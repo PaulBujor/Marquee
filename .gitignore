@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output
+.svelte-kit/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Cloudflare
+.wrangler/
+.dev.vars
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Cache
+.cache/
