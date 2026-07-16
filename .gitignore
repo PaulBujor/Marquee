@@ -24,6 +24,9 @@ Thumbs.db
 .wrangler/
 .dev.vars
 
+# Drizzle Kit output
+drizzle/
+
 # SQLite database files
 *.db
 *.db-shm
