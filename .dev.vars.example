@@ -1,0 +1,5 @@
+# Local development secrets (copy to .dev.vars and fill in real values)
+TMDB_API_KEY=your_tmdb_api_key
+RESEND_API_KEY=your_resend_api_key
+VAPID_PUBLIC_KEY=your_vapid_public_key
+VAPID_PRIVATE_KEY=your_vapid_private_key
