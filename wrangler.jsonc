@@ -2,7 +2,9 @@
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"name": "marquee",
 	"compatibility_date": "2026-07-16",
-	"compatibility_flags": ["nodejs_compat"],
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
 	"main": ".svelte-kit/cloudflare/_worker.js",
 	"assets": {
 		"binding": "ASSETS",
@@ -14,7 +16,7 @@
 		{
 			"binding": "DB",
 			"database_name": "marquee",
-			"database_id": "<YOUR_DATABASE_ID>",
+			"database_id": "5b8b3942-7360-4f68-8b5b-c1edeff1c9f8",
 			"migrations_dir": "drizzle"
 		}
 	],
