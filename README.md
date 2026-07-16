@@ -6,16 +6,16 @@ Progressive web app built with SvelteKit and deployed on Cloudflare. Tracks your
 
 ## Tech stack
 
-| Layer | Technology |
-|---|---|
-| Framework | SvelteKit (Svelte 5, runes) |
-| Deploy | Cloudflare Workers/Pages |
-| Database | Cloudflare D1 (SQLite) via Drizzle ORM |
-| Styling | Tailwind CSS v4 + shadcn-svelte + Bits UI |
-| Auth | Passwordless magic-link via Resend |
-| Media data | TMDB API |
-| Offline | IndexedDB + event-sourced sync |
-| Notifications | Web Push (VAPID) |
+| Layer         | Technology                                |
+| ------------- | ----------------------------------------- |
+| Framework     | SvelteKit (Svelte 5, runes)               |
+| Deploy        | Cloudflare Workers/Pages                  |
+| Database      | Cloudflare D1 (SQLite) via Drizzle ORM    |
+| Styling       | Tailwind CSS v4 + shadcn-svelte + Bits UI |
+| Auth          | Passwordless magic-link via Resend        |
+| Media data    | TMDB API                                  |
+| Offline       | IndexedDB + event-sourced sync            |
+| Notifications | Web Push (VAPID)                          |
 
 ## Prerequisites
 
@@ -54,13 +54,13 @@ npm run dev
 
 ## Development
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start dev server |
-| `npm run build` | Production build |
-| `npm run lint` | Lint code |
-| `npm run check` | Typecheck |
-| `npm run format` | Format code |
+| Command          | Description      |
+| ---------------- | ---------------- |
+| `npm run dev`    | Start dev server |
+| `npm run build`  | Production build |
+| `npm run lint`   | Lint code        |
+| `npm run check`  | Typecheck        |
+| `npm run format` | Format code      |
 
 Run `lint → typecheck → build` before pushing.
 
@@ -80,6 +80,7 @@ src/
 ### Cloudflare Pages (recommended)
 
 Connect your GitHub repo in the [Cloudflare dashboard](https://dash.cloudflare.com/). Set:
+
 - Framework preset: SvelteKit
 - Build command: `npm run build`
 - Build output directory: `.svelte-kit/cloudflare`

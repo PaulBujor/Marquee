@@ -33,23 +33,24 @@ npx sv add eslint prettier
 ```
 
 Wrangler config (`wrangler.jsonc`) needs:
+
 - `compatibility_flags: ["nodejs_compat"]` (required for D1, crypto, etc.)
 - D1 binding named `DB`
 - Target Workers Static Assets (`main` + `assets.directory`), NOT Cloudflare Pages (being absorbed into Workers; Cron Triggers are Workers-only)
 
 ## Commands
 
-| Task | Command |
-|---|---|
-| Dev server | `npm run dev` |
-| Build | `npm run build` |
-| Preview (CF Workers) | `wrangler dev` |
-| Deploy | `wrangler deploy` |
-| Lint | `npm run lint` |
-| Typecheck | `npm run check` |
-| Format | `npm run format` |
-| Drizzle generate | `npx drizzle-kit generate` |
-| Drizzle push (dev) | `npx drizzle-kit push` |
+| Task                 | Command                    |
+| -------------------- | -------------------------- |
+| Dev server           | `npm run dev`              |
+| Build                | `npm run build`            |
+| Preview (CF Workers) | `wrangler dev`             |
+| Deploy               | `wrangler deploy`          |
+| Lint                 | `npm run lint`             |
+| Typecheck            | `npm run check`            |
+| Format               | `npm run format`           |
+| Drizzle generate     | `npx drizzle-kit generate` |
+| Drizzle push (dev)   | `npx drizzle-kit push`     |
 
 Run `lint → typecheck → build` before pushing.
 

@@ -10,7 +10,10 @@ const ASSETS = [...build, ...files];
 
 self.addEventListener('install', (event) => {
 	event.waitUntil(
-		caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+		caches
+			.open(CACHE)
+			.then((cache) => cache.addAll(ASSETS))
+			.then(() => self.skipWaiting())
 	);
 });
 
