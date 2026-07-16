@@ -4,11 +4,13 @@ node_modules/
 # Build output
 .svelte-kit/
 build/
+.output/
 
 # Environment files
 .env
 .env.*
 !.env.example
+!.env.test
 
 # Editor directories
 .idea/
@@ -32,6 +34,10 @@ drizzle/
 *.db-shm
 *.db-wal
 
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
 # Logs
 *.log
 npm-debug.log*
@@ -41,3 +47,7 @@ coverage/
 
 # Cache
 .cache/
+
+# Vercel / Netlify
+.vercel/
+.netlify/

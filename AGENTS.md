@@ -2,6 +2,11 @@
 
 Movie & TV tracking PWA. Linear project: https://linear.app/paulbujor/project/marquee-fad148833ffe
 
+## Reference
+
+- `reference/watchlist-spec.md` — full product & technical spec (data model, auth flow, sync architecture, epics)
+- `reference/watchlist-ui-concept.jsx` — throwaway React mockup for UI/UX reference (`data-spec-ref` attributes cross-referenced in spec)
+
 ## Tech stack
 
 - **SvelteKit** (Svelte 5, runes mode)
@@ -20,7 +25,7 @@ Use the official `sv` CLI — do NOT manually scaffold.
 
 ```sh
 npx sv create . --template minimal --types ts
-npx sv add sveltekit-adapter   # picks Cloudflare
+npx sv add sveltekit-adapter   # picks Cloudflare (target: workers)
 npx sv add tailwindcss
 npx shadcn-svelte init          # interactive; set aliases to $lib paths
 npx sv add drizzle             # Drizzle ORM integration
@@ -30,6 +35,7 @@ npx sv add eslint prettier
 Wrangler config (`wrangler.jsonc`) needs:
 - `compatibility_flags: ["nodejs_compat"]` (required for D1, crypto, etc.)
 - D1 binding named `DB`
+- Target Workers Static Assets (`main` + `assets.directory`), NOT Cloudflare Pages (being absorbed into Workers; Cron Triggers are Workers-only)
 
 ## Commands
 
@@ -37,7 +43,8 @@ Wrangler config (`wrangler.jsonc`) needs:
 |---|---|
 | Dev server | `npm run dev` |
 | Build | `npm run build` |
-| Preview (CF Pages) | `wrangler pages dev .svelte-kit/cloudflare` |
+| Preview (CF Workers) | `wrangler dev` |
+| Deploy | `wrangler deploy` |
 | Lint | `npm run lint` |
 | Typecheck | `npm run check` |
 | Format | `npm run format` |
