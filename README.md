@@ -9,7 +9,7 @@ Progressive web app built with SvelteKit and deployed on Cloudflare. Tracks your
 | Layer         | Technology                                |
 | ------------- | ----------------------------------------- |
 | Framework     | SvelteKit (Svelte 5, runes)               |
-| Deploy        | Cloudflare Workers/Pages                  |
+| Deploy        | Cloudflare Workers (Static Assets)        |
 | Database      | Cloudflare D1 (SQLite) via Drizzle ORM    |
 | Styling       | Tailwind CSS v4 + shadcn-svelte + Bits UI |
 | Auth          | Passwordless magic-link via Resend        |
@@ -19,7 +19,7 @@ Progressive web app built with SvelteKit and deployed on Cloudflare. Tracks your
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 22 (matches CI)
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) (`npm i -g wrangler`)
 - [Docker](https://docs.docker.com/get-docker/) (for local email via Mailpit)
 - [TMDB API key](https://developer.themoviedb.org/docs/getting-started)
@@ -27,40 +27,38 @@ Progressive web app built with SvelteKit and deployed on Cloudflare. Tracks your
 ## Getting started
 
 ```sh
-# 1. Scaffold the project
-npx sv create . --template minimal --types ts
-npx sv add sveltekit-adapter
-npx sv add tailwindcss
-npx shadcn-svelte init
-npx sv add drizzle
-npx sv add eslint prettier
+# 1. Clone and install
+git clone <repo-url> Marquee
+cd Marquee
 npm install
 
-# 2. Create local secrets file
-cat > .dev.vars << 'EOF'
-TMDB_API_KEY=your_tmdb_api_key
-RESEND_API_KEY=your_resend_api_key
-VAPID_PUBLIC_KEY=your_vapid_public_key
-VAPID_PRIVATE_KEY=your_vapid_private_key
-EOF
+# 2. Create the local secrets file and fill in your keys
+cp .dev.vars.example .dev.vars
+# edit .dev.vars: TMDB_API_KEY, RESEND_API_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
 
-# 3. Create D1 database and run migrations
+# 3. Create the D1 database and push the schema
 wrangler d1 create marquee
-npx drizzle-kit push
+npm run db:push
 
-# 4. Start dev server
+# 4. (optional) Start Mailpit for local email
+docker compose up -d
+
+# 5. Start the dev server
 npm run dev
 ```
 
 ## Development
 
-| Command          | Description      |
-| ---------------- | ---------------- |
-| `npm run dev`    | Start dev server |
-| `npm run build`  | Production build |
-| `npm run lint`   | Lint code        |
-| `npm run check`  | Typecheck        |
-| `npm run format` | Format code      |
+| Command             | Description                         |
+| ------------------- | ----------------------------------- |
+| `npm run dev`       | Start dev server                    |
+| `npm run build`     | Production build                    |
+| `npm run preview`   | Run the built worker locally        |
+| `npm run lint`      | Lint code (Prettier check + ESLint) |
+| `npm run check`     | Typecheck                           |
+| `npm run format`    | Format code                         |
+| `npm run db:push`   | Push Drizzle schema to D1 (dev)     |
+| `npm run db:studio` | Open Drizzle Studio                 |
 
 Run `lint → typecheck → build` before pushing.
 
@@ -77,21 +75,11 @@ src/
 
 ## Deployment
 
-### Cloudflare Pages (recommended)
-
-Connect your GitHub repo in the [Cloudflare dashboard](https://dash.cloudflare.com/). Set:
-
-- Framework preset: SvelteKit
-- Build command: `npm run build`
-- Build output directory: `.svelte-kit/cloudflare`
-
-Add the `nodejs_compat` compatibility flag in your project settings or `wrangler.jsonc`.
-
-### Wrangler CLI
+Marquee deploys as a **Cloudflare Worker with static assets** (not Cloudflare Pages), configured in `wrangler.jsonc` (`nodejs_compat` flag, D1 binding `DB`).
 
 ```sh
 npm run build
-wrangler pages deploy .svelte-kit/cloudflare
+wrangler deploy
 ```
 
 Set production secrets with:
@@ -105,7 +93,7 @@ wrangler secret put VAPID_PRIVATE_KEY
 
 ## Learn more
 
-- [Linear project](https://linear.app/paulbujor/project/marquee-fad148833ffe)
+- [Linear board (MRQ)](https://linear.app/paulbujor/team/MRQ)
 - [SvelteKit docs](https://kit.svelte.dev/docs)
-- [Cloudflare Pages docs](https://developers.cloudflare.com/pages/)
-- [TMDB API docs](https://developer.themovied.org/docs)
+- [Cloudflare Workers docs](https://developers.cloudflare.com/workers/)
+- [TMDB API docs](https://developer.themoviedb.org/docs)

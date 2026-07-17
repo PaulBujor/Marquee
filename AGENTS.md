@@ -1,11 +1,10 @@
 # Marquee — Agent Instructions
 
-Movie & TV tracking PWA. Linear project: https://linear.app/paulbujor/project/marquee-fad148833ffe
+Movie & TV tracking PWA. Linear team board (MRQ): https://linear.app/paulbujor/team/MRQ — Core App project: https://linear.app/paulbujor/project/marquee-fad148833ffe
 
 ## Reference
 
-- `reference/watchlist-spec.md` — full product & technical spec (data model, auth flow, sync architecture, epics)
-- `reference/watchlist-ui-concept.jsx` — throwaway React mockup for UI/UX reference (`data-spec-ref` attributes cross-referenced in spec)
+- `reference/watchlist-ui-concept.jsx` — throwaway React mockup for UI/UX reference (carries `data-spec-ref` attributes)
 
 ## Tech stack
 
@@ -19,48 +18,52 @@ Movie & TV tracking PWA. Linear project: https://linear.app/paulbujor/project/ma
 - **IndexedDB** for client-side offline storage
 - **Web Push (VAPID)** for notifications
 
-## Recommended setup order
+## Setup
 
-Use the official `sv` CLI — do NOT manually scaffold.
+The project is already scaffolded — see README "Getting started" for the clone-based setup (`git clone` → `npm install` → `.dev.vars` → `wrangler d1 create marquee` → `npm run db:push` → `npm run dev`). It was bootstrapped with the official `sv` CLI (`sv create`, `sv add sveltekit-adapter/tailwindcss/drizzle/eslint prettier`, `shadcn-svelte init`); do NOT re-scaffold.
 
-```sh
-npx sv create . --template minimal --types ts
-npx sv add sveltekit-adapter   # picks Cloudflare (target: workers)
-npx sv add tailwindcss
-npx shadcn-svelte init          # interactive; set aliases to $lib paths
-npx sv add drizzle             # Drizzle ORM integration
-npx sv add eslint prettier
-```
+Wrangler config (`wrangler.jsonc`) invariants to preserve:
 
-Wrangler config (`wrangler.jsonc`) needs:
-
-- `compatibility_flags: ["nodejs_compat"]` (required for D1, crypto, etc.)
+- `compatibility_flags: ["nodejs_compat"]` (required for D1, crypto, nodemailer)
 - D1 binding named `DB`
-- Target Workers Static Assets (`main` + `assets.directory`), NOT Cloudflare Pages (being absorbed into Workers; Cron Triggers are Workers-only)
+- Deploy target is **Workers Static Assets** (`main` + `assets.directory`), NOT Cloudflare Pages (Pages is being absorbed into Workers; Cron Triggers are Workers-only). Uses `@sveltejs/adapter-cloudflare`, not the deprecated `adapter-cloudflare-workers`.
 
 ## Commands
 
-| Task                 | Command                    |
-| -------------------- | -------------------------- |
-| Dev server           | `npm run dev`              |
-| Build                | `npm run build`            |
-| Preview (CF Workers) | `wrangler dev`             |
-| Deploy               | `wrangler deploy`          |
-| Lint                 | `npm run lint`             |
-| Typecheck            | `npm run check`            |
-| Format               | `npm run format`           |
-| Drizzle generate     | `npx drizzle-kit generate` |
-| Drizzle push (dev)   | `npx drizzle-kit push`     |
+| Task                       | Command                                           |
+| -------------------------- | ------------------------------------------------- |
+| Dev server                 | `npm run dev`                                     |
+| Build                      | `npm run build` (runs `wrangler types` first)     |
+| Preview (built worker)     | `npm run preview` (`wrangler dev`)                |
+| Deploy                     | `wrangler deploy`                                 |
+| Lint                       | `npm run lint` (`prettier --check` + eslint)      |
+| Typecheck                  | `npm run check` (`wrangler types` + svelte-check) |
+| Format                     | `npm run format`                                  |
+| Regen worker types         | `npm run gen` (`wrangler types`)                  |
+| Drizzle generate migration | `npm run db:generate`                             |
+| Drizzle push schema (dev)  | `npm run db:push`                                 |
+| Drizzle apply migrations   | `npm run db:migrate`                              |
+| Drizzle Studio             | `npm run db:studio`                               |
 
-Run `lint → typecheck → build` before pushing.
+Run `lint → typecheck → build` (`npm run lint && npm run check && npm run build`) before pushing — this mirrors CI (`.github/workflows/ci.yml`, Node 22).
 
 ## Architecture
 
-- **Event-sourced sync**: Epic E (Offline & Sync) is sequenced before Epics F/G. All tracking writes go through the event pipeline from the start.
-- Server code lives in `src/lib/server/` — never import from client.
-- Client offline state lives in IndexedDB with a materialized-state layer.
-- `hooks.server.ts` validates session cookies on every request.
-- Auth flow: magic link → verify endpoint → httpOnly session cookie.
+- **Server-only code** lives in `src/lib/server/` and must never be imported from client code. `src/hooks.server.ts` creates a per-request Drizzle client — `event.locals.db = createDb(platform.env.DB)` (guarded by `event.platform`, typed via `App.Locals` in `src/app.d.ts`).
+- **Database**: Cloudflare D1 (binding `DB`) via Drizzle (`drizzle-orm/d1`). Schema at `src/lib/server/db/schema.ts`, `createDb()` at `src/lib/server/db/index.ts`. `drizzle.config.ts` uses the `sqlite` dialect; migrations output to `./drizzle`. ⚠️ The schema is still the scaffold demo `task` table — the real watchlist model is not built yet.
+- **Email**: `EmailSender` interface (`src/lib/server/email/index.ts`) with `ResendSender` (prod) and `SmtpSender` (dev, nodemailer → Mailpit).
+- **Theme / design tokens**: dark mode is a `.dark` class on `<html>`, toggled reactively by the `theme` rune singleton (`src/lib/state/theme.svelte.ts`, persisted to `localStorage` key `marquee:theme-mode`) in `src/routes/+layout.svelte`. Tokens are oklch CSS variables in `src/routes/layout.css` mapped to Tailwind via `@theme inline` — there is **no `tailwind.config`** (Tailwind v4, CSS-configured). shadcn-svelte style is `nova`; component/util/ui aliases live in `components.json`.
+- **PWA / offline**: `src/service-worker.ts` (cache-first), manifest + icons in `static/`. Planned client offline state is IndexedDB with a materialized-state layer.
+- **Event-sourced sync** (planned): Offline & Sync is sequenced before the higher feature epics — all tracking writes are intended to flow through the event pipeline from the start.
+- **Auth** (planned): passwordless magic link → verify endpoint → httpOnly session cookie; `hooks.server.ts` will validate the session cookie on every request.
+
+## Roadmap / build order
+
+Tracked in Linear team **MRQ**. Rough sequence, from the current UI foundation outward: magic-link auth → event-sourced offline sync → TMDB API client → tracking/watchlist model. Later projects (all in backlog): **Timeline View** (upcoming releases), **Custom Media & Linking** (niche titles not on TMDB), **Data Portability** (JSON export), **Notifications** (Web Push / VAPID / daily cron sweep), **Recommendations Engine** (multi-cluster taste profiles). Check the team board for current issue detail rather than assuming from this list.
+
+## Testing
+
+No test framework is configured yet — there is no `test` script and no vitest/playwright dependency. Do not assume tests exist; if adding them, wire the runner into `package.json` and CI.
 
 ## Secrets
 
@@ -70,5 +73,5 @@ Run `lint → typecheck → build` before pushing.
 
 ## Linear
 
-- Epics A→H define the build order
-- Issue IDs are `PAU-<n>` — reference in branch names: `paul/pau-<n>-short-slug`
+- Team **MRQ** (https://linear.app/paulbujor/team/MRQ). Issue IDs are `MRQ-<n>`.
+- Reference the issue in branch names: `paul/mrq-<n>-short-slug`.
