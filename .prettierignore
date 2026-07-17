@@ -9,3 +9,6 @@ bun.lockb
 /static/
 /drizzle/
 worker-configuration.d.ts
+
+# Local tooling (git-ignored; keeps local `pnpm lint` in step with CI)
+.claude/

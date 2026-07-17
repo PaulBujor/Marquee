@@ -13,7 +13,9 @@ declare global {
 
 		// interface Error {}
 		interface Locals {
-			db: ReturnType<typeof createDb>;
+			// Only set when platform bindings exist (dev proxy / deployed Worker); absent
+			// during prerender/build. Server load functions must guard: `if (!locals.db) error(503)`.
+			db?: ReturnType<typeof createDb>;
 		}
 		// interface PageData {}
 		// interface PageState {}
