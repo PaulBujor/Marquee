@@ -1,0 +1,4 @@
+# Enforce LF line endings on all platforms. Matches Prettier's default and
+# avoids the CRLF/LF churn that makes `wrangler types --check` fail on Windows
+# checkouts (worker-configuration.d.ts is generated with LF).
+* text=auto eol=lf

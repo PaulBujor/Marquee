@@ -20,7 +20,8 @@ Progressive web app built with SvelteKit and deployed on Cloudflare. Tracks your
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 22 (matches CI)
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) (`npm i -g wrangler`)
+- [pnpm](https://pnpm.io/) (`corepack enable pnpm`, or `npm i -g pnpm`)
+- [Wrangler](https://developers.cloudflare.com/workers/wrangler/) — included as a dev dependency; run via `pnpm exec wrangler`
 - [Docker](https://docs.docker.com/get-docker/) (for local email via Mailpit)
 - [TMDB API key](https://developer.themoviedb.org/docs/getting-started)
 
@@ -30,35 +31,35 @@ Progressive web app built with SvelteKit and deployed on Cloudflare. Tracks your
 # 1. Clone and install
 git clone <repo-url> Marquee
 cd Marquee
-npm install
+pnpm install
 
 # 2. Create the local secrets file and fill in your keys
 cp .dev.vars.example .dev.vars
 # edit .dev.vars: TMDB_API_KEY, RESEND_API_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
 
 # 3. Create the D1 database and push the schema
-wrangler d1 create marquee
-npm run db:push
+pnpm exec wrangler d1 create marquee
+pnpm db:push
 
 # 4. (optional) Start Mailpit for local email
 docker compose up -d
 
 # 5. Start the dev server
-npm run dev
+pnpm dev
 ```
 
 ## Development
 
-| Command             | Description                         |
-| ------------------- | ----------------------------------- |
-| `npm run dev`       | Start dev server                    |
-| `npm run build`     | Production build                    |
-| `npm run preview`   | Run the built worker locally        |
-| `npm run lint`      | Lint code (Prettier check + ESLint) |
-| `npm run check`     | Typecheck                           |
-| `npm run format`    | Format code                         |
-| `npm run db:push`   | Push Drizzle schema to D1 (dev)     |
-| `npm run db:studio` | Open Drizzle Studio                 |
+| Command          | Description                         |
+| ---------------- | ----------------------------------- |
+| `pnpm dev`       | Start dev server                    |
+| `pnpm build`     | Production build                    |
+| `pnpm preview`   | Run the built worker locally        |
+| `pnpm lint`      | Lint code (Prettier check + ESLint) |
+| `pnpm check`     | Typecheck                           |
+| `pnpm format`    | Format code                         |
+| `pnpm db:push`   | Push Drizzle schema to D1 (dev)     |
+| `pnpm db:studio` | Open Drizzle Studio                 |
 
 Run `lint → typecheck → build` before pushing.
 
@@ -78,17 +79,19 @@ src/
 Marquee deploys as a **Cloudflare Worker with static assets** (not Cloudflare Pages), configured in `wrangler.jsonc` (`nodejs_compat` flag, D1 binding `DB`).
 
 ```sh
-npm run build
-wrangler deploy
+pnpm build
+pnpm exec wrangler deploy
 ```
+
+If deploying via **Cloudflare Workers Builds** (git-connected), set the build environment variable `PNPM_VERSION` to match `packageManager` in `package.json` (currently `11.3.0`), and set the build command to `pnpm run build`. The default build image ships an older pnpm that ignores the `allowBuilds` setting in `pnpm-workspace.yaml`, which would skip native build scripts (`esbuild`, `workerd`) and break the build.
 
 Set production secrets with:
 
 ```sh
-wrangler secret put TMDB_API_KEY
-wrangler secret put RESEND_API_KEY
-wrangler secret put VAPID_PUBLIC_KEY
-wrangler secret put VAPID_PRIVATE_KEY
+pnpm exec wrangler secret put TMDB_API_KEY
+pnpm exec wrangler secret put RESEND_API_KEY
+pnpm exec wrangler secret put VAPID_PUBLIC_KEY
+pnpm exec wrangler secret put VAPID_PRIVATE_KEY
 ```
 
 ## Learn more
