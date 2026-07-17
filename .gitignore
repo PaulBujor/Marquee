@@ -25,6 +25,9 @@ Thumbs.db
 # Cloudflare
 .wrangler/
 .dev.vars
+# Generated per-environment by `wrangler types` (regenerated in build/check).
+# Not committed: its output depends on local .dev.vars/.env and build state.
+worker-configuration.d.ts
 
 # Drizzle Kit output
 drizzle/

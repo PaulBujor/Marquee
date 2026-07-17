@@ -13,7 +13,7 @@
 </script>
 
 <div class={cn('space-y-3 py-4', className)} {...restProps}>
-	{#each Array(lines) as _, i}
+	{#each Array.from({ length: lines }, (_, i) => i) as index (index)}
 		<div class="flex items-center gap-3">
 			<Skeleton class="aspect-[2/3] w-10 shrink-0 rounded-lg" />
 			<div class="flex-1 space-y-2">

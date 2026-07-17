@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
-	import NavButton from './nav-button.svelte';
 
 	let {
 		class: className,

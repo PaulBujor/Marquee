@@ -62,6 +62,7 @@
 	}: ButtonProps = $props();
 </script>
 
+<!-- eslint-disable svelte/no-navigation-without-resolve -- generic button primitive: href may be an internal or external URL supplied by the caller -->
 {#if href}
 	<a
 		bind:this={ref}
