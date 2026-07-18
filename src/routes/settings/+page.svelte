@@ -164,12 +164,15 @@
 				variant="outline"
 				value={theme.mode}
 				onValueChange={(v) => v && theme.set(v as 'auto' | 'light' | 'dark')}
-				class="w-full overflow-hidden rounded-lg"
+				class="w-full"
 			>
-				{#each themeModes as m (m.value)}
+				{#each themeModes as m, i (m.value)}
 					<ToggleGroup.Item
 						value={m.value}
-						class="flex-1 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+						class="flex-1 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground {i ===
+						0
+							? 'rounded-l-lg!'
+							: ''} {i === themeModes.length - 1 ? 'rounded-r-lg!' : ''}"
 					>
 						{m.label}
 					</ToggleGroup.Item>
