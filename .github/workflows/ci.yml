@@ -17,6 +17,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `wrangler types` folds .dev.vars into the generated `Env`. CI has no
+      # .dev.vars (git-ignored), so seed it from the example to type env vars.
+      - run: cp .dev.vars.example .dev.vars
       - run: pnpm run lint
       - run: pnpm run check
       - run: pnpm run build
+      - run: pnpm test

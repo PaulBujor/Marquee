@@ -14,11 +14,14 @@ export interface EmailSender {
  * in dev. Otherwise we use Resend over HTTPS (production).
  */
 export function createEmailSender(env: Env): EmailSender {
-	// `from` must be a Resend-verified sender in production. Defaults to Resend's
-	// shared test sender so dev works out of the box; set EMAIL_FROM in prod.
-	const from = env.EMAIL_FROM || 'Marquee <onboarding@resend.dev>';
+	// Fail hard on misconfiguration rather than silently sending from a wrong
+	// address. `from` must be set everywhere (a Resend-verified sender in prod).
+	const from = env.EMAIL_FROM;
+	if (!from) throw new Error('EMAIL_FROM is not configured');
+
 	if (env.SMTP_HOST) {
 		return new SmtpSender(env.SMTP_HOST, Number(env.SMTP_PORT) || 1025, from);
 	}
+	if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured');
 	return new ResendSender(env.RESEND_API_KEY, from);
 }
