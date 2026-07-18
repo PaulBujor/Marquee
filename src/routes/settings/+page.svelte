@@ -164,7 +164,7 @@
 				variant="outline"
 				value={theme.mode}
 				onValueChange={(v) => v && theme.set(v as 'auto' | 'light' | 'dark')}
-				class="w-full"
+				class="w-full overflow-hidden rounded-lg"
 			>
 				{#each themeModes as m (m.value)}
 					<ToggleGroup.Item
