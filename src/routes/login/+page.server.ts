@@ -12,14 +12,21 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	if (locals.user) redirect(303, '/');
 
 	const error = url.searchParams.get('error');
-	const linkError =
-		error === 'expired'
-			? 'That sign-in link has expired. Request a new one below.'
-			: error === 'not_allowed'
-				? "This account can't sign in right now."
-				: error
-					? 'That sign-in link is invalid. Request a new one below.'
-					: null;
+	let linkError: string | null;
+	switch (error) {
+		case null:
+		case '':
+			linkError = null;
+			break;
+		case 'expired':
+			linkError = 'That sign-in link has expired. Request a new one below.';
+			break;
+		case 'not_allowed':
+			linkError = "This account can't sign in right now.";
+			break;
+		default:
+			linkError = 'That sign-in link is invalid. Request a new one below.';
+	}
 	return { linkError };
 };
 

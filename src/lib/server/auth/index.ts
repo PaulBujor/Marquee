@@ -172,30 +172,47 @@ async function isRateLimited(db: Db, email: string, ip?: string | null): Promise
 	return false;
 }
 
-function renderMagicLinkEmail(url: string, ttlMinutes: number): string {
+/**
+ * Shared shell for transactional emails. Links the Fraunces webfont (email
+ * clients strip CSS vars, so it can't reference `--font-serif`) and renders the
+ * heading with the app's serif stack + weight; clients without webfont support
+ * fall back to serif. Colours are inlined literally — keep them in sync with the
+ * design tokens in `src/routes/layout.css`.
+ */
+function renderEmail(heading: string, body: string): string {
 	return `<!doctype html>
 <html>
+	<head>
+		<meta charset="utf-8" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet" />
+	</head>
 	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', Georgia, 'Times New Roman', serif; font-weight: 600;">Sign in to Marquee</h2>
-		<p>Click the button below to sign in. This link expires in ${ttlMinutes} minutes and can be used once.</p>
-		<p style="margin: 24px 0;">
-			<a href="${url}" style="background: #8b5cf6; color: #ffffff; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">Sign in to Marquee</a>
-		</p>
-		<p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email.</p>
-		<p style="color: #666; font-size: 13px; word-break: break-all;">Or paste this link into your browser:<br />${url}</p>
+		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', ui-serif, Georgia, serif; font-weight: 600;">${heading}</h2>
+		${body}
 	</body>
 </html>`;
 }
 
+function renderMagicLinkEmail(url: string, ttlMinutes: number): string {
+	return renderEmail(
+		'Sign in to Marquee',
+		`<p>Click the button below to sign in. This link expires in ${ttlMinutes} minutes and can be used once.</p>
+		<p style="margin: 24px 0;">
+			<a href="${url}" style="background: #8b5cf6; color: #ffffff; padding: 12px 20px; border-radius: 10px; text-decoration: none; display: inline-block; font-size: 14px; font-weight: 500;">Sign in to Marquee</a>
+		</p>
+		<p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email.</p>
+		<p style="color: #666; font-size: 13px; word-break: break-all;">Or paste this link into your browser:<br />${url}</p>`
+	);
+}
+
 function renderWaitlistEmail(): string {
-	return `<!doctype html>
-<html>
-	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', Georgia, 'Times New Roman', serif; font-weight: 600;">You're on the waitlist</h2>
-		<p>Thanks for your interest in Marquee — you're on the list. We'll email you as soon as your account is ready to sign in.</p>
-		<p style="color: #666; font-size: 13px;">If you didn't sign up, you can safely ignore this email.</p>
-	</body>
-</html>`;
+	return renderEmail(
+		"You're on the waitlist",
+		`<p>Thanks for your interest in Marquee — you're on the list. We'll email you as soon as your account is ready to sign in.</p>
+		<p style="color: #666; font-size: 13px;">If you didn't sign up, you can safely ignore this email.</p>`
+	);
 }
 
 export {
