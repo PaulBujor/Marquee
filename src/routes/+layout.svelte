@@ -25,6 +25,6 @@
 <svelte:head>
 	<link rel="icon" href={favicon} />
 	<link rel="manifest" href="/manifest.json" />
-	<meta name="theme-color" content="#E7A33D" />
+	<meta name="theme-color" content="#8B5CF6" />
 </svelte:head>
 {@render children()}

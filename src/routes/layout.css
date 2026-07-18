@@ -7,13 +7,13 @@
  * Design tokens. Colors are oklch(Lightness Chroma Hue) and drive the whole app
  * via the `@theme inline` map below (Tailwind utilities like `bg-primary`,
  * `text-muted-foreground`, etc.). To re-theme:
- *   - Brand / accent = `--primary` (currently a warm orange, hue 60). Change it
+ *   - Brand / accent = `--primary` (currently a violet, hue 293). Change it
  *     in BOTH `:root` and `.dark`, and `--ring` which mirrors it.
  *   - Fonts: `--font-sans` (Public Sans) / `--font-serif` (Fraunces, used for
  *     headings) in `@theme inline`.
  * Transactional emails can't use these variables (email clients strip CSS vars),
  * so their colors are inlined literally in `src/lib/server/auth` — keep the
- * brand hex there in sync with `--primary` (oklch(0.765 0.156 60) = #f9983a).
+ * brand hex there in sync with `--primary` (oklch(0.606 0.219 292.717) = #8b5cf6).
  */
 :root {
 	--radius: 0.625rem;
@@ -23,8 +23,8 @@
 	--card-foreground: oklch(0.155 0.015 60);
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.155 0.015 60);
-	--primary: oklch(0.765 0.156 60);
-	--primary-foreground: oklch(0.135 0.045 60);
+	--primary: oklch(0.606 0.219 292.717);
+	--primary-foreground: oklch(1 0 0);
 	--secondary: oklch(0.955 0.005 80);
 	--secondary-foreground: oklch(0.155 0.015 60);
 	--muted: oklch(0.955 0.005 80);
@@ -34,7 +34,7 @@
 	--destructive: oklch(0.577 0.245 27.325);
 	--border: oklch(0.915 0.006 80);
 	--input: oklch(0.915 0.006 80);
-	--ring: oklch(0.765 0.156 60);
+	--ring: oklch(0.606 0.219 292.717);
 	--chart-1: oklch(0.646 0.222 41.116);
 	--chart-2: oklch(0.6 0.118 184.704);
 	--chart-3: oklch(0.398 0.07 227.392);
@@ -57,8 +57,8 @@
 	--card-foreground: oklch(0.935 0.008 80);
 	--popover: oklch(0.185 0.008 270);
 	--popover-foreground: oklch(0.935 0.008 80);
-	--primary: oklch(0.765 0.156 60);
-	--primary-foreground: oklch(0.135 0.045 60);
+	--primary: oklch(0.606 0.219 292.717);
+	--primary-foreground: oklch(1 0 0);
 	--secondary: oklch(0.22 0.008 270);
 	--secondary-foreground: oklch(0.935 0.008 80);
 	--muted: oklch(0.22 0.008 270);
@@ -68,7 +68,7 @@
 	--destructive: oklch(0.704 0.191 22.216);
 	--border: oklch(0.26 0.008 270);
 	--input: oklch(0.26 0.008 270);
-	--ring: oklch(0.765 0.156 60);
+	--ring: oklch(0.606 0.219 292.717);
 	--chart-1: oklch(0.488 0.243 264.376);
 	--chart-2: oklch(0.696 0.17 162.48);
 	--chart-3: oklch(0.769 0.188 70.08);
