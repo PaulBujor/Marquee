@@ -21,18 +21,39 @@ function parseMode(value: FormDataEntryValue | null): SignInMode {
 	return value === 'standalone' ? 'standalone' : 'browser';
 }
 
+/** Map a `?error=` from the magic-link redirect to a message shown on the form. */
+function linkErrorMessage(error: string | null): string | null {
+	if (!error) return null;
+	switch (error) {
+		case 'expired':
+			return 'That sign-in link has expired. Request a new one below.';
+		case 'not_allowed':
+			return "This account can't sign in right now.";
+		default:
+			return 'That sign-in link is invalid. Request a new one below.';
+	}
+}
+
+/** Map a code-verification failure to a message shown on the code step. */
+function codeErrorMessage(
+	reason: 'invalid' | 'expired' | 'not_allowed' | 'too_many_attempts'
+): string {
+	switch (reason) {
+		case 'expired':
+			return 'That code has expired — request a new one.';
+		case 'too_many_attempts':
+			return 'Too many attempts — request a new code.';
+		case 'not_allowed':
+			return "This account can't sign in right now.";
+		default:
+			return 'Incorrect code. Try again.';
+	}
+}
+
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (locals.user) redirect(303, '/');
 
-	const error = url.searchParams.get('error');
-	const linkError =
-		error === 'expired'
-			? 'That sign-in link has expired. Request a new one below.'
-			: error === 'not_allowed'
-				? "This account can't sign in right now."
-				: error
-					? 'That sign-in link is invalid. Request a new one below.'
-					: null;
+	const linkError = linkErrorMessage(url.searchParams.get('error'));
 	return { linkError, linkTtlMinutes: LINK_TTL_MINUTES, codeTtlMinutes: CODE_TTL_MINUTES };
 };
 
@@ -90,15 +111,7 @@ export const actions: Actions = {
 			redirect(303, '/');
 		}
 
-		const codeError =
-			result.reason === 'expired'
-				? 'That code has expired — request a new one.'
-				: result.reason === 'too_many_attempts'
-					? 'Too many attempts — request a new code.'
-					: result.reason === 'not_allowed'
-						? "This account can't sign in right now."
-						: 'Incorrect code. Try again.';
-		return fail(400, { step: 'code' as const, email, codeError });
+		return fail(400, { step: 'code' as const, email, codeError: codeErrorMessage(result.reason) });
 	},
 
 	// Waitlist signup for a previously-unknown address (creates a pending user + emails a confirmation).

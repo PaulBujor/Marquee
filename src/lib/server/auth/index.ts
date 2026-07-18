@@ -2,12 +2,22 @@ import { and, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { createDb } from '$lib/server/db';
 import { loginTokens, users, type User } from '$lib/server/db/schema';
 import type { EmailSender } from '$lib/server/email';
+import {
+	renderCodeEmail,
+	renderMagicLinkEmail,
+	renderWaitlistEmail
+} from '$lib/server/email/templates';
 import { createSession } from './session';
 import { generateCode, generateToken, hashToken } from './tokens';
 
 type Db = ReturnType<typeof createDb>;
 
-/** Magic links (browser) live a little longer than typed codes (PWA). */
+/**
+ * A code lives shorter than a link on purpose: a 6-digit code is only ~20 bits
+ * of entropy (vs the link token's 256), so a tighter window limits online
+ * brute-forcing; a code is also typed straight back into the open app, while a
+ * link may detour through an email client on another device.
+ */
 export const LINK_TTL_MINUTES = 15;
 export const CODE_TTL_MINUTES = 10;
 const LINK_TTL_MS = LINK_TTL_MINUTES * 60 * 1000;
@@ -63,49 +73,69 @@ export async function requestSignIn(opts: {
 	if (await isRateLimited(opts.db, email, opts.ip)) return { kind: 'rate_limited' };
 
 	if (opts.mode === 'standalone') {
-		const code = generateCode();
-		// Keep at most one live code per email so verify never has to disambiguate
-		// between two codes issued in the same second (createdAt is second-resolution).
-		await opts.db
-			.update(loginTokens)
-			.set({ consumedAt: new Date() })
-			.where(
-				and(
-					eq(loginTokens.email, email),
-					eq(loginTokens.kind, 'code'),
-					isNull(loginTokens.consumedAt)
-				)
-			);
-		await opts.db.insert(loginTokens).values({
-			email,
-			tokenHash: await hashToken(code),
-			kind: 'code',
-			requestIp: opts.ip ?? null,
-			expiresAt: new Date(Date.now() + CODE_TTL_MS)
-		});
-		await opts.sender.send({
-			to: email,
-			subject: 'Your Marquee sign-in code',
-			html: renderCodeEmail(code, CODE_TTL_MINUTES)
-		});
+		await issueCode(opts.db, email, opts.sender, opts.ip);
 		return { kind: 'sent', method: 'code' };
 	}
+	await issueLink(opts.db, email, opts.sender, opts.origin, opts.ip);
+	return { kind: 'sent', method: 'link' };
+}
 
+/** Store a fresh 6-digit code (superseding any live one) and email it. */
+async function issueCode(
+	db: Db,
+	email: string,
+	sender: EmailSender,
+	ip?: string | null
+): Promise<void> {
+	const code = generateCode();
+	// Keep at most one live code per email so verify never has to disambiguate
+	// between two codes issued in the same second (createdAt is second-resolution).
+	await db
+		.update(loginTokens)
+		.set({ consumedAt: new Date() })
+		.where(
+			and(
+				eq(loginTokens.email, email),
+				eq(loginTokens.kind, 'code'),
+				isNull(loginTokens.consumedAt)
+			)
+		);
+	await db.insert(loginTokens).values({
+		email,
+		tokenHash: await hashToken(code),
+		kind: 'code',
+		requestIp: ip ?? null,
+		expiresAt: new Date(Date.now() + CODE_TTL_MS)
+	});
+	await sender.send({
+		to: email,
+		subject: 'Your Marquee sign-in code',
+		html: renderCodeEmail(code, CODE_TTL_MINUTES)
+	});
+}
+
+/** Store a fresh magic-link token and email the sign-in URL. */
+async function issueLink(
+	db: Db,
+	email: string,
+	sender: EmailSender,
+	origin: string,
+	ip?: string | null
+): Promise<void> {
 	const token = generateToken();
-	await opts.db.insert(loginTokens).values({
+	await db.insert(loginTokens).values({
 		email,
 		tokenHash: await hashToken(token),
 		kind: 'link',
-		requestIp: opts.ip ?? null,
+		requestIp: ip ?? null,
 		expiresAt: new Date(Date.now() + LINK_TTL_MS)
 	});
-	const url = `${opts.origin}/auth/verify?token=${encodeURIComponent(token)}`;
-	await opts.sender.send({
+	const url = `${origin}/auth/verify?token=${encodeURIComponent(token)}`;
+	await sender.send({
 		to: email,
 		subject: 'Your Marquee sign-in link',
 		html: renderMagicLinkEmail(url, LINK_TTL_MINUTES)
 	});
-	return { kind: 'sent', method: 'link' };
 }
 
 export type JoinResult =
@@ -258,44 +288,6 @@ async function isRateLimited(db: Db, email: string, ip?: string | null): Promise
 		if (byIp >= RATE_MAX_PER_IP) return true;
 	}
 	return false;
-}
-
-function renderMagicLinkEmail(url: string, ttlMinutes: number): string {
-	return `<!doctype html>
-<html>
-	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', Georgia, 'Times New Roman', serif; font-weight: 600;">Sign in to Marquee</h2>
-		<p>Click the button below to sign in. This link expires in ${ttlMinutes} minutes and can be used once.</p>
-		<p style="margin: 24px 0;">
-			<a href="${url}" style="background: #8b5cf6; color: #ffffff; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">Sign in to Marquee</a>
-		</p>
-		<p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email.</p>
-		<p style="color: #666; font-size: 13px; word-break: break-all;">Or paste this link into your browser:<br />${url}</p>
-	</body>
-</html>`;
-}
-
-function renderCodeEmail(code: string, ttlMinutes: number): string {
-	return `<!doctype html>
-<html>
-	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', Georgia, 'Times New Roman', serif; font-weight: 600;">Your sign-in code</h2>
-		<p>Enter this code in Marquee to sign in. It expires in ${ttlMinutes} minutes.</p>
-		<p style="margin: 24px 0; font-size: 32px; font-weight: 700; letter-spacing: 8px; font-family: ui-monospace, 'SF Mono', Menlo, monospace;">${code}</p>
-		<p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email.</p>
-	</body>
-</html>`;
-}
-
-function renderWaitlistEmail(): string {
-	return `<!doctype html>
-<html>
-	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', Georgia, 'Times New Roman', serif; font-weight: 600;">You're on the waitlist</h2>
-		<p>Thanks for your interest in Marquee — you're on the list. We'll email you as soon as your account is ready to sign in.</p>
-		<p style="color: #666; font-size: 13px;">If you didn't sign up, you can safely ignore this email.</p>
-	</body>
-</html>`;
 }
 
 export {

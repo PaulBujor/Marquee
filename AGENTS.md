@@ -63,6 +63,7 @@ Run `lint → typecheck → build → test` (`pnpm lint && pnpm check && pnpm bu
 ## Conventions
 
 - **Comments**: doc blocks briefly state _what_ a function does. Don't leave comments that narrate rolled-back decisions, or that describe code which no longer exists (or never did) — update or delete them when the code changes.
+- **Validation**: validate user input on **both** the client and the server. Client-side is for immediate feedback (native constraints like `type="email"`/`required`, disabled submit buttons); the **server is always authoritative** and must re-validate — never trust the client. e.g. the login email is `type="email" required` in the UI and re-checked with `EMAIL_RE` in the action; the OTP is digit/length-gated in the UI (`^\d{6}$`) and re-validated with the same rule in `?/verify`.
 
 ## Architecture
 

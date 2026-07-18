@@ -33,6 +33,8 @@
 	);
 	// What we'll actually send from the initial step, given the detected mode.
 	const noun = $derived(mode === 'standalone' ? 'code' : 'link');
+	// Client-side mirror of the server's code check (the server stays authoritative).
+	const codeValid = $derived(/^\d{6}$/.test(code));
 
 	const track = () => {
 		submitting = true;
@@ -90,7 +92,7 @@
 						inputmode="numeric"
 						disabled={submitting}
 						class="justify-center"
-						onComplete={() => codeForm?.requestSubmit()}
+						onComplete={() => codeValid && codeForm?.requestSubmit()}
 					>
 						{#snippet children({ cells })}
 							<InputOTP.Group>
@@ -103,7 +105,7 @@
 					{#if codeError}
 						<p class="text-center text-sm text-destructive">{codeError}</p>
 					{/if}
-					<Button type="submit" disabled={submitting || code.length < 6}>
+					<Button type="submit" disabled={submitting || !codeValid}>
 						{submitting ? 'Verifying…' : 'Verify code'}
 					</Button>
 					<a href={resolve('/login')} class="text-center text-sm text-muted-foreground underline">
