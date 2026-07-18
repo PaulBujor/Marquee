@@ -4,13 +4,16 @@ import type { EmailSender } from './index';
 export class ResendSender implements EmailSender {
 	private resend: Resend;
 
-	constructor(apiKey: string) {
+	constructor(
+		apiKey: string,
+		private from: string
+	) {
 		this.resend = new Resend(apiKey);
 	}
 
 	async send(opts: { to: string; subject: string; html: string }): Promise<void> {
 		const { error } = await this.resend.emails.send({
-			from: 'Marquee <noreply@marquee.app>',
+			from: this.from,
 			to: [opts.to],
 			subject: opts.subject,
 			html: opts.html

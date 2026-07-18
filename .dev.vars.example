@@ -9,3 +9,7 @@ VAPID_PRIVATE_KEY=your_vapid_private_key
 # (wrangler dev) can't resolve the hostname.
 SMTP_HOST=127.0.0.1
 SMTP_PORT=1025
+
+# From address for outgoing mail. In production this MUST be a Resend-verified
+# sender (unverified domains -> Resend 403). Locally Mailpit accepts anything.
+EMAIL_FROM=Marquee <dev@marquee.local>

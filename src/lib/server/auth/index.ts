@@ -88,11 +88,17 @@ export async function joinWaitlist(
 		return existing.status === 'blocked' ? { kind: 'blocked' } : { kind: 'already' };
 	}
 	await db.insert(users).values({ email, status: 'pending' }).onConflictDoNothing();
-	await sender.send({
-		to: email,
-		subject: "You're on the Marquee waitlist",
-		html: renderWaitlistEmail()
-	});
+	// Confirmation email is best-effort: the signup has already succeeded, so a
+	// mail failure must not fail the request (it would otherwise 500 the join).
+	try {
+		await sender.send({
+			to: email,
+			subject: "You're on the Marquee waitlist",
+			html: renderWaitlistEmail()
+		});
+	} catch (err) {
+		console.error('waitlist confirmation email failed:', err);
+	}
 	return { kind: 'waitlisted' };
 }
 
@@ -152,10 +158,10 @@ function renderMagicLinkEmail(url: string, ttlMinutes: number): string {
 	return `<!doctype html>
 <html>
 	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-		<h2 style="margin: 0 0 16px;">Sign in to Marquee</h2>
+		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', Georgia, 'Times New Roman', serif; font-weight: 600;">Sign in to Marquee</h2>
 		<p>Click the button below to sign in. This link expires in ${ttlMinutes} minutes and can be used once.</p>
 		<p style="margin: 24px 0;">
-			<a href="${url}" style="background: #111; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Sign in to Marquee</a>
+			<a href="${url}" style="background: #f9983a; color: #150400; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">Sign in to Marquee</a>
 		</p>
 		<p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email.</p>
 		<p style="color: #666; font-size: 13px; word-break: break-all;">Or paste this link into your browser:<br />${url}</p>
@@ -167,7 +173,7 @@ function renderWaitlistEmail(): string {
 	return `<!doctype html>
 <html>
 	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-		<h2 style="margin: 0 0 16px;">You're on the waitlist</h2>
+		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', Georgia, 'Times New Roman', serif; font-weight: 600;">You're on the waitlist</h2>
 		<p>Thanks for your interest in Marquee — you're on the list. We'll email you as soon as your account is ready to sign in.</p>
 		<p style="color: #666; font-size: 13px;">If you didn't sign up, you can safely ignore this email.</p>
 	</body>

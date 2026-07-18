@@ -32,14 +32,22 @@ export const actions: Actions = {
 		}
 
 		const sender = createEmailSender(platform.env);
-		const result = await requestMagicLink({
-			db: locals.db,
-			email,
-			sender,
-			origin: url.origin,
-			ip: getClientAddress()
-		});
-		return { step: 'request' as const, email: normalizeEmail(email), result: result.kind };
+		try {
+			const result = await requestMagicLink({
+				db: locals.db,
+				email,
+				sender,
+				origin: url.origin,
+				ip: getClientAddress()
+			});
+			return { step: 'request' as const, email: normalizeEmail(email), result: result.kind };
+		} catch (err) {
+			console.error('magic-link request failed:', err);
+			return fail(502, {
+				email,
+				message: "We couldn't send the email right now. Please try again shortly."
+			});
+		}
 	},
 
 	// Waitlist signup for a previously-unknown address (creates a pending user + emails a confirmation).

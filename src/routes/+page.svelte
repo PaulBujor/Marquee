@@ -8,7 +8,7 @@
 </script>
 
 <main class="mx-auto flex min-h-svh max-w-2xl flex-col items-start justify-center gap-4 p-6">
-	<h1 class="text-3xl font-semibold">Marquee</h1>
+	<h1 class="font-serif text-3xl font-semibold">Marquee</h1>
 	{#if data.user}
 		<p class="text-muted-foreground">
 			Signed in as <strong>{data.user.email}</strong>.
