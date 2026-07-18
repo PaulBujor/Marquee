@@ -1,9 +1,11 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import AppHeader from '$lib/components/app-header.svelte';
 	import { theme } from '$lib/state/theme.svelte.js';
+	import type { LayoutData } from './$types';
 
-	let { children } = $props();
+	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
 	$effect(() => {
 		document.documentElement.classList.toggle('dark', theme.isDark);
@@ -29,4 +31,7 @@
 	<link rel="manifest" href="/manifest.json" />
 	<meta name="theme-color" content="#8B5CF6" />
 </svelte:head>
+{#if data.user}
+	<AppHeader user={data.user} />
+{/if}
 {@render children()}

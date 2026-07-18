@@ -41,6 +41,15 @@ export function renderCodeEmail(code: string, ttlMinutes: number): string {
 	);
 }
 
+export function renderEmailChangeCode(code: string, ttlMinutes: number): string {
+	return layout(
+		'Confirm your new email',
+		`<p>Enter this code in Marquee to confirm this as your new account email. It expires in ${ttlMinutes} minutes.</p>
+		<p style="margin: 24px 0; font-size: 32px; font-weight: 700; letter-spacing: 8px; font-family: ui-monospace, 'SF Mono', Menlo, monospace;">${code}</p>
+		<p style="${MUTED}">If you didn't request this change, you can safely ignore this email — your address won't change.</p>`
+	);
+}
+
 export function renderWaitlistEmail(): string {
 	return layout(
 		"You're on the waitlist",

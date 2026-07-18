@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { createDb } from '$lib/server/db';
-import { loginTokens, users, type User } from '$lib/server/db/schema';
+import { emailChangeTokens, loginTokens, sessions, users, type User } from '$lib/server/db/schema';
 import type { EmailSender } from '$lib/server/email';
 import {
 	renderCodeEmail,
@@ -34,6 +34,14 @@ const SIGNUP_MAX_PER_IP = 10;
 export function normalizeEmail(email: string): string {
 	return email.trim().toLowerCase();
 }
+
+/**
+ * Shared input shapes, re-validated server-side (the client uses them only for
+ * immediate feedback). `EMAIL_RE` is a permissive email check; `CODE_RE` gates
+ * the 6-digit OTP for both sign-in and email-change flows.
+ */
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const CODE_RE = /^\d{6}$/;
 
 /** Where the sign-in request came from: an installed PWA vs a browser tab. */
 export type SignInMode = 'standalone' | 'browser';
@@ -272,6 +280,19 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
 	return { ok: true, user, token, expiresAt };
 }
 
+/**
+ * Permanently delete a user and everything tied to them. Child rows are removed
+ * explicitly (not via FK cascade) so this holds regardless of whether the
+ * connection enforces foreign keys: sessions + email-change tokens by user id,
+ * login tokens by email (that table has no FK).
+ */
+export async function deleteAccount(db: Db, user: User): Promise<void> {
+	await db.delete(emailChangeTokens).where(eq(emailChangeTokens.userId, user.id));
+	await db.delete(sessions).where(eq(sessions.userId, user.id));
+	await db.delete(loginTokens).where(eq(loginTokens.email, user.email));
+	await db.delete(users).where(eq(users.id, user.id));
+}
+
 async function isRateLimited(db: Db, email: string, ip?: string | null): Promise<boolean> {
 	const since = new Date(Date.now() - RATE_WINDOW_MS);
 	const [{ n }] = await db
@@ -297,3 +318,11 @@ export {
 	setSessionCookie,
 	SESSION_COOKIE
 } from './session';
+
+export {
+	requestEmailChange,
+	verifyEmailChange,
+	EMAIL_CHANGE_TTL_MINUTES,
+	type EmailChangeRequestResult,
+	type EmailChangeVerifyResult
+} from './email-change';

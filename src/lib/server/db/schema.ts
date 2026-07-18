@@ -85,6 +85,37 @@ export const loginTokens = sqliteTable(
 );
 
 /**
+ * A short-lived secret confirming a change of account email. Like `loginTokens`
+ * we store only the SHA-256 hash of a 6-digit code — but this is scoped to a
+ * specific user and the *target* address the code was emailed to, so verifying
+ * it switches `users.email` rather than minting a session. `attempts` caps
+ * online brute-forcing before the row is invalidated.
+ */
+export const emailChangeTokens = sqliteTable(
+	'email_change_tokens',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		// The address the code was sent to and that we'll switch the account to.
+		newEmail: text('new_email').notNull(),
+		// SHA-256 hex of the raw 6-digit code.
+		tokenHash: text('token_hash').notNull(),
+		// Failed verification attempts; the token is invalidated past a cap.
+		attempts: integer('attempts').notNull().default(0),
+		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+		consumedAt: integer('consumed_at', { mode: 'timestamp' }),
+		createdAt: integer('created_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [index('email_change_tokens_user_id_idx').on(table.userId)]
+);
+
+/**
  * A server-side session. The cookie carries a random token; we store only its
  * SHA-256 hash (as the primary key), so a leaked DB cannot be used to forge a
  * session cookie. `lastUsedAt` is refreshed on each authenticated request.
@@ -111,3 +142,4 @@ export const sessions = sqliteTable(
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type LoginToken = typeof loginTokens.$inferSelect;
+export type EmailChangeToken = typeof emailChangeTokens.$inferSelect;
