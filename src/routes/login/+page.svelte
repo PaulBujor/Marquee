@@ -31,6 +31,8 @@
 	const onCodeStep = $derived(
 		(form && 'step' in form && form.step === 'code') || (result === 'sent' && method === 'code')
 	);
+	// What we'll actually send from the initial step, given the detected mode.
+	const noun = $derived(mode === 'standalone' ? 'code' : 'link');
 
 	const track = () => {
 		submitting = true;
@@ -139,9 +141,9 @@
 		{:else}
 			<Card.Header>
 				<Card.Title>Sign in to Marquee</Card.Title>
-				<Card.Description
-					>Enter your email and we'll send you a one-time sign-in link.</Card.Description
-				>
+				<Card.Description>
+					Enter your email and we'll send you a one-time sign-in {noun}.
+				</Card.Description>
 			</Card.Header>
 			<Card.Content>
 				<form method="POST" action="?/request" class="flex flex-col gap-3" use:enhance={track}>
@@ -167,7 +169,7 @@
 						<p class="text-sm text-destructive">{data.linkError}</p>
 					{/if}
 					<Button type="submit" disabled={submitting}>
-						{submitting ? 'Sending…' : 'Send sign-in link'}
+						{submitting ? 'Sending…' : `Send sign-in ${noun}`}
 					</Button>
 				</form>
 			</Card.Content>
