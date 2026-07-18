@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 
-// Unit tests only (no integration/e2e yet). Pure server-lib logic runs in the
-// node environment; the `$lib` alias mirrors SvelteKit's so imports resolve.
+// Unit tests run in the node environment; the `$lib` alias mirrors SvelteKit's
+// so imports resolve. Coverage focuses on the server logic under test.
 export default defineConfig({
 	resolve: {
 		alias: {
@@ -11,6 +11,11 @@ export default defineConfig({
 	},
 	test: {
 		environment: 'node',
-		include: ['src/**/*.test.ts']
+		include: ['src/**/*.test.ts'],
+		coverage: {
+			provider: 'v8',
+			include: ['src/lib/server/**'],
+			reporter: ['text', 'json-summary', 'html']
+		}
 	}
 });

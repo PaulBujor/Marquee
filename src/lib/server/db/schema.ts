@@ -17,24 +17,30 @@ export type UserStatus = (typeof USER_STATUSES)[number];
  * passwords (auth is passwordless magic link). Users are created as `pending`
  * when they join the waitlist, not lazily at verify time.
  */
-export const users = sqliteTable('users', {
-	id: text('id')
-		.primaryKey()
-		.$defaultFn(() => crypto.randomUUID()),
-	email: text('email').notNull().unique(),
-	status: text('status', { enum: USER_STATUSES }).notNull().default('pending'),
-	// Optional free-text reason recorded when an account is blocked (audit trail).
-	blockedReason: text('blocked_reason'),
-	createdAt: integer('created_at', { mode: 'timestamp' })
-		.notNull()
-		.$defaultFn(() => new Date()),
-	// Maintained by the `users_set_updated_at` DB trigger (see migration) so it
-	// tracks *every* change, including manual status flips via raw SQL. Stored as
-	// Unix seconds, matching Drizzle's `timestamp` mode.
-	updatedAt: integer('updated_at', { mode: 'timestamp' })
-		.notNull()
-		.default(sql`(unixepoch())`)
-});
+export const users = sqliteTable(
+	'users',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		email: text('email').notNull().unique(),
+		status: text('status', { enum: USER_STATUSES }).notNull().default('pending'),
+		// Optional free-text reason recorded when an account is blocked (audit trail).
+		blockedReason: text('blocked_reason'),
+		// Requesting client IP at waitlist signup, for per-IP signup rate limiting.
+		signupIp: text('signup_ip'),
+		createdAt: integer('created_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		// Maintained by the `users_set_updated_at` DB trigger (see migration) so it
+		// tracks *every* change, including manual status flips via raw SQL. Stored as
+		// Unix seconds, matching Drizzle's `timestamp` mode.
+		updatedAt: integer('updated_at', { mode: 'timestamp' })
+			.notNull()
+			.default(sql`(unixepoch())`)
+	},
+	(table) => [index('users_signup_ip_idx').on(table.signupIp)]
+);
 
 /**
  * A short-lived magic-link token. We store only the SHA-256 hash of the token;

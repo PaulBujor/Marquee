@@ -13,6 +13,8 @@ const LOGIN_TOKEN_TTL_MS = 15 * 60 * 1000;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX_PER_EMAIL = 5;
 const RATE_MAX_PER_IP = 20;
+/** Per-IP cap on unauthenticated waitlist signups within RATE_WINDOW_MS. */
+const SIGNUP_MAX_PER_IP = 10;
 
 export function normalizeEmail(email: string): string {
 	return email.trim().toLowerCase();
@@ -70,24 +72,41 @@ export async function requestMagicLink(opts: {
 	return { kind: 'sent' };
 }
 
-export type JoinResult = { kind: 'waitlisted' } | { kind: 'blocked' } | { kind: 'already' };
+export type JoinResult =
+	{ kind: 'waitlisted' } | { kind: 'blocked' } | { kind: 'already' } | { kind: 'rate_limited' };
 
 /**
  * Waitlist signup: create a `pending` user for a previously-unknown address and
- * email a confirmation. Promotion to `enabled` is a manual DB flip during the
- * private beta.
+ * email a confirmation. Unauthenticated, so it's rate-limited per IP to prevent
+ * row-flooding / email-bombing. Promotion to `enabled` is a manual DB flip
+ * during the private beta.
  */
 export async function joinWaitlist(
 	db: Db,
 	rawEmail: string,
-	sender: EmailSender
+	sender: EmailSender,
+	ip?: string | null
 ): Promise<JoinResult> {
 	const email = normalizeEmail(rawEmail);
 	const existing = (await db.select().from(users).where(eq(users.email, email)).limit(1)).at(0);
 	if (existing) {
 		return existing.status === 'blocked' ? { kind: 'blocked' } : { kind: 'already' };
 	}
-	await db.insert(users).values({ email, status: 'pending' }).onConflictDoNothing();
+
+	if (ip) {
+		const [{ n }] = await db
+			.select({ n: count() })
+			.from(users)
+			.where(
+				and(eq(users.signupIp, ip), gte(users.createdAt, new Date(Date.now() - RATE_WINDOW_MS)))
+			);
+		if (n >= SIGNUP_MAX_PER_IP) return { kind: 'rate_limited' };
+	}
+
+	await db
+		.insert(users)
+		.values({ email, status: 'pending', signupIp: ip ?? null })
+		.onConflictDoNothing();
 	// Confirmation email is best-effort: the signup has already succeeded, so a
 	// mail failure must not fail the request (it would otherwise 500 the join).
 	try {

@@ -8,6 +8,13 @@
       "when": 1784361630589,
       "tag": "0000_init_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1784366851971,
+      "tag": "0001_waitlist_signup_ip",
+      "breakpoints": true
     }
   ]
 }
