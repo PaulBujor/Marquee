@@ -4,7 +4,11 @@ import type { EmailSender } from './index';
 export class SmtpSender implements EmailSender {
 	private transporter: nodemailer.Transporter;
 
-	constructor(host: string, port: number) {
+	constructor(
+		host: string,
+		port: number,
+		private from: string
+	) {
 		this.transporter = nodemailer.createTransport({
 			host,
 			port,
@@ -14,7 +18,7 @@ export class SmtpSender implements EmailSender {
 
 	async send(opts: { to: string; subject: string; html: string }): Promise<void> {
 		await this.transporter.sendMail({
-			from: 'Marquee <dev@marquee.local>',
+			from: this.from,
 			to: opts.to,
 			subject: opts.subject,
 			html: opts.html

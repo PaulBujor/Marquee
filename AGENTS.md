@@ -20,7 +20,12 @@ Movie & TV tracking PWA. Linear team board (MRQ): https://linear.app/paulbujor/t
 
 ## Setup
 
-Local setup: `pnpm install` → `pnpm dev`. `pnpm dev` (Vite) runs against emulated Cloudflare bindings — `adapter-cloudflare` provisions a **local D1** (persisted in `.wrangler/`) through its platform proxy, so `platform.env.DB` works in dev without `wrangler dev`. Copy `.dev.vars.example` → `.dev.vars` when you need local secret values (TMDB/Resend/VAPID). `pnpm preview` (`wrangler dev`) runs the built worker in workerd; `wrangler deploy` ships it.
+Local setup: `pnpm install` → `pnpm dev`. `pnpm dev` (Vite) runs against emulated Cloudflare bindings — `adapter-cloudflare` provisions a **local D1** (persisted in `.wrangler/`) through its platform proxy, so `platform.env.DB` works in dev without `wrangler dev`. Copy `.dev.vars.example` → `.dev.vars` for local secret values (`.dev.vars` also carries `SMTP_HOST`/`SMTP_PORT` for Mailpit). `pnpm preview` (`wrangler dev`) runs the built worker in workerd; `wrangler deploy` ships it.
+
+Two extra steps to run the full app locally:
+
+- **Mailpit** (local email): `docker compose up -d`. SMTP on `1025`, web UI at `http://localhost:8025`. Magic-link emails land here in dev — no Resend key needed locally.
+- **Apply DB migrations to local D1**: `pnpm db:migrate:local` (wraps `wrangler d1 migrations apply marquee --local`). After editing `schema.ts`, run `pnpm db:generate` then re-apply. `pnpm db:migrate:remote` targets the deployed D1. Do **not** use drizzle-kit's own `push`/`migrate` — they don't apply to D1.
 
 Package manager is **pnpm** (pinned via `packageManager` in `package.json`; `corepack enable pnpm` to match). Do not use npm/yarn — only `pnpm-lock.yaml` is committed. Build scripts for native deps (`esbuild`, `sharp`, `workerd`) are allow-listed in `pnpm-workspace.yaml` (`allowBuilds`).
 
@@ -32,38 +37,44 @@ Wrangler config (`wrangler.jsonc`) invariants to preserve:
 
 ## Commands
 
-| Task                       | Command                                        |
-| -------------------------- | ---------------------------------------------- |
-| Dev server                 | `pnpm dev`                                     |
-| Build                      | `pnpm build` (`wrangler types` + vite)         |
-| Preview (built worker)     | `pnpm preview` (`wrangler dev`)                |
-| Deploy                     | `pnpm exec wrangler deploy`                    |
-| Lint                       | `pnpm lint` (`prettier --check` + eslint)      |
-| Typecheck                  | `pnpm check` (`wrangler types` + svelte-check) |
-| Format                     | `pnpm format`                                  |
-| Regen worker types         | `pnpm gen` (`wrangler types`)                  |
-| Drizzle generate migration | `pnpm db:generate`                             |
-| Drizzle push schema (dev)  | `pnpm db:push`                                 |
-| Drizzle apply migrations   | `pnpm db:migrate`                              |
-| Drizzle Studio             | `pnpm db:studio`                               |
+| Task                        | Command                                        |
+| --------------------------- | ---------------------------------------------- |
+| Dev server                  | `pnpm dev`                                     |
+| Build                       | `pnpm build` (`wrangler types` + vite)         |
+| Preview (built worker)      | `pnpm preview` (`wrangler dev`)                |
+| Deploy                      | `pnpm exec wrangler deploy`                    |
+| Lint                        | `pnpm lint` (`prettier --check` + eslint)      |
+| Typecheck                   | `pnpm check` (`wrangler types` + svelte-check) |
+| Format                      | `pnpm format`                                  |
+| Test                        | `pnpm test` (`vitest run`)                     |
+| Test + coverage             | `pnpm test:coverage` (v8)                      |
+| Regen worker types          | `pnpm gen` (`wrangler types`)                  |
+| Drizzle generate migration  | `pnpm db:generate`                             |
+| Apply migrations (local D1) | `pnpm db:migrate:local`                        |
+| Apply migrations (remote)   | `pnpm db:migrate:remote`                       |
+| Drizzle Studio              | `pnpm db:studio`                               |
 
-Run `lint → typecheck → build` (`pnpm lint && pnpm check && pnpm build`) before pushing — this mirrors CI (`.github/workflows/ci.yml`, Node 22, pnpm). Run `check` on a clean tree — a stale `.svelte-kit/output` / `.svelte-kit/cloudflare` from a prior `build` makes `svelte-check` scan generated worker code and report false errors (CI runs `check` before `build`, so it never hits this).
+Run `lint → typecheck → build → test` (`pnpm lint && pnpm check && pnpm build && pnpm test`) before pushing — this mirrors CI (`.github/workflows/ci.yml`, Node 22, pnpm; CI runs `test:coverage` and publishes the report). Run `check` on a clean tree — a stale `.svelte-kit/output` / `.svelte-kit/cloudflare` from a prior `build` makes `svelte-check` scan generated worker code and report false errors (CI runs `check` before `build`, so it never hits this).
 
 **TypeScript stays on 6.x** (`^6.0.3`). TypeScript 7 (the native "Corsa" rewrite) is verified-blocked: both `svelte-check@4.7.3` and `typescript-eslint@8.64.0` crash on TS7's rewritten compiler API. Revisit once those tools ship TS7 support; do not bump `typescript` past 6 until `pnpm lint && pnpm check` pass with it.
 
-**Worker types**: `worker-configuration.d.ts` is generated by `wrangler types` and is **git-ignored, not committed**. Its output is non-deterministic — it folds in local `.env`/`.dev.vars` values and a `mainModule` line that only exists after a build — so no committed copy can stay valid across machines, CI, and Cloudflare. It is regenerated per environment instead: `build` and `check` run `wrangler types` first, and `pnpm gen` regenerates it on demand (run it once after cloning so your editor has types). Do **not** add `wrangler types --check` — it fails on that non-determinism (and crashes intermittently on Windows).
+**Worker types**: `worker-configuration.d.ts` is generated by `wrangler types` and is **git-ignored, not committed**. Its output is non-deterministic — it folds in local `.env`/`.dev.vars` values and a `mainModule` line that only exists after a build — so no committed copy can stay valid across machines, CI, and Cloudflare. It is regenerated per environment instead: `build` and `check` run `wrangler types` first, and `pnpm gen` regenerates it on demand (run it once after cloning so your editor has types). Do **not** add `wrangler types --check` — it fails on that non-determinism (and crashes intermittently on Windows). `wrangler types` only types env vars it can see (from `.dev.vars`), which CI doesn't have — so the app's env contract is declared explicitly as an `interface Env` augmentation in `src/app.d.ts` (it merges with the generated `Env`; keep members `string` to match). That types `env.EMAIL_FROM`/`SMTP_HOST`/`RESEND_API_KEY`/etc. everywhere, including CI. Add new app-read env vars there.
+
+## Conventions
+
+- **Comments**: doc blocks briefly state _what_ a function does. Don't leave comments that narrate rolled-back decisions, or that describe code which no longer exists (or never did) — update or delete them when the code changes.
 
 ## Architecture
 
-- **Server-only code** lives in `src/lib/server/` and must never be imported from client code. `src/hooks.server.ts` composes hooks via `sequence()`: a per-request Drizzle client — `event.locals.db = createDb(platform.env.DB)`, only set when `event.platform` exists (absent during prerender/build) — plus a security-headers hook. `App.Locals.db` is therefore typed **optional** (`src/app.d.ts`); server load functions must guard it (`if (!locals.db) error(503)`).
+- **Server-only code** lives in `src/lib/server/` and must never be imported from client code. `src/hooks.server.ts` composes hooks via `sequence(database, authentication, securityHeaders)`: a per-request Drizzle client — `event.locals.db = createDb(platform.env.DB)`, only set when `event.platform` exists (absent during prerender/build) — then session resolution, then security headers. `App.Locals.db` is therefore typed **optional** (`src/app.d.ts`); server load functions must guard it (`if (!locals.db) error(503)`). `App.Locals.user` (`User | null`) is set by the `authentication` hook and exposed to pages via `src/routes/+layout.server.ts`.
 - **Security headers**: `hooks.server.ts` sets `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and `Strict-Transport-Security` on every response. **CSP** is configured separately as `kit.csp` in `svelte.config.js` (it needs SvelteKit's nonce/hash augmentation of inline scripts). `style-src` includes `'unsafe-inline'` because Svelte/bits-ui transitions inject runtime inline `<style>`; `img-src` allows `image.tmdb.org` for future poster loading.
 - **SvelteKit config** lives in `svelte.config.js` (adapter, `kit.csp`, `kit.typescript`, runes `compilerOptions`). Keep `vite.config.ts` to just `[tailwindcss(), sveltekit()]` — passing config inline to `sveltekit()` would make SvelteKit ignore `svelte.config.js`.
-- **Database**: Cloudflare D1 (binding `DB`) via Drizzle (`drizzle-orm/d1`). Schema at `src/lib/server/db/schema.ts`, `createDb()` at `src/lib/server/db/index.ts`. `drizzle.config.ts` uses the `sqlite` dialect; migrations output to `./drizzle`. ⚠️ The schema is still the scaffold demo `task` table — the real watchlist model is not built yet.
-- **Email**: `EmailSender` interface (`src/lib/server/email/index.ts`) with `ResendSender` (prod) and `SmtpSender` (dev, nodemailer → Mailpit).
+- **Database**: Cloudflare D1 (binding `DB`) via Drizzle (`drizzle-orm/d1`). Schema at `src/lib/server/db/schema.ts`, `createDb()` at `src/lib/server/db/index.ts`. `drizzle.config.ts` uses the `sqlite` dialect; migrations output to `./drizzle` and **are committed** (they're the source of truth applied to D1 via `wrangler d1 migrations apply`). Current tables: `users`, `sessions`, `login_tokens` (the auth model). The watchlist/tracking model is not built yet.
+- **Email**: `EmailSender` interface (`src/lib/server/email/index.ts`) with `ResendSender` (prod) and `SmtpSender` (nodemailer → Mailpit). `createEmailSender(env)` picks the transport at **runtime** by presence of `SMTP_HOST` (so it's correct under both `pnpm dev` and `wrangler dev`) — SMTP/Mailpit when set, else Resend. Use `SMTP_HOST=127.0.0.1` locally: workerd's DNS can't resolve `localhost`.
 - **Theme / design tokens**: dark mode is a `.dark` class on `<html>`, toggled reactively by the `theme` rune singleton (`src/lib/state/theme.svelte.ts`, persisted to `localStorage` key `marquee:theme-mode`) in `src/routes/+layout.svelte`. Tokens are oklch CSS variables in `src/routes/layout.css` mapped to Tailwind via `@theme inline` — there is **no `tailwind.config`** (Tailwind v4, CSS-configured). shadcn-svelte style is `nova`; component/util/ui aliases live in `components.json`.
 - **PWA / offline**: `src/service-worker.ts` (cache-first), manifest + icons in `static/`. Planned client offline state is IndexedDB with a materialized-state layer.
 - **Event-sourced sync** (planned): Offline & Sync is sequenced before the higher feature epics — all tracking writes are intended to flow through the event pipeline from the start.
-- **Auth** (planned): passwordless magic link → verify endpoint → httpOnly session cookie; `hooks.server.ts` will validate the session cookie on every request.
+- **Auth**: passwordless magic link, **gated by account status** (`users.status` = `pending` | `enabled` | `blocked`). `src/lib/server/auth/` holds the logic — `tokens.ts` (Web Crypto random tokens + SHA-256 hashing), `session.ts` (session create/validate/invalidate + httpOnly cookie helpers; a session whose user is no longer `enabled` is dropped on validation), `index.ts` (`requestMagicLink` / `joinWaitlist` / `verifyMagicLink`). Only token **hashes** are stored (magic-link and session tokens alike), so a DB read can't forge either. Flow: `/login` asks for an email; the **request phase** branches on status — `enabled` → send link; `blocked` → stop; `pending` → "on the waitlist"; **unknown** → offer waitlist signup, which creates a `pending` user. Only `enabled` users receive links. `/auth/verify` consumes the single-use token and mints a session **only for an enabled user** (no lazy creation). `hooks.server.ts` resolves the cookie to `locals.user` on every request; logout is a form action on `/`. Promotion `pending`→`enabled` is a **manual DB flip** during the private beta. The status-gated UX intentionally reveals account state (i.e. is **not** enumeration-resistant) — a deliberate product choice. Rate limiting: 5/hr per email + 20/hr per IP (`login_tokens.request_ip`). Account settings (change email, delete account) are not built yet.
 
 ## Roadmap / build order
 
@@ -71,7 +82,7 @@ Tracked in Linear team **MRQ**. Rough sequence, from the current UI foundation o
 
 ## Testing
 
-No test framework is configured yet — there is no `test` script and no vitest/playwright dependency. Do not assume tests exist; if adding them, wire the runner into `package.json` and CI.
+**Vitest**. `pnpm test` (`svelte-kit sync && vitest run`; the sync makes the generated `.svelte-kit/tsconfig.json` exist for Vite 8's oxc transform); `pnpm test:coverage` for v8 coverage (CI publishes a job-summary table + a `coverage/` artifact). Config: `vitest.config.ts` (node env, `$lib` alias, `src/**/*.test.ts`), tests colocated. DB-backed auth logic is tested against an **in-memory SQLite** (`better-sqlite3`) with the real committed migrations applied — `createTestDb()` in `src/lib/server/db/test-db.ts`; D1's dialect is SQLite, so the schema/migrations/`updated_at` trigger and queries run identically (the driver-type gap is a cast inside the helper). Pure helpers (`tokens.test.ts`, `normalize-email.test.ts`) run directly. **Note:** true-D1 tests via `@cloudflare/vitest-pool-workers` are blocked on this repo's Vite 8 / Vitest 4 — its 0.18.x package exports (no `./config`) don't resolve under Vite 8; revisit when it catches up.
 
 ## Secrets
 

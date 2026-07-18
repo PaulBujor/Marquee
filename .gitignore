@@ -29,8 +29,8 @@ Thumbs.db
 # Not committed: its output depends on local .dev.vars/.env and build state.
 worker-configuration.d.ts
 
-# Drizzle Kit output
-drizzle/
+# Drizzle migrations (./drizzle) ARE committed — they are the source of truth
+# applied to D1 via `wrangler d1 migrations apply`. Do not ignore them.
 
 # SQLite database files
 *.db

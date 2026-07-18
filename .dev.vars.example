@@ -3,3 +3,13 @@ TMDB_API_KEY=your_tmdb_api_key
 RESEND_API_KEY=your_resend_api_key
 VAPID_PUBLIC_KEY=your_vapid_public_key
 VAPID_PRIVATE_KEY=your_vapid_private_key
+
+# Local email via Mailpit (docker compose up -d). Presence of SMTP_HOST selects the
+# SMTP transport over Resend. Use 127.0.0.1, not "localhost" — workerd's DNS
+# (wrangler dev) can't resolve the hostname.
+SMTP_HOST=127.0.0.1
+SMTP_PORT=1025
+
+# From address for outgoing mail. In production this MUST be a Resend-verified
+# sender (unverified domains -> Resend 403). Locally Mailpit accepts anything.
+EMAIL_FROM=Marquee <dev@marquee.local>

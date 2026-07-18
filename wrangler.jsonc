@@ -14,7 +14,7 @@
 		{
 			"binding": "DB",
 			"database_name": "marquee",
-			"database_id": "5b8b3942-7360-4f68-8b5b-c1edeff1c9f8",
+			"database_id": "a54537ab-09e0-48d7-ac8f-46c33cf631a2",
 			"migrations_dir": "drizzle"
 		}
 	],
@@ -34,6 +34,33 @@
 			"enabled": true,
 			"persist": true,
 			"head_sampling_rate": 1
+		}
+	},
+	"env": {
+		"preview": {
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "marquee-preview",
+					"database_id": "72ed3d6e-b0a2-46cd-ad5e-00ec51f928a6",
+					"migrations_dir": "drizzle"
+				}
+			],
+			"observability": {
+				"enabled": true,
+				"head_sampling_rate": 1,
+				"logs": {
+					"enabled": true,
+					"head_sampling_rate": 1,
+					"persist": true,
+					"invocation_logs": true
+				},
+				"traces": {
+					"enabled": true,
+					"persist": true,
+					"head_sampling_rate": 1
+				}
+			}
 		}
 	}
 }

@@ -3,6 +3,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Design tokens. Colors are oklch(Lightness Chroma Hue) and drive the whole app
+ * via the `@theme inline` map below (Tailwind utilities like `bg-primary`,
+ * `text-muted-foreground`, etc.). To re-theme:
+ *   - Brand / accent = `--primary` (currently a warm orange, hue 60). Change it
+ *     in BOTH `:root` and `.dark`, and `--ring` which mirrors it.
+ *   - Fonts: `--font-sans` (Public Sans) / `--font-serif` (Fraunces, used for
+ *     headings) in `@theme inline`.
+ * Transactional emails can't use these variables (email clients strip CSS vars),
+ * so their colors are inlined literally in `src/lib/server/auth` — keep the
+ * brand hex there in sync with `--primary` (oklch(0.765 0.156 60) = #f9983a).
+ */
 :root {
 	--radius: 0.625rem;
 	--background: oklch(0.973 0.004 80);

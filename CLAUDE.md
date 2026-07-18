@@ -7,5 +7,5 @@ See @AGENTS.md for the full project guidance — tech stack, commands, architect
 ## Claude Code notes
 
 - Package manager is **pnpm** (see `packageManager` in `package.json`). Use `pnpm install`, `pnpm <script>` — not npm.
-- Before proposing a commit, run `pnpm lint && pnpm check && pnpm build` — this mirrors the CI gate (`.github/workflows/ci.yml`, Node 22, pnpm).
+- Before proposing a commit, run `pnpm lint && pnpm check && pnpm build && pnpm test` — this mirrors the CI gate (`.github/workflows/ci.yml`, Node 22, pnpm).
 - Work is planned in Linear team **MRQ** (project "Core App"). The Linear MCP is available for reading/updating `MRQ-<n>` issues; branch names follow `paul/mrq-<n>-short-slug`.
