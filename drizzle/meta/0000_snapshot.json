@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9787546a-764e-42b5-9416-f5fe63580499",
+  "id": "2e1a1e3d-5732-4ae4-a206-ff9bdd1734b2",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "login_tokens": {
@@ -19,6 +19,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "request_ip": {
+          "name": "request_ip",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "expires_at": {
@@ -48,6 +55,13 @@
           "name": "login_tokens_email_idx",
           "columns": [
             "email"
+          ],
+          "isUnique": false
+        },
+        "login_tokens_request_ip_idx": {
+          "name": "login_tokens_request_ip_idx",
+          "columns": [
+            "request_ip"
           ],
           "isUnique": false
         }
@@ -140,6 +154,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
         },
         "created_at": {
           "name": "created_at",

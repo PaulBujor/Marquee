@@ -49,7 +49,9 @@ export async function validateSession(
 	if (!row) return null;
 
 	const now = Date.now();
-	if (row.session.expiresAt.getTime() <= now) {
+	// Drop the session if it expired or the account is no longer enabled
+	// (e.g. blocked after signing in).
+	if (row.session.expiresAt.getTime() <= now || row.user.status !== 'enabled') {
 		await db.delete(sessions).where(eq(sessions.id, id));
 		return null;
 	}

@@ -1,15 +1,27 @@
 import { integer, sqliteTable, text, index } from 'drizzle-orm/sqlite-core';
 
 /**
+ * Account states for the gated (waitlist) auth flow:
+ * - `pending`  — signed up, waiting for access; cannot receive a login link.
+ * - `enabled`  — approved; can request links and sign in.
+ * - `blocked`  — denied; cannot request links or hold a session.
+ * New signups start `pending`; promotion to `enabled` is a manual DB flip
+ * during the private beta.
+ */
+export const USER_STATUSES = ['pending', 'enabled', 'blocked'] as const;
+export type UserStatus = (typeof USER_STATUSES)[number];
+
+/**
  * A registered user. Identity is the verified email address — there are no
- * passwords (auth is passwordless magic link). Users are created lazily on the
- * first successful link verification, so no signup step is needed.
+ * passwords (auth is passwordless magic link). Users are created as `pending`
+ * when they join the waitlist, not lazily at verify time.
  */
 export const users = sqliteTable('users', {
 	id: text('id')
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
 	email: text('email').notNull().unique(),
+	status: text('status', { enum: USER_STATUSES }).notNull().default('pending'),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
 		.$defaultFn(() => new Date())
@@ -18,7 +30,7 @@ export const users = sqliteTable('users', {
 /**
  * A short-lived magic-link token. We store only the SHA-256 hash of the token;
  * the raw token travels solely in the emailed link, so a DB read cannot mint a
- * valid link. `email` is captured at request time (the user may not exist yet).
+ * valid link. Links are only ever issued to `enabled` users.
  */
 export const loginTokens = sqliteTable(
 	'login_tokens',
@@ -26,13 +38,18 @@ export const loginTokens = sqliteTable(
 		// SHA-256 hex of the raw token — also the lookup key.
 		tokenHash: text('token_hash').primaryKey(),
 		email: text('email').notNull(),
+		// Requesting client IP, for per-IP email-bomb rate limiting (nullable if unknown).
+		requestIp: text('request_ip'),
 		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
 		consumedAt: integer('consumed_at', { mode: 'timestamp' }),
 		createdAt: integer('created_at', { mode: 'timestamp' })
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [index('login_tokens_email_idx').on(table.email)]
+	(table) => [
+		index('login_tokens_email_idx').on(table.email),
+		index('login_tokens_request_ip_idx').on(table.requestIp)
+	]
 );
 
 /**

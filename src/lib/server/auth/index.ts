@@ -9,45 +9,57 @@ type Db = ReturnType<typeof createDb>;
 
 /** Magic links expire quickly — long enough to switch to an email client. */
 const LOGIN_TOKEN_TTL_MS = 15 * 60 * 1000;
-/** Throttle window and cap on link requests per email address. */
-const RATE_WINDOW_MS = 15 * 60 * 1000;
-const RATE_MAX_PER_WINDOW = 5;
+/** Email-bomb protection: cap link requests per email and per IP within a window. */
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+const RATE_MAX_PER_EMAIL = 5;
+const RATE_MAX_PER_IP = 20;
 
 export function normalizeEmail(email: string): string {
 	return email.trim().toLowerCase();
 }
 
-export type VerifyResult =
-	| { ok: true; user: User; token: string; expiresAt: Date }
-	| { ok: false; reason: 'invalid' | 'expired' };
+/**
+ * Outcome of the request phase. The flow is gated by account status, so the
+ * response deliberately reflects whether the address is enabled / blocked /
+ * on the waitlist / unknown (this trades away email-enumeration resistance in
+ * favour of the waitlist UX — an intentional product choice).
+ */
+export type RequestResult =
+	| { kind: 'sent' }
+	| { kind: 'blocked' }
+	| { kind: 'waitlisted' }
+	| { kind: 'unknown' }
+	| { kind: 'rate_limited' };
 
 /**
- * Issue a magic link for `email` and send it. Behaves identically whether or
- * not the address belongs to an existing user (the account is created on
- * verify), so this endpoint never reveals whether an email is registered.
- * Returns `false` when the per-address rate limit is hit.
+ * Request phase: look up the account by email and branch on its status. Only
+ * `enabled` users are sent a magic link; `pending`/`blocked` are told their
+ * state, and unknown addresses are invited to join the waitlist (see
+ * `joinWaitlist`) rather than being created here.
  */
 export async function requestMagicLink(opts: {
 	db: Db;
 	email: string;
 	sender: EmailSender;
 	origin: string;
-}): Promise<boolean> {
+	ip?: string | null;
+}): Promise<RequestResult> {
 	const email = normalizeEmail(opts.email);
-	const now = Date.now();
+	const user = (await opts.db.select().from(users).where(eq(users.email, email)).limit(1)).at(0);
 
-	const [{ n }] = await opts.db
-		.select({ n: count() })
-		.from(loginTokens)
-		.where(
-			and(eq(loginTokens.email, email), gte(loginTokens.createdAt, new Date(now - RATE_WINDOW_MS)))
-		);
-	if (n >= RATE_MAX_PER_WINDOW) return false;
+	if (!user) return { kind: 'unknown' };
+	if (user.status === 'blocked') return { kind: 'blocked' };
+	if (user.status === 'pending') return { kind: 'waitlisted' };
+
+	// user.status === 'enabled'
+	if (await isRateLimited(opts.db, email, opts.ip)) return { kind: 'rate_limited' };
 
 	const token = generateToken();
 	const tokenHash = await hashToken(token);
-	const expiresAt = new Date(now + LOGIN_TOKEN_TTL_MS);
-	await opts.db.insert(loginTokens).values({ tokenHash, email, expiresAt });
+	const expiresAt = new Date(Date.now() + LOGIN_TOKEN_TTL_MS);
+	await opts.db
+		.insert(loginTokens)
+		.values({ tokenHash, email, requestIp: opts.ip ?? null, expiresAt });
 
 	const url = `${opts.origin}/auth/verify?token=${encodeURIComponent(token)}`;
 	await opts.sender.send({
@@ -55,13 +67,34 @@ export async function requestMagicLink(opts: {
 		subject: 'Your Marquee sign-in link',
 		html: renderMagicLinkEmail(url, LOGIN_TOKEN_TTL_MS / 60000)
 	});
-	return true;
+	return { kind: 'sent' };
 }
 
+export type JoinResult = { kind: 'waitlisted' } | { kind: 'blocked' } | { kind: 'already' };
+
 /**
- * Validate and consume a magic-link token. On success creates (or reuses) the
- * user, mints a session, and returns the raw session token for the cookie.
- * Tokens are single-use — consumption is atomic against concurrent replays.
+ * Waitlist signup: create a `pending` user for a previously-unknown address.
+ * Promotion to `enabled` is a manual DB flip during the private beta.
+ */
+export async function joinWaitlist(db: Db, rawEmail: string): Promise<JoinResult> {
+	const email = normalizeEmail(rawEmail);
+	const existing = (await db.select().from(users).where(eq(users.email, email)).limit(1)).at(0);
+	if (existing) {
+		return existing.status === 'blocked' ? { kind: 'blocked' } : { kind: 'already' };
+	}
+	await db.insert(users).values({ email, status: 'pending' }).onConflictDoNothing();
+	return { kind: 'waitlisted' };
+}
+
+export type VerifyResult =
+	| { ok: true; user: User; token: string; expiresAt: Date }
+	| { ok: false; reason: 'invalid' | 'expired' | 'not_allowed' };
+
+/**
+ * Verify phase: validate and consume a magic-link token, then mint a session —
+ * but only for an `enabled` user. Tokens are single-use (consumption is atomic
+ * against concurrent replays). No user is created here; that happens at
+ * waitlist signup, and links are only ever issued to enabled accounts.
  */
 export async function verifyMagicLink(db: Db, rawToken: string): Promise<VerifyResult> {
 	const tokenHash = await hashToken(rawToken);
@@ -80,16 +113,29 @@ export async function verifyMagicLink(db: Db, rawToken: string): Promise<VerifyR
 		.returning({ tokenHash: loginTokens.tokenHash });
 	if (consumed.length === 0) return { ok: false, reason: 'invalid' };
 
-	const user = await findOrCreateUser(db, row.email);
+	const user = (await db.select().from(users).where(eq(users.email, row.email)).limit(1)).at(0);
+	if (!user || user.status !== 'enabled') return { ok: false, reason: 'not_allowed' };
+
 	const { token, expiresAt } = await createSession(db, user.id);
 	return { ok: true, user, token, expiresAt };
 }
 
-async function findOrCreateUser(db: Db, email: string): Promise<User> {
-	const existing = (await db.select().from(users).where(eq(users.email, email)).limit(1)).at(0);
-	if (existing) return existing;
-	const [created] = await db.insert(users).values({ email }).returning();
-	return created;
+async function isRateLimited(db: Db, email: string, ip?: string | null): Promise<boolean> {
+	const since = new Date(Date.now() - RATE_WINDOW_MS);
+	const [{ n }] = await db
+		.select({ n: count() })
+		.from(loginTokens)
+		.where(and(eq(loginTokens.email, email), gte(loginTokens.createdAt, since)));
+	if (n >= RATE_MAX_PER_EMAIL) return true;
+
+	if (ip) {
+		const [{ n: byIp }] = await db
+			.select({ n: count() })
+			.from(loginTokens)
+			.where(and(eq(loginTokens.requestIp, ip), gte(loginTokens.createdAt, since)));
+		if (byIp >= RATE_MAX_PER_IP) return true;
+	}
+	return false;
 }
 
 function renderMagicLinkEmail(url: string, ttlMinutes: number): string {
