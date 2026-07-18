@@ -8,6 +8,7 @@
 	import * as InputOTP from '$lib/components/ui/input-otp';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { theme } from '$lib/state/theme.svelte.js';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -150,6 +151,15 @@
 				</form>
 			{/if}
 		</Card.Content>
+		<Card.Footer class="border-t pt-4">
+			<!-- Sign out submits the existing root `?/logout` action (redirects to /login). -->
+			<form method="POST" action="/?/logout" use:enhance>
+				<Button type="submit" variant="ghost" class="px-0 text-destructive hover:text-destructive">
+					<LogOutIcon class="size-4" />
+					Log out
+				</Button>
+			</form>
+		</Card.Footer>
 	</Card.Root>
 
 	<!-- Appearance -->

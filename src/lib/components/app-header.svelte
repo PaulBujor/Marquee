@@ -1,47 +1,47 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import { buttonVariants } from '$lib/components/ui/button';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import CircleUserIcon from '@lucide/svelte/icons/circle-user';
-	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import { Button } from '$lib/components/ui/button';
+	import CalendarDaysIcon from '@lucide/svelte/icons/calendar-days';
+	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 
-	// Structurally typed to avoid importing server-only `User`; the layout only
-	// renders this header when a user is present.
-	let { user }: { user: { email: string } } = $props();
-
-	let logoutForm = $state<HTMLFormElement | null>(null);
+	// Circular icon buttons, matching the reference. Timeline and Search are
+	// roadmap features (MRQ Timeline / TMDB search) — rendered disabled for now.
 </script>
 
-<header class="flex items-center justify-between border-b px-4 py-3">
-	<a href={resolve('/')} class="font-serif text-lg font-semibold">Marquee</a>
-
-	<DropdownMenu.Root>
-		<DropdownMenu.Trigger class={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-			<CircleUserIcon class="size-4" />
-			<span class="max-w-[12rem] truncate">{user.email}</span>
-		</DropdownMenu.Trigger>
-		<DropdownMenu.Content align="end" class="w-56">
-			<DropdownMenu.Label class="truncate font-normal text-muted-foreground">
-				{user.email}
-			</DropdownMenu.Label>
-			<DropdownMenu.Separator />
-			<DropdownMenu.Item>
-				{#snippet child({ props })}
-					<a href={resolve('/settings')} {...props}>
-						<SettingsIcon class="size-4" />
-						Settings
-					</a>
-				{/snippet}
-			</DropdownMenu.Item>
-			<DropdownMenu.Item variant="destructive" onSelect={() => logoutForm?.requestSubmit()}>
-				<LogOutIcon class="size-4" />
-				Sign out
-			</DropdownMenu.Item>
-		</DropdownMenu.Content>
-	</DropdownMenu.Root>
-
-	<!-- Actual sign-out submits the existing root `?/logout` action (redirects to /login). -->
-	<form bind:this={logoutForm} method="POST" action="/?/logout" class="hidden" use:enhance></form>
+<header class="flex items-center justify-between px-5 py-4">
+	<a href={resolve('/')} class="font-serif text-xl font-semibold">Marquee</a>
+	<div class="flex items-center gap-2">
+		<Button
+			variant="outline"
+			size="icon"
+			shape="round"
+			class="text-muted-foreground"
+			disabled
+			title="Timeline — coming soon"
+			aria-label="Timeline (coming soon)"
+		>
+			<CalendarDaysIcon class="size-4" />
+		</Button>
+		<Button
+			href={resolve('/settings')}
+			variant="outline"
+			size="icon"
+			shape="round"
+			class="text-muted-foreground"
+			title="Settings"
+			aria-label="Settings"
+		>
+			<SettingsIcon class="size-4" />
+		</Button>
+		<Button
+			size="icon"
+			shape="round"
+			disabled
+			title="Search — coming soon"
+			aria-label="Search (coming soon)"
+		>
+			<SearchIcon class="size-4" />
+		</Button>
+	</div>
 </header>

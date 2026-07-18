@@ -32,6 +32,6 @@
 	<meta name="theme-color" content="#8B5CF6" />
 </svelte:head>
 {#if data.user}
-	<AppHeader user={data.user} />
+	<AppHeader />
 {/if}
 {@render children()}
