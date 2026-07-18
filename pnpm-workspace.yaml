@@ -3,3 +3,12 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+
+# Force patched versions of vulnerable transitive deps (Dependabot / `pnpm audit`).
+# Version-range selectors so only the vulnerable resolutions are bumped, not the
+# already-safe copies (Vite's esbuild 0.28, wrangler's cookie 1.x):
+#   - cookie <0.7.0 (GHSA-pxg6-pf52-xh8x, via @sveltejs/kit)
+#   - esbuild <=0.24.2 (GHSA-67mh-4wv8-2f99, dev-only via drizzle-kit's @esbuild-kit chain)
+overrides:
+  cookie@<0.7.0: '^0.7.0'
+  esbuild@<=0.24.2: '>=0.24.3'
