@@ -1,22 +1,50 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { browser } from '$app/environment';
+	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Card from '$lib/components/ui/card';
+	import * as InputOTP from '$lib/components/ui/input-otp';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let submitting = $state(false);
+	let code = $state('');
+	let codeForm = $state<HTMLFormElement | null>(null);
+
+	// Installed PWAs can't capture the emailed link, so ask the server for a code
+	// instead. Detected client-side (no server header exists); SSR/no-JS → browser.
+	const mode = $derived(
+		browser &&
+			(window.matchMedia('(display-mode: standalone)').matches ||
+				(navigator as unknown as { standalone?: boolean }).standalone === true)
+			? 'standalone'
+			: 'browser'
+	);
 
 	const result = $derived(form && 'result' in form ? form.result : null);
+	const method = $derived(form && 'method' in form ? form.method : null);
 	const email = $derived(form && 'email' in form ? form.email : '');
 	const failMessage = $derived(form && 'message' in form ? form.message : null);
+	const codeError = $derived(form && 'codeError' in form ? form.codeError : null);
+	const onCodeStep = $derived(
+		(form && 'step' in form && form.step === 'code') || (result === 'sent' && method === 'code')
+	);
 
 	const track = () => {
 		submitting = true;
 		return async ({ update }: { update: () => Promise<void> }) => {
 			await update();
 			submitting = false;
+		};
+	};
+	const trackCode = () => {
+		submitting = true;
+		return async ({ update }: { update: () => Promise<void> }) => {
+			await update();
+			submitting = false;
+			code = ''; // clear on a failed attempt so the user can retype (success redirects away)
 		};
 	};
 </script>
@@ -27,13 +55,58 @@
 
 <main class="flex min-h-svh items-center justify-center p-4">
 	<Card.Root class="w-full max-w-sm">
-		{#if result === 'sent'}
+		{#if result === 'sent' && method === 'link'}
 			<Card.Header>
 				<Card.Title>Check your inbox</Card.Title>
 				<Card.Description>
 					We sent a sign-in link to <strong>{email}</strong>. It expires in 15 minutes.
 				</Card.Description>
 			</Card.Header>
+		{:else if onCodeStep}
+			<Card.Header>
+				<Card.Title>Enter your code</Card.Title>
+				<Card.Description>
+					We emailed a 6-digit code to <strong>{email}</strong>. It expires in 10 minutes.
+				</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				<form
+					bind:this={codeForm}
+					method="POST"
+					action="?/verify"
+					class="flex flex-col gap-4"
+					use:enhance={trackCode}
+				>
+					<input type="hidden" name="email" value={email} />
+					<input type="hidden" name="code" value={code} />
+					<InputOTP.Root
+						maxlength={6}
+						bind:value={code}
+						autocomplete="one-time-code"
+						inputmode="numeric"
+						disabled={submitting}
+						class="justify-center"
+						onComplete={() => codeForm?.requestSubmit()}
+					>
+						{#snippet children({ cells })}
+							<InputOTP.Group>
+								{#each cells as cell, i (i)}
+									<InputOTP.Slot {cell} />
+								{/each}
+							</InputOTP.Group>
+						{/snippet}
+					</InputOTP.Root>
+					{#if codeError}
+						<p class="text-center text-sm text-destructive">{codeError}</p>
+					{/if}
+					<Button type="submit" disabled={submitting || code.length < 6}>
+						{submitting ? 'Verifying…' : 'Verify code'}
+					</Button>
+					<a href={resolve('/login')} class="text-center text-sm text-muted-foreground underline">
+						Use a different email
+					</a>
+				</form>
+			</Card.Content>
 		{:else if result === 'waitlisted'}
 			<Card.Header>
 				<Card.Title>You're on the waitlist</Card.Title>
@@ -72,6 +145,7 @@
 			</Card.Header>
 			<Card.Content>
 				<form method="POST" action="?/request" class="flex flex-col gap-3" use:enhance={track}>
+					<input type="hidden" name="mode" value={mode} />
 					<Input
 						type="email"
 						name="email"

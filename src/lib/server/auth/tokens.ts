@@ -19,6 +19,20 @@ export function generateToken(): string {
 }
 
 /**
+ * A random 6-digit numeric code (for the PWA OTP flow). Uniform via rejection
+ * sampling so no digit range is favoured; only ever stored hashed.
+ */
+export function generateCode(): string {
+	const max = 1_000_000;
+	const limit = Math.floor(0xffffffff / max) * max;
+	let n: number;
+	do {
+		n = crypto.getRandomValues(new Uint32Array(1))[0];
+	} while (n >= limit);
+	return (n % max).toString().padStart(6, '0');
+}
+
+/**
  * SHA-256 of a token, hex-encoded. The hash is what we persist and look up by,
  * so a database read alone cannot reconstruct a usable token.
  */

@@ -1,15 +1,18 @@
-import { and, count, eq, gte, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNull } from 'drizzle-orm';
 import type { createDb } from '$lib/server/db';
 import { loginTokens, users, type User } from '$lib/server/db/schema';
 import type { EmailSender } from '$lib/server/email';
 import { createSession } from './session';
-import { generateToken, hashToken } from './tokens';
+import { generateCode, generateToken, hashToken } from './tokens';
 
 type Db = ReturnType<typeof createDb>;
 
-/** Magic links expire quickly — long enough to switch to an email client. */
-const LOGIN_TOKEN_TTL_MS = 15 * 60 * 1000;
-/** Email-bomb protection: cap link requests per email and per IP within a window. */
+/** Magic links (browser) live a little longer than typed codes (PWA). */
+const LINK_TTL_MS = 15 * 60 * 1000;
+const CODE_TTL_MS = 10 * 60 * 1000;
+/** Failed code entries before the code is invalidated (online brute-force cap). */
+const CODE_MAX_ATTEMPTS = 5;
+/** Email-bomb protection: cap link/code requests per email and per IP within a window. */
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX_PER_EMAIL = 5;
 const RATE_MAX_PER_IP = 20;
@@ -20,29 +23,33 @@ export function normalizeEmail(email: string): string {
 	return email.trim().toLowerCase();
 }
 
+/** Where the sign-in request came from: an installed PWA vs a browser tab. */
+export type SignInMode = 'standalone' | 'browser';
+
 /**
  * Outcome of the request phase. Status-gated, so it deliberately reveals account
  * state (enabled / blocked / waitlisted / unknown) — not enumeration-resistant,
- * by design.
+ * by design. On success, `method` is what was emailed (a link for browsers, a
+ * code for installed PWAs, which can't capture the link).
  */
 export type RequestResult =
-	| { kind: 'sent' }
+	| { kind: 'sent'; method: 'link' | 'code' }
 	| { kind: 'blocked' }
 	| { kind: 'waitlisted' }
 	| { kind: 'unknown' }
 	| { kind: 'rate_limited' };
 
 /**
- * Request phase: look up the account by email and branch on its status. Only
- * `enabled` users are sent a magic link; `pending`/`blocked` are told their
- * state, and unknown addresses are invited to join the waitlist (see
- * `joinWaitlist`) rather than being created here.
+ * Request phase: branch on account status; for an enabled user, email a magic
+ * link (browser) or a 6-digit code (PWA) per `mode`. Unknown addresses are
+ * invited to join the waitlist (see `joinWaitlist`), not created here.
  */
-export async function requestMagicLink(opts: {
+export async function requestSignIn(opts: {
 	db: Db;
 	email: string;
 	sender: EmailSender;
 	origin: string;
+	mode: SignInMode;
 	ip?: string | null;
 }): Promise<RequestResult> {
 	const email = normalizeEmail(opts.email);
@@ -51,24 +58,40 @@ export async function requestMagicLink(opts: {
 	if (!user) return { kind: 'unknown' };
 	if (user.status === 'blocked') return { kind: 'blocked' };
 	if (user.status === 'pending') return { kind: 'waitlisted' };
-
-	// user.status === 'enabled'
 	if (await isRateLimited(opts.db, email, opts.ip)) return { kind: 'rate_limited' };
 
-	const token = generateToken();
-	const tokenHash = await hashToken(token);
-	const expiresAt = new Date(Date.now() + LOGIN_TOKEN_TTL_MS);
-	await opts.db
-		.insert(loginTokens)
-		.values({ tokenHash, email, requestIp: opts.ip ?? null, expiresAt });
+	if (opts.mode === 'standalone') {
+		const code = generateCode();
+		await opts.db.insert(loginTokens).values({
+			email,
+			tokenHash: await hashToken(code),
+			kind: 'code',
+			requestIp: opts.ip ?? null,
+			expiresAt: new Date(Date.now() + CODE_TTL_MS)
+		});
+		await opts.sender.send({
+			to: email,
+			subject: 'Your Marquee sign-in code',
+			html: renderCodeEmail(code, CODE_TTL_MS / 60000)
+		});
+		return { kind: 'sent', method: 'code' };
+	}
 
+	const token = generateToken();
+	await opts.db.insert(loginTokens).values({
+		email,
+		tokenHash: await hashToken(token),
+		kind: 'link',
+		requestIp: opts.ip ?? null,
+		expiresAt: new Date(Date.now() + LINK_TTL_MS)
+	});
 	const url = `${opts.origin}/auth/verify?token=${encodeURIComponent(token)}`;
 	await opts.sender.send({
 		to: email,
 		subject: 'Your Marquee sign-in link',
-		html: renderMagicLinkEmail(url, LOGIN_TOKEN_TTL_MS / 60000)
+		html: renderMagicLinkEmail(url, LINK_TTL_MS / 60000)
 	});
-	return { kind: 'sent' };
+	return { kind: 'sent', method: 'link' };
 }
 
 export type JoinResult =
@@ -122,32 +145,79 @@ export async function joinWaitlist(
 
 export type VerifyResult =
 	| { ok: true; user: User; token: string; expiresAt: Date }
-	| { ok: false; reason: 'invalid' | 'expired' | 'not_allowed' };
+	| { ok: false; reason: 'invalid' | 'expired' | 'not_allowed' | 'too_many_attempts' };
 
 /**
- * Verify phase: validate and consume a magic-link token, then mint a session —
- * but only for an `enabled` user. Tokens are single-use (consumption is atomic
- * against concurrent replays). No user is created here; that happens at
- * waitlist signup, and links are only ever issued to enabled accounts.
+ * Verify a magic link (browser flow): validate and consume the token, then mint
+ * a session for the enabled user. Single-use — consumption is atomic.
  */
 export async function verifyMagicLink(db: Db, rawToken: string): Promise<VerifyResult> {
 	const tokenHash = await hashToken(rawToken);
 	const row = (
-		await db.select().from(loginTokens).where(eq(loginTokens.tokenHash, tokenHash)).limit(1)
+		await db
+			.select()
+			.from(loginTokens)
+			.where(and(eq(loginTokens.tokenHash, tokenHash), eq(loginTokens.kind, 'link')))
+			.limit(1)
 	).at(0);
 
 	if (!row || row.consumedAt) return { ok: false, reason: 'invalid' };
 	if (row.expiresAt.getTime() <= Date.now()) return { ok: false, reason: 'expired' };
 
-	// Atomically claim the token; if another request beat us to it, bail.
+	return consumeAndMint(db, row.id, row.email);
+}
+
+/**
+ * Verify a 6-digit code (PWA flow): match the code against the latest unused
+ * code for the email, minting a session for the enabled user. Single-use;
+ * failed attempts are counted and the code is invalidated past the cap.
+ */
+export async function verifyCode(db: Db, rawEmail: string, code: string): Promise<VerifyResult> {
+	const email = normalizeEmail(rawEmail);
+	const row = (
+		await db
+			.select()
+			.from(loginTokens)
+			.where(
+				and(
+					eq(loginTokens.email, email),
+					eq(loginTokens.kind, 'code'),
+					isNull(loginTokens.consumedAt)
+				)
+			)
+			.orderBy(desc(loginTokens.createdAt))
+			.limit(1)
+	).at(0);
+
+	if (!row) return { ok: false, reason: 'invalid' };
+	if (row.expiresAt.getTime() <= Date.now()) return { ok: false, reason: 'expired' };
+
+	if ((await hashToken(code)) !== row.tokenHash) {
+		const attempts = row.attempts + 1;
+		if (attempts >= CODE_MAX_ATTEMPTS) {
+			await db
+				.update(loginTokens)
+				.set({ attempts, consumedAt: new Date() })
+				.where(eq(loginTokens.id, row.id));
+			return { ok: false, reason: 'too_many_attempts' };
+		}
+		await db.update(loginTokens).set({ attempts }).where(eq(loginTokens.id, row.id));
+		return { ok: false, reason: 'invalid' };
+	}
+
+	return consumeAndMint(db, row.id, email);
+}
+
+/** Atomically consume a validated login row and mint a session for an enabled user. */
+async function consumeAndMint(db: Db, id: string, email: string): Promise<VerifyResult> {
 	const consumed = await db
 		.update(loginTokens)
 		.set({ consumedAt: new Date() })
-		.where(and(eq(loginTokens.tokenHash, tokenHash), isNull(loginTokens.consumedAt)))
-		.returning({ tokenHash: loginTokens.tokenHash });
+		.where(and(eq(loginTokens.id, id), isNull(loginTokens.consumedAt)))
+		.returning({ id: loginTokens.id });
 	if (consumed.length === 0) return { ok: false, reason: 'invalid' };
 
-	const user = (await db.select().from(users).where(eq(users.email, row.email)).limit(1)).at(0);
+	const user = (await db.select().from(users).where(eq(users.email, email)).limit(1)).at(0);
 	if (!user || user.status !== 'enabled') return { ok: false, reason: 'not_allowed' };
 
 	const { token, expiresAt } = await createSession(db, user.id);
@@ -183,6 +253,18 @@ function renderMagicLinkEmail(url: string, ttlMinutes: number): string {
 		</p>
 		<p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email.</p>
 		<p style="color: #666; font-size: 13px; word-break: break-all;">Or paste this link into your browser:<br />${url}</p>
+	</body>
+</html>`;
+}
+
+function renderCodeEmail(code: string, ttlMinutes: number): string {
+	return `<!doctype html>
+<html>
+	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
+		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', Georgia, 'Times New Roman', serif; font-weight: 600;">Your sign-in code</h2>
+		<p>Enter this code in Marquee to sign in. It expires in ${ttlMinutes} minutes.</p>
+		<p style="margin: 24px 0; font-size: 32px; font-weight: 700; letter-spacing: 8px; font-family: ui-monospace, 'SF Mono', Menlo, monospace;">${code}</p>
+		<p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email.</p>
 	</body>
 </html>`;
 }

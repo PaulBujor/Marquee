@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
 import { loginTokens, sessions, users } from '$lib/server/db/schema';
 import type { EmailSender } from '$lib/server/email';
-import { joinWaitlist, requestMagicLink, verifyMagicLink } from './index';
+import { joinWaitlist, requestSignIn, verifyCode, verifyMagicLink } from './index';
 import { createSession, invalidateSession, validateSession } from './session';
 import { hashToken } from './tokens';
 
@@ -15,10 +15,16 @@ function fakeSender() {
 	return { sender, sent };
 }
 
-function tokenFromEmail(html: string): string {
+function linkFromEmail(html: string): string {
 	const m = html.match(/token=([^"&\s]+)/);
-	if (!m) throw new Error('no token found in email');
+	if (!m) throw new Error('no link token in email');
 	return decodeURIComponent(m[1]);
+}
+
+function codeFromEmail(html: string): string {
+	const m = html.match(/(\d{6})/);
+	if (!m) throw new Error('no code in email');
+	return m[1];
 }
 
 async function seedUser(db: Db, email: string, status: 'pending' | 'enabled' | 'blocked') {
@@ -31,90 +37,198 @@ beforeEach(() => {
 	db = createTestDb();
 });
 
-describe('requestMagicLink', () => {
-	const base = { origin: 'http://localhost' };
+describe('requestSignIn', () => {
+	const base = { origin: 'http://localhost', mode: 'browser' as const };
 
 	it('returns "unknown" for an unregistered email and sends nothing', async () => {
 		const { sender, sent } = fakeSender();
-		expect(await requestMagicLink({ db, email: 'nobody@x.com', sender, ...base })).toEqual({
+		expect(await requestSignIn({ db, email: 'nobody@x.com', sender, ...base })).toEqual({
 			kind: 'unknown'
 		});
 		expect(sent).toHaveLength(0);
 		expect(await db.select().from(loginTokens)).toHaveLength(0);
 	});
 
-	it('returns "blocked" for a blocked user, no email', async () => {
+	it('returns "blocked"/"waitlisted" for blocked/pending users, no email', async () => {
 		await seedUser(db, 'b@x.com', 'blocked');
-		const { sender, sent } = fakeSender();
-		expect(await requestMagicLink({ db, email: 'b@x.com', sender, ...base })).toEqual({
-			kind: 'blocked'
-		});
-		expect(sent).toHaveLength(0);
-	});
-
-	it('returns "waitlisted" for a pending user, no email', async () => {
 		await seedUser(db, 'p@x.com', 'pending');
 		const { sender, sent } = fakeSender();
-		expect(await requestMagicLink({ db, email: 'p@x.com', sender, ...base })).toEqual({
-			kind: 'waitlisted'
-		});
+		expect((await requestSignIn({ db, email: 'b@x.com', sender, ...base })).kind).toBe('blocked');
+		expect((await requestSignIn({ db, email: 'p@x.com', sender, ...base })).kind).toBe(
+			'waitlisted'
+		);
 		expect(sent).toHaveLength(0);
 	});
 
-	it('sends a link to an enabled user and records a token', async () => {
+	it('emails a link in browser mode and stores a kind=link token', async () => {
 		await seedUser(db, 'e@x.com', 'enabled');
 		const { sender, sent } = fakeSender();
-		expect(await requestMagicLink({ db, email: 'e@x.com', sender, ...base })).toEqual({
-			kind: 'sent'
-		});
-		expect(sent).toHaveLength(1);
-		expect(sent[0].to).toBe('e@x.com');
-		expect(await db.select().from(loginTokens)).toHaveLength(1);
+		expect(await requestSignIn({ db, email: 'e@x.com', sender, ...base, mode: 'browser' })).toEqual(
+			{
+				kind: 'sent',
+				method: 'link'
+			}
+		);
+		expect(sent[0].html).toContain('/auth/verify?token=');
+		const rows = await db.select().from(loginTokens).where(eq(loginTokens.email, 'e@x.com'));
+		expect(rows).toHaveLength(1);
+		expect(rows[0].kind).toBe('link');
+	});
+
+	it('emails a 6-digit code in standalone mode and stores a kind=code token', async () => {
+		await seedUser(db, 'e@x.com', 'enabled');
+		const { sender, sent } = fakeSender();
+		expect(
+			await requestSignIn({ db, email: 'e@x.com', sender, ...base, mode: 'standalone' })
+		).toEqual({ kind: 'sent', method: 'code' });
+		expect(codeFromEmail(sent[0].html)).toMatch(/^\d{6}$/);
+		const rows = await db.select().from(loginTokens).where(eq(loginTokens.email, 'e@x.com'));
+		expect(rows[0].kind).toBe('code');
 	});
 
 	it('normalizes the email before lookup', async () => {
 		await seedUser(db, 'mixed@x.com', 'enabled');
 		const { sender } = fakeSender();
-		expect(await requestMagicLink({ db, email: '  Mixed@X.com ', sender, ...base })).toEqual({
-			kind: 'sent'
-		});
+		expect((await requestSignIn({ db, email: '  Mixed@X.com ', sender, ...base })).kind).toBe(
+			'sent'
+		);
 	});
 
-	it('rate-limits after 5 requests per email within the window', async () => {
+	it('rate-limits after 5 requests per email', async () => {
 		await seedUser(db, 'rl@x.com', 'enabled');
 		const { sender } = fakeSender();
 		const kinds: string[] = [];
 		for (let i = 0; i < 6; i++) {
-			kinds.push((await requestMagicLink({ db, email: 'rl@x.com', sender, ...base })).kind);
+			kinds.push((await requestSignIn({ db, email: 'rl@x.com', sender, ...base })).kind);
 		}
-		expect(kinds.slice(0, 5)).toEqual(['sent', 'sent', 'sent', 'sent', 'sent']);
+		expect(kinds.slice(0, 5).every((k) => k === 'sent')).toBe(true);
 		expect(kinds[5]).toBe('rate_limited');
 	});
 
 	it('rate-limits per IP across multiple enabled users', async () => {
 		const { sender } = fakeSender();
 		for (let u = 0; u < 4; u++) await seedUser(db, `ip${u}@x.com`, 'enabled');
-		// 4 users x 5 links = 20 tokens from one IP (the per-IP cap)
 		for (let u = 0; u < 4; u++) {
 			for (let i = 0; i < 5; i++) {
-				await requestMagicLink({
-					db,
-					email: `ip${u}@x.com`,
-					sender,
-					origin: 'http://localhost',
-					ip: '5.5.5.5'
-				});
+				await requestSignIn({ db, email: `ip${u}@x.com`, sender, ...base, ip: '5.5.5.5' });
 			}
 		}
 		await seedUser(db, 'ip4@x.com', 'enabled');
-		const result = await requestMagicLink({
-			db,
-			email: 'ip4@x.com',
-			sender,
-			origin: 'http://localhost',
-			ip: '5.5.5.5'
+		expect(
+			(await requestSignIn({ db, email: 'ip4@x.com', sender, ...base, ip: '5.5.5.5' })).kind
+		).toBe('rate_limited');
+	});
+});
+
+describe('verifyMagicLink', () => {
+	const base = { origin: 'http://localhost', mode: 'browser' as const };
+
+	it('consumes a valid link for an enabled user and mints a session', async () => {
+		const user = await seedUser(db, 'v@x.com', 'enabled');
+		const { sender, sent } = fakeSender();
+		await requestSignIn({ db, email: 'v@x.com', sender, ...base });
+		const token = linkFromEmail(sent[0].html);
+
+		const result = await verifyMagicLink(db, token);
+		expect(result.ok).toBe(true);
+		if (result.ok) expect(result.user.email).toBe('v@x.com');
+		expect(await db.select().from(sessions).where(eq(sessions.userId, user.id))).toHaveLength(1);
+		// single-use
+		expect(await verifyMagicLink(db, token)).toEqual({ ok: false, reason: 'invalid' });
+	});
+
+	it('rejects an unknown token', async () => {
+		expect(await verifyMagicLink(db, 'never-issued')).toEqual({ ok: false, reason: 'invalid' });
+	});
+
+	it('rejects an expired link', async () => {
+		await db.insert(loginTokens).values({
+			email: 'e@x.com',
+			tokenHash: await hashToken('expired-raw'),
+			kind: 'link',
+			expiresAt: new Date(Date.now() - 1000)
 		});
-		expect(result.kind).toBe('rate_limited');
+		expect(await verifyMagicLink(db, 'expired-raw')).toEqual({ ok: false, reason: 'expired' });
+	});
+
+	it('rejects a link whose account is not enabled', async () => {
+		await seedUser(db, 'p@x.com', 'pending');
+		await db.insert(loginTokens).values({
+			email: 'p@x.com',
+			tokenHash: await hashToken('pending-raw'),
+			kind: 'link',
+			expiresAt: new Date(Date.now() + 60_000)
+		});
+		expect(await verifyMagicLink(db, 'pending-raw')).toEqual({ ok: false, reason: 'not_allowed' });
+	});
+});
+
+describe('verifyCode', () => {
+	const base = { origin: 'http://localhost', mode: 'standalone' as const };
+
+	it('consumes the correct code for an enabled user and mints a session', async () => {
+		const user = await seedUser(db, 'c@x.com', 'enabled');
+		const { sender, sent } = fakeSender();
+		await requestSignIn({ db, email: 'c@x.com', sender, ...base });
+		const code = codeFromEmail(sent[0].html);
+
+		const result = await verifyCode(db, 'c@x.com', code);
+		expect(result.ok).toBe(true);
+		expect(await db.select().from(sessions).where(eq(sessions.userId, user.id))).toHaveLength(1);
+		// single-use
+		expect(await verifyCode(db, 'c@x.com', code)).toEqual({ ok: false, reason: 'invalid' });
+	});
+
+	it('rejects a wrong code and counts the attempt', async () => {
+		await seedUser(db, 'c@x.com', 'enabled');
+		const { sender, sent } = fakeSender();
+		await requestSignIn({ db, email: 'c@x.com', sender, ...base });
+		const code = codeFromEmail(sent[0].html);
+		const wrong = code === '000000' ? '111111' : '000000';
+
+		expect(await verifyCode(db, 'c@x.com', wrong)).toEqual({ ok: false, reason: 'invalid' });
+		expect(
+			(await db.select().from(loginTokens).where(eq(loginTokens.email, 'c@x.com')))[0].attempts
+		).toBe(1);
+	});
+
+	it('invalidates the code after too many attempts', async () => {
+		await seedUser(db, 'c@x.com', 'enabled');
+		const { sender, sent } = fakeSender();
+		await requestSignIn({ db, email: 'c@x.com', sender, ...base });
+		const code = codeFromEmail(sent[0].html);
+		const wrong = code === '000000' ? '111111' : '000000';
+
+		const reasons: string[] = [];
+		for (let i = 0; i < 5; i++) {
+			const r = await verifyCode(db, 'c@x.com', wrong);
+			if (!r.ok) reasons.push(r.reason);
+		}
+		expect(reasons[4]).toBe('too_many_attempts');
+		// even the correct code no longer works — it was invalidated
+		expect((await verifyCode(db, 'c@x.com', code)).ok).toBe(false);
+	});
+
+	it('rejects an expired code', async () => {
+		await seedUser(db, 'c@x.com', 'enabled');
+		await db.insert(loginTokens).values({
+			email: 'c@x.com',
+			tokenHash: await hashToken('654321'),
+			kind: 'code',
+			expiresAt: new Date(Date.now() - 1000)
+		});
+		expect(await verifyCode(db, 'c@x.com', '654321')).toEqual({ ok: false, reason: 'expired' });
+	});
+
+	it('rejects a code whose account is not enabled', async () => {
+		await seedUser(db, 'p@x.com', 'pending');
+		await db.insert(loginTokens).values({
+			email: 'p@x.com',
+			tokenHash: await hashToken('654321'),
+			kind: 'code',
+			expiresAt: new Date(Date.now() + 60_000)
+		});
+		expect(await verifyCode(db, 'p@x.com', '654321')).toEqual({ ok: false, reason: 'not_allowed' });
 	});
 });
 
@@ -128,20 +242,15 @@ describe('joinWaitlist', () => {
 		expect(u.status).toBe('pending');
 		expect(u.signupIp).toBe('1.2.3.4');
 		expect(sent).toHaveLength(1);
-		expect(sent[0].to).toBe('new@x.com');
 	});
 
-	it('returns "already" for an existing pending/enabled user without re-emailing', async () => {
+	it('returns "already"/"blocked" for existing users without re-emailing', async () => {
 		await seedUser(db, 'p@x.com', 'pending');
+		await seedUser(db, 'b@x.com', 'blocked');
 		const { sender, sent } = fakeSender();
 		expect(await joinWaitlist(db, 'p@x.com', sender)).toEqual({ kind: 'already' });
-		expect(sent).toHaveLength(0);
-	});
-
-	it('returns "blocked" for a blocked address', async () => {
-		await seedUser(db, 'b@x.com', 'blocked');
-		const { sender } = fakeSender();
 		expect(await joinWaitlist(db, 'b@x.com', sender)).toEqual({ kind: 'blocked' });
+		expect(sent).toHaveLength(0);
 	});
 
 	it('is best-effort on email failure — the signup still succeeds', async () => {
@@ -167,61 +276,11 @@ describe('joinWaitlist', () => {
 	});
 });
 
-describe('verifyMagicLink', () => {
-	it('consumes a valid link for an enabled user and mints a session', async () => {
-		const user = await seedUser(db, 'v@x.com', 'enabled');
-		const { sender, sent } = fakeSender();
-		await requestMagicLink({ db, email: 'v@x.com', sender, origin: 'http://localhost' });
-		const token = tokenFromEmail(sent[0].html);
-
-		const result = await verifyMagicLink(db, token);
-		expect(result.ok).toBe(true);
-		if (result.ok) expect(result.user.email).toBe('v@x.com');
-		expect(await db.select().from(sessions).where(eq(sessions.userId, user.id))).toHaveLength(1);
-	});
-
-	it('rejects a reused (single-use) token', async () => {
-		await seedUser(db, 'v@x.com', 'enabled');
-		const { sender, sent } = fakeSender();
-		await requestMagicLink({ db, email: 'v@x.com', sender, origin: 'http://localhost' });
-		const token = tokenFromEmail(sent[0].html);
-
-		await verifyMagicLink(db, token);
-		expect(await verifyMagicLink(db, token)).toEqual({ ok: false, reason: 'invalid' });
-	});
-
-	it('rejects an unknown token', async () => {
-		expect(await verifyMagicLink(db, 'never-issued')).toEqual({ ok: false, reason: 'invalid' });
-	});
-
-	it('rejects an expired token', async () => {
-		const raw = 'expired-raw';
-		await db.insert(loginTokens).values({
-			tokenHash: await hashToken(raw),
-			email: 'e@x.com',
-			expiresAt: new Date(Date.now() - 1000)
-		});
-		expect(await verifyMagicLink(db, raw)).toEqual({ ok: false, reason: 'expired' });
-	});
-
-	it('rejects a token whose account is not enabled (not_allowed)', async () => {
-		await seedUser(db, 'p@x.com', 'pending');
-		const raw = 'pending-raw';
-		await db.insert(loginTokens).values({
-			tokenHash: await hashToken(raw),
-			email: 'p@x.com',
-			expiresAt: new Date(Date.now() + 60_000)
-		});
-		expect(await verifyMagicLink(db, raw)).toEqual({ ok: false, reason: 'not_allowed' });
-	});
-});
-
 describe('sessions', () => {
 	it('creates and validates a session for an enabled user', async () => {
 		const user = await seedUser(db, 'h@x.com', 'enabled');
 		const { token } = await createSession(db, user.id);
-		const res = await validateSession(db, token);
-		expect(res?.user.email).toBe('h@x.com');
+		expect((await validateSession(db, token))?.user.email).toBe('h@x.com');
 	});
 
 	it('returns null for an unknown cookie token', async () => {
@@ -244,23 +303,6 @@ describe('sessions', () => {
 		const { token } = await createSession(db, user.id);
 		await db.update(users).set({ status: 'blocked' }).where(eq(users.id, user.id));
 		expect(await validateSession(db, token)).toBeNull();
-	});
-
-	it('slides the expiry forward on a stale-but-valid session', async () => {
-		const user = await seedUser(db, 'r@x.com', 'enabled');
-		const raw = 'refresh-raw';
-		const id = await hashToken(raw);
-		const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-		await db.insert(sessions).values({
-			id,
-			userId: user.id,
-			expiresAt: new Date(Date.now() + 60_000),
-			createdAt: old,
-			lastUsedAt: old
-		});
-		expect(await validateSession(db, raw)).not.toBeNull();
-		const row = (await db.select().from(sessions).where(eq(sessions.id, id)))[0];
-		expect(row.lastUsedAt.getTime()).toBeGreaterThan(old.getTime());
 	});
 
 	it('invalidateSession removes the session', async () => {

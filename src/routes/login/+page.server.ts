@@ -1,5 +1,12 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { joinWaitlist, normalizeEmail, requestMagicLink } from '$lib/server/auth';
+import {
+	joinWaitlist,
+	normalizeEmail,
+	requestSignIn,
+	setSessionCookie,
+	verifyCode,
+	type SignInMode
+} from '$lib/server/auth';
 import { createEmailSender } from '$lib/server/email';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -7,6 +14,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SERVICE_UNAVAILABLE = 'Service unavailable.';
 const INVALID_EMAIL = 'Enter a valid email address.';
 const SEND_FAILED = "We couldn't send the email right now. Please try again shortly.";
+
+function parseMode(value: FormDataEntryValue | null): SignInMode {
+	return value === 'standalone' ? 'standalone' : 'browser';
+}
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (locals.user) redirect(303, '/');
@@ -24,7 +35,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-	// Request phase: branch on account status (sent / blocked / waitlisted / unknown / rate_limited).
+	// Request phase: branch on status; email a link (browser) or a code (PWA) per `mode`.
 	request: async ({ request, locals, platform, url, getClientAddress }) => {
 		if (!locals.db || !platform) return fail(503, { message: SERVICE_UNAVAILABLE });
 
@@ -34,18 +45,52 @@ export const actions: Actions = {
 
 		const sender = createEmailSender(platform.env);
 		try {
-			const result = await requestMagicLink({
+			const result = await requestSignIn({
 				db: locals.db,
 				email,
 				sender,
 				origin: url.origin,
+				mode: parseMode(data.get('mode')),
 				ip: getClientAddress()
 			});
-			return { step: 'request' as const, email: normalizeEmail(email), result: result.kind };
+			return {
+				step: 'request' as const,
+				email: normalizeEmail(email),
+				result: result.kind,
+				method: result.kind === 'sent' ? result.method : undefined
+			};
 		} catch (err) {
-			console.error('magic-link request failed:', err);
+			console.error('sign-in request failed:', err);
 			return fail(502, { email, message: SEND_FAILED });
 		}
+	},
+
+	// Verify phase (PWA code flow): match the emailed code and mint a session.
+	verify: async ({ request, locals, cookies }) => {
+		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
+
+		const data = await request.formData();
+		const email = String(data.get('email') ?? '');
+		const code = String(data.get('code') ?? '').trim();
+		if (!/^\d{6}$/.test(code)) {
+			return fail(400, { step: 'code' as const, email, codeError: 'Enter the 6-digit code.' });
+		}
+
+		const result = await verifyCode(locals.db, email, code);
+		if (result.ok) {
+			setSessionCookie(cookies, result.token, result.expiresAt);
+			redirect(303, '/');
+		}
+
+		const codeError =
+			result.reason === 'expired'
+				? 'That code has expired — request a new one.'
+				: result.reason === 'too_many_attempts'
+					? 'Too many attempts — request a new code.'
+					: result.reason === 'not_allowed'
+						? "This account can't sign in right now."
+						: 'Incorrect code. Try again.';
+		return fail(400, { step: 'code' as const, email, codeError });
 	},
 
 	// Waitlist signup for a previously-unknown address (creates a pending user + emails a confirmation).
