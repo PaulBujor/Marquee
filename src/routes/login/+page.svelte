@@ -61,14 +61,16 @@
 			<Card.Header>
 				<Card.Title>Check your inbox</Card.Title>
 				<Card.Description>
-					We sent a sign-in link to <strong>{email}</strong>. It expires in 15 minutes.
+					We sent a sign-in link to <strong>{email}</strong>. It expires in {data.linkTtlMinutes}
+					minutes.
 				</Card.Description>
 			</Card.Header>
 		{:else if onCodeStep}
 			<Card.Header>
 				<Card.Title>Enter your code</Card.Title>
 				<Card.Description>
-					We emailed a 6-digit code to <strong>{email}</strong>. It expires in 10 minutes.
+					We emailed a 6-digit code to <strong>{email}</strong>. It expires in {data.codeTtlMinutes}
+					minutes.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>

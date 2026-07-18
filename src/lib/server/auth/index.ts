@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { createDb } from '$lib/server/db';
 import { loginTokens, users, type User } from '$lib/server/db/schema';
 import type { EmailSender } from '$lib/server/email';
@@ -8,8 +8,10 @@ import { generateCode, generateToken, hashToken } from './tokens';
 type Db = ReturnType<typeof createDb>;
 
 /** Magic links (browser) live a little longer than typed codes (PWA). */
-const LINK_TTL_MS = 15 * 60 * 1000;
-const CODE_TTL_MS = 10 * 60 * 1000;
+export const LINK_TTL_MINUTES = 15;
+export const CODE_TTL_MINUTES = 10;
+const LINK_TTL_MS = LINK_TTL_MINUTES * 60 * 1000;
+const CODE_TTL_MS = CODE_TTL_MINUTES * 60 * 1000;
 /** Failed code entries before the code is invalidated (online brute-force cap). */
 const CODE_MAX_ATTEMPTS = 5;
 /** Email-bomb protection: cap link/code requests per email and per IP within a window. */
@@ -62,6 +64,18 @@ export async function requestSignIn(opts: {
 
 	if (opts.mode === 'standalone') {
 		const code = generateCode();
+		// Keep at most one live code per email so verify never has to disambiguate
+		// between two codes issued in the same second (createdAt is second-resolution).
+		await opts.db
+			.update(loginTokens)
+			.set({ consumedAt: new Date() })
+			.where(
+				and(
+					eq(loginTokens.email, email),
+					eq(loginTokens.kind, 'code'),
+					isNull(loginTokens.consumedAt)
+				)
+			);
 		await opts.db.insert(loginTokens).values({
 			email,
 			tokenHash: await hashToken(code),
@@ -72,7 +86,7 @@ export async function requestSignIn(opts: {
 		await opts.sender.send({
 			to: email,
 			subject: 'Your Marquee sign-in code',
-			html: renderCodeEmail(code, CODE_TTL_MS / 60000)
+			html: renderCodeEmail(code, CODE_TTL_MINUTES)
 		});
 		return { kind: 'sent', method: 'code' };
 	}
@@ -89,7 +103,7 @@ export async function requestSignIn(opts: {
 	await opts.sender.send({
 		to: email,
 		subject: 'Your Marquee sign-in link',
-		html: renderMagicLinkEmail(url, LINK_TTL_MS / 60000)
+		html: renderMagicLinkEmail(url, LINK_TTL_MINUTES)
 	});
 	return { kind: 'sent', method: 'link' };
 }
@@ -193,15 +207,19 @@ export async function verifyCode(db: Db, rawEmail: string, code: string): Promis
 	if (row.expiresAt.getTime() <= Date.now()) return { ok: false, reason: 'expired' };
 
 	if ((await hashToken(code)) !== row.tokenHash) {
-		const attempts = row.attempts + 1;
+		// Increment atomically so concurrent wrong guesses can't lose a count.
+		const [{ attempts }] = await db
+			.update(loginTokens)
+			.set({ attempts: sql`${loginTokens.attempts} + 1` })
+			.where(eq(loginTokens.id, row.id))
+			.returning({ attempts: loginTokens.attempts });
 		if (attempts >= CODE_MAX_ATTEMPTS) {
 			await db
 				.update(loginTokens)
-				.set({ attempts, consumedAt: new Date() })
+				.set({ consumedAt: new Date() })
 				.where(eq(loginTokens.id, row.id));
 			return { ok: false, reason: 'too_many_attempts' };
 		}
-		await db.update(loginTokens).set({ attempts }).where(eq(loginTokens.id, row.id));
 		return { ok: false, reason: 'invalid' };
 	}
 

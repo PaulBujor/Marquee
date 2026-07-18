@@ -1,6 +1,8 @@
 import { fail, redirect } from '@sveltejs/kit';
 import {
+	CODE_TTL_MINUTES,
 	joinWaitlist,
+	LINK_TTL_MINUTES,
 	normalizeEmail,
 	requestSignIn,
 	setSessionCookie,
@@ -31,7 +33,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				: error
 					? 'That sign-in link is invalid. Request a new one below.'
 					: null;
-	return { linkError };
+	return { linkError, linkTtlMinutes: LINK_TTL_MINUTES, codeTtlMinutes: CODE_TTL_MINUTES };
 };
 
 export const actions: Actions = {
@@ -76,7 +78,13 @@ export const actions: Actions = {
 			return fail(400, { step: 'code' as const, email, codeError: 'Enter the 6-digit code.' });
 		}
 
-		const result = await verifyCode(locals.db, email, code);
+		let result;
+		try {
+			result = await verifyCode(locals.db, email, code);
+		} catch (err) {
+			console.error('code verification failed:', err);
+			return fail(502, { step: 'code' as const, email, codeError: SERVICE_UNAVAILABLE });
+		}
 		if (result.ok) {
 			setSessionCookie(cookies, result.token, result.expiresAt);
 			redirect(303, '/');

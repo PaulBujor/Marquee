@@ -179,6 +179,19 @@ describe('verifyCode', () => {
 		expect(await verifyCode(db, 'c@x.com', code)).toEqual({ ok: false, reason: 'invalid' });
 	});
 
+	it('invalidates a prior code when a new one is requested', async () => {
+		await seedUser(db, 'c@x.com', 'enabled');
+		const { sender, sent } = fakeSender();
+		await requestSignIn({ db, email: 'c@x.com', sender, ...base });
+		const first = codeFromEmail(sent[0].html);
+		await requestSignIn({ db, email: 'c@x.com', sender, ...base });
+		const second = codeFromEmail(sent[1].html);
+
+		// only the newest code works; the previous one was consumed on re-issue
+		expect(await verifyCode(db, 'c@x.com', first)).toEqual({ ok: false, reason: 'invalid' });
+		expect((await verifyCode(db, 'c@x.com', second)).ok).toBe(true);
+	});
+
 	it('rejects a wrong code and counts the attempt', async () => {
 		await seedUser(db, 'c@x.com', 'enabled');
 		const { sender, sent } = fakeSender();
@@ -303,6 +316,23 @@ describe('sessions', () => {
 		const { token } = await createSession(db, user.id);
 		await db.update(users).set({ status: 'blocked' }).where(eq(users.id, user.id));
 		expect(await validateSession(db, token)).toBeNull();
+	});
+
+	it('slides the expiry forward on a stale-but-valid session', async () => {
+		const user = await seedUser(db, 'r@x.com', 'enabled');
+		const raw = 'refresh-raw';
+		const id = await hashToken(raw);
+		const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+		await db.insert(sessions).values({
+			id,
+			userId: user.id,
+			expiresAt: new Date(Date.now() + 60_000),
+			createdAt: old,
+			lastUsedAt: old
+		});
+		expect(await validateSession(db, raw)).not.toBeNull();
+		const row = (await db.select().from(sessions).where(eq(sessions.id, id)))[0];
+		expect(row.lastUsedAt.getTime()).toBeGreaterThan(old.getTime());
 	});
 
 	it('invalidateSession removes the session', async () => {
