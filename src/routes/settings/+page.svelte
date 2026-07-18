@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Card from '$lib/components/ui/card';
@@ -8,6 +9,7 @@
 	import * as InputOTP from '$lib/components/ui/input-otp';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { theme } from '$lib/state/theme.svelte.js';
+	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import type { ActionData, PageData } from './$types';
 
@@ -75,7 +77,19 @@
 </svelte:head>
 
 <main class="mx-auto flex w-full max-w-lg flex-col gap-6 p-6">
-	<h1 class="font-serif text-2xl font-semibold">Settings</h1>
+	<div class="flex items-center gap-3">
+		<Button
+			href={resolve('/')}
+			variant="outline"
+			size="icon"
+			shape="round"
+			class="text-muted-foreground"
+			aria-label="Back to home"
+		>
+			<ChevronLeftIcon class="size-4" />
+		</Button>
+		<h1 class="font-serif text-2xl font-semibold">Settings</h1>
+	</div>
 
 	<!-- Account -->
 	<Card.Root>
