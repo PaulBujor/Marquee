@@ -5,14 +5,11 @@
  */
 
 const BRAND = '#8b5cf6';
-// Mirrors the app's `--font-serif` (see src/routes/layout.css); the Fraunces
-// webfont is linked in `layout()` below so clients that support it render the
-// real face, others fall back to serif.
 const SERIF = "'Fraunces', ui-serif, Georgia, serif";
 const MUTED = 'color: #666; font-size: 13px;';
 const IGNORE_REQUEST = "If you didn't request this, you can safely ignore this email.";
 
-/** Shared shell: doctype + Fraunces webfont + base typography + a serif heading. */
+/** Shared shell: doctype + base typography + a serif heading. */
 function layout(heading: string, body: string): string {
 	return `<!doctype html>
 <html>
