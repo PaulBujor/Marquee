@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text, index } from 'drizzle-orm/sqlite-core';
 
 /**
@@ -22,9 +23,17 @@ export const users = sqliteTable('users', {
 		.$defaultFn(() => crypto.randomUUID()),
 	email: text('email').notNull().unique(),
 	status: text('status', { enum: USER_STATUSES }).notNull().default('pending'),
+	// Optional free-text reason recorded when an account is blocked (audit trail).
+	blockedReason: text('blocked_reason'),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date())
+		.$defaultFn(() => new Date()),
+	// Maintained by the `users_set_updated_at` DB trigger (see migration) so it
+	// tracks *every* change, including manual status flips via raw SQL. Stored as
+	// Unix seconds, matching Drizzle's `timestamp` mode.
+	updatedAt: integer('updated_at', { mode: 'timestamp' })
+		.notNull()
+		.default(sql`(unixepoch())`)
 });
 
 /**

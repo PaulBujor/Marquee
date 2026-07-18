@@ -42,9 +42,9 @@ export const actions: Actions = {
 		return { step: 'request' as const, email: normalizeEmail(email), result: result.kind };
 	},
 
-	// Waitlist signup for a previously-unknown address (creates a pending user).
-	join: async ({ request, locals }) => {
-		if (!locals.db) return fail(503, { message: 'Service unavailable.' });
+	// Waitlist signup for a previously-unknown address (creates a pending user + emails a confirmation).
+	join: async ({ request, locals, platform }) => {
+		if (!locals.db || !platform) return fail(503, { message: 'Service unavailable.' });
 
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
@@ -52,7 +52,8 @@ export const actions: Actions = {
 			return fail(400, { email, message: 'Enter a valid email address.' });
 		}
 
-		const result = await joinWaitlist(locals.db, email);
+		const sender = createEmailSender(platform.env);
+		const result = await joinWaitlist(locals.db, email, sender);
 		return { step: 'join' as const, email: normalizeEmail(email), result: result.kind };
 	}
 };

@@ -73,16 +73,26 @@ export async function requestMagicLink(opts: {
 export type JoinResult = { kind: 'waitlisted' } | { kind: 'blocked' } | { kind: 'already' };
 
 /**
- * Waitlist signup: create a `pending` user for a previously-unknown address.
- * Promotion to `enabled` is a manual DB flip during the private beta.
+ * Waitlist signup: create a `pending` user for a previously-unknown address and
+ * email a confirmation. Promotion to `enabled` is a manual DB flip during the
+ * private beta.
  */
-export async function joinWaitlist(db: Db, rawEmail: string): Promise<JoinResult> {
+export async function joinWaitlist(
+	db: Db,
+	rawEmail: string,
+	sender: EmailSender
+): Promise<JoinResult> {
 	const email = normalizeEmail(rawEmail);
 	const existing = (await db.select().from(users).where(eq(users.email, email)).limit(1)).at(0);
 	if (existing) {
 		return existing.status === 'blocked' ? { kind: 'blocked' } : { kind: 'already' };
 	}
 	await db.insert(users).values({ email, status: 'pending' }).onConflictDoNothing();
+	await sender.send({
+		to: email,
+		subject: "You're on the Marquee waitlist",
+		html: renderWaitlistEmail()
+	});
 	return { kind: 'waitlisted' };
 }
 
@@ -149,6 +159,17 @@ function renderMagicLinkEmail(url: string, ttlMinutes: number): string {
 		</p>
 		<p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email.</p>
 		<p style="color: #666; font-size: 13px; word-break: break-all;">Or paste this link into your browser:<br />${url}</p>
+	</body>
+</html>`;
+}
+
+function renderWaitlistEmail(): string {
+	return `<!doctype html>
+<html>
+	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
+		<h2 style="margin: 0 0 16px;">You're on the waitlist</h2>
+		<p>Thanks for your interest in Marquee — you're on the list. We'll email you as soon as your account is ready to sign in.</p>
+		<p style="color: #666; font-size: 13px;">If you didn't sign up, you can safely ignore this email.</p>
 	</body>
 </html>`;
 }

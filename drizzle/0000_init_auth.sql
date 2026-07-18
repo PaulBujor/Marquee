@@ -23,7 +23,15 @@ CREATE TABLE `users` (
 	`id` text PRIMARY KEY NOT NULL,
 	`email` text NOT NULL,
 	`status` text DEFAULT 'pending' NOT NULL,
-	`created_at` integer NOT NULL
+	`blocked_reason` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);
+CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);--> statement-breakpoint
+CREATE TRIGGER `users_set_updated_at`
+AFTER UPDATE ON `users` FOR EACH ROW
+WHEN NEW.`updated_at` = OLD.`updated_at`
+BEGIN
+	UPDATE `users` SET `updated_at` = unixepoch() WHERE `id` = NEW.`id`;
+END;
