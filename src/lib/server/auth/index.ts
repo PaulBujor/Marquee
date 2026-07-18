@@ -179,7 +179,7 @@ function renderMagicLinkEmail(url: string, ttlMinutes: number): string {
 		<h2 style="margin: 0 0 16px; font-family: 'Fraunces', Georgia, 'Times New Roman', serif; font-weight: 600;">Sign in to Marquee</h2>
 		<p>Click the button below to sign in. This link expires in ${ttlMinutes} minutes and can be used once.</p>
 		<p style="margin: 24px 0;">
-			<a href="${url}" style="background: #f9983a; color: #150400; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">Sign in to Marquee</a>
+			<a href="${url}" style="background: #8b5cf6; color: #ffffff; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">Sign in to Marquee</a>
 		</p>
 		<p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email.</p>
 		<p style="color: #666; font-size: 13px; word-break: break-all;">Or paste this link into your browser:<br />${url}</p>

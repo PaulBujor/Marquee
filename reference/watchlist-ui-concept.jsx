@@ -380,7 +380,7 @@ function useTheme(dark) {
 	};
 }
 
-const ACCENT = '#E7A33D';
+const ACCENT = '#8B5CF6';
 
 function ProgressRing({ progress, size = 34, stroke = 3, theme }) {
 	const r = (size - stroke) / 2;
@@ -524,7 +524,7 @@ function TabsPill({ active, onSelect, theme }) {
 							fontWeight: 600,
 							border: `1px solid ${isActive ? ACCENT : theme.border}`,
 							background: isActive ? ACCENT : 'transparent',
-							color: isActive ? '#1D1400' : theme.textMuted
+							color: isActive ? '#FFFFFF' : theme.textMuted
 						}}
 					>
 						{tab.label}
@@ -880,7 +880,7 @@ function SettingsScreen({ theme, themeMode, setThemeMode }) {
 										textTransform: 'capitalize',
 										border: `1px solid ${isActive ? ACCENT : theme.border}`,
 										background: isActive ? ACCENT : theme.surface,
-										color: isActive ? '#1D1400' : theme.text
+										color: isActive ? '#FFFFFF' : theme.text
 									}}
 								>
 									{mode}
@@ -1005,7 +1005,7 @@ function SearchScreen({
 									borderRadius: 999,
 									border: tracked ? `1px solid ${theme.border}` : 'none',
 									background: tracked ? 'transparent' : ACCENT,
-									color: tracked ? theme.textMuted : '#1D1400',
+									color: tracked ? theme.textMuted : '#FFFFFF',
 									fontWeight: 700,
 									fontSize: 12
 								}}
@@ -1040,7 +1040,7 @@ function SearchScreen({
 									fontWeight: 600,
 									border: `1px solid ${customType === t ? ACCENT : theme.border}`,
 									background: customType === t ? ACCENT : 'transparent',
-									color: customType === t ? '#1D1400' : theme.textMuted
+									color: customType === t ? '#FFFFFF' : theme.textMuted
 								}}
 							>
 								{t === 'movie' ? 'Movie' : 'Show'}
@@ -1208,7 +1208,7 @@ export default function WatchlistConcept() {
 		fontWeight: 600,
 		border: `1px solid ${isActive ? ACCENT : theme.border}`,
 		background: isActive ? ACCENT : 'transparent',
-		color: isActive ? '#1D1400' : theme.textMuted,
+		color: isActive ? '#FFFFFF' : theme.textMuted,
 		flexShrink: 0
 	});
 
@@ -1434,7 +1434,7 @@ export default function WatchlistConcept() {
 												borderRadius: 999,
 												border: 'none',
 												background: ACCENT,
-												color: '#1D1400',
+												color: '#FFFFFF',
 												fontWeight: 700,
 												fontSize: 12
 											}}
@@ -1645,7 +1645,7 @@ export default function WatchlistConcept() {
 												justifyContent: 'center'
 											}}
 										>
-											<Play size={18} color="#1D1400" fill="#1D1400" />
+											<Play size={18} color="#FFFFFF" fill="#FFFFFF" />
 										</div>
 									</div>
 								</div>
@@ -1662,7 +1662,7 @@ export default function WatchlistConcept() {
 							borderRadius: 12,
 							border: 'none',
 							background: selected.watched ? theme.surfaceAlt : ACCENT,
-							color: selected.watched ? theme.text : '#1D1400',
+							color: selected.watched ? theme.text : '#FFFFFF',
 							fontWeight: 700,
 							fontSize: 14,
 							display: 'flex',
@@ -1689,7 +1689,7 @@ export default function WatchlistConcept() {
 										fontWeight: 600,
 										border: `1px solid ${i === activeSeason ? ACCENT : theme.border}`,
 										background: i === activeSeason ? ACCENT : 'transparent',
-										color: i === activeSeason ? '#1D1400' : theme.textMuted
+										color: i === activeSeason ? '#FFFFFF' : theme.textMuted
 									}}
 								>
 									Season {s.number}
@@ -1729,7 +1729,7 @@ export default function WatchlistConcept() {
 											justifyContent: 'center'
 										}}
 									>
-										{ep.watched && <Check size={13} color="#1D1400" />}
+										{ep.watched && <Check size={13} color="#FFFFFF" />}
 									</div>
 								</div>
 							))}
@@ -1791,7 +1791,7 @@ export default function WatchlistConcept() {
 								borderRadius: 999,
 								border: `1px solid ${tabStyle === key ? ACCENT : '#333'}`,
 								background: tabStyle === key ? ACCENT : 'transparent',
-								color: tabStyle === key ? '#1D1400' : '#8A8880',
+								color: tabStyle === key ? '#FFFFFF' : '#8A8880',
 								fontSize: 11,
 								fontWeight: 600
 							}}
@@ -1816,7 +1816,7 @@ export default function WatchlistConcept() {
 								borderRadius: 999,
 								border: `1px solid ${networkMode === n.key ? ACCENT : '#333'}`,
 								background: networkMode === n.key ? ACCENT : 'transparent',
-								color: networkMode === n.key ? '#1D1400' : '#8A8880',
+								color: networkMode === n.key ? '#FFFFFF' : '#8A8880',
 								fontSize: 11,
 								fontWeight: 600
 							}}
@@ -1893,7 +1893,7 @@ export default function WatchlistConcept() {
 										...iconButtonStyle(theme),
 										background: ACCENT,
 										borderColor: ACCENT,
-										color: '#1D1400'
+										color: '#FFFFFF'
 									}}
 									title="Search"
 								>
