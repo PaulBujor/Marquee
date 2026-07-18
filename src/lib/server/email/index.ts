@@ -6,16 +6,10 @@ export interface EmailSender {
 }
 
 /**
- * Resolve the email transport from the environment (a *runtime* decision, so it
- * is correct under both `pnpm dev` and the built worker in `wrangler dev`).
- *
- * When `SMTP_HOST` is set we deliver over SMTP — locally that's Mailpit (see
- * `docker-compose.yml`; `.dev.vars` sets host/port), so no Resend key is needed
- * in dev. Otherwise we use Resend over HTTPS (production).
+ * Resolve the email transport: SMTP (Mailpit in dev) when `SMTP_HOST` is set,
+ * otherwise Resend. `EMAIL_FROM` must be a Resend-verified sender in prod.
  */
 export function createEmailSender(env: Env): EmailSender {
-	// Fail hard on misconfiguration rather than silently sending from a wrong
-	// address. `from` must be set everywhere (a Resend-verified sender in prod).
 	const from = env.EMAIL_FROM;
 	if (!from) throw new Error('EMAIL_FROM is not configured');
 

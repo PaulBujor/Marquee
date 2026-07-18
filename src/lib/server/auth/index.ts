@@ -21,10 +21,9 @@ export function normalizeEmail(email: string): string {
 }
 
 /**
- * Outcome of the request phase. The flow is gated by account status, so the
- * response deliberately reflects whether the address is enabled / blocked /
- * on the waitlist / unknown (this trades away email-enumeration resistance in
- * favour of the waitlist UX — an intentional product choice).
+ * Outcome of the request phase. Status-gated, so it deliberately reveals account
+ * state (enabled / blocked / waitlisted / unknown) — not enumeration-resistant,
+ * by design.
  */
 export type RequestResult =
 	| { kind: 'sent' }
@@ -107,8 +106,8 @@ export async function joinWaitlist(
 		.insert(users)
 		.values({ email, status: 'pending', signupIp: ip ?? null })
 		.onConflictDoNothing();
-	// Confirmation email is best-effort: the signup has already succeeded, so a
-	// mail failure must not fail the request (it would otherwise 500 the join).
+	// Confirmation email is best-effort — the signup already succeeded, so a send
+	// failure must not fail the request.
 	try {
 		await sender.send({
 			to: email,
