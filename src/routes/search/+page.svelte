@@ -7,6 +7,7 @@
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { posterUrl } from '$lib/media.js';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { PageData } from './$types';
@@ -23,6 +24,8 @@
 	let searchInput = $state<HTMLInputElement | null>(null);
 
 	let debounce: ReturnType<typeof setTimeout> | undefined;
+	// Guards the loading flag against overlapping commits — only the latest clears it.
+	let commitSeq = 0;
 
 	// Re-sync the input when the URL changes outside of typing (back/forward, direct load) so a
 	// restored `?q=` shows up in the box. Skip our own `goto` navigations (nav.type === 'goto').
@@ -48,9 +51,12 @@
 	}
 
 	async function commit() {
-		searching = true;
-		await pushQuery(query.trim());
-		searching = false;
+		const q = query.trim();
+		const seq = ++commitSeq;
+		// Only show the skeleton for an actual search — clearing shouldn't flash a loading state.
+		searching = q.length > 0;
+		await pushQuery(q);
+		if (seq === commitSeq) searching = false;
 	}
 
 	function onInput() {
@@ -137,13 +143,7 @@
 			{#each data.results as item (item.type + item.tmdbId)}
 				<li class="flex items-center gap-3 py-1.5">
 					<div class="w-12 shrink-0">
-						<PosterTile
-							type={item.type}
-							posterUrl={item.posterPath
-								? `https://image.tmdb.org/t/p/w342${item.posterPath}`
-								: null}
-							title={item.title}
-						/>
+						<PosterTile type={item.type} posterUrl={posterUrl(item.posterPath)} alt={item.title} />
 					</div>
 					<div class="flex min-w-0 flex-1 flex-col gap-1">
 						<span class="truncate font-medium">{item.title}</span>

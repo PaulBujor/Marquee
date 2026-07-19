@@ -1,7 +1,6 @@
 import type { MediaSearchResult, TmdbMultiSearchItem, TmdbMultiSearchResponse } from './types';
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
 
 /** Thrown when TMDB responds with a non-2xx status, so callers can map it to a clean HTTP error. */
 export class TmdbError extends Error {
@@ -12,12 +11,6 @@ export class TmdbError extends Error {
 		super(message);
 		this.name = 'TmdbError';
 	}
-}
-
-/** Build a TMDB poster URL. Returns null when the item has no poster. */
-export function posterUrl(path: string | null, size = 'w342'): string | null {
-	if (!path) return null;
-	return `${TMDB_IMAGE_BASE_URL}/${size}${path}`;
 }
 
 /** Parse a leading 4-digit year out of a TMDB date string (`YYYY-MM-DD`). */

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTmdbClient, posterUrl, TmdbError } from './client';
+import { createTmdbClient, TmdbError } from './client';
 import type { TmdbMultiSearchResponse } from './types';
 
 /** A representative `/search/multi` payload: a movie, a show, and a person to be filtered out. */
@@ -118,16 +118,5 @@ describe('createTmdbClient.search', () => {
 			})
 		);
 		await expect(createTmdbClient('key').search('x')).rejects.toBeInstanceOf(TmdbError);
-	});
-});
-
-describe('posterUrl', () => {
-	it('builds a sized TMDB image URL', () => {
-		expect(posterUrl('/poster.jpg')).toBe('https://image.tmdb.org/t/p/w342/poster.jpg');
-		expect(posterUrl('/poster.jpg', 'w500')).toBe('https://image.tmdb.org/t/p/w500/poster.jpg');
-	});
-
-	it('returns null when there is no poster path', () => {
-		expect(posterUrl(null)).toBeNull();
 	});
 });

@@ -9,7 +9,7 @@
 		gradientFrom,
 		gradientTo,
 		posterUrl,
-		title,
+		alt = '',
 		class: className,
 		children,
 		...restProps
@@ -22,7 +22,7 @@
 		/** Poster image URL; when set it renders behind the overlays, gradient is the fallback. */
 		posterUrl?: string | null;
 		/** Alt text for the poster image. */
-		title?: string;
+		alt?: string;
 		class?: string;
 		children?: import('svelte').Snippet;
 	} = $props();
@@ -40,7 +40,13 @@
 	{...restProps}
 >
 	{#if posterUrl}
-		<img src={posterUrl} alt={title ?? ''} class="absolute inset-0 h-full w-full object-cover" />
+		<img
+			src={posterUrl}
+			{alt}
+			loading="lazy"
+			decoding="async"
+			class="absolute inset-0 h-full w-full object-cover"
+		/>
 	{/if}
 
 	{#if isCustom}
