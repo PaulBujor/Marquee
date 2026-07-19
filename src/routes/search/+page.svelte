@@ -141,17 +141,26 @@
 	{:else if data.results.length > 0}
 		<ul class="flex flex-col gap-1">
 			{#each data.results as item (item.type + item.tmdbId)}
-				<li class="flex items-center gap-3 py-1.5">
-					<div class="w-12 shrink-0">
-						<PosterTile type={item.type} posterUrl={posterUrl(item.posterPath)} alt={item.title} />
-					</div>
-					<div class="flex min-w-0 flex-1 flex-col gap-1">
-						<span class="truncate font-medium">{item.title}</span>
-						<div class="flex items-center gap-2 text-sm text-muted-foreground">
-							<MediaBadge>{item.type === 'movie' ? 'Movie' : 'Show'}</MediaBadge>
-							{#if item.year}<span>{item.year}</span>{/if}
+				<li>
+					<a
+						href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
+						class="-mx-2 flex items-center gap-3 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-secondary"
+					>
+						<div class="w-12 shrink-0">
+							<PosterTile
+								type={item.type}
+								posterUrl={posterUrl(item.posterPath)}
+								alt={item.title}
+							/>
 						</div>
-					</div>
+						<div class="flex min-w-0 flex-1 flex-col gap-1">
+							<span class="truncate font-medium">{item.title}</span>
+							<div class="flex items-center gap-2 text-sm text-muted-foreground">
+								<MediaBadge>{item.type === 'movie' ? 'Movie' : 'Show'}</MediaBadge>
+								{#if item.year}<span>{item.year}</span>{/if}
+							</div>
+						</div>
+					</a>
 				</li>
 			{/each}
 		</ul>

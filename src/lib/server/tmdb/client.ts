@@ -1,6 +1,16 @@
-import type { MediaSearchResult, TmdbMultiSearchItem, TmdbMultiSearchResponse } from './types';
+import type {
+	MediaDetail,
+	MediaSearchResult,
+	TmdbMovieDetailsResponse,
+	TmdbMultiSearchItem,
+	TmdbMultiSearchResponse,
+	TmdbTvDetailsResponse
+} from './types';
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+/** How many cast members the detail page shows (TMDB orders `cast` by billing). */
+const CAST_LIMIT = 10;
 
 /** Thrown when TMDB responds with a non-2xx status, so callers can map it to a clean HTTP error. */
 export class TmdbError extends Error {
@@ -46,6 +56,43 @@ function normalize(item: TmdbMultiSearchItem): MediaSearchResult | null {
 	return null;
 }
 
+/** Normalize a raw movie/tv detail response to the app-facing `MediaDetail` shape. */
+function normalizeDetails(
+	type: 'movie' | 'show',
+	data: TmdbMovieDetailsResponse | TmdbTvDetailsResponse
+): MediaDetail {
+	const isMovie = type === 'movie';
+	const movie = data as TmdbMovieDetailsResponse;
+	const tv = data as TmdbTvDetailsResponse;
+
+	const trailer = (data.videos?.results ?? []).find(
+		(v) => v.site === 'YouTube' && v.type === 'Trailer'
+	);
+
+	return {
+		tmdbId: data.id,
+		type,
+		title: (isMovie ? movie.title : tv.name) ?? '',
+		year: parseYear(isMovie ? movie.release_date : tv.first_air_date),
+		overview: data.overview ?? '',
+		posterPath: data.poster_path ?? null,
+		backdropPath: data.backdrop_path ?? null,
+		// TMDB reports 0 for unrated titles — surface that as null rather than a fake "0/10".
+		rating:
+			typeof data.vote_average === 'number' && data.vote_average > 0 ? data.vote_average : null,
+		voteCount: data.vote_count ?? 0,
+		runtime: (isMovie ? movie.runtime : tv.episode_run_time?.[0]) ?? null,
+		genres: (data.genres ?? []).map((g) => g.name),
+		cast: (data.credits?.cast ?? []).slice(0, CAST_LIMIT).map((c) => ({
+			id: c.id,
+			name: c.name,
+			character: c.character ?? '',
+			profilePath: c.profile_path ?? null
+		})),
+		trailer: trailer ? { key: trailer.key, name: trailer.name } : null
+	};
+}
+
 /**
  * TMDB API client. `createTmdbClient(apiKey)` is the single place the API key and base URL
  * live; the key is read off `platform.env.TMDB_API_KEY` at the call site (see the search endpoint).
@@ -82,6 +129,16 @@ export function createTmdbClient(apiKey: string) {
 			})) as TmdbMultiSearchResponse;
 
 			return (data.results ?? []).map(normalize).filter((r): r is MediaSearchResult => r !== null);
+		},
+
+		/** Fetch a single movie/show with credits, images, and videos appended, normalized. */
+		async getDetails(type: 'movie' | 'show', id: number): Promise<MediaDetail> {
+			const path = type === 'movie' ? `/movie/${id}` : `/tv/${id}`;
+			const data = (await request(path, {
+				append_to_response: 'credits,images,videos'
+			})) as TmdbMovieDetailsResponse | TmdbTvDetailsResponse;
+
+			return normalizeDetails(type, data);
 		}
 	};
 }
