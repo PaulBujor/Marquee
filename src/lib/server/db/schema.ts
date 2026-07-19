@@ -211,7 +211,9 @@ export const media = sqliteTable(
 		overview: text('overview').notNull().default(''),
 		// Epoch **ms** (plain integer, not `timestamp`/seconds) — it's an LWW clock
 		// compared against event `clientCreatedAt`, so units must match.
-		updatedAt: integer('updated_at').notNull().$defaultFn(() => Date.now())
+		updatedAt: integer('updated_at')
+			.notNull()
+			.$defaultFn(() => Date.now())
 	},
 	(table) => [uniqueIndex('media_tmdb_idx').on(table.tmdbId, table.type)]
 );
