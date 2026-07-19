@@ -31,6 +31,10 @@
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="manifest" href="/manifest.json" />
 	<meta name="theme-color" content="#8B5CF6" />
+	<!-- Standalone web-app mode. iOS only consults the apple-touch-startup-image
+	links below when launched as a standalone web app, so this must be present. -->
+	<meta name="mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
 
 	<!-- iOS PWA splash screens: iOS matches a static image by exact device
 	resolution + orientation; the light/dark pair is picked via prefers-color-scheme. -->
