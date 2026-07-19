@@ -31,3 +31,30 @@ jobs:
           name: coverage
           path: coverage/
           if-no-files-found: ignore
+
+  # Warn-only Lighthouse (PWA/Core Web Vitals) gate — MRQ-102. Separate job so it
+  # doesn't slow `check`. continue-on-error keeps it non-blocking on top of the
+  # warn-only assertions in lighthouserc.cjs, so wrangler/Chrome flakiness can't
+  # block a merge. Serves the built worker via `pnpm preview` (wrangler dev);
+  # ubuntu-latest ships Chrome, which lhci auto-detects.
+  lighthouse:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Run Lighthouse CI
+        run: pnpm exec lhci autorun --config=./lighthouserc.cjs
+      - name: Upload Lighthouse results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse
+          path: .lighthouseci/
+          if-no-files-found: ignore
