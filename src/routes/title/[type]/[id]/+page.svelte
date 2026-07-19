@@ -266,13 +266,31 @@
 					{#if season.episodes.length > 0}
 						<ul class="flex flex-col">
 							{#each season.episodes as ep (ep.episodeNumber)}
-								<li class="flex items-center gap-3 border-b border-border py-2.5 last:border-b-0">
-									<span class="w-6 shrink-0 text-sm font-semibold text-muted-foreground"
-										>{ep.episodeNumber}</span
-									>
-									<span class="min-w-0 flex-1 truncate text-sm font-medium">{ep.name}</span>
-									{#if ep.airDate}
-										<span class="shrink-0 text-xs text-muted-foreground">{ep.airDate}</span>
+								<li class="flex flex-col gap-1 border-b border-border py-3 last:border-b-0">
+									<div class="flex items-center gap-3">
+										<span class="w-6 shrink-0 text-sm font-semibold text-muted-foreground"
+											>{ep.episodeNumber}</span
+										>
+										<span class="min-w-0 flex-1 truncate text-sm font-medium">{ep.name}</span>
+										{#if ep.runtime}
+											<span
+												class="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground"
+												>{ep.runtime} min</span
+											>
+										{/if}
+										<!-- Mark-as-viewed check lands here with the tracking epic (Offline & Sync). -->
+									</div>
+									{#if ep.airDate || ep.overview}
+										<div class="flex flex-col gap-0.5 pl-9">
+											{#if ep.airDate}
+												<span class="text-xs text-muted-foreground">{ep.airDate}</span>
+											{/if}
+											{#if ep.overview}
+												<p class="line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+													{ep.overview}
+												</p>
+											{/if}
+										</div>
 									{/if}
 								</li>
 							{/each}

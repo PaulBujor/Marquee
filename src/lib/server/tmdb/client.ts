@@ -115,7 +115,8 @@ function normalizeSeason(data: TmdbSeasonDetailResponse): SeasonDetail {
 			name: e.name ?? '',
 			airDate: e.air_date ?? null,
 			overview: e.overview ?? '',
-			stillPath: e.still_path ?? null
+			stillPath: e.still_path ?? null,
+			runtime: e.runtime ?? null
 		}))
 	};
 }

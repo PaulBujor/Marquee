@@ -205,14 +205,16 @@ const SEASON_DETAILS: TmdbSeasonDetailResponse = {
 			name: 'Pilot',
 			air_date: '2008-01-20',
 			overview: 'Walt cooks.',
-			still_path: '/e1.jpg'
+			still_path: '/e1.jpg',
+			runtime: 58
 		},
 		{
 			episode_number: 2,
 			name: "Cat's in the Bag...",
 			air_date: '2008-01-27',
 			overview: 'Cleanup.',
-			still_path: null
+			still_path: null,
+			runtime: 48
 		}
 	]
 };
@@ -395,14 +397,16 @@ describe('createTmdbClient.getSeason', () => {
 					name: 'Pilot',
 					airDate: '2008-01-20',
 					overview: 'Walt cooks.',
-					stillPath: '/e1.jpg'
+					stillPath: '/e1.jpg',
+					runtime: 58
 				},
 				{
 					episodeNumber: 2,
 					name: "Cat's in the Bag...",
 					airDate: '2008-01-27',
 					overview: 'Cleanup.',
-					stillPath: null
+					stillPath: null,
+					runtime: 48
 				}
 			]
 		});

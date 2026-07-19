@@ -131,6 +131,7 @@ export interface TmdbEpisode {
 	overview?: string;
 	air_date?: string;
 	still_path?: string | null;
+	runtime?: number | null;
 }
 
 /** Raw `/tv/{id}/season/{n}` response (only consumed fields modelled). */
@@ -196,6 +197,8 @@ export interface Episode {
 	airDate: string | null;
 	overview: string;
 	stillPath: string | null;
+	/** Episode runtime in minutes, or null when TMDB has none. */
+	runtime: number | null;
 }
 
 /** A normalized single season with its episodes (`/tv/{id}/season/{n}`). */
