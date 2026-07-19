@@ -17,6 +17,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      idb:
+        specifier: ^8.0.3
+        version: 8.0.3
       resend:
         specifier: ^6.17.2
         version: 6.17.2
@@ -1747,6 +1750,9 @@ packages:
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
+
+  idb@8.0.3:
+    resolution: {integrity: sha512-LtwtVyVYO5BqRvcsKuB2iUMnHwPVByPCXFXOpuU96IZPPoPN6xjOGxZQ74pgSVVLQWtUOYgyeL4GE98BY5D3wg==}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -3828,6 +3834,8 @@ snapshots:
   has-flag@4.0.0: {}
 
   html-escaper@2.0.2: {}
+
+  idb@8.0.3: {}
 
   ieee754@1.2.1: {}
 
