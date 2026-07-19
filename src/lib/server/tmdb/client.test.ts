@@ -3,6 +3,7 @@ import { createTmdbClient, TmdbError } from './client';
 import type {
 	TmdbMovieDetailsResponse,
 	TmdbMultiSearchResponse,
+	TmdbSeasonDetailResponse,
 	TmdbTvDetailsResponse
 } from './types';
 
@@ -172,7 +173,48 @@ const TV_DETAILS: TmdbTvDetailsResponse = {
 	},
 	videos: {
 		results: [{ key: 'bb-trailer', name: 'Trailer', site: 'YouTube', type: 'Trailer' }]
-	}
+	},
+	seasons: [
+		{
+			season_number: 0,
+			name: 'Specials',
+			episode_count: 8,
+			air_date: '2009-02-17',
+			poster_path: '/s0.jpg',
+			overview: 'Extras.'
+		},
+		{
+			season_number: 1,
+			name: 'Season 1',
+			episode_count: 7,
+			air_date: '2008-01-20',
+			poster_path: '/s1.jpg',
+			overview: 'The beginning.'
+		}
+	]
+};
+
+/** A representative `/tv/{id}/season/{n}` payload. */
+const SEASON_DETAILS: TmdbSeasonDetailResponse = {
+	season_number: 1,
+	name: 'Season 1',
+	overview: 'The beginning.',
+	episodes: [
+		{
+			episode_number: 1,
+			name: 'Pilot',
+			air_date: '2008-01-20',
+			overview: 'Walt cooks.',
+			still_path: '/e1.jpg'
+		},
+		{
+			episode_number: 2,
+			name: "Cat's in the Bag...",
+			air_date: '2008-01-27',
+			overview: 'Cleanup.',
+			still_path: null
+		}
+	]
 };
 
 describe('createTmdbClient.getDetails', () => {
@@ -196,7 +238,8 @@ describe('createTmdbClient.getDetails', () => {
 				{ id: 1, name: 'Leonardo DiCaprio', character: 'Cobb', profilePath: '/leo.jpg' },
 				{ id: 2, name: 'Elliot Page', character: 'Ariadne', profilePath: null }
 			],
-			trailer: { key: 'yt-trailer', name: 'Official Trailer' }
+			trailer: { key: 'yt-trailer', name: 'Official Trailer' },
+			seasons: []
 		});
 	});
 
@@ -216,6 +259,30 @@ describe('createTmdbClient.getDetails', () => {
 		expect(detail.cast).toEqual([
 			{ id: 3, name: 'Bryan Cranston', character: 'Walter White', profilePath: '/bc.jpg' }
 		]);
+		expect(detail.seasons).toEqual([
+			{
+				seasonNumber: 0,
+				name: 'Specials',
+				episodeCount: 8,
+				airYear: 2009,
+				posterPath: '/s0.jpg',
+				overview: 'Extras.'
+			},
+			{
+				seasonNumber: 1,
+				name: 'Season 1',
+				episodeCount: 7,
+				airYear: 2008,
+				posterPath: '/s1.jpg',
+				overview: 'The beginning.'
+			}
+		]);
+	});
+
+	it('leaves seasons empty for movies', async () => {
+		mockFetch(MOVIE_DETAILS);
+		const detail = await createTmdbClient('key').getDetails('movie', 27205);
+		expect(detail.seasons).toEqual([]);
 	});
 
 	it('requests the movie path with the append_to_response param', async () => {
@@ -294,7 +361,8 @@ describe('createTmdbClient.getDetails', () => {
 			runtime: null,
 			genres: [],
 			cast: [],
-			trailer: null
+			trailer: null,
+			seasons: []
 		});
 	});
 
@@ -307,6 +375,57 @@ describe('createTmdbClient.getDetails', () => {
 	it('throws TmdbError on a non-2xx response', async () => {
 		mockFetch({}, { status: 404 });
 		await expect(createTmdbClient('key').getDetails('movie', 999)).rejects.toMatchObject({
+			name: 'TmdbError',
+			status: 404
+		});
+	});
+});
+
+describe('createTmdbClient.getSeason', () => {
+	it('normalizes a season with its episodes', async () => {
+		mockFetch(SEASON_DETAILS);
+		const season = await createTmdbClient('key').getSeason(1396, 1);
+
+		expect(season).toEqual({
+			seasonNumber: 1,
+			name: 'Season 1',
+			episodes: [
+				{
+					episodeNumber: 1,
+					name: 'Pilot',
+					airDate: '2008-01-20',
+					overview: 'Walt cooks.',
+					stillPath: '/e1.jpg'
+				},
+				{
+					episodeNumber: 2,
+					name: "Cat's in the Bag...",
+					airDate: '2008-01-27',
+					overview: 'Cleanup.',
+					stillPath: null
+				}
+			]
+		});
+	});
+
+	it('requests the /tv/{id}/season/{n} path', async () => {
+		const spy = mockFetch(SEASON_DETAILS);
+		await createTmdbClient('key').getSeason(1396, 2);
+
+		const [firstArg] = spy.mock.calls[0] as unknown as [URL | string];
+		const url = new URL(String(firstArg));
+		expect(url.origin + url.pathname).toBe('https://api.themoviedb.org/3/tv/1396/season/2');
+	});
+
+	it('handles a season with no episodes', async () => {
+		mockFetch({ season_number: 3, name: 'Season 3' });
+		const season = await createTmdbClient('key').getSeason(1396, 3);
+		expect(season).toEqual({ seasonNumber: 3, name: 'Season 3', episodes: [] });
+	});
+
+	it('throws TmdbError on a non-2xx response', async () => {
+		mockFetch({}, { status: 404 });
+		await expect(createTmdbClient('key').getSeason(1396, 99)).rejects.toMatchObject({
 			name: 'TmdbError',
 			status: 404
 		});

@@ -1,9 +1,11 @@
 import type {
 	MediaDetail,
 	MediaSearchResult,
+	SeasonDetail,
 	TmdbMovieDetailsResponse,
 	TmdbMultiSearchItem,
 	TmdbMultiSearchResponse,
+	TmdbSeasonDetailResponse,
 	TmdbTvDetailsResponse
 } from './types';
 
@@ -89,7 +91,32 @@ function normalizeDetails(
 			character: c.character ?? '',
 			profilePath: c.profile_path ?? null
 		})),
-		trailer: trailer ? { key: trailer.key, name: trailer.name } : null
+		trailer: trailer ? { key: trailer.key, name: trailer.name } : null,
+		seasons: isMovie
+			? []
+			: (tv.seasons ?? []).map((s) => ({
+					seasonNumber: s.season_number,
+					name: s.name ?? '',
+					episodeCount: s.episode_count ?? 0,
+					airYear: parseYear(s.air_date),
+					posterPath: s.poster_path ?? null,
+					overview: s.overview ?? ''
+				}))
+	};
+}
+
+/** Normalize a raw `/tv/{id}/season/{n}` response to the app-facing `SeasonDetail` shape. */
+function normalizeSeason(data: TmdbSeasonDetailResponse): SeasonDetail {
+	return {
+		seasonNumber: data.season_number,
+		name: data.name ?? '',
+		episodes: (data.episodes ?? []).map((e) => ({
+			episodeNumber: e.episode_number,
+			name: e.name ?? '',
+			airDate: e.air_date ?? null,
+			overview: e.overview ?? '',
+			stillPath: e.still_path ?? null
+		}))
 	};
 }
 
@@ -139,6 +166,16 @@ export function createTmdbClient(apiKey: string) {
 			})) as TmdbMovieDetailsResponse | TmdbTvDetailsResponse;
 
 			return normalizeDetails(type, data);
+		},
+
+		/** Fetch a single TV season with its episodes, normalized. */
+		async getSeason(showId: number, seasonNumber: number): Promise<SeasonDetail> {
+			const data = (await request(
+				`/tv/${showId}/season/${seasonNumber}`,
+				{}
+			)) as TmdbSeasonDetailResponse;
+
+			return normalizeSeason(data);
 		}
 	};
 }

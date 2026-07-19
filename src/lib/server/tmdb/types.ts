@@ -111,6 +111,34 @@ export interface TmdbTvDetailsResponse {
 	credits?: TmdbCredits;
 	images?: TmdbImages;
 	videos?: TmdbVideosResponse;
+	seasons?: TmdbSeasonSummary[];
+}
+
+/** A season summary from a `/tv/{id}` response (TMDB includes season 0 = "Specials"). */
+export interface TmdbSeasonSummary {
+	season_number: number;
+	name?: string;
+	overview?: string;
+	air_date?: string;
+	episode_count?: number;
+	poster_path?: string | null;
+}
+
+/** A single episode from a `/tv/{id}/season/{n}` response. */
+export interface TmdbEpisode {
+	episode_number: number;
+	name?: string;
+	overview?: string;
+	air_date?: string;
+	still_path?: string | null;
+}
+
+/** Raw `/tv/{id}/season/{n}` response (only consumed fields modelled). */
+export interface TmdbSeasonDetailResponse {
+	season_number: number;
+	name?: string;
+	overview?: string;
+	episodes?: TmdbEpisode[];
 }
 
 /** A normalized cast member for the detail UI. */
@@ -145,4 +173,34 @@ export interface MediaDetail {
 	genres: string[];
 	cast: CastMember[];
 	trailer: MediaTrailer | null;
+	/** Season summaries for shows (ordered as TMDB returns them); empty for movies. */
+	seasons: Season[];
+}
+
+/** A normalized season summary for the detail page's season selector. */
+export interface Season {
+	seasonNumber: number;
+	name: string;
+	episodeCount: number;
+	/** Air year, or null when TMDB has no date. */
+	airYear: number | null;
+	posterPath: string | null;
+	overview: string;
+}
+
+/** A normalized episode for the season episode list. */
+export interface Episode {
+	episodeNumber: number;
+	name: string;
+	/** Raw TMDB air date (`YYYY-MM-DD`), or null. */
+	airDate: string | null;
+	overview: string;
+	stillPath: string | null;
+}
+
+/** A normalized single season with its episodes (`/tv/{id}/season/{n}`). */
+export interface SeasonDetail {
+	seasonNumber: number;
+	name: string;
+	episodes: Episode[];
 }

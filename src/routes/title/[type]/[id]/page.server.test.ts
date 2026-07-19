@@ -15,18 +15,54 @@ function makeEvent(opts: {
 	id?: string;
 	apiKey?: string | null;
 	hasPlatform?: boolean;
+	season?: string | null;
 }): LoadEvent {
 	const {
 		user = { id: 'u1' },
 		type = 'movie',
 		id = '27205',
 		apiKey = 'key',
-		hasPlatform = true
+		hasPlatform = true,
+		season = null
 	} = opts;
 	const platform = hasPlatform
 		? { env: apiKey === null ? {} : { TMDB_API_KEY: apiKey } }
 		: undefined;
-	return { locals: { user }, params: { type, id }, platform } as unknown as LoadEvent;
+	const url = new URL(
+		`http://localhost/title/${type}/${id}${season === null ? '' : `?season=${season}`}`
+	);
+	return { locals: { user }, params: { type, id }, platform, url } as unknown as LoadEvent;
+}
+
+/** A minimal `/tv/{id}` payload with two seasons (Specials + Season 1). */
+const SHOW_WITH_SEASONS = {
+	id: 1396,
+	name: 'Breaking Bad',
+	first_air_date: '2008-01-20',
+	seasons: [
+		{ season_number: 0, name: 'Specials', episode_count: 8 },
+		{ season_number: 1, name: 'Season 1', episode_count: 7 }
+	]
+};
+
+/** Stub fetch to answer the detail call, then each subsequent season call. */
+function stubShowFetch() {
+	const fetchSpy = vi.fn(async (input: URL | string) => {
+		const path = new URL(String(input)).pathname;
+		if (/\/season\/\d+$/.test(path)) {
+			const seasonNumber = Number(path.split('/').pop());
+			return new Response(
+				JSON.stringify({
+					season_number: seasonNumber,
+					name: `Season ${seasonNumber}`,
+					episodes: []
+				})
+			);
+		}
+		return new Response(JSON.stringify(SHOW_WITH_SEASONS));
+	});
+	vi.stubGlobal('fetch', fetchSpy);
+	return fetchSpy;
 }
 
 /** Run the load and return whatever it threw (redirect/error are thrown, not returned). */
@@ -100,5 +136,35 @@ describe('title detail load', () => {
 		const err = await thrownBy(() => load(makeEvent({})));
 		expect(isHttpError(err)).toBe(true);
 		expect(err.status).toBe(502);
+	});
+
+	it('returns null season for movies', async () => {
+		vi.stubGlobal('fetch', tmdbResponse({ id: 1, title: 'Inception' }));
+		const result = (await load(makeEvent({}))) as unknown as { season: unknown };
+		expect(result.season).toBeNull();
+	});
+
+	it('loads the first non-Specials season by default for shows', async () => {
+		stubShowFetch();
+		const result = (await load(makeEvent({ type: 'show', id: '1396' }))) as unknown as {
+			season: { seasonNumber: number };
+		};
+		expect(result.season.seasonNumber).toBe(1);
+	});
+
+	it('loads the requested ?season=N for shows', async () => {
+		stubShowFetch();
+		const result = (await load(
+			makeEvent({ type: 'show', id: '1396', season: '0' })
+		)) as unknown as { season: { seasonNumber: number } };
+		expect(result.season.seasonNumber).toBe(0);
+	});
+
+	it('falls back to the default season when ?season=N is not a real season', async () => {
+		stubShowFetch();
+		const result = (await load(
+			makeEvent({ type: 'show', id: '1396', season: '99' })
+		)) as unknown as { season: { seasonNumber: number } };
+		expect(result.season.seasonNumber).toBe(1);
 	});
 });
