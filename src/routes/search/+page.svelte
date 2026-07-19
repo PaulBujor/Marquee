@@ -24,12 +24,6 @@
 
 	let debounce: ReturnType<typeof setTimeout> | undefined;
 
-	// Autofocus on mount. NOTE: on mobile this shows the cursor but doesn't open the keyboard —
-	// browsers only raise it from a real tap on the field.
-	$effect(() => {
-		searchInput?.focus();
-	});
-
 	// Re-sync the input when the URL changes outside of typing (back/forward, direct load) so a
 	// restored `?q=` shows up in the box. Skip our own `goto` navigations (nav.type === 'goto').
 	// Also track whether we can pop history for the back button (mirrors the Settings page).
@@ -45,7 +39,11 @@
 	}
 
 	function pushQuery(q: string) {
-		const target = q ? `${resolve('/search')}?q=${encodeURIComponent(q)}` : resolve('/search');
+		const path = resolve('/search');
+		const target = q ? `${path}?q=${encodeURIComponent(q)}` : path;
+		// The path is resolved; appending a query string drops resolve()'s branded type, which the
+		// rule keys on, and it has no escape for query-string navigation — so disable it here.
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		return goto(target, { replaceState: true, keepFocus: true, noScroll: true });
 	}
 
@@ -72,7 +70,7 @@
 	<title>Search · Marquee</title>
 </svelte:head>
 
-<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pb-10">
+<main class="mx-auto flex w-full max-w-lg flex-col gap-6 p-6">
 	<div class="flex items-center gap-3">
 		<Button
 			onclick={goBack}
@@ -97,7 +95,7 @@
 			aria-label="Search movies and shows"
 			autocomplete="off"
 			autocapitalize="none"
-			class="pr-9 [&::-webkit-search-cancel-button]:appearance-none"
+			class="h-8 appearance-none pr-9 [&::-webkit-search-cancel-button]:appearance-none"
 		/>
 		{#if query}
 			<button
