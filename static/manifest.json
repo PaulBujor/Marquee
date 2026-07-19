@@ -1,12 +1,17 @@
 {
+	"id": "/",
 	"name": "Marquee",
 	"short_name": "Marquee",
 	"description": "Movie & TV tracking PWA",
+	"lang": "en",
+	"dir": "ltr",
+	"categories": ["entertainment"],
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",
+	"orientation": "portrait",
 	"background_color": "#090a0e",
-	"theme_color": "#8B5CF6",
+	"theme_color": "#090a0e",
 	"icons": [
 		{
 			"src": "/icons/icon-192.png",

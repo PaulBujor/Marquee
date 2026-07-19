@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#090a0e" />
+		<title>Offline · Marquee</title>
+		<link rel="icon" href="/favicon.ico" sizes="any" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<style>
+			:root {
+				color-scheme: dark;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				height: 100%;
+				margin: 0;
+			}
+			body {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				gap: 1.25rem;
+				padding: 2rem;
+				text-align: center;
+				background: #090a0e;
+				color: #ededf0;
+				font-family:
+					system-ui,
+					-apple-system,
+					'Segoe UI',
+					Roboto,
+					sans-serif;
+			}
+			img {
+				width: 72px;
+				height: 72px;
+			}
+			h1 {
+				margin: 0;
+				/* App serif; falls back to a system serif offline. */
+				font-family: 'Fraunces', ui-serif, Georgia, serif;
+				font-size: 1.5rem;
+				font-weight: 600;
+			}
+			p {
+				margin: 0;
+				max-width: 28rem;
+				color: #a1a1ab;
+				line-height: 1.5;
+			}
+			button {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.5rem;
+				margin-top: 0.5rem;
+				padding: 0.625rem 1.25rem;
+				font: inherit;
+				font-weight: 600;
+				color: #fff;
+				background: #8b5cf6;
+				border: none;
+				border-radius: 0.625rem;
+				cursor: pointer;
+			}
+			button:hover:not(:disabled) {
+				background: #7c4ef4;
+			}
+			button:disabled {
+				cursor: default;
+				opacity: 0.7;
+			}
+			.spinner {
+				width: 1em;
+				height: 1em;
+				border: 2px solid rgba(255, 255, 255, 0.4);
+				border-top-color: #fff;
+				border-radius: 50%;
+				animation: spin 0.6s linear infinite;
+			}
+			@keyframes spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
+			.status {
+				min-height: 1.25rem;
+				color: #f0a68a;
+				font-size: 0.9rem;
+			}
+			[hidden] {
+				display: none;
+			}
+		</style>
+	</head>
+	<body>
+		<img src="/icons/icon-192.png" alt="Marquee" />
+		<h1>You're offline</h1>
+		<p>
+			Marquee can't reach the network right now. Check your connection — anything you've already
+			opened is still available.
+		</p>
+		<button id="retry" type="button">
+			<span class="spinner" hidden></span>
+			<span class="label">Try again</span>
+		</button>
+		<p class="status" role="status" aria-live="polite"></p>
+		<script>
+			(function () {
+				var btn = document.getElementById('retry');
+				var spinner = btn.querySelector('.spinner');
+				var label = btn.querySelector('.label');
+				var status = document.querySelector('.status');
+				var checking = false;
+
+				async function tryAgain() {
+					if (checking) return;
+					checking = true;
+					btn.disabled = true;
+					spinner.hidden = false;
+					label.textContent = 'Checking…';
+					status.textContent = '';
+					try {
+						// HEAD bypasses the GET-only SW — a real network probe.
+						await fetch(location.href, { method: 'HEAD', cache: 'no-store' });
+						location.reload();
+					} catch (e) {
+						btn.disabled = false;
+						spinner.hidden = true;
+						label.textContent = 'Try again';
+						status.textContent = 'Still offline — check your connection and try again.';
+						checking = false;
+					}
+				}
+
+				btn.addEventListener('click', tryAgain);
+				// Auto-retry when the OS reports the connection is back.
+				window.addEventListener('online', tryAgain);
+			})();
+		</script>
+	</body>
+</html>
