@@ -43,6 +43,9 @@ jobs:
   lighthouse:
     runs-on: ubuntu-latest
     continue-on-error: true
+    # LHCI_GITHUB_APP_TOKEN lives on the `ci` environment, so the job must opt into
+    # it to read the secret (environment secrets aren't visible to jobs otherwise).
+    environment: ci
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
