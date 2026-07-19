@@ -96,7 +96,7 @@ describe('POST /api/sync push + pull', () => {
 			cursor: 0,
 			events: [
 				ev(
-					'media.tracked',
+					'tracking.added',
 					{
 						media: {
 							tmdbId: 603,

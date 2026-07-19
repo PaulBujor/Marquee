@@ -8,13 +8,19 @@ export async function enqueueEvent(event: EventEnvelope): Promise<void> {
 	await db.put('events', { ...event, synced: 0 });
 }
 
-/** All events not yet acknowledged by the server, oldest first. */
-export async function getUnsynced(): Promise<EventEnvelope[]> {
+/**
+ * Events not yet acknowledged by the server, oldest first. Pass `limit` to page the
+ * outbox — the sync engine (MRQ-43) must keep a push at or under `SYNC_MAX_PUSH`, so
+ * a large offline backlog is drained across several round trips rather than one
+ * oversized request the server would reject.
+ */
+export async function getUnsynced(limit?: number): Promise<EventEnvelope[]> {
 	const db = await openDb();
 	const rows = await db.getAllFromIndex('events', 'by_synced', 0);
 	rows.sort((a, b) => a.clientCreatedAt - b.clientCreatedAt);
+	const page = limit === undefined ? rows : rows.slice(0, limit);
 	// Return bare envelopes (drop the local `synced` flag) — the wire shape.
-	return rows.map((row) => ({
+	return page.map((row) => ({
 		id: row.id,
 		type: row.type,
 		entityId: row.entityId,

@@ -14,19 +14,24 @@ export const EVENT_SCHEMA_VERSION = 1;
 export const TRACKING_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
 export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
 
-/** The kinds of events the foundation supports (enough to prove the pipeline). */
+/**
+ * The kinds of events the foundation supports (enough to prove the pipeline).
+ * `tracking.*` are the lifecycle of a watchlist entry; `episode.*` are per-episode
+ * watched state. Adding a title is `tracking.added` (not `media.*`) — it carries a
+ * media snapshot as payload, but the aggregate it acts on is the tracking entry.
+ */
 export const SYNC_EVENT_TYPES = [
-	'media.tracked',
+	'tracking.added',
 	'tracking.status_changed',
 	'tracking.favorite_toggled',
+	'tracking.removed',
 	'episode.watched',
-	'episode.unwatched',
-	'tracking.removed'
+	'episode.unwatched'
 ] as const;
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
 
 /**
- * A minimal media descriptor carried by `media.tracked` so the server can populate
+ * A minimal media descriptor carried by `tracking.added` so the server can populate
  * its catalog cache without a TMDB round-trip. Mirrors `MediaSearchResult`
  * (`src/lib/server/tmdb/types.ts`) — TMDB stays the real source, this is display cache.
  */
@@ -41,12 +46,12 @@ export interface MediaSnapshot {
 
 /** Payload shape per event type — the discriminated union that drives projection. */
 export interface EventPayloadMap {
-	'media.tracked': { media: MediaSnapshot; status: TrackingStatus };
+	'tracking.added': { media: MediaSnapshot; status: TrackingStatus };
 	'tracking.status_changed': { status: TrackingStatus };
 	'tracking.favorite_toggled': { favorite: boolean };
+	'tracking.removed': Record<string, never>;
 	'episode.watched': { season: number; episode: number };
 	'episode.unwatched': { season: number; episode: number };
-	'tracking.removed': Record<string, never>;
 }
 
 /**
@@ -112,6 +117,14 @@ export function createEvent<T extends SyncEventType>(
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Upper sanity bound for `clientCreatedAt` — Jan 1 2100 in epoch ms. `clientCreatedAt`
+ * is the LWW clock, so a client clock set absurdly far ahead would otherwise win every
+ * future merge and poison ordering; reject clearly bogus values. (Blast radius is only
+ * the user's own data, so this is a robustness guard, not a security boundary.)
+ */
+const MAX_CLIENT_TIME = 4102444800000;
+
 function isPositiveInt(v: unknown): v is number {
 	return typeof v === 'number' && Number.isInteger(v) && v > 0;
 }
@@ -120,7 +133,7 @@ function isValidPayload(type: SyncEventType, payload: unknown): boolean {
 	if (typeof payload !== 'object' || payload === null) return false;
 	const p = payload as Record<string, unknown>;
 	switch (type) {
-		case 'media.tracked': {
+		case 'tracking.added': {
 			const m = p.media as Record<string, unknown> | undefined;
 			return (
 				(TRACKING_STATUSES as readonly string[]).includes(p.status as string) &&
@@ -157,7 +170,14 @@ export function validateEvent(raw: unknown): EventEnvelope | null {
 		return null;
 	}
 	if (typeof e.entityId !== 'string' || e.entityId.length === 0) return null;
-	if (typeof e.clientCreatedAt !== 'number' || !Number.isFinite(e.clientCreatedAt)) return null;
+	if (
+		typeof e.clientCreatedAt !== 'number' ||
+		!Number.isInteger(e.clientCreatedAt) ||
+		e.clientCreatedAt <= 0 ||
+		e.clientCreatedAt >= MAX_CLIENT_TIME
+	) {
+		return null;
+	}
 	if (typeof e.schemaVersion !== 'number') return null;
 	if (!isValidPayload(e.type as SyncEventType, e.payload)) return null;
 	return e as unknown as EventEnvelope;

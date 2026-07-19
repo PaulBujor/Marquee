@@ -43,7 +43,7 @@ describe('createEvent', () => {
 describe('validateEvent', () => {
 	it('accepts every well-formed event type', () => {
 		const cases: EventEnvelope[] = [
-			createEvent('media.tracked', 'movie:603', { media: SNAPSHOT, status: 'watching' }, DEVICE),
+			createEvent('tracking.added', 'movie:603', { media: SNAPSHOT, status: 'watching' }, DEVICE),
 			createEvent('tracking.status_changed', 'movie:603', { status: 'completed' }, DEVICE),
 			createEvent('tracking.favorite_toggled', 'movie:603', { favorite: false }, DEVICE),
 			createEvent('episode.watched', 'show:1396', { season: 1, episode: 2 }, DEVICE),
@@ -66,6 +66,9 @@ describe('validateEvent', () => {
 		expect(validateEvent({ ...good, deviceId: 'not-a-uuid' })).toBeNull();
 		expect(validateEvent({ ...good, entityId: '' })).toBeNull();
 		expect(validateEvent({ ...good, clientCreatedAt: 'soon' })).toBeNull();
+		expect(validateEvent({ ...good, clientCreatedAt: 0 })).toBeNull();
+		expect(validateEvent({ ...good, clientCreatedAt: 1.5 })).toBeNull(); // non-integer
+		expect(validateEvent({ ...good, clientCreatedAt: 4102444800000 })).toBeNull(); // year 2100
 		// bad payloads
 		expect(validateEvent({ ...good, payload: { status: 'invalid' } })).toBeNull();
 		expect(
@@ -76,7 +79,7 @@ describe('validateEvent', () => {
 		expect(
 			validateEvent({
 				...createEvent(
-					'media.tracked',
+					'tracking.added',
 					'movie:603',
 					{ media: SNAPSHOT, status: 'watching' },
 					DEVICE

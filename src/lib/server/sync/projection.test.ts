@@ -65,9 +65,9 @@ beforeEach(async () => {
 });
 
 describe('projectEvent via applyEvents', () => {
-	it('media.tracked creates media + tracking rows', async () => {
+	it('tracking.added creates media + tracking rows', async () => {
 		await applyEvents(db, USER, [
-			ev('media.tracked', MID, { media: SNAPSHOT, status: 'watching' }, 100)
+			ev('tracking.added', MID, { media: SNAPSHOT, status: 'watching' }, 100)
 		]);
 		const [m] = await db.select().from(media).where(eq(media.id, MID));
 		expect(m).toMatchObject({
@@ -82,7 +82,7 @@ describe('projectEvent via applyEvents', () => {
 	});
 
 	it('is idempotent — replaying the same event id is a no-op', async () => {
-		const e = ev('media.tracked', MID, { media: SNAPSHOT, status: 'watching' }, 100);
+		const e = ev('tracking.added', MID, { media: SNAPSHOT, status: 'watching' }, 100);
 		await applyEvents(db, USER, [e]);
 		const applied = await applyEvents(db, USER, [e]);
 		expect(applied).toHaveLength(0); // deduped
@@ -130,14 +130,27 @@ describe('projectEvent via applyEvents', () => {
 		await applyEvents(db, USER, [ev('tracking.removed', MID, {}, 100)]);
 		expect((await trackingRow(db)).removed).toBe(true);
 		await applyEvents(db, USER, [
-			ev('media.tracked', MID, { media: SNAPSHOT, status: 'watching' }, 200)
+			ev('tracking.added', MID, { media: SNAPSHOT, status: 'watching' }, 200)
 		]);
 		expect((await trackingRow(db)).removed).toBe(false); // re-add revives
 	});
 
+	it('a newer removal is not undone by an older re-add arriving afterward', async () => {
+		await applyEvents(db, USER, [
+			ev('tracking.added', MID, { media: SNAPSHOT, status: 'watching' }, 100)
+		]);
+		await applyEvents(db, USER, [ev('tracking.removed', MID, {}, 300)]);
+		// A stale re-add (clock 200 < removal 300) arrives later — e.g. a delayed event
+		// from another device. The revive is guarded by the removed clock, not status.
+		await applyEvents(db, USER, [
+			ev('tracking.added', MID, { media: SNAPSHOT, status: 'watching' }, 200)
+		]);
+		expect((await trackingRow(db)).removed).toBe(true); // removal@300 still wins
+	});
+
 	it('rebuildProjection replays the log to the same materialized state', async () => {
 		await applyEvents(db, USER, [
-			ev('media.tracked', MID, { media: SNAPSHOT, status: 'want_to_watch' }, 100)
+			ev('tracking.added', MID, { media: SNAPSHOT, status: 'want_to_watch' }, 100)
 		]);
 		await applyEvents(db, USER, [ev('tracking.status_changed', MID, { status: 'watching' }, 200)]);
 		await applyEvents(db, USER, [ev('episode.watched', MID, { season: 1, episode: 1 }, 300)]);

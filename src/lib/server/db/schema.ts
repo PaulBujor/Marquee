@@ -174,6 +174,9 @@ export const events = sqliteTable(
 		// Epoch **ms** on the originating device — the LWW ordering clock. Plain integer
 		// (not `timestamp` mode, which is Unix seconds) to preserve millisecond precision.
 		clientCreatedAt: integer('client_created_at').notNull(),
+		// Audit-only wall-clock; `timestamp` mode stores Unix seconds, so it's coarser
+		// than the ms `clientCreatedAt`. Not used for ordering or LWW (that's `seq` /
+		// `clientCreatedAt`), so the reduced precision is fine.
 		serverReceivedAt: integer('server_received_at', { mode: 'timestamp' })
 			.notNull()
 			.$defaultFn(() => new Date())
@@ -195,7 +198,7 @@ export const syncState = sqliteTable('sync_state', {
 
 /**
  * Global media catalog cache (not user-scoped). Populated from the `MediaSnapshot`
- * carried by `media.tracked` events. Mirrors `MediaSearchResult`; TMDB remains the
+ * carried by `tracking.added` events. Mirrors `MediaSearchResult`; TMDB remains the
  * real source, this is a display cache so tracked titles render offline.
  */
 export const media = sqliteTable(
@@ -221,7 +224,7 @@ export const media = sqliteTable(
 /**
  * A user's tracking row for a title. `mediaId` intentionally has **no FK** to
  * `media`: a `tracking.status_changed` can arrive from another device before this
- * server has seen the corresponding `media.tracked`, so decoupling avoids FK
+ * server has seen the corresponding `tracking.added`, so decoupling avoids FK
  * failures and keeps event ordering robust. Per-field LWW clocks (epoch ms of the
  * winning event's `clientCreatedAt`) let independent fields merge without clobber.
  * `removed` is a tombstone so a delete can lose to a later re-add deterministically.

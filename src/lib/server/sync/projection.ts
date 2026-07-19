@@ -6,11 +6,13 @@
  * Idempotency and conflict resolution are pushed **into SQL**: every projection
  * write is an upsert guarded by `... ON CONFLICT DO UPDATE SET ... WHERE <clock> >=
  * existing`, so re-applying an event is a no-op, an older event loses, and a newer
- * one wins — with no read-before-write. Conflicts resolve per-field **last-write-
- * wins** keyed by the event's `clientCreatedAt` (epoch ms).
+ * one wins — with no read-before-write. Conflicts resolve per **field** last-write-
+ * wins keyed by the event's `clientCreatedAt` (epoch ms): each field carries its own
+ * clock, so e.g. a stale re-add can't revive a title a newer removal tombstoned.
  */
 import { eq, inArray, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
+import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { createDb } from '../db';
 import { episodeWatches, events as eventsTable, media, syncState, tracking } from '../db/schema';
 import {
@@ -24,6 +26,20 @@ import {
 type Db = ReturnType<typeof createDb>;
 /** A runnable SQLite query that can be handed to `db.batch()`. */
 type Statement = BatchItem<'sqlite'>;
+type TrackingFields = Partial<typeof tracking.$inferInsert>;
+
+/**
+ * D1 caps bound parameters per query and statements per batch. Chunk well under any
+ * plausible limit: dedup `IN (...)` lists and projection batches are split accordingly.
+ */
+const DEDUP_CHUNK = 90;
+const BATCH_STATEMENTS = 90;
+
+function chunk<T>(items: T[], size: number): T[][] {
+	const out: T[][] = [];
+	for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+	return out;
+}
 
 /** Drizzle's `batch` wants a non-empty tuple type; at runtime it takes an array. */
 function runBatch(db: Db, statements: Statement[]): Promise<unknown[]> {
@@ -48,16 +64,46 @@ async function reserveSeqBlock(db: Db, userId: string, count: number): Promise<n
 	return row.lastSeq;
 }
 
+/**
+ * Upsert one field-group of a user's tracking row under an LWW guard on `clockCol`.
+ * `fields` seeds a fresh row (insert branch) and is the winning update (conflict
+ * branch); `updatedAt` is bookkeeping and always refreshed.
+ */
+function trackingUpsert(
+	db: Db,
+	ev: ServerEvent,
+	fields: TrackingFields,
+	clockCol: SQLiteColumn
+): Statement {
+	const clock = ev.clientCreatedAt;
+	const tkey = trackingKey(ev.userId, ev.entityId);
+	return db
+		.insert(tracking)
+		.values({
+			id: tkey,
+			userId: ev.userId,
+			mediaId: ev.entityId,
+			addedAt: new Date(clock),
+			updatedAt: new Date(clock),
+			...fields
+		})
+		.onConflictDoUpdate({
+			target: tracking.id,
+			set: { ...fields, updatedAt: new Date(clock) },
+			setWhere: sql`${clock} >= ${clockCol}`
+		});
+}
+
 /** Build the materialized-table upserts for a single (server-augmented) event. */
 export function projectEvent(db: Db, ev: ServerEvent): Statement[] {
 	const clock = ev.clientCreatedAt;
 	const mid = ev.entityId;
-	const tkey = trackingKey(ev.userId, mid);
 
 	switch (ev.type) {
-		case 'media.tracked': {
-			const p = ev.payload as EventPayloadMap['media.tracked'];
+		case 'tracking.added': {
+			const p = ev.payload as EventPayloadMap['tracking.added'];
 			return [
+				// Catalog cache (its own clock).
 				db
 					.insert(media)
 					.values({
@@ -81,94 +127,53 @@ export function projectEvent(db: Db, ev: ServerEvent): Statement[] {
 						},
 						setWhere: sql`${clock} >= ${media.updatedAt}`
 					}),
-				db
-					.insert(tracking)
-					.values({
-						id: tkey,
-						userId: ev.userId,
-						mediaId: mid,
-						status: p.status,
-						removed: false,
-						statusUpdatedAt: clock,
-						removedUpdatedAt: clock,
-						addedAt: new Date(clock),
-						updatedAt: new Date(clock)
-					})
-					.onConflictDoUpdate({
-						target: tracking.id,
-						// Re-adding a title revives it and (re)asserts its status, but only
-						// if this event is at least as new as the last status change.
-						set: {
-							status: p.status,
-							statusUpdatedAt: clock,
-							removed: false,
-							removedUpdatedAt: clock,
-							updatedAt: new Date(clock)
-						},
-						setWhere: sql`${clock} >= ${tracking.statusUpdatedAt}`
-					})
+				// Assert the status (status clock) and revive from any tombstone (removed
+				// clock) as two independent LWW fields — so a stale add can't un-remove a
+				// title that a newer removal deleted.
+				trackingUpsert(
+					db,
+					ev,
+					{ status: p.status, statusUpdatedAt: clock },
+					tracking.statusUpdatedAt
+				),
+				trackingUpsert(
+					db,
+					ev,
+					{ removed: false, removedUpdatedAt: clock },
+					tracking.removedUpdatedAt
+				)
 			];
 		}
 		case 'tracking.status_changed': {
 			const p = ev.payload as EventPayloadMap['tracking.status_changed'];
 			return [
-				db
-					.insert(tracking)
-					.values({
-						id: tkey,
-						userId: ev.userId,
-						mediaId: mid,
-						status: p.status,
-						statusUpdatedAt: clock,
-						addedAt: new Date(clock),
-						updatedAt: new Date(clock)
-					})
-					.onConflictDoUpdate({
-						target: tracking.id,
-						set: { status: p.status, statusUpdatedAt: clock, updatedAt: new Date(clock) },
-						setWhere: sql`${clock} >= ${tracking.statusUpdatedAt}`
-					})
+				trackingUpsert(
+					db,
+					ev,
+					{ status: p.status, statusUpdatedAt: clock },
+					tracking.statusUpdatedAt
+				)
 			];
 		}
 		case 'tracking.favorite_toggled': {
 			const p = ev.payload as EventPayloadMap['tracking.favorite_toggled'];
 			return [
-				db
-					.insert(tracking)
-					.values({
-						id: tkey,
-						userId: ev.userId,
-						mediaId: mid,
-						favorite: p.favorite,
-						favoriteUpdatedAt: clock,
-						addedAt: new Date(clock),
-						updatedAt: new Date(clock)
-					})
-					.onConflictDoUpdate({
-						target: tracking.id,
-						set: { favorite: p.favorite, favoriteUpdatedAt: clock, updatedAt: new Date(clock) },
-						setWhere: sql`${clock} >= ${tracking.favoriteUpdatedAt}`
-					})
+				trackingUpsert(
+					db,
+					ev,
+					{ favorite: p.favorite, favoriteUpdatedAt: clock },
+					tracking.favoriteUpdatedAt
+				)
 			];
 		}
 		case 'tracking.removed': {
 			return [
-				db
-					.insert(tracking)
-					.values({
-						id: tkey,
-						userId: ev.userId,
-						mediaId: mid,
-						removed: true,
-						removedUpdatedAt: clock,
-						addedAt: new Date(clock),
-						updatedAt: new Date(clock)
-					})
-					.onConflictDoUpdate({
-						target: tracking.id,
-						set: { removed: true, removedUpdatedAt: clock, updatedAt: new Date(clock) },
-						setWhere: sql`${clock} >= ${tracking.removedUpdatedAt}`
-					})
+				trackingUpsert(
+					db,
+					ev,
+					{ removed: true, removedUpdatedAt: clock },
+					tracking.removedUpdatedAt
+				)
 			];
 		}
 		case 'episode.watched':
@@ -198,12 +203,36 @@ export function projectEvent(db: Db, ev: ServerEvent): Statement[] {
 	}
 }
 
+/** The append-only log insert for one event (dedup by client uuid PK). */
+function insertEventStmt(db: Db, ev: ServerEvent): Statement {
+	return db
+		.insert(eventsTable)
+		.values({
+			id: ev.id,
+			userId: ev.userId,
+			seq: ev.seq,
+			type: ev.type,
+			entityId: ev.entityId,
+			payload: JSON.stringify(ev.payload),
+			deviceId: ev.deviceId,
+			schemaVersion: ev.schemaVersion,
+			clientCreatedAt: ev.clientCreatedAt,
+			serverReceivedAt: new Date(ev.serverReceivedAt)
+		})
+		.onConflictDoNothing();
+}
+
 /**
  * Persist a batch of client events for a user and return them augmented with the
  * server-assigned `seq` (in `clientCreatedAt` order). Already-seen events (by id)
- * are dropped up front; the `events` insert is also `ON CONFLICT DO NOTHING` as a
- * belt-and-suspenders guard against a racing duplicate. The event inserts and all
- * projection upserts run in one atomic `db.batch()`.
+ * are dropped up front; the log insert is also `ON CONFLICT DO NOTHING` to absorb a
+ * racing duplicate.
+ *
+ * Writes are chunked to respect D1's per-batch limits, but each event's log insert
+ * and its projection stay in the **same** batch — so a mid-way failure can never
+ * leave a persisted event whose projection was skipped (dedup would then never
+ * re-apply it). A failed batch throws; earlier batches are already committed and
+ * safe to re-receive (idempotent), later events stay unsynced and get retried.
  */
 export async function applyEvents(
 	db: Db,
@@ -212,12 +241,18 @@ export async function applyEvents(
 ): Promise<ServerEvent[]> {
 	if (incoming.length === 0) return [];
 
-	const ids = incoming.map((e) => e.id);
-	const existing = await db
-		.select({ id: eventsTable.id })
-		.from(eventsTable)
-		.where(inArray(eventsTable.id, ids));
-	const seen = new Set(existing.map((r) => r.id));
+	// Dedup, chunked to stay under D1's bound-parameter limit.
+	const seen = new Set<string>();
+	for (const ids of chunk(
+		incoming.map((e) => e.id),
+		DEDUP_CHUNK
+	)) {
+		const rows = await db
+			.select({ id: eventsTable.id })
+			.from(eventsTable)
+			.where(inArray(eventsTable.id, ids));
+		for (const r of rows) seen.add(r.id);
+	}
 	const fresh = incoming.filter((e) => !seen.has(e.id));
 	if (fresh.length === 0) return [];
 
@@ -234,35 +269,27 @@ export async function applyEvents(
 		serverReceivedAt: receivedAt
 	}));
 
-	const statements: Statement[] = [];
+	let batch: Statement[] = [];
+	const flush = async () => {
+		if (batch.length > 0) {
+			await runBatch(db, batch);
+			batch = [];
+		}
+	};
 	for (const ev of server) {
-		statements.push(
-			db
-				.insert(eventsTable)
-				.values({
-					id: ev.id,
-					userId,
-					seq: ev.seq,
-					type: ev.type,
-					entityId: ev.entityId,
-					payload: JSON.stringify(ev.payload),
-					deviceId: ev.deviceId,
-					schemaVersion: ev.schemaVersion,
-					clientCreatedAt: ev.clientCreatedAt,
-					serverReceivedAt: new Date(ev.serverReceivedAt)
-				})
-				.onConflictDoNothing() as Statement
-		);
-		statements.push(...projectEvent(db, ev));
+		const stmts = [insertEventStmt(db, ev), ...projectEvent(db, ev)];
+		if (batch.length > 0 && batch.length + stmts.length > BATCH_STATEMENTS) await flush();
+		batch.push(...stmts);
 	}
-	await runBatch(db, statements);
+	await flush();
+
 	return server;
 }
 
 /**
  * Recovery / test oracle: drop a user's materialized rows and rebuild them by
  * replaying the event log in `seq` order. The global `media` cache is left intact
- * (it's shared and derivable from every user's `media.tracked` events).
+ * (it's shared and derivable from every user's `tracking.added` events).
  */
 export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 	await db.delete(tracking).where(eq(tracking.userId, userId));
@@ -274,7 +301,13 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 		.where(eq(eventsTable.userId, userId))
 		.orderBy(eventsTable.seq);
 
-	const statements: Statement[] = [];
+	let batch: Statement[] = [];
+	const flush = async () => {
+		if (batch.length > 0) {
+			await runBatch(db, batch);
+			batch = [];
+		}
+	};
 	for (const row of rows) {
 		const ev: ServerEvent = {
 			id: row.id,
@@ -288,7 +321,9 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 			schemaVersion: row.schemaVersion,
 			serverReceivedAt: row.serverReceivedAt.getTime()
 		};
-		statements.push(...projectEvent(db, ev));
+		const stmts = projectEvent(db, ev);
+		if (batch.length > 0 && batch.length + stmts.length > BATCH_STATEMENTS) await flush();
+		batch.push(...stmts);
 	}
-	if (statements.length > 0) await runBatch(db, statements);
+	await flush();
 }

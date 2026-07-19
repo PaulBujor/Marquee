@@ -47,18 +47,21 @@ export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 	const mid = event.entityId;
 
 	switch (event.type) {
-		case 'media.tracked': {
-			const p = event.payload as EventPayloadMap['media.tracked'];
+		case 'tracking.added': {
+			const p = event.payload as EventPayloadMap['tracking.added'];
 			const tx = db.transaction('media', 'readwrite');
 			const cur = await tx.store.get(mid);
 			if (!cur || clock >= cur.updatedAt) {
 				await tx.store.put({ id: mid, ...p.media, updatedAt: clock });
 			}
 			await tx.done;
+			// Status and revive are independent LWW fields (mirrors the server): a stale
+			// add can't un-remove a title a newer removal tombstoned.
 			await upsertTracking(db, mid, clock, 'statusUpdatedAt', (t) => {
 				t.status = p.status;
+			});
+			await upsertTracking(db, mid, clock, 'removedUpdatedAt', (t) => {
 				t.removed = false;
-				t.removedUpdatedAt = clock;
 			});
 			break;
 		}
