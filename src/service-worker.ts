@@ -33,6 +33,17 @@ self.addEventListener('message', (event) => {
 	if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// Cloudflare redirects /offline.html → /offline, so the precached response is
+// flagged `redirected` — WebKit refuses those for navigations. Rebuild a clean copy.
+async function offlineResponse(): Promise<Response> {
+	const cached = await caches.match(OFFLINE_URL);
+	if (!cached) return Response.error();
+	return new Response(await cached.text(), {
+		status: 200,
+		headers: { 'Content-Type': 'text/html; charset=utf-8' }
+	});
+}
+
 self.addEventListener('fetch', (event) => {
 	const { request } = event;
 	if (request.method !== 'GET') return;
@@ -49,10 +60,7 @@ self.addEventListener('fetch', (event) => {
 	// copy, then the offline page.
 	if (request.mode === 'navigate') {
 		event.respondWith(
-			fetch(request).catch(
-				async () =>
-					(await caches.match(request)) ?? (await caches.match(OFFLINE_URL)) ?? Response.error()
-			)
+			fetch(request).catch(async () => (await caches.match(request)) ?? offlineResponse())
 		);
 		return;
 	}
