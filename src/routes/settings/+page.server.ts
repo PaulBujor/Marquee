@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import {
-	CODE_RE,
+	CODE_REGEX,
 	deleteAccount,
 	deleteSessionCookie,
 	EMAIL_CHANGE_TTL_MINUTES,
@@ -85,7 +85,7 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const newEmail = String(data.get('newEmail') ?? '');
 		const code = String(data.get('code') ?? '').trim();
-		if (!CODE_RE.test(code)) {
+		if (!CODE_REGEX.test(code)) {
 			return fail(400, { step: 'code' as const, newEmail, codeError: 'Enter the 6-digit code.' });
 		}
 

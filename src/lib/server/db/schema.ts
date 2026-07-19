@@ -84,13 +84,7 @@ export const loginTokens = sqliteTable(
 	]
 );
 
-/**
- * A short-lived secret confirming a change of account email. Like `loginTokens`
- * we store only the SHA-256 hash of a 6-digit code — but this is scoped to a
- * specific user and the *target* address the code was emailed to, so verifying
- * it switches `users.email` rather than minting a session. `attempts` caps
- * online brute-forcing before the row is invalidated.
- */
+/** Confirms an account-email change: a hashed 6-digit code scoped to a user + target address. */
 export const emailChangeTokens = sqliteTable(
 	'email_change_tokens',
 	{

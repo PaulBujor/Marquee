@@ -3,7 +3,7 @@ import type { createDb } from '$lib/server/db';
 import { emailChangeTokens, users, type User } from '$lib/server/db/schema';
 import type { EmailSender } from '$lib/server/email';
 import { renderEmailChangeCode } from '$lib/server/email/templates';
-import { EMAIL_RE, normalizeEmail } from './index';
+import { EMAIL_REGEX, normalizeEmail } from './validation';
 import { generateCode, hashToken } from './tokens';
 
 type Db = ReturnType<typeof createDb>;
@@ -42,7 +42,7 @@ export async function requestEmailChange(opts: {
 	ip?: string | null;
 }): Promise<EmailChangeRequestResult> {
 	const newEmail = normalizeEmail(opts.newEmail);
-	if (!EMAIL_RE.test(newEmail)) return { kind: 'invalid' };
+	if (!EMAIL_REGEX.test(newEmail)) return { kind: 'invalid' };
 	if (newEmail === opts.user.email) return { kind: 'unchanged' };
 
 	const taken = (

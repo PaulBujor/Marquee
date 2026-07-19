@@ -4,9 +4,6 @@
 	import CalendarDaysIcon from '@lucide/svelte/icons/calendar-days';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
-
-	// Circular icon buttons, matching the reference. Timeline and Search are
-	// roadmap features (MRQ Timeline / TMDB search) — rendered disabled for now.
 </script>
 
 <header class="flex items-center justify-between px-5 py-4">

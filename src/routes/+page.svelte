@@ -6,16 +6,14 @@
 	let { data }: { data: PageData } = $props();
 </script>
 
-<!-- Signed out has no header, so fill the viewport and center; signed in sits under the app header. -->
+<!-- Signed in, the app header carries the branding, so the landing copy shows only when signed out. -->
 <main
 	class="mx-auto flex max-w-2xl flex-col items-start justify-center gap-4 p-6 {data.user
 		? ''
 		: 'min-h-svh'}"
 >
-	<h1 class="font-serif text-3xl font-semibold">Marquee</h1>
-	{#if data.user}
-		<p class="text-muted-foreground">Track the movies and shows you're watching.</p>
-	{:else}
+	{#if !data.user}
+		<h1 class="font-serif text-3xl font-semibold">Marquee</h1>
 		<p class="text-muted-foreground">Track the movies and shows you're watching.</p>
 		<a href={resolve('/login')} class={buttonVariants()}>Sign in</a>
 	{/if}

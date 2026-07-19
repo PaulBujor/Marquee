@@ -9,6 +9,7 @@ import {
 } from '$lib/server/email/templates';
 import { createSession } from './session';
 import { generateCode, generateToken, hashToken } from './tokens';
+import { normalizeEmail } from './validation';
 
 type Db = ReturnType<typeof createDb>;
 
@@ -30,18 +31,6 @@ const RATE_MAX_PER_EMAIL = 5;
 const RATE_MAX_PER_IP = 20;
 /** Per-IP cap on unauthenticated waitlist signups within RATE_WINDOW_MS. */
 const SIGNUP_MAX_PER_IP = 10;
-
-export function normalizeEmail(email: string): string {
-	return email.trim().toLowerCase();
-}
-
-/**
- * Shared input shapes, re-validated server-side (the client uses them only for
- * immediate feedback). `EMAIL_RE` is a permissive email check; `CODE_RE` gates
- * the 6-digit OTP for both sign-in and email-change flows.
- */
-export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export const CODE_RE = /^\d{6}$/;
 
 /** Where the sign-in request came from: an installed PWA vs a browser tab. */
 export type SignInMode = 'standalone' | 'browser';
@@ -310,6 +299,8 @@ async function isRateLimited(db: Db, email: string, ip?: string | null): Promise
 	}
 	return false;
 }
+
+export { normalizeEmail, EMAIL_REGEX, CODE_REGEX } from './validation';
 
 export {
 	validateSession,
