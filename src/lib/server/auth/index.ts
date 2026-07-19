@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { createDb } from '$lib/server/db';
-import { loginTokens, users, type User } from '$lib/server/db/schema';
+import { emailChangeTokens, loginTokens, sessions, users, type User } from '$lib/server/db/schema';
 import type { EmailSender } from '$lib/server/email';
 import {
 	renderCodeEmail,
@@ -9,6 +9,7 @@ import {
 } from '$lib/server/email/templates';
 import { createSession } from './session';
 import { generateCode, generateToken, hashToken } from './tokens';
+import { normalizeEmail } from './validation';
 
 type Db = ReturnType<typeof createDb>;
 
@@ -30,10 +31,6 @@ const RATE_MAX_PER_EMAIL = 5;
 const RATE_MAX_PER_IP = 20;
 /** Per-IP cap on unauthenticated waitlist signups within RATE_WINDOW_MS. */
 const SIGNUP_MAX_PER_IP = 10;
-
-export function normalizeEmail(email: string): string {
-	return email.trim().toLowerCase();
-}
 
 /** Where the sign-in request came from: an installed PWA vs a browser tab. */
 export type SignInMode = 'standalone' | 'browser';
@@ -272,6 +269,22 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
 	return { ok: true, user, token, expiresAt };
 }
 
+/**
+ * Permanently delete a user and everything tied to them, atomically. D1 has no
+ * interactive transactions, so we use `db.batch()` — the four deletes run as one
+ * all-or-nothing unit. Child rows are removed explicitly (not via FK cascade) so
+ * this holds regardless of whether the connection enforces foreign keys:
+ * sessions + email-change tokens by user id, login tokens by email (no FK).
+ */
+export async function deleteAccount(db: Db, user: User): Promise<void> {
+	await db.batch([
+		db.delete(emailChangeTokens).where(eq(emailChangeTokens.userId, user.id)),
+		db.delete(sessions).where(eq(sessions.userId, user.id)),
+		db.delete(loginTokens).where(eq(loginTokens.email, user.email)),
+		db.delete(users).where(eq(users.id, user.id))
+	]);
+}
+
 async function isRateLimited(db: Db, email: string, ip?: string | null): Promise<boolean> {
 	const since = new Date(Date.now() - RATE_WINDOW_MS);
 	const [{ n }] = await db
@@ -290,6 +303,8 @@ async function isRateLimited(db: Db, email: string, ip?: string | null): Promise
 	return false;
 }
 
+export { normalizeEmail, EMAIL_REGEX, CODE_REGEX } from './validation';
+
 export {
 	validateSession,
 	invalidateSession,
@@ -297,3 +312,11 @@ export {
 	setSessionCookie,
 	SESSION_COOKIE
 } from './session';
+
+export {
+	requestEmailChange,
+	verifyEmailChange,
+	EMAIL_CHANGE_TTL_MINUTES,
+	type EmailChangeRequestResult,
+	type EmailChangeVerifyResult
+} from './email-change';

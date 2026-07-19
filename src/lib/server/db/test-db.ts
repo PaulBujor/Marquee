@@ -25,5 +25,24 @@ export function createTestDb(): Db {
 		// migration (incl. the BEGIN...END trigger) runs as one script.
 		sqlite.exec(readFileSync(join(dir, file), 'utf8'));
 	}
-	return drizzle(sqlite, { schema }) as unknown as Db;
+
+	const db = drizzle(sqlite, { schema });
+	// D1 exposes `db.batch()` for atomic multi-statement writes; the better-sqlite3
+	// driver doesn't. Shim it with a real SQLite transaction (BEGIN/COMMIT, ROLLBACK
+	// on error) so code paths that batch — e.g. `deleteAccount` — run under the same
+	// all-or-nothing guarantee here as on D1.
+	(db as unknown as { batch: (queries: PromiseLike<unknown>[]) => Promise<unknown[]> }).batch =
+		async (queries) => {
+			sqlite.exec('BEGIN');
+			try {
+				const results: unknown[] = [];
+				for (const query of queries) results.push(await query);
+				sqlite.exec('COMMIT');
+				return results;
+			} catch (err) {
+				sqlite.exec('ROLLBACK');
+				throw err;
+			}
+		};
+	return db as unknown as Db;
 }

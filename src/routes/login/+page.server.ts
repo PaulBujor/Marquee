@@ -1,6 +1,8 @@
 import { fail, redirect } from '@sveltejs/kit';
 import {
+	CODE_REGEX,
 	CODE_TTL_MINUTES,
+	EMAIL_REGEX,
 	joinWaitlist,
 	LINK_TTL_MINUTES,
 	normalizeEmail,
@@ -12,7 +14,6 @@ import {
 import { createEmailSender } from '$lib/server/email';
 import type { Actions, PageServerLoad } from './$types';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SERVICE_UNAVAILABLE = 'Service unavailable.';
 const INVALID_EMAIL = 'Enter a valid email address.';
 const SEND_FAILED = "We couldn't send the email right now. Please try again shortly.";
@@ -64,7 +65,7 @@ export const actions: Actions = {
 
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
-		if (!EMAIL_RE.test(email.trim())) return fail(400, { email, message: INVALID_EMAIL });
+		if (!EMAIL_REGEX.test(email.trim())) return fail(400, { email, message: INVALID_EMAIL });
 
 		const sender = createEmailSender(platform.env);
 		try {
@@ -95,7 +96,7 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
 		const code = String(data.get('code') ?? '').trim();
-		if (!/^\d{6}$/.test(code)) {
+		if (!CODE_REGEX.test(code)) {
 			return fail(400, { step: 'code' as const, email, codeError: 'Enter the 6-digit code.' });
 		}
 
@@ -120,7 +121,7 @@ export const actions: Actions = {
 
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
-		if (!EMAIL_RE.test(email.trim())) return fail(400, { email, message: INVALID_EMAIL });
+		if (!EMAIL_REGEX.test(email.trim())) return fail(400, { email, message: INVALID_EMAIL });
 
 		const sender = createEmailSender(platform.env);
 		try {

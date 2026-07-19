@@ -30,21 +30,28 @@
 				'icon-sm':
 					'size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg',
 				'icon-lg': 'size-9'
+			},
+			shape: {
+				normal: '',
+				round: 'rounded-full'
 			}
 		},
 		defaultVariants: {
 			variant: 'default',
-			size: 'default'
+			size: 'default',
+			shape: 'normal'
 		}
 	});
 
 	export type ButtonVariant = VariantProps<typeof buttonVariants>['variant'];
 	export type ButtonSize = VariantProps<typeof buttonVariants>['size'];
+	export type ButtonShape = VariantProps<typeof buttonVariants>['shape'];
 
 	export type ButtonProps = WithElementRef<HTMLButtonAttributes> &
 		WithElementRef<HTMLAnchorAttributes> & {
 			variant?: ButtonVariant;
 			size?: ButtonSize;
+			shape?: ButtonShape;
 		};
 </script>
 
@@ -53,6 +60,7 @@
 		class: className,
 		variant = 'default',
 		size = 'default',
+		shape = 'normal',
 		ref = $bindable(null),
 		href = undefined,
 		type = 'button',
@@ -67,7 +75,7 @@
 	<a
 		bind:this={ref}
 		data-slot="button"
-		class={cn(buttonVariants({ variant, size }), className)}
+		class={cn(buttonVariants({ variant, size, shape }), className)}
 		href={disabled ? undefined : href}
 		aria-disabled={disabled}
 		role={disabled ? 'link' : undefined}
@@ -80,7 +88,7 @@
 	<button
 		bind:this={ref}
 		data-slot="button"
-		class={cn(buttonVariants({ variant, size }), className)}
+		class={cn(buttonVariants({ variant, size, shape }), className)}
 		{type}
 		{disabled}
 		{...restProps}

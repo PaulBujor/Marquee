@@ -26,6 +26,7 @@ Two extra steps to run the full app locally:
 
 - **Mailpit** (local email): `docker compose up -d`. SMTP on `1025`, web UI at `http://localhost:8025`. Magic-link emails land here in dev — no Resend key needed locally.
 - **Apply DB migrations to local D1**: `pnpm db:migrate:local` (wraps `wrangler d1 migrations apply marquee --local`). After editing `schema.ts`, run `pnpm db:generate` then re-apply. `pnpm db:migrate:remote` targets the deployed D1. Do **not** use drizzle-kit's own `push`/`migrate` — they don't apply to D1.
+  - **Always name migrations** with `pnpm db:generate --name <descriptive_snake_case>` (e.g. `--name email_change_tokens`). Without `--name`, drizzle-kit assigns a random `adjective_noun` codename (e.g. `familiar_onslaught`), which is meaningless in the ledger. The name becomes the file (`drizzle/NNNN_<name>.sql`) and the `tag` in `drizzle/meta/_journal.json`. Only rename an existing migration if it hasn't been applied anywhere beyond disposable local D1 — the migration ledger keys on the filename, so a rename re-applies on any DB that ran the old name.
 
 Package manager is **pnpm** (pinned via `packageManager` in `package.json`; `corepack enable pnpm` to match). Do not use npm/yarn — only `pnpm-lock.yaml` is committed. Build scripts for native deps (`esbuild`, `sharp`, `workerd`) are allow-listed in `pnpm-workspace.yaml` (`allowBuilds`).
 
@@ -63,7 +64,7 @@ Run `lint → typecheck → build → test` (`pnpm lint && pnpm check && pnpm bu
 ## Conventions
 
 - **Comments**: doc blocks briefly state _what_ a function does. Don't leave comments that narrate rolled-back decisions, or that describe code which no longer exists (or never did) — update or delete them when the code changes.
-- **Validation**: validate user input on **both** the client and the server. Client-side is for immediate feedback (native constraints like `type="email"`/`required`, disabled submit buttons); the **server is always authoritative** and must re-validate — never trust the client. e.g. the login email is `type="email" required` in the UI and re-checked with `EMAIL_RE` in the action; the OTP is digit/length-gated in the UI (`^\d{6}$`) and re-validated with the same rule in `?/verify`.
+- **Validation**: validate user input on **both** the client and the server. Client-side is for immediate feedback (native constraints like `type="email"`/`required`, disabled submit buttons); the **server is always authoritative** and must re-validate — never trust the client. e.g. the login email is `type="email" required` in the UI and re-checked with `EMAIL_REGEX` in the action; the OTP is digit/length-gated in the UI (`^\d{6}$`) and re-validated with the same rule in `?/verify`.
 
 ## Architecture
 
