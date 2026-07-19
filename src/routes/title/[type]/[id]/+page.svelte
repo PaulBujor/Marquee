@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { Button } from '$lib/components/ui/button';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
+	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { posterUrl } from '$lib/media.js';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
@@ -63,14 +65,16 @@
 </svelte:head>
 
 {#snippet backButton(extraClass: string)}
-	<button
-		type="button"
+	<Button
 		onclick={goBack}
-		class="flex items-center gap-1 rounded-full border border-border/60 bg-background/70 py-1.5 pr-3 pl-2 text-sm font-semibold text-foreground shadow-sm backdrop-blur transition-colors hover:bg-background {extraClass}"
+		variant="outline"
+		size="icon"
+		shape="round"
+		class="text-muted-foreground {extraClass}"
+		aria-label="Go back"
 	>
 		<ChevronLeftIcon class="size-4" />
-		Back
-	</button>
+	</Button>
 {/snippet}
 
 <main class="mx-auto w-full max-w-lg">
@@ -89,21 +93,29 @@
 		</div>
 	{/if}
 
-	<div
-		class={heroUrl
-			? 'relative -mt-16 flex flex-col gap-4 px-6 pb-12'
-			: 'flex flex-col gap-4 px-6 pt-6 pb-12'}
-	>
+	<div class="flex flex-col gap-4 px-5 pb-10 {heroUrl ? '-mt-14' : 'pt-4'}">
 		{#if !heroUrl}
 			{@render backButton('self-start')}
 		{/if}
 
-		<h1 class="font-serif text-3xl font-semibold">{detail.title}</h1>
-
-		<div class="flex flex-wrap items-center gap-2">
-			<MediaBadge>
-				{detail.type === 'movie' ? 'Movie' : 'Show'}{detail.year ? ` · ${detail.year}` : ''}
-			</MediaBadge>
+		<!-- Poster overlaps the bottom of the backdrop; title/badges sit below the hero -->
+		<div class="flex items-end gap-4">
+			<div class="w-24 shrink-0">
+				<PosterTile
+					type={detail.type}
+					posterUrl={posterUrl(detail.posterPath)}
+					alt={detail.title}
+					class="shadow-xl ring-4 ring-background"
+				/>
+			</div>
+			<div class="flex min-w-0 flex-1 flex-col gap-2 pb-1">
+				<h1 class="font-serif text-2xl font-semibold">{detail.title}</h1>
+				<div class="flex flex-wrap items-center gap-2">
+					<MediaBadge>
+						{detail.type === 'movie' ? 'Movie' : 'Show'}{detail.year ? ` · ${detail.year}` : ''}
+					</MediaBadge>
+				</div>
+			</div>
 		</div>
 
 		<div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">

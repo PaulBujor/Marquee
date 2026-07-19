@@ -3,6 +3,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Hide the scrollbar on horizontally-scrolling strips (cast, season pills) while
+ * keeping them scrollable. */
+@utility no-scrollbar {
+	&::-webkit-scrollbar {
+		display: none;
+	}
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+}
+
 /*
  * Design tokens. Colors are oklch(Lightness Chroma Hue) and drive the whole app
  * via the `@theme inline` map below (Tailwind utilities like `bg-primary`,

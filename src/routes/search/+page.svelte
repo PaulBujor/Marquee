@@ -76,7 +76,7 @@
 	<title>Search · Marquee</title>
 </svelte:head>
 
-<main class="mx-auto flex w-full max-w-lg flex-col gap-6 p-6">
+<main class="mx-auto flex w-full max-w-lg flex-col gap-6 px-5 py-4">
 	<div class="flex items-center gap-3">
 		<Button
 			onclick={goBack}
@@ -88,7 +88,7 @@
 		>
 			<ChevronLeftIcon class="size-4" />
 		</Button>
-		<h1 class="font-serif text-2xl font-semibold">Search</h1>
+		<h1 class="font-serif text-xl font-semibold">Search</h1>
 	</div>
 
 	<div class="relative">
