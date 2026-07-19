@@ -270,16 +270,19 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
 }
 
 /**
- * Permanently delete a user and everything tied to them. Child rows are removed
- * explicitly (not via FK cascade) so this holds regardless of whether the
- * connection enforces foreign keys: sessions + email-change tokens by user id,
- * login tokens by email (that table has no FK).
+ * Permanently delete a user and everything tied to them, atomically. D1 has no
+ * interactive transactions, so we use `db.batch()` — the four deletes run as one
+ * all-or-nothing unit. Child rows are removed explicitly (not via FK cascade) so
+ * this holds regardless of whether the connection enforces foreign keys:
+ * sessions + email-change tokens by user id, login tokens by email (no FK).
  */
 export async function deleteAccount(db: Db, user: User): Promise<void> {
-	await db.delete(emailChangeTokens).where(eq(emailChangeTokens.userId, user.id));
-	await db.delete(sessions).where(eq(sessions.userId, user.id));
-	await db.delete(loginTokens).where(eq(loginTokens.email, user.email));
-	await db.delete(users).where(eq(users.id, user.id));
+	await db.batch([
+		db.delete(emailChangeTokens).where(eq(emailChangeTokens.userId, user.id)),
+		db.delete(sessions).where(eq(sessions.userId, user.id)),
+		db.delete(loginTokens).where(eq(loginTokens.email, user.email)),
+		db.delete(users).where(eq(users.id, user.id))
+	]);
 }
 
 async function isRateLimited(db: Db, email: string, ip?: string | null): Promise<boolean> {
