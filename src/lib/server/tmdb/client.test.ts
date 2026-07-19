@@ -34,7 +34,7 @@ const SAMPLE: TmdbMultiSearchResponse = {
 
 function mockFetch(response: unknown, init: { ok?: boolean; status?: number } = {}) {
 	const spy = vi.fn(
-		async (_input: URL | string) =>
+		async () =>
 			new Response(JSON.stringify(response), {
 				status: init.status ?? (init.ok === false ? 500 : 200)
 			})
@@ -77,7 +77,8 @@ describe('createTmdbClient.search', () => {
 		const spy = mockFetch(SAMPLE);
 		await createTmdbClient('secret-key').search('the matrix');
 
-		const url = new URL(String(spy.mock.calls[0][0]));
+		const [firstArg] = spy.mock.calls[0] as unknown as [URL | string];
+		const url = new URL(String(firstArg));
 		expect(url.origin + url.pathname).toBe('https://api.themoviedb.org/3/search/multi');
 		expect(url.searchParams.get('api_key')).toBe('secret-key');
 		expect(url.searchParams.get('query')).toBe('the matrix');
