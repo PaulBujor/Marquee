@@ -50,6 +50,31 @@
 		};
 	});
 
+	// Pin the overlay to the *visual* viewport while open. When the mobile keyboard opens it
+	// shifts the layout viewport (dragging `position: fixed` up on iOS); tracking
+	// visualViewport keeps the panel — and its top-anchored input — above the keyboard.
+	$effect(() => {
+		const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+		if (!search.isOpen || !vv) return;
+
+		const apply = () => {
+			if (!panelEl) return;
+			panelEl.style.top = `${vv.offsetTop}px`;
+			panelEl.style.height = `${vv.height}px`;
+		};
+		apply();
+		vv.addEventListener('resize', apply);
+		vv.addEventListener('scroll', apply);
+		return () => {
+			vv.removeEventListener('resize', apply);
+			vv.removeEventListener('scroll', apply);
+			if (panelEl) {
+				panelEl.style.top = '';
+				panelEl.style.height = '';
+			}
+		};
+	});
+
 	function reset() {
 		clearTimeout(debounce);
 		inFlight?.abort();
@@ -125,12 +150,12 @@ which would block that focus. -->
 	aria-modal="true"
 	aria-label="Search movies and shows"
 	tabindex={-1}
-	class="fixed inset-0 z-50 flex flex-col bg-background transition-transform duration-200 ease-out {search.isOpen
+	class="fixed inset-x-0 top-0 z-50 flex h-dvh flex-col bg-background transition-transform duration-200 ease-out {search.isOpen
 		? 'translate-y-0'
 		: 'pointer-events-none translate-y-full'}"
 >
-	<div class="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto px-5 pt-4 pb-10">
-		<div class="flex items-center gap-3">
+	<div class="mx-auto flex h-full w-full max-w-2xl flex-col gap-4 overflow-hidden px-5 pt-4">
+		<div class="flex shrink-0 items-center gap-3">
 			<Button
 				onclick={() => search.close()}
 				variant="outline"
@@ -166,54 +191,56 @@ which would block that focus. -->
 			</div>
 		</div>
 
-		{#if loading}
-			<ul class="flex flex-col gap-3">
-				{#each [0, 1, 2, 3] as i (i)}
-					<li class="flex items-center gap-3">
-						<Skeleton class="aspect-[2/3] w-12 rounded-[10px]" />
-						<div class="flex flex-1 flex-col gap-2">
-							<Skeleton class="h-4 w-1/2" />
-							<Skeleton class="h-3 w-1/4" />
-						</div>
-					</li>
-				{/each}
-			</ul>
-		{:else if errored}
-			<p
-				data-spec-ref="search-degraded-offline-banner"
-				class="rounded-[10px] bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
-			>
-				Search is unavailable right now. Please try again shortly.
-			</p>
-		{:else if hasSearched && results.length === 0}
-			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
-				No movies or shows found for “{query.trim()}”.
-			</p>
-		{:else if results.length > 0}
-			<ul class="flex flex-col gap-1">
-				{#each results as item (item.type + item.tmdbId)}
-					<li class="flex items-center gap-3 py-1.5">
-						<div class="w-12 shrink-0">
-							<PosterTile
-								type={item.type}
-								posterUrl={posterUrl(item.posterPath)}
-								title={item.title}
-							/>
-						</div>
-						<div class="flex min-w-0 flex-1 flex-col gap-1">
-							<span class="truncate font-medium">{item.title}</span>
-							<div class="flex items-center gap-2 text-sm text-muted-foreground">
-								<MediaBadge>{item.type === 'movie' ? 'Movie' : 'Show'}</MediaBadge>
-								{#if item.year}<span>{item.year}</span>{/if}
+		<div class="flex-1 overflow-y-auto pb-10">
+			{#if loading}
+				<ul class="flex flex-col gap-3">
+					{#each [0, 1, 2, 3] as i (i)}
+						<li class="flex items-center gap-3">
+							<Skeleton class="aspect-[2/3] w-12 rounded-[10px]" />
+							<div class="flex flex-1 flex-col gap-2">
+								<Skeleton class="h-4 w-1/2" />
+								<Skeleton class="h-3 w-1/4" />
 							</div>
-						</div>
-					</li>
-				{/each}
-			</ul>
-		{:else}
-			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
-				Search for a movie or show to get started.
-			</p>
-		{/if}
+						</li>
+					{/each}
+				</ul>
+			{:else if errored}
+				<p
+					data-spec-ref="search-degraded-offline-banner"
+					class="rounded-[10px] bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
+				>
+					Search is unavailable right now. Please try again shortly.
+				</p>
+			{:else if hasSearched && results.length === 0}
+				<p class="px-1 py-6 text-center text-sm text-muted-foreground">
+					No movies or shows found for “{query.trim()}”.
+				</p>
+			{:else if results.length > 0}
+				<ul class="flex flex-col gap-1">
+					{#each results as item (item.type + item.tmdbId)}
+						<li class="flex items-center gap-3 py-1.5">
+							<div class="w-12 shrink-0">
+								<PosterTile
+									type={item.type}
+									posterUrl={posterUrl(item.posterPath)}
+									title={item.title}
+								/>
+							</div>
+							<div class="flex min-w-0 flex-1 flex-col gap-1">
+								<span class="truncate font-medium">{item.title}</span>
+								<div class="flex items-center gap-2 text-sm text-muted-foreground">
+									<MediaBadge>{item.type === 'movie' ? 'Movie' : 'Show'}</MediaBadge>
+									{#if item.year}<span>{item.year}</span>{/if}
+								</div>
+							</div>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="px-1 py-6 text-center text-sm text-muted-foreground">
+					Search for a movie or show to get started.
+				</p>
+			{/if}
+		</div>
 	</div>
 </div>
