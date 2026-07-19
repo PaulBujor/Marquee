@@ -61,25 +61,25 @@
 		media="screen and (prefers-color-scheme: dark) and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)"
 		href="/splash/iphone15pro-landscape-dark.png"
 	/>
-	<!-- iPad Air 5th gen (820x1180 @2) -->
+	<!-- iPad Air 5th gen (954x1373 @2) -->
 	<link
 		rel="apple-touch-startup-image"
-		media="screen and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
+		media="screen and (device-width: 954px) and (device-height: 1373px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
 		href="/splash/ipadair-portrait-light.png"
 	/>
 	<link
 		rel="apple-touch-startup-image"
-		media="screen and (prefers-color-scheme: dark) and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
+		media="screen and (prefers-color-scheme: dark) and (device-width: 954px) and (device-height: 1373px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
 		href="/splash/ipadair-portrait-dark.png"
 	/>
 	<link
 		rel="apple-touch-startup-image"
-		media="screen and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
+		media="screen and (device-width: 954px) and (device-height: 1373px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
 		href="/splash/ipadair-landscape-light.png"
 	/>
 	<link
 		rel="apple-touch-startup-image"
-		media="screen and (prefers-color-scheme: dark) and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
+		media="screen and (prefers-color-scheme: dark) and (device-width: 954px) and (device-height: 1373px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
 		href="/splash/ipadair-landscape-dark.png"
 	/>
 </svelte:head>

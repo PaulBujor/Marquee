@@ -37,7 +37,7 @@ const LIGHT_BG = '#f7f6f3';
 // landscape swaps w/h. The splash renders the logo at the OS icon size (iconPt * dpr).
 const DEVICES = [
 	{ name: 'iphone15pro', w: 1179, h: 2556, dpr: 3, iconPt: 60 },
-	{ name: 'ipadair', w: 1640, h: 2360, dpr: 2, iconPt: 76 }
+	{ name: 'ipadair', w: 1908, h: 2746, dpr: 2, iconPt: 76 }
 ];
 
 const logo = await readFile(SRC);
