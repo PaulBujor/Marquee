@@ -54,3 +54,6 @@ coverage/
 # Vercel / Netlify
 .vercel/
 .netlify/
+
+# Throwaway PWA-asset generator dump; source of truth is dev-assets/logo*.png
+dev-assets/pwa-assets/
