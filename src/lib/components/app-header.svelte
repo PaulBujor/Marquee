@@ -31,13 +31,7 @@
 		>
 			<SettingsIcon class="size-4" />
 		</Button>
-		<Button
-			size="icon"
-			shape="round"
-			disabled
-			title="Search — coming soon"
-			aria-label="Search (coming soon)"
-		>
+		<Button href={resolve('/search')} size="icon" shape="round" title="Search" aria-label="Search">
 			<SearchIcon class="size-4" />
 		</Button>
 	</div>
