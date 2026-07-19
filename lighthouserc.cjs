@@ -49,9 +49,10 @@ module.exports = {
 			}
 		},
 		upload: {
-			// Keep reports local (uploaded as a CI artifact) — no external publishing.
-			target: 'filesystem',
-			outputDir: './.lighthouseci'
+			// Public (unlisted) report URL so the Lighthouse CI GitHub App can post a
+			// PR status check that links to the full report. Reports live in a
+			// Google-hosted bucket; the only audited page is the public login/landing.
+			target: 'temporary-public-storage'
 		}
 	}
 };
