@@ -54,6 +54,11 @@ jobs:
       - run: pnpm build
       - name: Run Lighthouse CI
         run: pnpm exec lhci autorun --config=./lighthouserc.cjs
+        env:
+          # Lighthouse CI GitHub App token — lets lhci post a "Lighthouse CI"
+          # status check on the PR. Optional: if the secret is unset the step
+          # runs unchanged (no status check, just the log + artifact).
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
       - name: Upload Lighthouse results
         if: always()
         uses: actions/upload-artifact@v4
