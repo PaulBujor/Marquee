@@ -4,7 +4,7 @@ import { emailChangeTokens, loginTokens, sessions, users, type User } from '$lib
 import type { EmailSender } from '$lib/server/email';
 import {
 	renderCodeEmail,
-	renderMagicLinkEmail,
+	renderMagicLinkAndCodeEmail,
 	renderWaitlistEmail
 } from '$lib/server/email/templates';
 import { createSession } from './session';
@@ -25,7 +25,7 @@ const LINK_TTL_MS = LINK_TTL_MINUTES * 60 * 1000;
 const CODE_TTL_MS = CODE_TTL_MINUTES * 60 * 1000;
 /** Failed code entries before the code is invalidated (online brute-force cap). */
 const CODE_MAX_ATTEMPTS = 5;
-/** Email-bomb protection: cap link/code requests per email and per IP within a window. */
+/** Email-bomb protection: cap sign-in requests per email and per IP within a window. */
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX_PER_EMAIL = 5;
 const RATE_MAX_PER_IP = 20;
@@ -38,11 +38,12 @@ export type SignInMode = 'standalone' | 'browser';
 /**
  * Outcome of the request phase. Status-gated, so it deliberately reveals account
  * state (enabled / blocked / waitlisted / unknown) — not enumeration-resistant,
- * by design. On success, `method` is what was emailed (a link for browsers, a
- * code for installed PWAs, which can't capture the link).
+ * by design. On success, `method` is what was emailed: a link *and* a code for
+ * browsers (click either), a code only for installed PWAs (which can't capture
+ * the link).
  */
 export type RequestResult =
-	| { kind: 'sent'; method: 'link' | 'code' }
+	| { kind: 'sent'; method: 'code' | 'link_and_code' }
 	| { kind: 'blocked' }
 	| { kind: 'waitlisted' }
 	| { kind: 'unknown' }
@@ -50,8 +51,8 @@ export type RequestResult =
 
 /**
  * Request phase: branch on account status; for an enabled user, email a magic
- * link (browser) or a 6-digit code (PWA) per `mode`. Unknown addresses are
- * invited to join the waitlist (see `joinWaitlist`), not created here.
+ * link *and* a 6-digit code (browser) or a code only (PWA) per `mode`. Unknown
+ * addresses are invited to join the waitlist (see `joinWaitlist`), not created here.
  */
 export async function requestSignIn(opts: {
 	db: Db;
@@ -70,24 +71,39 @@ export async function requestSignIn(opts: {
 	if (await isRateLimited(opts.db, email, opts.ip)) return { kind: 'rate_limited' };
 
 	if (opts.mode === 'standalone') {
-		await issueCode(opts.db, email, opts.sender, opts.ip);
+		const { code, supersede, insert } = await codeWrites(opts.db, email, opts.ip);
+		await opts.db.batch([supersede, insert]);
+		await opts.sender.send({
+			to: email,
+			subject: 'Your Marquee sign-in code',
+			html: renderCodeEmail(code, CODE_TTL_MINUTES)
+		});
 		return { kind: 'sent', method: 'code' };
 	}
-	await issueLink(opts.db, email, opts.sender, opts.origin, opts.ip);
-	return { kind: 'sent', method: 'link' };
+
+	// Browser: one email with both, so a user can click the link or type the code.
+	const { code, supersede, insert: codeInsert } = await codeWrites(opts.db, email, opts.ip);
+	const { url, insert: linkInsert } = await linkWrite(opts.db, email, opts.origin, opts.ip);
+	await opts.db.batch([supersede, codeInsert, linkInsert]);
+	await opts.sender.send({
+		to: email,
+		subject: 'Your Marquee sign-in link and code',
+		html: renderMagicLinkAndCodeEmail(url, code, LINK_TTL_MINUTES, CODE_TTL_MINUTES)
+	});
+	return { kind: 'sent', method: 'link_and_code' };
 }
 
-/** Store a fresh 6-digit code (superseding any live one) and email it. */
-async function issueCode(
-	db: Db,
-	email: string,
-	sender: EmailSender,
-	ip?: string | null
-): Promise<void> {
+/**
+ * Build the writes for a fresh 6-digit code (superseding any live one) without
+ * running them, so the caller can batch them into a single D1 round-trip. Returns
+ * the raw code alongside the supersede + insert statements.
+ */
+async function codeWrites(db: Db, email: string, ip?: string | null) {
 	const code = generateCode();
+	const tokenHash = await hashToken(code);
 	// Keep at most one live code per email so verify never has to disambiguate
 	// between two codes issued in the same second (createdAt is second-resolution).
-	await db
+	const supersede = db
 		.update(loginTokens)
 		.set({ consumedAt: new Date() })
 		.where(
@@ -97,42 +113,30 @@ async function issueCode(
 				isNull(loginTokens.consumedAt)
 			)
 		);
-	await db.insert(loginTokens).values({
+	const insert = db.insert(loginTokens).values({
 		email,
-		tokenHash: await hashToken(code),
+		tokenHash,
 		kind: 'code',
 		requestIp: ip ?? null,
 		expiresAt: new Date(Date.now() + CODE_TTL_MS)
 	});
-	await sender.send({
-		to: email,
-		subject: 'Your Marquee sign-in code',
-		html: renderCodeEmail(code, CODE_TTL_MINUTES)
-	});
+	return { code, supersede, insert };
 }
 
-/** Store a fresh magic-link token and email the sign-in URL. */
-async function issueLink(
-	db: Db,
-	email: string,
-	sender: EmailSender,
-	origin: string,
-	ip?: string | null
-): Promise<void> {
+/**
+ * Build the write for a fresh magic-link token without running it (batched by the
+ * caller). Returns the sign-in URL alongside the insert statement.
+ */
+async function linkWrite(db: Db, email: string, origin: string, ip?: string | null) {
 	const token = generateToken();
-	await db.insert(loginTokens).values({
+	const insert = db.insert(loginTokens).values({
 		email,
 		tokenHash: await hashToken(token),
 		kind: 'link',
 		requestIp: ip ?? null,
 		expiresAt: new Date(Date.now() + LINK_TTL_MS)
 	});
-	const url = `${origin}/auth/verify?token=${encodeURIComponent(token)}`;
-	await sender.send({
-		to: email,
-		subject: 'Your Marquee sign-in link',
-		html: renderMagicLinkEmail(url, LINK_TTL_MINUTES)
-	});
+	return { url: `${origin}/auth/verify?token=${encodeURIComponent(token)}`, insert };
 }
 
 export type JoinResult =
@@ -287,17 +291,31 @@ export async function deleteAccount(db: Db, user: User): Promise<void> {
 
 async function isRateLimited(db: Db, email: string, ip?: string | null): Promise<boolean> {
 	const since = new Date(Date.now() - RATE_WINDOW_MS);
+	// Count the one `kind='code'` row every request writes, so a browser request
+	// (which also writes a `kind='link'` row) still counts as a single request.
 	const [{ n }] = await db
 		.select({ n: count() })
 		.from(loginTokens)
-		.where(and(eq(loginTokens.email, email), gte(loginTokens.createdAt, since)));
+		.where(
+			and(
+				eq(loginTokens.email, email),
+				eq(loginTokens.kind, 'code'),
+				gte(loginTokens.createdAt, since)
+			)
+		);
 	if (n >= RATE_MAX_PER_EMAIL) return true;
 
 	if (ip) {
 		const [{ n: byIp }] = await db
 			.select({ n: count() })
 			.from(loginTokens)
-			.where(and(eq(loginTokens.requestIp, ip), gte(loginTokens.createdAt, since)));
+			.where(
+				and(
+					eq(loginTokens.requestIp, ip),
+					eq(loginTokens.kind, 'code'),
+					gte(loginTokens.createdAt, since)
+				)
+			);
 		if (byIp >= RATE_MAX_PER_IP) return true;
 	}
 	return false;
