@@ -3,7 +3,6 @@
 	import AppHeader from '$lib/components/app-header.svelte';
 	import InstallPrompt from '$lib/components/install-prompt.svelte';
 	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
-	import SearchOverlay from '$lib/components/search/search-overlay.svelte';
 	import { theme } from '$lib/state/theme.svelte.js';
 	import type { LayoutData } from './$types';
 
@@ -94,7 +93,6 @@
 </svelte:head>
 {#if data.user}
 	<AppHeader />
-	<SearchOverlay />
 {/if}
 {@render children()}
 <InstallPrompt />

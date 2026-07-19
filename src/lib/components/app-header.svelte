@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
-	import { search } from '$lib/state/search.svelte.js';
 	import CalendarDaysIcon from '@lucide/svelte/icons/calendar-days';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
@@ -32,13 +31,7 @@
 		>
 			<SettingsIcon class="size-4" />
 		</Button>
-		<Button
-			onclick={() => search.open()}
-			size="icon"
-			shape="round"
-			title="Search"
-			aria-label="Search"
-		>
+		<Button href={resolve('/search')} size="icon" shape="round" title="Search" aria-label="Search">
 			<SearchIcon class="size-4" />
 		</Button>
 	</div>
