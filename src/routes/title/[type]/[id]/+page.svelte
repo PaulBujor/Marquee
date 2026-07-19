@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
@@ -89,7 +90,7 @@
 			<div
 				class="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent"
 			></div>
-			{@render backButton('absolute top-4 left-4 z-10')}
+			{@render backButton('absolute top-4 left-5 z-10 bg-background dark:bg-background')}
 		</div>
 	{/if}
 
@@ -152,87 +153,92 @@
 			</button>
 
 			{#if detailsOpen}
-				{#if detail.overview}
-					<p class="text-sm leading-relaxed">{detail.overview}</p>
-				{/if}
+				<div class="flex flex-col gap-4" transition:slide={{ duration: 200 }}>
+					{#if detail.overview}
+						<p class="text-sm leading-relaxed">{detail.overview}</p>
+					{/if}
 
-				{#if detail.cast.length > 0}
-					<section class="flex flex-col gap-3">
-						<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Cast</h2>
-						<ul class="no-scrollbar flex gap-3.5 overflow-x-auto pb-1">
-							{#each detail.cast as member (member.id)}
-								{@const avatar = posterUrl(member.profilePath, 'w185')}
-								<li class="flex w-16 shrink-0 flex-col items-center text-center">
-									{#if avatar}
-										<img
-											src={avatar}
-											alt={member.name}
-											loading="lazy"
-											decoding="async"
-											class="size-14 rounded-full object-cover"
-										/>
-									{:else}
-										<div
-											class="flex size-14 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-muted-foreground"
-											aria-hidden="true"
+					{#if detail.cast.length > 0}
+						<section class="flex flex-col gap-3">
+							<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
+								Cast
+							</h2>
+							<ul class="no-scrollbar flex gap-3.5 overflow-x-auto pb-1">
+								{#each detail.cast as member (member.id)}
+									{@const avatar = posterUrl(member.profilePath, 'w185')}
+									<li class="flex w-16 shrink-0 flex-col items-center text-center">
+										{#if avatar}
+											<img
+												src={avatar}
+												alt={member.name}
+												loading="lazy"
+												decoding="async"
+												class="size-14 rounded-full object-cover"
+											/>
+										{:else}
+											<div
+												class="flex size-14 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-muted-foreground"
+												aria-hidden="true"
+											>
+												{initials(member.name)}
+											</div>
+										{/if}
+										<span class="mt-1.5 text-[0.7rem] leading-tight font-medium">{member.name}</span
 										>
-											{initials(member.name)}
-										</div>
-									{/if}
-									<span class="mt-1.5 text-[0.7rem] leading-tight font-medium">{member.name}</span>
-									{#if member.character}
-										<span class="text-[0.65rem] leading-tight text-muted-foreground"
-											>{member.character}</span
-										>
-									{/if}
-								</li>
-							{/each}
-						</ul>
-					</section>
-				{/if}
+										{#if member.character}
+											<span class="text-[0.65rem] leading-tight text-muted-foreground"
+												>{member.character}</span
+											>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+						</section>
+					{/if}
 
-				{#if detail.trailer}
-					<section class="flex flex-col gap-3">
-						<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-							Trailer
-						</h2>
-						{#if showTrailer}
-							<div class="aspect-video w-full overflow-hidden rounded-[14px]">
-								<iframe
-									src={`https://www.youtube-nocookie.com/embed/${detail.trailer.key}?autoplay=1`}
-									title={detail.trailer.name}
-									allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-									allowfullscreen
-									class="h-full w-full border-0"
-								></iframe>
-							</div>
-						{:else}
-							<button
-								type="button"
-								onclick={() => (showTrailer = true)}
-								class="group relative aspect-video w-full overflow-hidden rounded-[14px] bg-secondary"
-								aria-label={`Play trailer: ${detail.trailer.name}`}
-							>
-								<img
-									src={`https://img.youtube.com/vi/${detail.trailer.key}/hqdefault.jpg`}
-									alt=""
-									loading="lazy"
-									decoding="async"
-									class="absolute inset-0 h-full w-full object-cover"
-								/>
-								<span
-									class="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/30"
+					{#if detail.trailer}
+						<section class="flex flex-col gap-3">
+							<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
+								Trailer
+							</h2>
+							{#if showTrailer}
+								<div class="aspect-video w-full overflow-hidden rounded-[14px]">
+									<iframe
+										src={`https://www.youtube-nocookie.com/embed/${detail.trailer.key}?autoplay=1`}
+										title={detail.trailer.name}
+										allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+										allowfullscreen
+										class="h-full w-full border-0"
+									></iframe>
+								</div>
+							{:else}
+								<button
+									type="button"
+									onclick={() => (showTrailer = true)}
+									class="group relative aspect-video w-full overflow-hidden rounded-[14px] bg-secondary"
+									aria-label={`Play trailer: ${detail.trailer.name}`}
 								>
+									<img
+										src={`https://img.youtube.com/vi/${detail.trailer.key}/hqdefault.jpg`}
+										alt=""
+										loading="lazy"
+										decoding="async"
+										class="absolute inset-0 h-full w-full object-cover"
+									/>
 									<span
-										class="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground"
+										class="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/30"
 									>
-										<PlayIcon class="size-5 translate-x-0.5 fill-current" />
+										<span
+											class="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground"
+										>
+											<PlayIcon class="size-5 translate-x-0.5 fill-current" />
+										</span>
 									</span>
-								</span>
-							</button>
-						{/if}
-					</section>
-				{/if}
+								</button>
+							{/if}
+						</section>
+					{/if}
+				</div>
 			{/if}
 		</div>
 
