@@ -8,6 +8,8 @@
 		isFavorite = false,
 		gradientFrom,
 		gradientTo,
+		posterUrl,
+		title,
 		class: className,
 		children,
 		...restProps
@@ -17,6 +19,10 @@
 		isFavorite?: boolean;
 		gradientFrom?: string;
 		gradientTo?: string;
+		/** Poster image URL; when set it renders behind the overlays, gradient is the fallback. */
+		posterUrl?: string | null;
+		/** Alt text for the poster image. */
+		title?: string;
 		class?: string;
 		children?: import('svelte').Snippet;
 	} = $props();
@@ -33,6 +39,10 @@
 		: undefined}
 	{...restProps}
 >
+	{#if posterUrl}
+		<img src={posterUrl} alt={title ?? ''} class="absolute inset-0 h-full w-full object-cover" />
+	{/if}
+
 	{#if isCustom}
 		<div class="absolute inset-0 flex items-center justify-center">
 			<FileQuestion class="size-[26px] text-muted-foreground" />
