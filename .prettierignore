@@ -12,3 +12,6 @@ worker-configuration.d.ts
 
 # Local tooling (git-ignored; keeps local `pnpm lint` in step with CI)
 .claude/
+
+# Throwaway PWA-asset tool output (source of truth is dev-assets/logo.png)
+dev-assets/
