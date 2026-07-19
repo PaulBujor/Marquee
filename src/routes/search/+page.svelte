@@ -1,8 +1,14 @@
 <script lang="ts">
+	import { afterNavigate, goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { focusFirstInput } from '$lib/utils.js';
+	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
+	import XIcon from '@lucide/svelte/icons/x';
 
 	/** Matches the normalized shape returned by `/api/search` (see src/lib/server/tmdb/types.ts). */
 	type SearchResult = {
@@ -21,9 +27,32 @@
 	let loading = $state(false);
 	let errored = $state(false);
 	let hasSearched = $state(false);
+	let searchInput = $state<HTMLInputElement | null>(null);
 
 	let debounce: ReturnType<typeof setTimeout> | undefined;
 	let inFlight: AbortController | undefined;
+
+	// Autofocus the search box on mount so the user can type straight away.
+	$effect(() => focusFirstInput(searchInput));
+
+	// Pop history so Search doesn't stack a duplicate `/` entry; fall back to home
+	// when opened directly (no in-app history to pop). Mirrors the Settings page.
+	let cameFromApp = $state(false);
+	afterNavigate((nav) => {
+		cameFromApp = nav.from != null;
+	});
+
+	function goBack() {
+		if (cameFromApp) history.back();
+		else goto(resolve('/'));
+	}
+
+	function clearSearch() {
+		clearTimeout(debounce);
+		query = '';
+		run('');
+		searchInput?.focus();
+	}
 
 	function posterUrl(path: string | null): string | null {
 		return path ? `https://image.tmdb.org/t/p/w342${path}` : null;
@@ -73,15 +102,43 @@
 </svelte:head>
 
 <main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pb-10">
-	<Input
-		type="search"
-		bind:value={query}
-		oninput={onInput}
-		placeholder="Search movies and shows"
-		aria-label="Search movies and shows"
-		autocomplete="off"
-		autocapitalize="none"
-	/>
+	<div class="flex items-center gap-3">
+		<Button
+			onclick={goBack}
+			variant="outline"
+			size="icon"
+			shape="round"
+			class="text-muted-foreground"
+			aria-label="Go back"
+		>
+			<ChevronLeftIcon class="size-4" />
+		</Button>
+		<h1 class="font-serif text-2xl font-semibold">Search</h1>
+	</div>
+
+	<div class="relative">
+		<Input
+			bind:ref={searchInput}
+			type="search"
+			bind:value={query}
+			oninput={onInput}
+			placeholder="Search movies and shows"
+			aria-label="Search movies and shows"
+			autocomplete="off"
+			autocapitalize="none"
+			class="pr-9 [&::-webkit-search-cancel-button]:appearance-none"
+		/>
+		{#if query}
+			<button
+				type="button"
+				onclick={clearSearch}
+				aria-label="Clear search"
+				class="absolute top-1/2 right-1 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+			>
+				<XIcon class="size-4" />
+			</button>
+		{/if}
+	</div>
 
 	{#if loading}
 		<ul class="flex flex-col gap-3">

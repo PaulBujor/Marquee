@@ -6,12 +6,19 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Card from '$lib/components/ui/card';
 	import * as InputOTP from '$lib/components/ui/input-otp';
+	import { focusFirstInput } from '$lib/utils.js';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let submitting = $state(false);
 	let code = $state('');
 	let codeForm = $state<HTMLFormElement | null>(null);
+	let emailInput = $state<HTMLInputElement | null>(null);
+	let otpRoot = $state<HTMLElement | null>(null);
+
+	// Autofocus whichever field is on screen: email on the sign-in step, the code on the code step.
+	$effect(() => focusFirstInput(emailInput));
+	$effect(() => focusFirstInput(otpRoot));
 
 	// Installed PWAs can't capture the emailed link, so ask the server for a code
 	// instead. Detected client-side (no server header exists); SSR/no-JS → browser.
@@ -86,6 +93,7 @@
 					<input type="hidden" name="email" value={email} />
 					<input type="hidden" name="code" value={code} />
 					<InputOTP.Root
+						bind:ref={otpRoot}
 						maxlength={6}
 						bind:value={code}
 						autocomplete="one-time-code"
@@ -153,6 +161,7 @@
 				<form method="POST" action="?/request" class="flex flex-col gap-3" use:enhance={track}>
 					<input type="hidden" name="mode" value={mode} />
 					<Input
+						bind:ref={emailInput}
 						type="email"
 						name="email"
 						placeholder="you@example.com"
