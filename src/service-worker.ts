@@ -6,15 +6,15 @@
 import { build, files, version } from '$service-worker';
 
 const CACHE = `cache-${version}`;
+// The app build + everything in static/ (icons, splash, manifest, offline.html).
 const ASSETS = [...build, ...files];
+const BUILD = new Set(build);
+const OFFLINE_URL = '/offline.html';
 
 self.addEventListener('install', (event) => {
-	event.waitUntil(
-		caches
-			.open(CACHE)
-			.then((cache) => cache.addAll(ASSETS))
-			.then(() => self.skipWaiting())
-	);
+	// No skipWaiting: the worker waits for the update prompt so hashed chunks
+	// aren't swapped under a live tab.
+	event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
 });
 
 self.addEventListener('activate', (event) => {
@@ -23,17 +23,40 @@ self.addEventListener('activate', (event) => {
 			for (const key of keys) {
 				if (key !== CACHE) await caches.delete(key);
 			}
-			self.clients.claim();
+			await self.clients.claim();
 		})
 	);
 });
 
-self.addEventListener('fetch', (event) => {
-	if (event.request.method !== 'GET') return;
+// Posted by the update prompt when the user accepts the new version.
+self.addEventListener('message', (event) => {
+	if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
 
-	event.respondWith(
-		caches.match(event.request).then((cached) => {
-			return cached || fetch(event.request);
-		})
-	);
+self.addEventListener('fetch', (event) => {
+	const { request } = event;
+	if (request.method !== 'GET') return;
+
+	const url = new URL(request.url);
+
+	// Versioned build assets: cache-first.
+	if (url.origin === self.location.origin && BUILD.has(url.pathname)) {
+		event.respondWith(caches.match(request).then((cached) => cached ?? fetch(request)));
+		return;
+	}
+
+	// Navigations: network-first (authed HTML is never cached), then any cached
+	// copy, then the offline page.
+	if (request.mode === 'navigate') {
+		event.respondWith(
+			fetch(request).catch(
+				async () =>
+					(await caches.match(request)) ?? (await caches.match(OFFLINE_URL)) ?? Response.error()
+			)
+		);
+		return;
+	}
+
+	// Everything else: cache-first.
+	event.respondWith(caches.match(request).then((cached) => cached ?? fetch(request)));
 });

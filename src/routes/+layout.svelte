@@ -1,6 +1,8 @@
 <script lang="ts">
 	import './layout.css';
 	import AppHeader from '$lib/components/app-header.svelte';
+	import InstallPrompt from '$lib/components/install-prompt.svelte';
+	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
 	import { theme } from '$lib/state/theme.svelte.js';
 	import type { LayoutData } from './$types';
 
@@ -21,6 +23,9 @@
 		mq.addEventListener('change', handler);
 		return () => mq.removeEventListener('change', handler);
 	});
+
+	// OS chrome matches the app background (not the accent); hex mirror `--background`.
+	const themeColor = $derived(theme.isDark ? '#090a0e' : '#f7f6f3');
 </script>
 
 <svelte:head>
@@ -30,11 +35,14 @@
 	<!-- iOS home-screen icon; without it Safari probes /apple-touch-icon(-precomposed).png and 404s. -->
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="manifest" href="/manifest.json" />
-	<meta name="theme-color" content="#8B5CF6" />
+	<meta name="theme-color" content={themeColor} />
 	<!-- Standalone web-app mode. iOS only consults the apple-touch-startup-image
 	links below when launched as a standalone web app, so this must be present. -->
 	<meta name="mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-title" content="Marquee" />
+	<!-- Translucent status bar so the dark splash/app background extends under it. -->
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
 	<!-- iOS PWA splash screens: iOS matches a static image by exact device
 	resolution + orientation. The light link (no prefers-color-scheme) is the
@@ -87,3 +95,5 @@
 	<AppHeader />
 {/if}
 {@render children()}
+<InstallPrompt />
+<PwaUpdatePrompt />
