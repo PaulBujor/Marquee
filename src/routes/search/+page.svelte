@@ -155,9 +155,5 @@
 				</li>
 			{/each}
 		</ul>
-	{:else}
-		<p class="px-1 py-6 text-center text-sm text-muted-foreground">
-			Search for a movie or show to get started.
-		</p>
 	{/if}
 </main>
