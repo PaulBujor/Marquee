@@ -37,48 +37,29 @@
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 
 	<!-- iOS PWA splash screens: iOS matches a static image by exact device
-	resolution + orientation; the light/dark pair is picked via prefers-color-scheme. -->
+	resolution + orientation. Single (dark) set while we confirm iOS honours
+	these at all; prefers-color-scheme on startup images is unreliable. -->
 	<!-- iPhone 15 Pro (393x852 @3) -->
 	<link
 		rel="apple-touch-startup-image"
-		media="(prefers-color-scheme: dark) and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)"
+		media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)"
 		href="/splash/iphone15pro-portrait-dark.png"
 	/>
 	<link
 		rel="apple-touch-startup-image"
-		media="(prefers-color-scheme: light) and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)"
-		href="/splash/iphone15pro-portrait-light.png"
-	/>
-	<link
-		rel="apple-touch-startup-image"
-		media="(prefers-color-scheme: dark) and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)"
+		media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)"
 		href="/splash/iphone15pro-landscape-dark.png"
-	/>
-	<link
-		rel="apple-touch-startup-image"
-		media="(prefers-color-scheme: light) and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)"
-		href="/splash/iphone15pro-landscape-light.png"
 	/>
 	<!-- iPad Air M1 (820x1180 @2) -->
 	<link
 		rel="apple-touch-startup-image"
-		media="(prefers-color-scheme: dark) and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
+		media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
 		href="/splash/ipadair-portrait-dark.png"
 	/>
 	<link
 		rel="apple-touch-startup-image"
-		media="(prefers-color-scheme: light) and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
-		href="/splash/ipadair-portrait-light.png"
-	/>
-	<link
-		rel="apple-touch-startup-image"
-		media="(prefers-color-scheme: dark) and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
+		media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
 		href="/splash/ipadair-landscape-dark.png"
-	/>
-	<link
-		rel="apple-touch-startup-image"
-		media="(prefers-color-scheme: light) and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
-		href="/splash/ipadair-landscape-light.png"
 	/>
 </svelte:head>
 {#if data.user}
