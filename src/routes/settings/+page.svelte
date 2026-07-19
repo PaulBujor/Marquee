@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
@@ -8,6 +9,18 @@
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
+
+	// Pop history so Settings doesn't stack a duplicate `/` entry; fall back to
+	// navigating home when opened directly (no in-app history to pop).
+	let cameFromApp = $state(false);
+	afterNavigate((nav) => {
+		cameFromApp = nav.from != null;
+	});
+
+	function goBack() {
+		if (cameFromApp) history.back();
+		else goto(resolve('/'));
+	}
 </script>
 
 <svelte:head>
@@ -17,12 +30,12 @@
 <main class="mx-auto flex w-full max-w-lg flex-col gap-6 p-6">
 	<div class="flex items-center gap-3">
 		<Button
-			href={resolve('/')}
+			onclick={goBack}
 			variant="outline"
 			size="icon"
 			shape="round"
 			class="text-muted-foreground"
-			aria-label="Back to home"
+			aria-label="Go back"
 		>
 			<ChevronLeftIcon class="size-4" />
 		</Button>
