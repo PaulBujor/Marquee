@@ -28,11 +28,16 @@
 	const email = $derived(form && 'email' in form ? form.email : '');
 	const failMessage = $derived(form && 'message' in form ? form.message : null);
 	const codeError = $derived(form && 'codeError' in form ? form.codeError : null);
+	// Browser gets a link + code in one email; standalone gets a code only. `combined`
+	// drives the "check your inbox" header and is echoed through ?/verify so it survives
+	// a wrong-code retry.
+	const combined = $derived(method === 'link_and_code');
 	const onCodeStep = $derived(
-		(form && 'step' in form && form.step === 'code') || (result === 'sent' && method === 'code')
+		(form && 'step' in form && form.step === 'code') ||
+			(result === 'sent' && (method === 'code' || method === 'link_and_code'))
 	);
-	// What we'll actually send from the initial step, given the detected mode.
-	const noun = $derived(mode === 'standalone' ? 'code' : 'link');
+	// What the initial step will send, given the detected mode.
+	const sendNoun = $derived(mode === 'standalone' ? 'code' : 'email');
 	// Client-side mirror of the server's code check (the server stays authoritative).
 	const codeValid = $derived(/^\d{6}$/.test(code));
 
@@ -57,61 +62,66 @@
 	<title>Sign in · Marquee</title>
 </svelte:head>
 
+{#snippet codeEntry()}
+	<form
+		bind:this={codeForm}
+		method="POST"
+		action="?/verify"
+		class="flex flex-col gap-4"
+		use:enhance={trackCode}
+	>
+		<input type="hidden" name="email" value={email} />
+		<input type="hidden" name="code" value={code} />
+		<input type="hidden" name="method" value={method ?? 'code'} />
+		<InputOTP.Root
+			maxlength={6}
+			bind:value={code}
+			autocomplete="one-time-code"
+			inputmode="numeric"
+			disabled={submitting}
+			class="justify-center"
+			onComplete={() => codeValid && codeForm?.requestSubmit()}
+		>
+			{#snippet children({ cells })}
+				<InputOTP.Group>
+					{#each cells as cell, i (i)}
+						<InputOTP.Slot {cell} />
+					{/each}
+				</InputOTP.Group>
+			{/snippet}
+		</InputOTP.Root>
+		{#if codeError}
+			<p class="text-center text-sm text-destructive">{codeError}</p>
+		{/if}
+		<Button type="submit" disabled={submitting || !codeValid}>
+			{submitting ? 'Verifying…' : 'Verify code'}
+		</Button>
+		<a href={resolve('/login')} class="text-center text-sm text-muted-foreground underline">
+			Use a different email
+		</a>
+	</form>
+{/snippet}
+
 <main class="flex min-h-svh items-center justify-center p-4">
 	<Card.Root class="w-full max-w-sm">
-		{#if result === 'sent' && method === 'link'}
+		{#if onCodeStep}
 			<Card.Header>
-				<Card.Title>Check your inbox</Card.Title>
-				<Card.Description>
-					We sent a sign-in link to <strong>{email}</strong>. It expires in {data.linkTtlMinutes}
-					minutes.
-				</Card.Description>
-			</Card.Header>
-		{:else if onCodeStep}
-			<Card.Header>
-				<Card.Title>Enter your code</Card.Title>
-				<Card.Description>
-					We emailed a 6-digit code to <strong>{email}</strong>. It expires in {data.codeTtlMinutes}
-					minutes.
-				</Card.Description>
+				{#if combined}
+					<Card.Title>Check your inbox</Card.Title>
+					<Card.Description>
+						We sent a sign-in link and a 6-digit code to <strong>{email}</strong>. Click the link
+						(expires in {data.linkTtlMinutes} minutes), or enter the code below.
+					</Card.Description>
+				{:else}
+					<Card.Title>Enter your code</Card.Title>
+					<Card.Description>
+						We emailed a 6-digit code to <strong>{email}</strong>. It expires in {data.codeTtlMinutes}
+						minutes.
+					</Card.Description>
+				{/if}
 			</Card.Header>
 			<Card.Content>
-				<form
-					bind:this={codeForm}
-					method="POST"
-					action="?/verify"
-					class="flex flex-col gap-4"
-					use:enhance={trackCode}
-				>
-					<input type="hidden" name="email" value={email} />
-					<input type="hidden" name="code" value={code} />
-					<InputOTP.Root
-						maxlength={6}
-						bind:value={code}
-						autocomplete="one-time-code"
-						inputmode="numeric"
-						disabled={submitting}
-						class="justify-center"
-						onComplete={() => codeValid && codeForm?.requestSubmit()}
-					>
-						{#snippet children({ cells })}
-							<InputOTP.Group>
-								{#each cells as cell, i (i)}
-									<InputOTP.Slot {cell} />
-								{/each}
-							</InputOTP.Group>
-						{/snippet}
-					</InputOTP.Root>
-					{#if codeError}
-						<p class="text-center text-sm text-destructive">{codeError}</p>
-					{/if}
-					<Button type="submit" disabled={submitting || !codeValid}>
-						{submitting ? 'Verifying…' : 'Verify code'}
-					</Button>
-					<a href={resolve('/login')} class="text-center text-sm text-muted-foreground underline">
-						Use a different email
-					</a>
-				</form>
+				{@render codeEntry()}
 			</Card.Content>
 		{:else if result === 'waitlisted'}
 			<Card.Header>
@@ -146,7 +156,11 @@
 			<Card.Header>
 				<Card.Title>Sign in to Marquee</Card.Title>
 				<Card.Description>
-					Enter your email and we'll send you a one-time sign-in {noun}.
+					{#if mode === 'standalone'}
+						Enter your email and we'll send you a one-time sign-in code.
+					{:else}
+						Enter your email and we'll send you a sign-in link and a 6-digit code.
+					{/if}
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
@@ -165,7 +179,7 @@
 						<p class="text-sm text-destructive">Too many requests — try again in a little while.</p>
 					{:else if result === 'already'}
 						<p class="text-sm text-muted-foreground">
-							You're already registered. Request a sign-in link above.
+							You're already registered. Request a sign-in {sendNoun} above.
 						</p>
 					{:else if failMessage}
 						<p class="text-sm text-destructive">{failMessage}</p>
@@ -173,7 +187,7 @@
 						<p class="text-sm text-destructive">{data.linkError}</p>
 					{/if}
 					<Button type="submit" disabled={submitting}>
-						{submitting ? 'Sending…' : `Send sign-in ${noun}`}
+						{submitting ? 'Sending…' : `Send sign-in ${sendNoun}`}
 					</Button>
 				</form>
 			</Card.Content>

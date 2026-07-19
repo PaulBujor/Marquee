@@ -96,8 +96,16 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
 		const code = String(data.get('code') ?? '').trim();
+		// Display-only: echoed back so the combined browser card (link + code) survives a
+		// wrong code instead of collapsing to a code-only view. Verification ignores it.
+		const method = data.get('method') === 'link_and_code' ? 'link_and_code' : 'code';
 		if (!CODE_REGEX.test(code)) {
-			return fail(400, { step: 'code' as const, email, codeError: 'Enter the 6-digit code.' });
+			return fail(400, {
+				step: 'code' as const,
+				email,
+				method,
+				codeError: 'Enter the 6-digit code.'
+			});
 		}
 
 		let result;
@@ -105,14 +113,19 @@ export const actions: Actions = {
 			result = await verifyCode(locals.db, email, code);
 		} catch (err) {
 			console.error('code verification failed:', err);
-			return fail(502, { step: 'code' as const, email, codeError: SERVICE_UNAVAILABLE });
+			return fail(502, { step: 'code' as const, email, method, codeError: SERVICE_UNAVAILABLE });
 		}
 		if (result.ok) {
 			setSessionCookie(cookies, result.token, result.expiresAt);
 			redirect(303, '/');
 		}
 
-		return fail(400, { step: 'code' as const, email, codeError: codeErrorMessage(result.reason) });
+		return fail(400, {
+			step: 'code' as const,
+			email,
+			method,
+			codeError: codeErrorMessage(result.reason)
+		});
 	},
 
 	// Waitlist signup for a previously-unknown address (creates a pending user + emails a confirmation).

@@ -26,15 +26,32 @@ function layout(heading: string, body: string): string {
 </html>`;
 }
 
-export function renderMagicLinkEmail(url: string, ttlMinutes: number): string {
+/** The shared big letter-spaced code display used by every code-carrying email. */
+function codeBlock(code: string, margin = '24px 0'): string {
+	return `<p style="margin: ${margin}; font-size: 32px; font-weight: 700; letter-spacing: 8px; font-family: ui-monospace, 'SF Mono', Menlo, monospace;">${code}</p>`;
+}
+
+/**
+ * Browser sign-in email carrying both a magic link and a 6-digit code: click the
+ * link, or type the code back into the open tab. The two TTLs differ on purpose
+ * (see the auth module) so each is stated next to its own mechanism.
+ */
+export function renderMagicLinkAndCodeEmail(
+	url: string,
+	code: string,
+	linkTtlMinutes: number,
+	codeTtlMinutes: number
+): string {
 	return layout(
 		'Sign in to Marquee',
-		`<p>Click the button below to sign in. This link expires in ${ttlMinutes} minutes and can be used once.</p>
+		`<p>Click the button below to sign in. This link expires in ${linkTtlMinutes} minutes and can be used once.</p>
 		<p style="margin: 24px 0;">
 			<a href="${url}" style="background: ${BRAND}; color: #ffffff; padding: 12px 20px; border-radius: 10px; text-decoration: none; display: inline-block; font-size: 14px; font-weight: 500;">Sign in to Marquee</a>
 		</p>
-		<p style="${MUTED}">${IGNORE_REQUEST}</p>
-		<p style="${MUTED} word-break: break-all;">Or paste this link into your browser:<br />${url}</p>`
+		<p style="${MUTED} word-break: break-all;">Or paste this link into your browser:<br />${url}</p>
+		<p style="margin: 24px 0 8px;">Prefer to type a code? Enter this in Marquee — it expires in ${codeTtlMinutes} minutes.</p>
+		${codeBlock(code, '0 0 24px')}
+		<p style="${MUTED}">${IGNORE_REQUEST}</p>`
 	);
 }
 
@@ -42,7 +59,7 @@ export function renderCodeEmail(code: string, ttlMinutes: number): string {
 	return layout(
 		'Your sign-in code',
 		`<p>Enter this code in Marquee to sign in. It expires in ${ttlMinutes} minutes.</p>
-		<p style="margin: 24px 0; font-size: 32px; font-weight: 700; letter-spacing: 8px; font-family: ui-monospace, 'SF Mono', Menlo, monospace;">${code}</p>
+		${codeBlock(code)}
 		<p style="${MUTED}">${IGNORE_REQUEST}</p>`
 	);
 }
@@ -51,7 +68,7 @@ export function renderEmailChangeCode(code: string, ttlMinutes: number): string 
 	return layout(
 		'Confirm your new email',
 		`<p>Enter this code in Marquee to confirm this as your new account email. It expires in ${ttlMinutes} minutes.</p>
-		<p style="margin: 24px 0; font-size: 32px; font-weight: 700; letter-spacing: 8px; font-family: ui-monospace, 'SF Mono', Menlo, monospace;">${code}</p>
+		${codeBlock(code)}
 		<p style="${MUTED}">If you didn't request this change, you can safely ignore this email — your address won't change.</p>`
 	);
 }

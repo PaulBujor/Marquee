@@ -21,8 +21,10 @@ function linkFromEmail(html: string): string {
 	return decodeURIComponent(m[1]);
 }
 
+// The code is the only element whose text is exactly 6 digits; match on the element
+// boundary so a combined email's link URL (which may contain digits) can't fool it.
 function codeFromEmail(html: string): string {
-	const m = html.match(/(\d{6})/);
+	const m = html.match(/>(\d{6})</);
 	if (!m) throw new Error('no code in email');
 	return m[1];
 }
@@ -60,19 +62,38 @@ describe('requestSignIn', () => {
 		expect(sent).toHaveLength(0);
 	});
 
-	it('emails a link in browser mode and stores a kind=link token', async () => {
+	it('emails one message with both a link and a code in browser mode, storing both kinds', async () => {
 		await seedUser(db, 'e@x.com', 'enabled');
 		const { sender, sent } = fakeSender();
 		expect(await requestSignIn({ db, email: 'e@x.com', sender, ...base, mode: 'browser' })).toEqual(
 			{
 				kind: 'sent',
-				method: 'link'
+				method: 'link_and_code'
 			}
 		);
+		// a single combined email carrying both a magic link and a 6-digit code
+		expect(sent).toHaveLength(1);
 		expect(sent[0].html).toContain('/auth/verify?token=');
+		expect(codeFromEmail(sent[0].html)).toMatch(/^\d{6}$/);
 		const rows = await db.select().from(loginTokens).where(eq(loginTokens.email, 'e@x.com'));
-		expect(rows).toHaveLength(1);
-		expect(rows[0].kind).toBe('link');
+		expect(rows).toHaveLength(2);
+		expect(rows.map((r) => r.kind).sort()).toEqual(['code', 'link']);
+	});
+
+	it('browser: the emailed magic link verifies and mints a session', async () => {
+		const user = await seedUser(db, 'bl@x.com', 'enabled');
+		const { sender, sent } = fakeSender();
+		await requestSignIn({ db, email: 'bl@x.com', sender, ...base, mode: 'browser' });
+		expect((await verifyMagicLink(db, linkFromEmail(sent[0].html))).ok).toBe(true);
+		expect(await db.select().from(sessions).where(eq(sessions.userId, user.id))).toHaveLength(1);
+	});
+
+	it('browser: the emailed code verifies and mints a session', async () => {
+		const user = await seedUser(db, 'bc@x.com', 'enabled');
+		const { sender, sent } = fakeSender();
+		await requestSignIn({ db, email: 'bc@x.com', sender, ...base, mode: 'browser' });
+		expect((await verifyCode(db, 'bc@x.com', codeFromEmail(sent[0].html))).ok).toBe(true);
+		expect(await db.select().from(sessions).where(eq(sessions.userId, user.id))).toHaveLength(1);
 	});
 
 	it('emails a 6-digit code in standalone mode and stores a kind=code token', async () => {
