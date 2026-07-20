@@ -284,7 +284,7 @@
 
 				{#if seasonLoading}
 					<ul class="flex flex-col">
-						{#each [0, 1, 2, 3, 4] as i (i)}
+						{#each Array.from({ length: 10 }, (_, i) => i) as i (i)}
 							<li class="flex flex-col gap-2 border-b border-border py-3 last:border-b-0">
 								<div class="flex items-center gap-3">
 									<Skeleton class="h-4 w-6 shrink-0" />
