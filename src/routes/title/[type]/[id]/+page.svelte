@@ -16,11 +16,7 @@
 	let { data }: { data: PageData } = $props();
 
 	const detail = $derived(data.detail);
-	const season = $derived(data.season);
 	const heroUrl = $derived(posterUrl(detail.backdropPath, 'w780'));
-	const basePath = $derived(
-		resolve('/title/[type]/[id]', { type: detail.type, id: String(detail.tmdbId) })
-	);
 
 	// Overview/cast/trailer live under a "Details" toggle (default open). When watch-tracking
 	// lands it can default this collapsed for in-progress shows; read-only for now.
@@ -29,12 +25,28 @@
 	// keeps the YouTube embed (and its CSP surface) off the page for anyone who never plays it.
 	let showTrailer = $state(false);
 
+	// Seasons switch client-side: episodes are fetched from our own JSON endpoint and cached, so
+	// picking a season never touches the URL or browser history. The server load seeds the default
+	// season for first paint / SSR.
+	type SeasonData = NonNullable<PageData['season']>;
+	let selectedSeason = $state(data.season?.seasonNumber ?? null);
+	let seasonCache = $state<Record<number, SeasonData>>(
+		data.season ? { [data.season.seasonNumber]: data.season } : {}
+	);
+	let seasonLoading = $state(false);
+	const currentSeason = $derived(
+		selectedSeason !== null ? (seasonCache[selectedSeason] ?? null) : null
+	);
+
 	// Mirror the search page's back behaviour: pop history when we arrived from within the app,
-	// otherwise fall back to the search page. Reset the trailer when navigating between titles.
+	// otherwise fall back to the search page. Reset per-title state when navigating between titles.
 	let cameFromApp = $state(false);
 	afterNavigate((nav) => {
 		cameFromApp = nav.from != null;
 		showTrailer = false;
+		selectedSeason = data.season?.seasonNumber ?? null;
+		seasonCache = data.season ? { [data.season.seasonNumber]: data.season } : {};
+		seasonLoading = false;
 	});
 
 	function goBack() {
@@ -42,12 +54,17 @@
 		else goto(resolve('/search'));
 	}
 
-	function selectSeason(seasonNumber: number) {
-		const target = `${basePath}?season=${seasonNumber}`;
-		// Query-string navigation drops resolve()'s branded type (the rule keys on it) and resolve()
-		// has no query-string escape — mirror the search page and disable the rule here.
-		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		return goto(target, { noScroll: true, keepFocus: true });
+	async function selectSeason(seasonNumber: number) {
+		if (seasonNumber === selectedSeason) return;
+		selectedSeason = seasonNumber; // highlight immediately; episodes fill in when fetched
+		if (seasonCache[seasonNumber]) return;
+		seasonLoading = true;
+		try {
+			const res = await fetch(`/title/${detail.type}/${detail.tmdbId}/season/${seasonNumber}`);
+			if (res.ok) seasonCache[seasonNumber] = await res.json();
+		} finally {
+			seasonLoading = false;
+		}
 	}
 
 	/** First-letter initials for a cast avatar with no profile image. */
@@ -248,7 +265,7 @@
 				<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Seasons</h2>
 				<div class="no-scrollbar flex gap-2 overflow-x-auto pb-1">
 					{#each detail.seasons as s (s.seasonNumber)}
-						{@const active = s.seasonNumber === season?.seasonNumber}
+						{@const active = s.seasonNumber === selectedSeason}
 						<button
 							type="button"
 							onclick={() => selectSeason(s.seasonNumber)}
@@ -262,10 +279,12 @@
 					{/each}
 				</div>
 
-				{#if season}
-					{#if season.episodes.length > 0}
+				{#if seasonLoading}
+					<p class="py-2 text-sm text-muted-foreground">Loading episodes…</p>
+				{:else if currentSeason}
+					{#if currentSeason.episodes.length > 0}
 						<ul class="flex flex-col">
-							{#each season.episodes as ep (ep.episodeNumber)}
+							{#each currentSeason.episodes as ep (ep.episodeNumber)}
 								<li class="flex flex-col gap-1 border-b border-border py-3 last:border-b-0">
 									<div class="flex items-center gap-3">
 										<span class="w-6 shrink-0 text-sm font-semibold text-muted-foreground"
