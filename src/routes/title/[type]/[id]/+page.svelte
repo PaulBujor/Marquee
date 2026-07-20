@@ -6,6 +6,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
@@ -282,7 +283,21 @@
 				</div>
 
 				{#if seasonLoading}
-					<p class="py-2 text-sm text-muted-foreground">Loading episodes…</p>
+					<ul class="flex flex-col">
+						{#each [0, 1, 2, 3, 4] as i (i)}
+							<li class="flex flex-col gap-2 border-b border-border py-3 last:border-b-0">
+								<div class="flex items-center gap-3">
+									<Skeleton class="h-4 w-6 shrink-0" />
+									<Skeleton class="h-4 w-2/5" />
+								</div>
+								<div class="flex flex-col gap-1 pl-9">
+									<Skeleton class="h-3 w-16" />
+									<Skeleton class="h-3 w-full" />
+									<Skeleton class="h-3 w-3/4" />
+								</div>
+							</li>
+						{/each}
+					</ul>
 				{:else if currentSeason}
 					{#if currentSeason.episodes.length > 0}
 						<ul class="flex flex-col">
