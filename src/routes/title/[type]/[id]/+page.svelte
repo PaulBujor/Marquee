@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -29,9 +30,10 @@
 	// picking a season never touches the URL or browser history. The server load seeds the default
 	// season for first paint / SSR.
 	type SeasonData = NonNullable<PageData['season']>;
-	let selectedSeason = $state(data.season?.seasonNumber ?? null);
+	// Seed once from the SSR data (untrack marks the initial read as intentional, mirroring search).
+	let selectedSeason = $state(untrack(() => data.season?.seasonNumber ?? null));
 	let seasonCache = $state<Record<number, SeasonData>>(
-		data.season ? { [data.season.seasonNumber]: data.season } : {}
+		untrack(() => (data.season ? { [data.season.seasonNumber]: data.season } : {}))
 	);
 	let seasonLoading = $state(false);
 	const currentSeason = $derived(

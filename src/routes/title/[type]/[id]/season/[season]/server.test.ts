@@ -77,7 +77,11 @@ describe('season endpoint', () => {
 		);
 		const res = await GET(makeEvent({ season: '1' }));
 		expect(res.status).toBe(200);
-		const body = await res.json();
+		const body = (await res.json()) as {
+			seasonNumber: number;
+			name: string;
+			episodes: Array<{ episodeNumber: number; name: string; runtime: number | null }>;
+		};
 		expect(body).toMatchObject({ seasonNumber: 1, name: 'Season 1' });
 		expect(body.episodes[0]).toMatchObject({ episodeNumber: 1, name: 'Pilot', runtime: 58 });
 	});
