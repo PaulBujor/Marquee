@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { browser } from '$app/environment';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import type { ActionResult } from '@sveltejs/kit';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Card from '$lib/components/ui/card';
@@ -50,7 +52,13 @@
 	};
 	const trackCode = () => {
 		submitting = true;
-		return async ({ update }: { update: () => Promise<void> }) => {
+		return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+			// A correct code redirects home — replace /login in history so Back doesn't land here.
+			if (result.type === 'redirect') {
+				// eslint-disable-next-line svelte/no-navigation-without-resolve
+				await goto(result.location, { replaceState: true, invalidateAll: true });
+				return;
+			}
 			await update();
 			submitting = false;
 			code = ''; // clear on a failed attempt so the user can retype (success redirects away)

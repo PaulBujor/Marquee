@@ -6,6 +6,8 @@
 
 	// Surface a waiting (freshly deployed) worker; swap only on user accept.
 	let waiting = $state<ServiceWorker | null>(null);
+	// Set when the user accepts; the button stays in its loading state until the reload lands.
+	let applying = $state(false);
 
 	onMount(() => {
 		if (!browser || !('serviceWorker' in navigator)) return;
@@ -52,6 +54,7 @@
 	});
 
 	function reload() {
+		applying = true;
 		waiting?.postMessage({ type: 'SKIP_WAITING' });
 	}
 </script>
@@ -62,6 +65,8 @@
 		class="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md flex-row items-center gap-3 px-4 py-3 shadow-lg sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2"
 	>
 		<span class="flex-1 text-sm">A new version of Marquee is available.</span>
-		<Button size="sm" onclick={reload}>Reload</Button>
+		<Button size="sm" onclick={reload} disabled={applying}>
+			{applying ? 'Reloading…' : 'Reload'}
+		</Button>
 	</Card.Root>
 {/if}

@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTmdbClient, TmdbError } from './client';
-import type { TmdbMultiSearchResponse } from './types';
+import type {
+	TmdbMovieDetailsResponse,
+	TmdbMultiSearchResponse,
+	TmdbSeasonDetailResponse,
+	TmdbTvDetailsResponse
+} from './types';
 
 /** A representative `/search/multi` payload: a movie, a show, and a person to be filtered out. */
 const SAMPLE: TmdbMultiSearchResponse = {
@@ -118,5 +123,315 @@ describe('createTmdbClient.search', () => {
 			})
 		);
 		await expect(createTmdbClient('key').search('x')).rejects.toBeInstanceOf(TmdbError);
+	});
+});
+
+/** A representative `/movie/{id}?append_to_response=credits,images,videos` payload. */
+const MOVIE_DETAILS: TmdbMovieDetailsResponse = {
+	id: 27205,
+	title: 'Inception',
+	release_date: '2010-07-16',
+	overview: 'A thief who steals corporate secrets.',
+	poster_path: '/inception.jpg',
+	backdrop_path: '/inception-backdrop.jpg',
+	vote_average: 8.4,
+	vote_count: 34000,
+	runtime: 148,
+	genres: [
+		{ id: 28, name: 'Action' },
+		{ id: 878, name: 'Science Fiction' }
+	],
+	credits: {
+		cast: [
+			{ id: 1, name: 'Leonardo DiCaprio', character: 'Cobb', profile_path: '/leo.jpg', order: 0 },
+			{ id: 2, name: 'Elliot Page', character: 'Ariadne', profile_path: null, order: 1 }
+		]
+	},
+	images: { backdrops: [{ file_path: '/b1.jpg' }], posters: [{ file_path: '/p1.jpg' }] },
+	videos: {
+		results: [
+			{ key: 'teaser1', name: 'Teaser', site: 'YouTube', type: 'Teaser' },
+			{ key: 'yt-trailer', name: 'Official Trailer', site: 'YouTube', type: 'Trailer' }
+		]
+	}
+};
+
+/** A representative `/tv/{id}?append_to_response=...` payload. */
+const TV_DETAILS: TmdbTvDetailsResponse = {
+	id: 1396,
+	name: 'Breaking Bad',
+	first_air_date: '2008-01-20',
+	overview: 'A chemistry teacher turned meth cook.',
+	poster_path: '/bb.jpg',
+	backdrop_path: '/bb-backdrop.jpg',
+	vote_average: 8.9,
+	vote_count: 12000,
+	episode_run_time: [47, 45],
+	genres: [{ id: 18, name: 'Drama' }],
+	credits: {
+		cast: [{ id: 3, name: 'Bryan Cranston', character: 'Walter White', profile_path: '/bc.jpg' }]
+	},
+	videos: {
+		results: [{ key: 'bb-trailer', name: 'Trailer', site: 'YouTube', type: 'Trailer' }]
+	},
+	seasons: [
+		{
+			season_number: 0,
+			name: 'Specials',
+			episode_count: 8,
+			air_date: '2009-02-17',
+			poster_path: '/s0.jpg',
+			overview: 'Extras.'
+		},
+		{
+			season_number: 1,
+			name: 'Season 1',
+			episode_count: 7,
+			air_date: '2008-01-20',
+			poster_path: '/s1.jpg',
+			overview: 'The beginning.'
+		}
+	]
+};
+
+/** A representative `/tv/{id}/season/{n}` payload. */
+const SEASON_DETAILS: TmdbSeasonDetailResponse = {
+	season_number: 1,
+	name: 'Season 1',
+	overview: 'The beginning.',
+	episodes: [
+		{
+			episode_number: 1,
+			name: 'Pilot',
+			air_date: '2008-01-20',
+			overview: 'Walt cooks.',
+			still_path: '/e1.jpg',
+			runtime: 58
+		},
+		{
+			episode_number: 2,
+			name: "Cat's in the Bag...",
+			air_date: '2008-01-27',
+			overview: 'Cleanup.',
+			still_path: null,
+			runtime: 48
+		}
+	]
+};
+
+describe('createTmdbClient.getDetails', () => {
+	it('normalizes a movie detail', async () => {
+		mockFetch(MOVIE_DETAILS);
+		const detail = await createTmdbClient('key').getDetails('movie', 27205);
+
+		expect(detail).toEqual({
+			tmdbId: 27205,
+			type: 'movie',
+			title: 'Inception',
+			year: 2010,
+			overview: 'A thief who steals corporate secrets.',
+			posterPath: '/inception.jpg',
+			backdropPath: '/inception-backdrop.jpg',
+			rating: 8.4,
+			voteCount: 34000,
+			runtime: 148,
+			genres: ['Action', 'Science Fiction'],
+			cast: [
+				{ id: 1, name: 'Leonardo DiCaprio', character: 'Cobb', profilePath: '/leo.jpg' },
+				{ id: 2, name: 'Elliot Page', character: 'Ariadne', profilePath: null }
+			],
+			trailer: { key: 'yt-trailer', name: 'Official Trailer' },
+			seasons: []
+		});
+	});
+
+	it('normalizes a show detail (name/first_air_date/episode_run_time)', async () => {
+		mockFetch(TV_DETAILS);
+		const detail = await createTmdbClient('key').getDetails('show', 1396);
+
+		expect(detail).toMatchObject({
+			tmdbId: 1396,
+			type: 'show',
+			title: 'Breaking Bad',
+			year: 2008,
+			runtime: 47,
+			genres: ['Drama'],
+			trailer: { key: 'bb-trailer', name: 'Trailer' }
+		});
+		expect(detail.cast).toEqual([
+			{ id: 3, name: 'Bryan Cranston', character: 'Walter White', profilePath: '/bc.jpg' }
+		]);
+		expect(detail.seasons).toEqual([
+			{
+				seasonNumber: 0,
+				name: 'Specials',
+				episodeCount: 8,
+				airYear: 2009,
+				posterPath: '/s0.jpg',
+				overview: 'Extras.'
+			},
+			{
+				seasonNumber: 1,
+				name: 'Season 1',
+				episodeCount: 7,
+				airYear: 2008,
+				posterPath: '/s1.jpg',
+				overview: 'The beginning.'
+			}
+		]);
+	});
+
+	it('leaves seasons empty for movies', async () => {
+		mockFetch(MOVIE_DETAILS);
+		const detail = await createTmdbClient('key').getDetails('movie', 27205);
+		expect(detail.seasons).toEqual([]);
+	});
+
+	it('requests the movie path with the append_to_response param', async () => {
+		const spy = mockFetch(MOVIE_DETAILS);
+		await createTmdbClient('secret-key').getDetails('movie', 27205);
+
+		const [firstArg] = spy.mock.calls[0] as unknown as [URL | string];
+		const url = new URL(String(firstArg));
+		expect(url.origin + url.pathname).toBe('https://api.themoviedb.org/3/movie/27205');
+		expect(url.searchParams.get('api_key')).toBe('secret-key');
+		expect(url.searchParams.get('append_to_response')).toBe('credits,images,videos');
+	});
+
+	it('requests the tv path for shows', async () => {
+		const spy = mockFetch(TV_DETAILS);
+		await createTmdbClient('key').getDetails('show', 1396);
+
+		const [firstArg] = spy.mock.calls[0] as unknown as [URL | string];
+		const url = new URL(String(firstArg));
+		expect(url.origin + url.pathname).toBe('https://api.themoviedb.org/3/tv/1396');
+	});
+
+	it('picks the first YouTube Trailer, ignoring non-YouTube and non-Trailer videos', async () => {
+		mockFetch({
+			...MOVIE_DETAILS,
+			videos: {
+				results: [
+					{ key: 'vimeo1', name: 'Vimeo Trailer', site: 'Vimeo', type: 'Trailer' },
+					{ key: 'clip1', name: 'Clip', site: 'YouTube', type: 'Clip' },
+					{ key: 'yt-first', name: 'First YT Trailer', site: 'YouTube', type: 'Trailer' },
+					{ key: 'yt-second', name: 'Second YT Trailer', site: 'YouTube', type: 'Trailer' }
+				]
+			}
+		});
+		const detail = await createTmdbClient('key').getDetails('movie', 1);
+		expect(detail.trailer).toEqual({ key: 'yt-first', name: 'First YT Trailer' });
+	});
+
+	it('leaves trailer null when there is no YouTube trailer', async () => {
+		mockFetch({
+			...MOVIE_DETAILS,
+			videos: { results: [{ key: 'x', name: 'Teaser', site: 'YouTube', type: 'Teaser' }] }
+		});
+		const detail = await createTmdbClient('key').getDetails('movie', 1);
+		expect(detail.trailer).toBeNull();
+	});
+
+	it('caps cast at the top 10', async () => {
+		const cast = Array.from({ length: 25 }, (_, i) => ({
+			id: i,
+			name: `Actor ${i}`,
+			character: `Role ${i}`,
+			profile_path: null,
+			order: i
+		}));
+		mockFetch({ ...MOVIE_DETAILS, credits: { cast } });
+		const detail = await createTmdbClient('key').getDetails('movie', 1);
+		expect(detail.cast).toHaveLength(10);
+		expect(detail.cast[0].name).toBe('Actor 0');
+		expect(detail.cast[9].name).toBe('Actor 9');
+	});
+
+	it('handles missing optional fields gracefully', async () => {
+		mockFetch({ id: 1, title: 'Bare' });
+		const detail = await createTmdbClient('key').getDetails('movie', 1);
+		expect(detail).toEqual({
+			tmdbId: 1,
+			type: 'movie',
+			title: 'Bare',
+			year: null,
+			overview: '',
+			posterPath: null,
+			backdropPath: null,
+			rating: null,
+			voteCount: 0,
+			runtime: null,
+			genres: [],
+			cast: [],
+			trailer: null,
+			seasons: []
+		});
+	});
+
+	it('treats a zero vote_average as unrated (null)', async () => {
+		mockFetch({ ...MOVIE_DETAILS, vote_average: 0, vote_count: 0 });
+		const detail = await createTmdbClient('key').getDetails('movie', 1);
+		expect(detail.rating).toBeNull();
+	});
+
+	it('throws TmdbError on a non-2xx response', async () => {
+		mockFetch({}, { status: 404 });
+		await expect(createTmdbClient('key').getDetails('movie', 999)).rejects.toMatchObject({
+			name: 'TmdbError',
+			status: 404
+		});
+	});
+});
+
+describe('createTmdbClient.getSeason', () => {
+	it('normalizes a season with its episodes', async () => {
+		mockFetch(SEASON_DETAILS);
+		const season = await createTmdbClient('key').getSeason(1396, 1);
+
+		expect(season).toEqual({
+			seasonNumber: 1,
+			name: 'Season 1',
+			episodes: [
+				{
+					episodeNumber: 1,
+					name: 'Pilot',
+					airDate: '2008-01-20',
+					overview: 'Walt cooks.',
+					stillPath: '/e1.jpg',
+					runtime: 58
+				},
+				{
+					episodeNumber: 2,
+					name: "Cat's in the Bag...",
+					airDate: '2008-01-27',
+					overview: 'Cleanup.',
+					stillPath: null,
+					runtime: 48
+				}
+			]
+		});
+	});
+
+	it('requests the /tv/{id}/season/{n} path', async () => {
+		const spy = mockFetch(SEASON_DETAILS);
+		await createTmdbClient('key').getSeason(1396, 2);
+
+		const [firstArg] = spy.mock.calls[0] as unknown as [URL | string];
+		const url = new URL(String(firstArg));
+		expect(url.origin + url.pathname).toBe('https://api.themoviedb.org/3/tv/1396/season/2');
+	});
+
+	it('handles a season with no episodes', async () => {
+		mockFetch({ season_number: 3, name: 'Season 3' });
+		const season = await createTmdbClient('key').getSeason(1396, 3);
+		expect(season).toEqual({ seasonNumber: 3, name: 'Season 3', episodes: [] });
+	});
+
+	it('throws TmdbError on a non-2xx response', async () => {
+		mockFetch({}, { status: 404 });
+		await expect(createTmdbClient('key').getSeason(1396, 99)).rejects.toMatchObject({
+			name: 'TmdbError',
+			status: 404
+		});
 	});
 });

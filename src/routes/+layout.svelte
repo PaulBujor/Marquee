@@ -1,5 +1,6 @@
 <script lang="ts">
 	import './layout.css';
+	import { page } from '$app/state';
 	import AppHeader from '$lib/components/app-header.svelte';
 	import InstallPrompt from '$lib/components/install-prompt.svelte';
 	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
@@ -91,7 +92,9 @@
 		href="/splash/ipadair-landscape-dark.png"
 	/>
 </svelte:head>
-{#if data.user}
+<!-- The header (branding + nav) rides on the home page only; other pages carry their own
+back navigation, keeping the movie/show page's immersive layout uncluttered. -->
+{#if data.user && page.url.pathname === '/'}
 	<AppHeader />
 {/if}
 {@render children()}
