@@ -8,7 +8,7 @@ import {
 	type SyncEventType
 } from '$lib/sync/events';
 import { openDb } from './db';
-import { applyEventToIdb, getEpisodeWatches, getTracking } from './state';
+import { applyEventToIdb, cacheMedia, getEpisodeWatches, getTracking } from './state';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 const SNAPSHOT: MediaSnapshot = {
@@ -62,15 +62,9 @@ describe('applyEventToIdb', () => {
 		MID = newMid();
 	});
 
-	it('materializes media + tracking from tracking.added', async () => {
-		await applyEventToIdb(
-			ev(
-				'tracking.added',
-				MID,
-				{ media: { ...SNAPSHOT, tmdbId: midCounter }, status: 'watching' },
-				100
-			)
-		);
+	it('caches media and materializes tracking from an add', async () => {
+		await cacheMedia({ ...SNAPSHOT, tmdbId: midCounter });
+		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 100));
 		const db = await openDb();
 		expect(await db.get('media', MID)).toMatchObject({ id: MID, title: 'X' });
 		const tracked = await getTracking();
@@ -103,23 +97,9 @@ describe('applyEventToIdb', () => {
 	});
 
 	it('does not undo a newer removal with an older re-add (revive fix mirror)', async () => {
-		await applyEventToIdb(
-			ev(
-				'tracking.added',
-				MID,
-				{ media: { ...SNAPSHOT, tmdbId: midCounter }, status: 'watching' },
-				100
-			)
-		);
+		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 100));
 		await applyEventToIdb(ev('tracking.removed', MID, {}, 300));
-		await applyEventToIdb(
-			ev(
-				'tracking.added',
-				MID,
-				{ media: { ...SNAPSHOT, tmdbId: midCounter }, status: 'watching' },
-				200
-			)
-		);
+		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 200));
 		expect((await trackingRow(MID))?.removed).toBe(true); // removal@300 still wins
 	});
 });

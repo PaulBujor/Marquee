@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	cachedMediaSchema,
 	createEvent,
 	episodeKey,
 	EVENT_SCHEMA_VERSION,
@@ -43,7 +44,7 @@ describe('createEvent', () => {
 describe('validateEvent', () => {
 	it('accepts every well-formed event type', () => {
 		const cases: EventEnvelope[] = [
-			createEvent('tracking.added', 'movie:603', { media: SNAPSHOT, status: 'watching' }, DEVICE),
+			createEvent('tracking.added', 'movie:603', { status: 'watching' }, DEVICE),
 			createEvent('tracking.status_changed', 'movie:603', { status: 'completed' }, DEVICE),
 			createEvent('tracking.favorite_toggled', 'movie:603', { favorite: false }, DEVICE),
 			createEvent('episode.watched', 'show:1396', { season: 1, episode: 2 }, DEVICE),
@@ -78,14 +79,19 @@ describe('validateEvent', () => {
 		).toBeNull();
 		expect(
 			validateEvent({
-				...createEvent(
-					'tracking.added',
-					'movie:603',
-					{ media: SNAPSHOT, status: 'watching' },
-					DEVICE
-				),
-				payload: { status: 'watching' } // missing media
+				...createEvent('tracking.added', 'movie:603', { status: 'watching' }, DEVICE),
+				payload: { status: 'invalid' } // bad status
 			})
 		).toBeNull();
+	});
+});
+
+describe('cachedMediaSchema', () => {
+	it('accepts a snapshot plus a cache clock', () => {
+		expect(cachedMediaSchema.safeParse({ ...SNAPSHOT, cachedAt: 1000 }).success).toBe(true);
+	});
+
+	it('rejects a snapshot missing the cache clock', () => {
+		expect(cachedMediaSchema.safeParse(SNAPSHOT).success).toBe(false);
 	});
 });

@@ -13,7 +13,7 @@ CREATE INDEX `episode_watches_user_media_idx` ON `episode_watches` (`user_id`,`m
 CREATE TABLE `events` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
-	`seq` integer NOT NULL,
+	`sequence` integer NOT NULL,
 	`type` text NOT NULL,
 	`entity_id` text NOT NULL,
 	`payload` text NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE `events` (
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `events_user_seq_idx` ON `events` (`user_id`,`seq`);--> statement-breakpoint
+CREATE UNIQUE INDEX `events_user_sequence_idx` ON `events` (`user_id`,`sequence`);--> statement-breakpoint
 CREATE TABLE `media` (
 	`id` text PRIMARY KEY NOT NULL,
 	`tmdb_id` integer NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE `media` (
 CREATE UNIQUE INDEX `media_tmdb_idx` ON `media` (`tmdb_id`,`type`);--> statement-breakpoint
 CREATE TABLE `sync_state` (
 	`user_id` text PRIMARY KEY NOT NULL,
-	`last_seq` integer DEFAULT 0 NOT NULL,
+	`last_sequence` integer DEFAULT 0 NOT NULL,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint

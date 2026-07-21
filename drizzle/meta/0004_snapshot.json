@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "fc6567bd-ce0a-436f-8f81-652cc7a4cffc",
+  "id": "eb4987dc-bd57-47ab-9dd8-3b05fe6b9e93",
   "prevId": "14f717de-475a-4915-8b12-ca6c80d1db64",
   "tables": {
     "email_change_tokens": {
@@ -194,8 +194,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "seq": {
-          "name": "seq",
+        "sequence": {
+          "name": "sequence",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -253,11 +253,11 @@
         }
       },
       "indexes": {
-        "events_user_seq_idx": {
-          "name": "events_user_seq_idx",
+        "events_user_sequence_idx": {
+          "name": "events_user_sequence_idx",
           "columns": [
             "user_id",
-            "seq"
+            "sequence"
           ],
           "isUnique": true
         }
@@ -530,8 +530,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "last_seq": {
-          "name": "last_seq",
+        "last_sequence": {
+          "name": "last_sequence",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

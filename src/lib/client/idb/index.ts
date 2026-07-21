@@ -5,9 +5,16 @@
  * applies it to the local materialized stores optimistically.
  */
 import { enqueueEvent } from './outbox';
-import { applyEventToIdb } from './state';
+import { applyEventToIdb, cacheMedia } from './state';
 import { getDeviceId } from './meta';
-import { createEvent, type EventPayloadMap, type SyncEventType } from '$lib/sync/events';
+import {
+	createEvent,
+	mediaId,
+	type EventPayloadMap,
+	type MediaSnapshot,
+	type SyncEventType,
+	type TrackingStatus
+} from '$lib/sync/events';
 
 export { openDb } from './db';
 export type {
@@ -18,7 +25,7 @@ export type {
 	MarqueeDatabase
 } from './db';
 export { getUnsynced, markSynced, enqueueEvent } from './outbox';
-export { applyEventToIdb, getTracking, getEpisodeWatches } from './state';
+export { applyEventToIdb, cacheMedia, getTracking, getEpisodeWatches } from './state';
 export { getDeviceId, getCursor, setCursor, getUserId, setUserId } from './meta';
 
 /**
@@ -34,4 +41,14 @@ export async function recordEvent<T extends SyncEventType>(
 	const event = createEvent(type, entityId, payload, deviceId);
 	await enqueueEvent(event);
 	await applyEventToIdb(event);
+}
+
+/**
+ * Add a title to the watchlist: cache its media (reference data, for offline render) and
+ * record a `tracking.added` event that refers to it by id. Media rides the sync `media`
+ * sidecar (MRQ-43), separate from the event.
+ */
+export async function addToWatchlist(media: MediaSnapshot, status: TrackingStatus): Promise<void> {
+	await cacheMedia(media);
+	await recordEvent('tracking.added', mediaId(media.type, media.tmdbId), { status });
 }

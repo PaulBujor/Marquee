@@ -1,8 +1,8 @@
 import { error, json } from '@sveltejs/kit';
 import { and, eq, gt } from 'drizzle-orm';
 import { events as eventsTable } from '$lib/server/db/schema';
-import { applyEvents } from '$lib/server/sync/projection';
-import type { EventEnvelope, ServerEvent } from '$lib/sync/events';
+import { applyEvents, applyMedia } from '$lib/server/sync/projection';
+import type { CachedMedia, EventEnvelope, ServerEvent } from '$lib/sync/events';
 import { syncRequestSchema, SYNC_PAGE_SIZE, type SyncResponse } from '$lib/sync/protocol';
 import { problem, zodProblem } from '$lib/server/http/problem';
 import type { RequestHandler } from './$types';
@@ -23,16 +23,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return problem(400, 'Malformed request body', { detail: 'Body must be valid JSON.' });
 	const parsed = syncRequestSchema.safeParse(raw);
 	if (!parsed.success) return zodProblem(parsed.error);
-	const { cursor, events } = parsed.data;
+	const { cursor, events, media } = parsed.data;
 
+	// Media is reference data, applied independently of the (user-scoped) event log.
+	await applyMedia(locals.db, media as CachedMedia[]);
 	await applyEvents(locals.db, locals.user.id, events as EventEnvelope[]);
 
 	// Pull one extra row past the page size to detect whether more remain.
 	const rows = await locals.db
 		.select()
 		.from(eventsTable)
-		.where(and(eq(eventsTable.userId, locals.user.id), gt(eventsTable.seq, cursor)))
-		.orderBy(eventsTable.seq)
+		.where(and(eq(eventsTable.userId, locals.user.id), gt(eventsTable.sequence, cursor)))
+		.orderBy(eventsTable.sequence)
 		.limit(SYNC_PAGE_SIZE + 1);
 
 	const hasMore = rows.length > SYNC_PAGE_SIZE;
@@ -41,7 +43,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const pulled: ServerEvent[] = page.map((row) => ({
 		id: row.id,
 		userId: row.userId,
-		seq: row.seq,
+		sequence: row.sequence,
 		type: row.type,
 		entityId: row.entityId,
 		payload: JSON.parse(row.payload),
@@ -52,7 +54,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}));
 
 	const response: SyncResponse = {
-		cursor: pulled.length > 0 ? pulled[pulled.length - 1].seq : cursor,
+		cursor: pulled.length > 0 ? pulled[pulled.length - 1].sequence : cursor,
 		events: pulled,
 		// Ack every id the client sent (including dedup no-ops) so it can clear its outbox.
 		applied: events.map((e) => e.id),

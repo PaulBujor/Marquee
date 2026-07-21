@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
+import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
-import { events as eventsTable, users } from '$lib/server/db/schema';
+import { events as eventsTable, media, users } from '$lib/server/db/schema';
 import {
 	mediaId,
+	type CachedMedia,
 	type EventEnvelope,
 	type EventPayloadMap,
-	type MediaSnapshot,
 	type SyncEventType
 } from '$lib/sync/events';
 import type { SyncRequest, SyncResponse } from '$lib/sync/protocol';
@@ -19,15 +20,15 @@ const USER = 'user-1';
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 const MID = mediaId('movie', 603);
 
-// `tracking.added` carries a full media snapshot so the server can seed its catalog
-// cache (title/year/poster) without a TMDB round-trip — hence the fields here.
-const SNAPSHOT: MediaSnapshot = {
+// Media travels in the request `media` sidecar (reference data), not in the event.
+const CACHED: CachedMedia = {
 	tmdbId: 603,
 	type: 'movie',
 	title: 'M',
 	year: 1999,
 	posterPath: null,
-	overview: ''
+	overview: '',
+	cachedAt: 100
 };
 
 let uuidCounter = 0;
@@ -106,18 +107,22 @@ describe('POST /api/sync guards', () => {
 });
 
 describe('POST /api/sync push + pull', () => {
-	it('persists a push and assigns monotonic seq from 1', async () => {
+	it('persists a push, caches sidecar media, and assigns monotonic sequence from 1', async () => {
 		const body: SyncRequest = {
 			deviceId: DEVICE,
 			cursor: 0,
-			events: [ev('tracking.added', { media: SNAPSHOT, status: 'watching' }, 100)]
+			events: [ev('tracking.added', { status: 'watching' }, 100)],
+			media: [CACHED]
 		};
 		const res = await post(reqEvent(db, { id: USER }, body));
 		expect(res.applied).toHaveLength(1);
 		expect(res.events).toHaveLength(1);
-		expect(res.events[0].seq).toBe(1);
+		expect(res.events[0].sequence).toBe(1);
 		expect(res.cursor).toBe(1);
 		expect(res.hasMore).toBe(false);
+		// The sidecar media was cached (reference data), keyed by our media id.
+		const [m] = await db.select().from(media).where(eq(media.id, MID));
+		expect(m).toMatchObject({ id: MID, title: 'M' });
 	});
 
 	it('dedupes by event id across requests', async () => {

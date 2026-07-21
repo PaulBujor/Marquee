@@ -4,33 +4,44 @@
  * pushes local events and pulls everything the client is missing since its cursor.
  */
 import { z } from 'zod';
-import { eventEnvelopeSchema, type EventEnvelope, type ServerEvent } from './events';
+import {
+	cachedMediaSchema,
+	eventEnvelopeSchema,
+	type CachedMedia,
+	type EventEnvelope,
+	type ServerEvent
+} from './events';
 
 /** Max events returned in one pull; the client loops on `hasMore` until drained. */
 export const SYNC_PAGE_SIZE = 500;
 
-/** Max events accepted in one push, to bound request size / work per invocation. */
+/** Max events (and media sidecar rows) accepted in one push, to bound work per invocation. */
 export const SYNC_MAX_PUSH = 1000;
 
 /** DTO for the `POST /api/sync` request body — the server parses against this authoritatively. */
 export const syncRequestSchema = z.object({
 	deviceId: z.string().min(1),
 	cursor: z.number().int().nonnegative(),
-	events: z.array(eventEnvelopeSchema).max(SYNC_MAX_PUSH)
+	events: z.array(eventEnvelopeSchema).max(SYNC_MAX_PUSH),
+	// Reference data, not events: the media the pushed events refer to, so the server can
+	// cache it for offline render. Defaults to none for a pull-only sync.
+	media: z.array(cachedMediaSchema).max(SYNC_MAX_PUSH).default([])
 });
 
 export interface SyncRequest {
 	deviceId: string;
-	/** Highest server `seq` the client already holds; pull returns events after it. */
+	/** Highest server `sequence` the client already holds; pull returns events after it. */
 	cursor: number;
 	/** Local unsynced events to push. May be empty for a pull-only sync. */
 	events: EventEnvelope[];
+	/** Media reference data for the pushed events (the catalog cache the server seeds). */
+	media: CachedMedia[];
 }
 
 export interface SyncResponse {
-	/** New cursor — the `seq` of the last returned event, or the request cursor if none. */
+	/** New cursor — the `sequence` of the last returned event, or the request cursor if none. */
 	cursor: number;
-	/** Events with `seq > request.cursor`, ascending, capped at {@link SYNC_PAGE_SIZE}. */
+	/** Events with `sequence > request.cursor`, ascending, capped at {@link SYNC_PAGE_SIZE}. */
 	events: ServerEvent[];
 	/** Ids the server accepted (including dedup no-ops) — the client clears these from its outbox. */
 	applied: string[];

@@ -5,7 +5,32 @@
  * pulled server state converge to the same result regardless of arrival order.
  */
 import { openDb, type ClientEpisodeWatch, type ClientTracking, type MarqueeDatabase } from './db';
-import type { EventEnvelope, EventPayloadMap } from '$lib/sync/events';
+import {
+	mediaId,
+	type EventEnvelope,
+	type EventPayloadMap,
+	type MediaSnapshot
+} from '$lib/sync/events';
+
+/**
+ * Cache a media snapshot in the local reference store (media is reference data, kept
+ * separate from the event log). LWW by `cachedAt` (epoch ms). Call this when adding a
+ * title so it renders offline; the sync engine (MRQ-43) pushes cached media as the
+ * request's `media` sidecar.
+ */
+export async function cacheMedia(
+	snapshot: MediaSnapshot,
+	cachedAt: number = Date.now()
+): Promise<void> {
+	const db = await openDb();
+	const id = mediaId(snapshot.type, snapshot.tmdbId);
+	const transaction = db.transaction('media', 'readwrite');
+	const current = await transaction.store.get(id);
+	if (!current || cachedAt >= current.updatedAt) {
+		await transaction.store.put({ id, ...snapshot, updatedAt: cachedAt });
+	}
+	await transaction.done;
+}
 
 /** Client episode key — no userId prefix (the store is already single-user). */
 function localEpisodeId(mediaId: string, season: number, episode: number): string {
@@ -44,43 +69,38 @@ async function upsertTracking(
 export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 	const db = await openDb();
 	const clock = event.clientCreatedAt;
-	const mediaId = event.entityId;
+	const entityId = event.entityId;
 
 	switch (event.type) {
 		case 'tracking.added': {
 			const payload = event.payload as EventPayloadMap['tracking.added'];
-			const transaction = db.transaction('media', 'readwrite');
-			const current = await transaction.store.get(mediaId);
-			if (!current || clock >= current.updatedAt) {
-				await transaction.store.put({ id: mediaId, ...payload.media, updatedAt: clock });
-			}
-			await transaction.done;
-			// Status and revive are independent LWW fields (mirrors the server): a stale
-			// add can't un-remove a title a newer removal tombstoned.
-			await upsertTracking(db, mediaId, clock, 'statusUpdatedAt', (t) => {
+			// Media is cached separately (see cacheMedia); an add only asserts tracking state.
+			// Status and revive are independent LWW fields (mirrors the server): a stale add
+			// can't un-remove a title a newer removal tombstoned.
+			await upsertTracking(db, entityId, clock, 'statusUpdatedAt', (t) => {
 				t.status = payload.status;
 			});
-			await upsertTracking(db, mediaId, clock, 'removedUpdatedAt', (t) => {
+			await upsertTracking(db, entityId, clock, 'removedUpdatedAt', (t) => {
 				t.removed = false;
 			});
 			break;
 		}
 		case 'tracking.status_changed': {
 			const payload = event.payload as EventPayloadMap['tracking.status_changed'];
-			await upsertTracking(db, mediaId, clock, 'statusUpdatedAt', (t) => {
+			await upsertTracking(db, entityId, clock, 'statusUpdatedAt', (t) => {
 				t.status = payload.status;
 			});
 			break;
 		}
 		case 'tracking.favorite_toggled': {
 			const payload = event.payload as EventPayloadMap['tracking.favorite_toggled'];
-			await upsertTracking(db, mediaId, clock, 'favoriteUpdatedAt', (t) => {
+			await upsertTracking(db, entityId, clock, 'favoriteUpdatedAt', (t) => {
 				t.favorite = payload.favorite;
 			});
 			break;
 		}
 		case 'tracking.removed': {
-			await upsertTracking(db, mediaId, clock, 'removedUpdatedAt', (t) => {
+			await upsertTracking(db, entityId, clock, 'removedUpdatedAt', (t) => {
 				t.removed = true;
 			});
 			break;
@@ -89,13 +109,13 @@ export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 		case 'episode.unwatched': {
 			const payload = event.payload as EventPayloadMap['episode.watched'];
 			const watched = event.type === 'episode.watched';
-			const id = localEpisodeId(mediaId, payload.season, payload.episode);
+			const id = localEpisodeId(entityId, payload.season, payload.episode);
 			const transaction = db.transaction('episodeWatches', 'readwrite');
 			const current = await transaction.store.get(id);
 			if (!current || clock >= current.updatedAt) {
 				const row: ClientEpisodeWatch = {
 					id,
-					mediaId,
+					mediaId: entityId,
 					season: payload.season,
 					episode: payload.episode,
 					watched,

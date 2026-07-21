@@ -143,18 +143,19 @@ export type EmailChangeToken = typeof emailChangeTokens.$inferSelect;
 /* ------------------------------------------------------------------ *
  * Offline & Sync — event-sourced tracking model.
  *
- * The append-only `events` log is the source of truth; `media`, `tracking`
- * and `episode_watches` are materialized *projections* of it (see
- * `src/lib/server/sync/projection.ts`). Unlike `users`, these tables have no
- * `updated_at` trigger: every write flows through the projection code, which
- * sets the LWW clocks explicitly — there are no raw-SQL edits to catch.
+ * The append-only `events` log is the source of truth for *what the user did*;
+ * `tracking` and `episode_watches` are materialized *projections* of it (see
+ * `src/lib/server/sync/projection.ts`). `media` is separate **reference data** —
+ * a catalog cache seeded from the sync request, not derived from the log. Unlike
+ * `users`, these tables have no `updated_at` trigger: every write flows through
+ * projection code, which sets the LWW clocks explicitly — no raw-SQL edits to catch.
  * ------------------------------------------------------------------ */
 
 /**
  * Append-only event log. The primary key is the **client-supplied** UUID (so it
  * has no `$defaultFn`), which is also the global dedup key — replaying a synced
- * event is a no-op. `seq` is a per-user monotonic counter assigned by the server
- * (see `syncState`); the client sync cursor is the highest `seq` it has pulled.
+ * event is a no-op. `sequence` is a per-user monotonic counter assigned by the server
+ * (see `syncState`); the client sync cursor is the highest `sequence` it has pulled.
  */
 export const events = sqliteTable(
 	'events',
@@ -163,7 +164,7 @@ export const events = sqliteTable(
 		userId: text('user_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
-		seq: integer('seq').notNull(),
+		sequence: integer('sequence').notNull(),
 		type: text('type', { enum: SYNC_EVENT_TYPES }).notNull(),
 		// The aggregate the event targets — the deterministic `mediaId` (`type:tmdbId`).
 		entityId: text('entity_id').notNull(),
@@ -181,25 +182,27 @@ export const events = sqliteTable(
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [uniqueIndex('events_user_seq_idx').on(table.userId, table.seq)]
+	(table) => [uniqueIndex('events_user_sequence_idx').on(table.userId, table.sequence)]
 );
 
 /**
  * Per-user sequence allocator. A single upsert-with-RETURNING against this row
- * atomically reserves a disjoint block of `seq` values, so concurrent sync
- * requests (separate Worker invocations) never collide on `events_user_seq_idx`.
+ * atomically reserves a disjoint block of `sequence` values, so concurrent sync
+ * requests (separate Worker invocations) never collide on `events_user_sequence_idx`.
  */
 export const syncState = sqliteTable('sync_state', {
 	userId: text('user_id')
 		.primaryKey()
 		.references(() => users.id, { onDelete: 'cascade' }),
-	lastSeq: integer('last_seq').notNull().default(0)
+	lastSequence: integer('last_sequence').notNull().default(0)
 });
 
 /**
- * Global media catalog cache (not user-scoped). Populated from the `MediaSnapshot`
- * carried by `tracking.added` events. Mirrors `MediaSearchResult`; TMDB remains the
- * real source, this is a display cache so tracked titles render offline.
+ * Global media catalog cache (not user-scoped) — **reference data, not a projection of
+ * the event log**. Populated from the `media` sidecar of the sync request (see
+ * `SyncRequest`), keyed by our media id, which events reference via `entityId`. Mirrors
+ * `MediaSearchResult`; TMDB remains the real source, this is a display cache so tracked
+ * titles render offline.
  */
 export const media = sqliteTable(
 	'media',
