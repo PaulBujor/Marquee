@@ -1,8 +1,8 @@
 import { error, json } from '@sveltejs/kit';
 import { and, eq, gt } from 'drizzle-orm';
 import { events as eventsTable } from '$lib/server/db/schema';
-import { applyEvents, applyMedia } from '$lib/server/sync/projection';
-import type { CachedMedia, EventEnvelope, ServerEvent } from '$lib/sync/events';
+import { applyEvents } from '$lib/server/sync/projection';
+import type { EventEnvelope, ServerEvent } from '$lib/sync/events';
 import { syncRequestSchema, SYNC_PAGE_SIZE, type SyncResponse } from '$lib/sync/protocol';
 import { problem, zodProblem } from '$lib/server/http/problem';
 import type { RequestHandler } from './$types';
@@ -23,10 +23,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return problem(400, 'Malformed request body', { detail: 'Body must be valid JSON.' });
 	const parsed = syncRequestSchema.safeParse(raw);
 	if (!parsed.success) return zodProblem(parsed.error);
-	const { cursor, events, media } = parsed.data;
+	const { cursor, events } = parsed.data;
 
-	// Media is reference data, applied independently of the (user-scoped) event log.
-	await applyMedia(locals.db, media as CachedMedia[]);
 	await applyEvents(locals.db, locals.user.id, events as EventEnvelope[]);
 
 	// Pull one extra row past the page size to detect whether more remain.

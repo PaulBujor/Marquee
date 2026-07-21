@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
-import { events as eventsTable, media, users } from '$lib/server/db/schema';
+import { events as eventsTable, users } from '$lib/server/db/schema';
 import {
 	mediaId,
-	type CachedMedia,
 	type EventEnvelope,
 	type EventPayloadMap,
 	type SyncEventType
@@ -19,17 +17,6 @@ type PostEvent = Parameters<typeof POST>[0];
 const USER = 'user-1';
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 const MID = mediaId('movie', 603);
-
-// Media travels in the request `media` sidecar (reference data), not in the event.
-const CACHED: CachedMedia = {
-	tmdbId: 603,
-	type: 'movie',
-	title: 'M',
-	year: 1999,
-	posterPath: null,
-	overview: '',
-	cachedAt: 100
-};
 
 let uuidCounter = 0;
 function nextUuid(): string {
@@ -107,12 +94,11 @@ describe('POST /api/sync guards', () => {
 });
 
 describe('POST /api/sync push + pull', () => {
-	it('persists a push, caches sidecar media, and assigns monotonic sequence from 1', async () => {
+	it('persists a push and assigns monotonic sequence from 1', async () => {
 		const body: SyncRequest = {
 			deviceId: DEVICE,
 			cursor: 0,
-			events: [ev('tracking.added', { status: 'watching' }, 100)],
-			media: [CACHED]
+			events: [ev('tracking.added', { status: 'watching' }, 100)]
 		};
 		const res = await post(reqEvent(db, { id: USER }, body));
 		expect(res.applied).toHaveLength(1);
@@ -120,9 +106,6 @@ describe('POST /api/sync push + pull', () => {
 		expect(res.events[0].sequence).toBe(1);
 		expect(res.cursor).toBe(1);
 		expect(res.hasMore).toBe(false);
-		// The sidecar media was cached (reference data), keyed by our media id.
-		const [m] = await db.select().from(media).where(eq(media.id, MID));
-		expect(m).toMatchObject({ id: MID, title: 'M' });
 	});
 
 	it('dedupes by event id across requests', async () => {

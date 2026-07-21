@@ -1,30 +1,21 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
-import { episodeWatches, media, tracking, users } from '$lib/server/db/schema';
+import { episodeWatches, events as eventsTable, tracking, users } from '$lib/server/db/schema';
 import {
 	mediaId,
 	trackingKey,
 	type EventEnvelope,
 	type EventPayloadMap,
-	type MediaSnapshot,
 	type SyncEventType
 } from '$lib/sync/events';
-import { applyEvents, applyMedia, rebuildProjection } from './projection';
+import { applyEvents, rebuildProjection } from './projection';
 
 type Db = ReturnType<typeof createTestDb>;
 
 const USER = 'user-1';
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 const MID = mediaId('movie', 603);
-const SNAPSHOT: MediaSnapshot = {
-	tmdbId: 603,
-	type: 'movie',
-	title: 'The Matrix',
-	year: 1999,
-	posterPath: '/m.jpg',
-	overview: 'x'
-};
 
 let uuidCounter = 0;
 function nextUuid(): string {
@@ -65,27 +56,10 @@ beforeEach(async () => {
 });
 
 describe('projectEvent via applyEvents', () => {
-	it('applyMedia caches media; tracking.added creates the tracking row', async () => {
-		await applyMedia(db, [{ ...SNAPSHOT, cachedAt: 100 }]);
-		const [m] = await db.select().from(media).where(eq(media.id, MID));
-		expect(m).toMatchObject({
-			id: MID,
-			tmdbId: 603,
-			type: 'movie',
-			title: 'The Matrix',
-			year: 1999
-		});
-
+	it('tracking.added creates the tracking row', async () => {
 		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, 100)]);
 		const t = await trackingRow(db);
 		expect(t).toMatchObject({ status: 'watching', removed: false });
-	});
-
-	it('applyMedia is last-write-wins by cachedAt', async () => {
-		await applyMedia(db, [{ ...SNAPSHOT, title: 'Newer', cachedAt: 200 }]);
-		await applyMedia(db, [{ ...SNAPSHOT, title: 'Stale', cachedAt: 100 }]);
-		const [m] = await db.select().from(media).where(eq(media.id, MID));
-		expect(m.title).toBe('Newer'); // older cachedAt loses
 	});
 
 	it('is idempotent — replaying the same event id is a no-op', async () => {
@@ -94,6 +68,17 @@ describe('projectEvent via applyEvents', () => {
 		const applied = await applyEvents(db, USER, [e]);
 		expect(applied).toHaveLength(0); // deduped
 		expect(await db.select().from(tracking)).toHaveLength(1);
+	});
+
+	it('scopes dedup per user — a colliding id from another user is not dropped', async () => {
+		const USER2 = 'user-2';
+		await db.insert(users).values({ id: USER2, email: 'u2@x.com', status: 'enabled' });
+		// Same event id, different users: the composite (user_id, id) PK keeps them distinct,
+		// so a forced/colliding UUID can't drop another user's event.
+		const shared = ev('tracking.status_changed', MID, { status: 'watching' }, 100);
+		expect(await applyEvents(db, USER, [shared])).toHaveLength(1);
+		expect(await applyEvents(db, USER2, [shared])).toHaveLength(1); // not deduped across users
+		expect(await db.select().from(eventsTable)).toHaveLength(2);
 	});
 
 	it('resolves status by last-write-wins in both arrival orders', async () => {

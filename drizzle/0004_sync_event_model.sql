@@ -11,7 +11,7 @@ CREATE TABLE `episode_watches` (
 --> statement-breakpoint
 CREATE INDEX `episode_watches_user_media_idx` ON `episode_watches` (`user_id`,`media_id`);--> statement-breakpoint
 CREATE TABLE `events` (
-	`id` text PRIMARY KEY NOT NULL,
+	`id` text NOT NULL,
 	`user_id` text NOT NULL,
 	`sequence` integer NOT NULL,
 	`type` text NOT NULL,
@@ -21,6 +21,7 @@ CREATE TABLE `events` (
 	`schema_version` integer DEFAULT 1 NOT NULL,
 	`client_created_at` integer NOT NULL,
 	`server_received_at` integer NOT NULL,
+	PRIMARY KEY(`user_id`, `id`),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint

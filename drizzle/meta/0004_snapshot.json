@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "eb4987dc-bd57-47ab-9dd8-3b05fe6b9e93",
+  "id": "8822bfaa-c402-493a-9925-4589f3fead28",
   "prevId": "14f717de-475a-4915-8b12-ca6c80d1db64",
   "tables": {
     "email_change_tokens": {
@@ -183,7 +183,7 @@
         "id": {
           "name": "id",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -277,7 +277,15 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "events_user_id_id_pk": {
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "name": "events_user_id_id_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },

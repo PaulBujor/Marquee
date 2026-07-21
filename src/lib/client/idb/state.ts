@@ -5,32 +5,7 @@
  * pulled server state converge to the same result regardless of arrival order.
  */
 import { openDb, type ClientEpisodeWatch, type ClientTracking, type MarqueeDatabase } from './db';
-import {
-	mediaId,
-	type EventEnvelope,
-	type EventPayloadMap,
-	type MediaSnapshot
-} from '$lib/sync/events';
-
-/**
- * Cache a media snapshot in the local reference store (media is reference data, kept
- * separate from the event log). LWW by `cachedAt` (epoch ms). Call this when adding a
- * title so it renders offline; the sync engine (MRQ-43) pushes cached media as the
- * request's `media` sidecar.
- */
-export async function cacheMedia(
-	snapshot: MediaSnapshot,
-	cachedAt: number = Date.now()
-): Promise<void> {
-	const db = await openDb();
-	const id = mediaId(snapshot.type, snapshot.tmdbId);
-	const transaction = db.transaction('media', 'readwrite');
-	const current = await transaction.store.get(id);
-	if (!current || cachedAt >= current.updatedAt) {
-		await transaction.store.put({ id, ...snapshot, updatedAt: cachedAt });
-	}
-	await transaction.done;
-}
+import type { EventEnvelope, EventPayloadMap } from '$lib/sync/events';
 
 /** Client episode key — no userId prefix (the store is already single-user). */
 function localEpisodeId(mediaId: string, season: number, episode: number): string {

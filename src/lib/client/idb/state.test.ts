@@ -4,21 +4,12 @@ import {
 	mediaId,
 	type EventEnvelope,
 	type EventPayloadMap,
-	type MediaSnapshot,
 	type SyncEventType
 } from '$lib/sync/events';
 import { openDb } from './db';
-import { applyEventToIdb, cacheMedia, getEpisodeWatches, getTracking } from './state';
+import { applyEventToIdb, getEpisodeWatches, getTracking } from './state';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
-const SNAPSHOT: MediaSnapshot = {
-	tmdbId: 1,
-	type: 'movie',
-	title: 'X',
-	year: 2000,
-	posterPath: null,
-	overview: ''
-};
 
 // Distinct mediaId per test — fake-indexeddb persists across a file's tests, so
 // isolating by key avoids cross-test interference without resetting the singleton.
@@ -62,11 +53,8 @@ describe('applyEventToIdb', () => {
 		MID = newMid();
 	});
 
-	it('caches media and materializes tracking from an add', async () => {
-		await cacheMedia({ ...SNAPSHOT, tmdbId: midCounter });
+	it('materializes tracking from an add', async () => {
 		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 100));
-		const db = await openDb();
-		expect(await db.get('media', MID)).toMatchObject({ id: MID, title: 'X' });
 		const tracked = await getTracking();
 		expect(tracked.find((t) => t.mediaId === MID)).toMatchObject({
 			status: 'watching',

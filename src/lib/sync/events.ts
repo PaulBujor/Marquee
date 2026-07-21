@@ -136,23 +136,6 @@ const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-
 const clientClock = z.number().int().positive().lt(4102444800000);
 const positiveInt = z.number().int().positive();
 
-/** Media reference row (see {@link MediaSnapshot}); also the shape of a sync `media` sidecar item. */
-export const mediaSnapshotSchema = z.object({
-	tmdbId: positiveInt,
-	type: z.enum(['movie', 'show']),
-	title: z.string().min(1),
-	year: z.number().int().nullable().default(null),
-	posterPath: z.string().nullable().default(null),
-	overview: z.string().default('')
-});
-
-/** A cached media row as pushed in the sync request's `media` sidecar (snapshot + cache clock). */
-export interface CachedMedia extends MediaSnapshot {
-	/** Epoch ms the client cached this snapshot — the LWW clock for the `media` reference cache. */
-	cachedAt: number;
-}
-export const cachedMediaSchema = mediaSnapshotSchema.extend({ cachedAt: clientClock });
-
 /** Payload schema per event type — the source of truth {@link EventPayloadMap} mirrors. */
 const payloadSchemas = {
 	'tracking.added': z.object({ status: z.enum(TRACKING_STATUSES) }),

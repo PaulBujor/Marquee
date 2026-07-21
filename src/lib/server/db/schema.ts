@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+	integer,
+	sqliteTable,
+	text,
+	index,
+	primaryKey,
+	uniqueIndex
+} from 'drizzle-orm/sqlite-core';
 // Relative (not `$lib`) so drizzle-kit's esbuild bundler resolves it outside Vite.
 import { SYNC_EVENT_TYPES, TRACKING_STATUSES } from '../../sync/events';
 
@@ -145,22 +152,25 @@ export type EmailChangeToken = typeof emailChangeTokens.$inferSelect;
  *
  * The append-only `events` log is the source of truth for *what the user did*;
  * `tracking` and `episode_watches` are materialized *projections* of it (see
- * `src/lib/server/sync/projection.ts`). `media` is separate **reference data** —
- * a catalog cache seeded from the sync request, not derived from the log. Unlike
+ * `src/lib/server/sync/projection.ts`). `media` is separate **reference data** — a
+ * catalog cache synced on its own parallel channel, not derived from the log. Unlike
  * `users`, these tables have no `updated_at` trigger: every write flows through
  * projection code, which sets the LWW clocks explicitly — no raw-SQL edits to catch.
  * ------------------------------------------------------------------ */
 
 /**
- * Append-only event log. The primary key is the **client-supplied** UUID (so it
- * has no `$defaultFn`), which is also the global dedup key — replaying a synced
- * event is a no-op. `sequence` is a per-user monotonic counter assigned by the server
- * (see `syncState`); the client sync cursor is the highest `sequence` it has pulled.
+ * Append-only event log. `id` is the **client-supplied** UUID (so it has no
+ * `$defaultFn`) and the per-user dedup key — replaying a synced event is a no-op. The
+ * primary key is **composite `(user_id, id)`**, not `id` alone: ids are client-minted and
+ * untrusted, so scoping by user means a forced or colliding UUID from one user can never
+ * collide with (and drop) another user's event — no id remapping needed. `sequence` is a
+ * per-user monotonic counter assigned by the server (see `syncState`); the client sync
+ * cursor is the highest `sequence` it has pulled.
  */
 export const events = sqliteTable(
 	'events',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
@@ -182,7 +192,10 @@ export const events = sqliteTable(
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [uniqueIndex('events_user_sequence_idx').on(table.userId, table.sequence)]
+	(table) => [
+		primaryKey({ columns: [table.userId, table.id] }),
+		uniqueIndex('events_user_sequence_idx').on(table.userId, table.sequence)
+	]
 );
 
 /**
@@ -199,10 +212,10 @@ export const syncState = sqliteTable('sync_state', {
 
 /**
  * Global media catalog cache (not user-scoped) — **reference data, not a projection of
- * the event log**. Populated from the `media` sidecar of the sync request (see
- * `SyncRequest`), keyed by our media id, which events reference via `entityId`. Mirrors
- * `MediaSearchResult`; TMDB remains the real source, this is a display cache so tracked
- * titles render offline.
+ * the event log**, keyed by our media id which events reference via `entityId`. Synced on
+ * a separate parallel channel (MRQ-111), never through `/api/sync`; scaffolding for now.
+ * Mirrors `MediaSearchResult`; TMDB remains the real source, this is a display cache so
+ * tracked titles render offline.
  */
 export const media = sqliteTable(
 	'media',

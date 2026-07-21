@@ -1,25 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-	cachedMediaSchema,
 	createEvent,
 	episodeKey,
 	EVENT_SCHEMA_VERSION,
 	mediaId,
 	trackingKey,
 	validateEvent,
-	type EventEnvelope,
-	type MediaSnapshot
+	type EventEnvelope
 } from './events';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
-const SNAPSHOT: MediaSnapshot = {
-	tmdbId: 603,
-	type: 'movie',
-	title: 'The Matrix',
-	year: 1999,
-	posterPath: '/m.jpg',
-	overview: 'x'
-};
 
 describe('key helpers', () => {
 	it('builds deterministic ids', () => {
@@ -83,15 +73,5 @@ describe('validateEvent', () => {
 				payload: { status: 'invalid' } // bad status
 			})
 		).toBeNull();
-	});
-});
-
-describe('cachedMediaSchema', () => {
-	it('accepts a snapshot plus a cache clock', () => {
-		expect(cachedMediaSchema.safeParse({ ...SNAPSHOT, cachedAt: 1000 }).success).toBe(true);
-	});
-
-	it('rejects a snapshot missing the cache clock', () => {
-		expect(cachedMediaSchema.safeParse(SNAPSHOT).success).toBe(false);
 	});
 });
