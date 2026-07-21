@@ -30,9 +30,12 @@ export interface ClientTracking {
 	mediaId: string;
 	status: TrackingStatus;
 	favorite: boolean;
+	/** Optional user rating 1–5; null = unrated. */
+	rating: number | null;
 	removed: boolean;
 	statusUpdatedAt: number;
 	favoriteUpdatedAt: number;
+	ratingUpdatedAt: number;
 	removedUpdatedAt: number;
 }
 

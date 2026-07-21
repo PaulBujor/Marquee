@@ -36,7 +36,10 @@ describe('validateEvent', () => {
 		const cases: EventEnvelope[] = [
 			createEvent('tracking.added', 'movie:603', { status: 'watching' }, DEVICE),
 			createEvent('tracking.status_changed', 'movie:603', { status: 'completed' }, DEVICE),
+			createEvent('tracking.status_changed', 'movie:603', { status: 'did_not_finish' }, DEVICE),
 			createEvent('tracking.favorite_toggled', 'movie:603', { favorite: false }, DEVICE),
+			createEvent('tracking.rated', 'movie:603', { rating: 5 }, DEVICE),
+			createEvent('tracking.rated', 'movie:603', { rating: null }, DEVICE),
 			createEvent('episode.watched', 'show:1396', { season: 1, episode: 2 }, DEVICE),
 			createEvent('episode.unwatched', 'show:1396', { season: 1, episode: 2 }, DEVICE),
 			createEvent('tracking.removed', 'movie:603', {}, DEVICE)
@@ -71,6 +74,19 @@ describe('validateEvent', () => {
 			validateEvent({
 				...createEvent('tracking.added', 'movie:603', { status: 'watching' }, DEVICE),
 				payload: { status: 'invalid' } // bad status
+			})
+		).toBeNull();
+		// rating out of the 1–5 range
+		expect(
+			validateEvent({
+				...createEvent('tracking.rated', 'movie:603', { rating: 5 }, DEVICE),
+				payload: { rating: 6 }
+			})
+		).toBeNull();
+		expect(
+			validateEvent({
+				...createEvent('tracking.rated', 'movie:603', { rating: 5 }, DEVICE),
+				payload: { rating: 0 }
 			})
 		).toBeNull();
 	});

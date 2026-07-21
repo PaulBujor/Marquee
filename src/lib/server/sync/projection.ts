@@ -138,6 +138,17 @@ export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 				)
 			];
 		}
+		case 'tracking.rated': {
+			const payload = event.payload as EventPayloadMap['tracking.rated'];
+			return [
+				trackingUpsert(
+					db,
+					event,
+					{ rating: payload.rating, ratingUpdatedAt: clock },
+					tracking.ratingUpdatedAt
+				)
+			];
+		}
 		case 'tracking.removed': {
 			return [
 				trackingUpsert(

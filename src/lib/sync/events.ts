@@ -11,8 +11,13 @@ import { z } from 'zod';
 /** Bumped when the envelope/payload shapes change, so future events can be migrated. */
 export const EVENT_SCHEMA_VERSION = 1;
 
-/** Tracking status for a title on a user's watchlist. */
-export const TRACKING_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
+/** Tracking status for a title on a user's watchlist (`did_not_finish` = started but abandoned). */
+export const TRACKING_STATUSES = [
+	'want_to_watch',
+	'watching',
+	'completed',
+	'did_not_finish'
+] as const;
 export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
 
 /**
@@ -33,6 +38,7 @@ export const SYNC_EVENT_TYPES = [
 	'tracking.added',
 	'tracking.status_changed',
 	'tracking.favorite_toggled',
+	'tracking.rated',
 	'tracking.removed',
 	'episode.watched',
 	'episode.unwatched'
@@ -60,6 +66,8 @@ export interface EventPayloadMap {
 	'tracking.added': { status: TrackingStatus };
 	'tracking.status_changed': { status: TrackingStatus };
 	'tracking.favorite_toggled': { favorite: boolean };
+	/** Optional user rating, 1–5; `null` clears it. */
+	'tracking.rated': { rating: number | null };
 	'tracking.removed': Record<string, never>;
 	'episode.watched': { season: number; episode: number };
 	'episode.unwatched': { season: number; episode: number };
@@ -141,6 +149,7 @@ const payloadSchemas = {
 	'tracking.added': z.object({ status: z.enum(TRACKING_STATUSES) }),
 	'tracking.status_changed': z.object({ status: z.enum(TRACKING_STATUSES) }),
 	'tracking.favorite_toggled': z.object({ favorite: z.boolean() }),
+	'tracking.rated': z.object({ rating: z.number().int().min(1).max(5).nullable() }),
 	'tracking.removed': z.object({}),
 	'episode.watched': z.object({ season: positiveInt, episode: positiveInt }),
 	'episode.unwatched': z.object({ season: positiveInt, episode: positiveInt })
@@ -171,6 +180,10 @@ export const eventEnvelopeSchema = z.discriminatedUnion('type', [
 	envelopeBase.extend({
 		type: z.literal('tracking.favorite_toggled'),
 		payload: payloadSchemas['tracking.favorite_toggled']
+	}),
+	envelopeBase.extend({
+		type: z.literal('tracking.rated'),
+		payload: payloadSchemas['tracking.rated']
 	}),
 	envelopeBase.extend({
 		type: z.literal('tracking.removed'),

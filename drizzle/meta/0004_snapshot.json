@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8822bfaa-c402-493a-9925-4589f3fead28",
+  "id": "5627a5e5-33d2-4732-8808-c4998cfc9149",
   "prevId": "14f717de-475a-4915-8b12-ca6c80d1db64",
   "tables": {
     "email_change_tokens": {
@@ -607,6 +607,13 @@
           "autoincrement": false,
           "default": false
         },
+        "rating": {
+          "name": "rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "removed": {
           "name": "removed",
           "type": "integer",
@@ -625,6 +632,14 @@
         },
         "favorite_updated_at": {
           "name": "favorite_updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "rating_updated_at": {
+          "name": "rating_updated_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

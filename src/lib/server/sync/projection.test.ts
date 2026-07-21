@@ -108,6 +108,15 @@ describe('projectEvent via applyEvents', () => {
 		expect(t.favorite).toBe(true);
 	});
 
+	it('rating is an independent LWW field (and clearable)', async () => {
+		await applyEvents(db, USER, [ev('tracking.status_changed', MID, { status: 'watching' }, 500)]);
+		await applyEvents(db, USER, [ev('tracking.rated', MID, { rating: 4 }, 100)]);
+		expect((await trackingRow(db)).rating).toBe(4); // set, independent of status
+		await applyEvents(db, USER, [ev('tracking.rated', MID, { rating: null }, 200)]);
+		expect((await trackingRow(db)).rating).toBeNull(); // newer null clears it
+		expect((await trackingRow(db)).status).toBe('watching'); // status untouched
+	});
+
 	it('episode watched/unwatched follows LWW', async () => {
 		await applyEvents(db, USER, [ev('episode.watched', MID, { season: 1, episode: 1 }, 200)]);
 		await applyEvents(db, USER, [ev('episode.unwatched', MID, { season: 1, episode: 1 }, 100)]);

@@ -76,6 +76,13 @@ describe('applyEventToIdb', () => {
 		expect(row?.favorite).toBe(true);
 	});
 
+	it('applies a rating and clears it by LWW', async () => {
+		await applyEventToIdb(ev('tracking.rated', MID, { rating: 5 }, 100));
+		expect((await trackingRow(MID))?.rating).toBe(5);
+		await applyEventToIdb(ev('tracking.rated', MID, { rating: null }, 200));
+		expect((await trackingRow(MID))?.rating).toBeNull();
+	});
+
 	it('applies episode watched/unwatched by LWW', async () => {
 		await applyEventToIdb(ev('episode.watched', MID, { season: 1, episode: 1 }, 200));
 		await applyEventToIdb(ev('episode.unwatched', MID, { season: 1, episode: 1 }, 100));

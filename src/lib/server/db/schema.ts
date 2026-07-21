@@ -256,9 +256,12 @@ export const tracking = sqliteTable(
 		mediaId: text('media_id').notNull(),
 		status: text('status', { enum: TRACKING_STATUSES }).notNull().default('want_to_watch'),
 		favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
+		// Optional user rating 1–5; null = unrated.
+		rating: integer('rating'),
 		removed: integer('removed', { mode: 'boolean' }).notNull().default(false),
 		statusUpdatedAt: integer('status_updated_at').notNull().default(0),
 		favoriteUpdatedAt: integer('favorite_updated_at').notNull().default(0),
+		ratingUpdatedAt: integer('rating_updated_at').notNull().default(0),
 		removedUpdatedAt: integer('removed_updated_at').notNull().default(0),
 		addedAt: integer('added_at', { mode: 'timestamp' })
 			.notNull()
