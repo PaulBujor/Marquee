@@ -3,12 +3,10 @@
  * (`media`, `tracking`, `episode_watches`). The log is authoritative; these
  * tables are strictly derivable from it (see {@link rebuildProjection}).
  *
- * Idempotency and conflict resolution are pushed **into SQL**: every projection
- * write is an upsert guarded by `... ON CONFLICT DO UPDATE SET ... WHERE <clock> >=
- * existing`, so re-applying an event is a no-op, an older event loses, and a newer
- * one wins — with no read-before-write. Conflicts resolve per **field** last-write-
- * wins keyed by the event's `clientCreatedAt` (epoch ms): each field carries its own
- * clock, so e.g. a stale re-add can't revive a title a newer removal tombstoned.
+ * Idempotency and conflict resolution live in SQL: every projection write is an
+ * upsert guarded by `ON CONFLICT DO UPDATE ... WHERE <clock> >= existing`, so
+ * re-applying an event is a no-op and conflicts resolve per **field** last-write-wins
+ * keyed by the event's `clientCreatedAt` (epoch ms) — no read-before-write needed.
  */
 import { eq, inArray, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
@@ -65,24 +63,23 @@ async function reserveSeqBlock(db: Db, userId: string, count: number): Promise<n
 }
 
 /**
- * Upsert one field-group of a user's tracking row under an LWW guard on `clockCol`.
- * `fields` seeds a fresh row (insert branch) and is the winning update (conflict
- * branch); `updatedAt` is bookkeeping and always refreshed.
+ * Upsert one field-group of a user's tracking row under an LWW guard on `clockColumn`.
+ * `fields` seeds a fresh row (insert branch) and is the winning update (conflict branch).
  */
 function trackingUpsert(
 	db: Db,
-	ev: ServerEvent,
+	event: ServerEvent,
 	fields: TrackingFields,
-	clockCol: SQLiteColumn
+	clockColumn: SQLiteColumn
 ): Statement {
-	const clock = ev.clientCreatedAt;
-	const tkey = trackingKey(ev.userId, ev.entityId);
+	const clock = event.clientCreatedAt;
+	const trackingId = trackingKey(event.userId, event.entityId);
 	return db
 		.insert(tracking)
 		.values({
-			id: tkey,
-			userId: ev.userId,
-			mediaId: ev.entityId,
+			id: trackingId,
+			userId: event.userId,
+			mediaId: event.entityId,
 			addedAt: new Date(clock),
 			updatedAt: new Date(clock),
 			...fields
@@ -90,78 +87,77 @@ function trackingUpsert(
 		.onConflictDoUpdate({
 			target: tracking.id,
 			set: { ...fields, updatedAt: new Date(clock) },
-			setWhere: sql`${clock} >= ${clockCol}`
+			setWhere: sql`${clock} >= ${clockColumn}`
 		});
 }
 
 /** Build the materialized-table upserts for a single (server-augmented) event. */
-export function projectEvent(db: Db, ev: ServerEvent): Statement[] {
-	const clock = ev.clientCreatedAt;
-	const mid = ev.entityId;
+export function projectEvent(db: Db, event: ServerEvent): Statement[] {
+	const clock = event.clientCreatedAt;
+	const mediaId = event.entityId;
 
-	switch (ev.type) {
+	switch (event.type) {
 		case 'tracking.added': {
-			const p = ev.payload as EventPayloadMap['tracking.added'];
+			const payload = event.payload as EventPayloadMap['tracking.added'];
 			return [
 				// Catalog cache (its own clock).
 				db
 					.insert(media)
 					.values({
-						id: mid,
-						tmdbId: p.media.tmdbId,
-						type: p.media.type,
-						title: p.media.title,
-						year: p.media.year,
-						posterPath: p.media.posterPath,
-						overview: p.media.overview,
+						id: mediaId,
+						tmdbId: payload.media.tmdbId,
+						type: payload.media.type,
+						title: payload.media.title,
+						year: payload.media.year,
+						posterPath: payload.media.posterPath,
+						overview: payload.media.overview,
 						updatedAt: clock
 					})
 					.onConflictDoUpdate({
 						target: media.id,
 						set: {
-							title: p.media.title,
-							year: p.media.year,
-							posterPath: p.media.posterPath,
-							overview: p.media.overview,
+							title: payload.media.title,
+							year: payload.media.year,
+							posterPath: payload.media.posterPath,
+							overview: payload.media.overview,
 							updatedAt: clock
 						},
 						setWhere: sql`${clock} >= ${media.updatedAt}`
 					}),
-				// Assert the status (status clock) and revive from any tombstone (removed
-				// clock) as two independent LWW fields — so a stale add can't un-remove a
-				// title that a newer removal deleted.
+				// Assert the status and revive from any tombstone as two independent LWW
+				// fields, so a stale add can't un-remove a title a newer removal deleted.
 				trackingUpsert(
 					db,
-					ev,
-					{ status: p.status, statusUpdatedAt: clock },
+					event,
+					{ status: payload.status, statusUpdatedAt: clock },
 					tracking.statusUpdatedAt
 				),
 				trackingUpsert(
 					db,
-					ev,
+					event,
 					{ removed: false, removedUpdatedAt: clock },
 					tracking.removedUpdatedAt
 				)
 			];
 		}
 		case 'tracking.status_changed': {
-			const p = ev.payload as EventPayloadMap['tracking.status_changed'];
+			const payload = event.payload as EventPayloadMap['tracking.status_changed'];
 			return [
 				trackingUpsert(
 					db,
-					ev,
-					{ status: p.status, statusUpdatedAt: clock },
+					event,
+					{ status: payload.status, statusUpdatedAt: clock },
 					tracking.statusUpdatedAt
 				)
 			];
 		}
 		case 'tracking.favorite_toggled': {
-			const p = ev.payload as EventPayloadMap['tracking.favorite_toggled'];
+			const payload = event.payload as EventPayloadMap['tracking.favorite_toggled'];
 			return [
 				trackingUpsert(
 					db,
-					ev,
-					{ favorite: p.favorite, favoriteUpdatedAt: clock },
+					event,
+					{ favorite: payload.favorite, favoriteUpdatedAt: clock },
 					tracking.favoriteUpdatedAt
 				)
 			];
@@ -170,7 +166,7 @@ export function projectEvent(db: Db, ev: ServerEvent): Statement[] {
 			return [
 				trackingUpsert(
 					db,
-					ev,
+					event,
 					{ removed: true, removedUpdatedAt: clock },
 					tracking.removedUpdatedAt
 				)
@@ -178,18 +174,18 @@ export function projectEvent(db: Db, ev: ServerEvent): Statement[] {
 		}
 		case 'episode.watched':
 		case 'episode.unwatched': {
-			const p = ev.payload as EventPayloadMap['episode.watched'];
-			const watched = ev.type === 'episode.watched';
-			const ekey = episodeKey(ev.userId, mid, p.season, p.episode);
+			const payload = event.payload as EventPayloadMap['episode.watched'];
+			const watched = event.type === 'episode.watched';
+			const episodeId = episodeKey(event.userId, mediaId, payload.season, payload.episode);
 			return [
 				db
 					.insert(episodeWatches)
 					.values({
-						id: ekey,
-						userId: ev.userId,
-						mediaId: mid,
-						season: p.season,
-						episode: p.episode,
+						id: episodeId,
+						userId: event.userId,
+						mediaId,
+						season: payload.season,
+						episode: payload.episode,
 						watched,
 						updatedAt: clock
 					})
@@ -204,35 +200,33 @@ export function projectEvent(db: Db, ev: ServerEvent): Statement[] {
 }
 
 /** The append-only log insert for one event (dedup by client uuid PK). */
-function insertEventStmt(db: Db, ev: ServerEvent): Statement {
+function insertEventStatement(db: Db, event: ServerEvent): Statement {
 	return db
 		.insert(eventsTable)
 		.values({
-			id: ev.id,
-			userId: ev.userId,
-			seq: ev.seq,
-			type: ev.type,
-			entityId: ev.entityId,
-			payload: JSON.stringify(ev.payload),
-			deviceId: ev.deviceId,
-			schemaVersion: ev.schemaVersion,
-			clientCreatedAt: ev.clientCreatedAt,
-			serverReceivedAt: new Date(ev.serverReceivedAt)
+			id: event.id,
+			userId: event.userId,
+			seq: event.seq,
+			type: event.type,
+			entityId: event.entityId,
+			payload: JSON.stringify(event.payload),
+			deviceId: event.deviceId,
+			schemaVersion: event.schemaVersion,
+			clientCreatedAt: event.clientCreatedAt,
+			serverReceivedAt: new Date(event.serverReceivedAt)
 		})
 		.onConflictDoNothing();
 }
 
 /**
  * Persist a batch of client events for a user and return them augmented with the
- * server-assigned `seq` (in `clientCreatedAt` order). Already-seen events (by id)
- * are dropped up front; the log insert is also `ON CONFLICT DO NOTHING` to absorb a
- * racing duplicate.
+ * server-assigned `seq` (in `clientCreatedAt` order). Already-seen events (by id) are
+ * dropped up front; the log insert is also `ON CONFLICT DO NOTHING` to absorb a race.
  *
- * Writes are chunked to respect D1's per-batch limits, but each event's log insert
- * and its projection stay in the **same** batch — so a mid-way failure can never
- * leave a persisted event whose projection was skipped (dedup would then never
- * re-apply it). A failed batch throws; earlier batches are already committed and
- * safe to re-receive (idempotent), later events stay unsynced and get retried.
+ * Writes are chunked for D1's per-batch limits, but each event's log insert and its
+ * projection stay in the **same** batch — so a mid-way failure can't leave a persisted
+ * event whose projection was skipped. Earlier batches are already committed and safe to
+ * re-receive (idempotent); later events stay unsynced and get retried.
  */
 export async function applyEvents(
 	db: Db,
@@ -251,7 +245,7 @@ export async function applyEvents(
 			.select({ id: eventsTable.id })
 			.from(eventsTable)
 			.where(inArray(eventsTable.id, ids));
-		for (const r of rows) seen.add(r.id);
+		for (const row of rows) seen.add(row.id);
 	}
 	const fresh = incoming.filter((e) => !seen.has(e.id));
 	if (fresh.length === 0) return [];
@@ -262,7 +256,7 @@ export async function applyEvents(
 	const start = highWater - fresh.length + 1;
 	const receivedAt = Date.now();
 
-	const server: ServerEvent[] = fresh.map((e, i) => ({
+	const serverEvents: ServerEvent[] = fresh.map((e, i) => ({
 		...e,
 		userId,
 		seq: start + i,
@@ -276,14 +270,14 @@ export async function applyEvents(
 			batch = [];
 		}
 	};
-	for (const ev of server) {
-		const stmts = [insertEventStmt(db, ev), ...projectEvent(db, ev)];
-		if (batch.length > 0 && batch.length + stmts.length > BATCH_STATEMENTS) await flush();
-		batch.push(...stmts);
+	for (const event of serverEvents) {
+		const statements = [insertEventStatement(db, event), ...projectEvent(db, event)];
+		if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) await flush();
+		batch.push(...statements);
 	}
 	await flush();
 
-	return server;
+	return serverEvents;
 }
 
 /**
@@ -309,7 +303,7 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 		}
 	};
 	for (const row of rows) {
-		const ev: ServerEvent = {
+		const event: ServerEvent = {
 			id: row.id,
 			userId: row.userId,
 			seq: row.seq,
@@ -321,9 +315,9 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 			schemaVersion: row.schemaVersion,
 			serverReceivedAt: row.serverReceivedAt.getTime()
 		};
-		const stmts = projectEvent(db, ev);
-		if (batch.length > 0 && batch.length + stmts.length > BATCH_STATEMENTS) await flush();
-		batch.push(...stmts);
+		const statements = projectEvent(db, event);
+		if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) await flush();
+		batch.push(...statements);
 	}
 	await flush();
 }

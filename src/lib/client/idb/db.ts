@@ -10,7 +10,11 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { EventEnvelope, MediaSnapshot, TrackingStatus } from '$lib/sync/events';
 
-/** An outbox event: the envelope plus a `synced` flag (0 = pending push, 1 = acked). */
+/**
+ * An outbox event: the envelope plus a `synced` flag (0 = pending push, 1 = acked).
+ * It's `0 | 1`, not a boolean, because the `by_synced` index queries unsynced rows and
+ * IndexedDB keys must be number/string/Date/array — a boolean can't be an index key.
+ */
 export interface OutboxEvent extends EventEnvelope {
 	synced: 0 | 1;
 }
@@ -53,6 +57,16 @@ export interface UpcomingEpisode {
 	cachedAt: number;
 }
 
+/** The `meta` key/value store's known keys and the type each maps to. */
+export interface MetaValues {
+	deviceId: string;
+	cursor: number;
+	userId: string;
+}
+export type MetaKey = keyof MetaValues;
+/** A single `meta` row — a known key paired with its typed value. */
+export type MetaEntry = { [K in MetaKey]: { key: K; value: MetaValues[K] } }[MetaKey];
+
 interface MarqueeDB extends DBSchema {
 	events: {
 		key: string;
@@ -63,7 +77,7 @@ interface MarqueeDB extends DBSchema {
 	media: { key: string; value: ClientMedia };
 	episodeWatches: { key: string; value: ClientEpisodeWatch; indexes: { by_media: string } };
 	upcoming: { key: string; value: UpcomingEpisode; indexes: { by_media: string } };
-	meta: { key: string; value: { key: string; value: unknown } };
+	meta: { key: MetaKey; value: MetaEntry };
 }
 
 export type MarqueeDatabase = IDBPDatabase<MarqueeDB>;

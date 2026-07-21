@@ -35,15 +35,15 @@ export async function getUnsynced(limit?: number): Promise<EventEnvelope[]> {
 export async function markSynced(ids: string[]): Promise<void> {
 	if (ids.length === 0) return;
 	const db = await openDb();
-	const tx = db.transaction('events', 'readwrite');
+	const transaction = db.transaction('events', 'readwrite');
 	await Promise.all(
 		ids.map(async (id) => {
-			const row = await tx.store.get(id);
+			const row = await transaction.store.get(id);
 			if (row) {
 				row.synced = 1;
-				await tx.store.put(row);
+				await transaction.store.put(row);
 			}
 		})
 	);
-	await tx.done;
+	await transaction.done;
 }

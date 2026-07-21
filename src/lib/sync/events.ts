@@ -6,6 +6,7 @@
  * same events defined here. This module is **client-safe** — no server-only
  * imports — so it can be imported from both `src/lib/server` and browser code.
  */
+import { z } from 'zod';
 
 /** Bumped when the envelope/payload shapes change, so future events can be migrated. */
 export const EVENT_SCHEMA_VERSION = 1;
@@ -15,10 +16,13 @@ export const TRACKING_STATUSES = ['want_to_watch', 'watching', 'completed'] as c
 export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
 
 /**
- * The kinds of events the foundation supports (enough to prove the pipeline).
- * `tracking.*` are the lifecycle of a watchlist entry; `episode.*` are per-episode
- * watched state. Adding a title is `tracking.added` (not `media.*`) — it carries a
- * media snapshot as payload, but the aggregate it acts on is the tracking entry.
+ * The kinds of events the foundation supports. `tracking.*` are the lifecycle of a
+ * watchlist entry; `episode.*` are per-episode watched state. Adding a title is
+ * `tracking.added` (it carries a media snapshot but acts on the tracking entry).
+ *
+ * Episodes get a `watched`/`unwatched` pair (a binary toggle reads cleaner than a
+ * boolean payload), while `status` is an enum, so it's one `status_changed` carrying
+ * the new value rather than an event per status.
  */
 export const SYNC_EVENT_TYPES = [
 	'tracking.added',
@@ -115,70 +119,77 @@ export function createEvent<T extends SyncEventType>(
 	};
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Permissive UUID shape (any version) — matches the ids `crypto.randomUUID` emits. */
+const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
 /**
- * Upper sanity bound for `clientCreatedAt` — Jan 1 2100 in epoch ms. `clientCreatedAt`
- * is the LWW clock, so a client clock set absurdly far ahead would otherwise win every
- * future merge and poison ordering; reject clearly bogus values. (Blast radius is only
- * the user's own data, so this is a robustness guard, not a security boundary.)
+ * `clientCreatedAt` is the LWW clock, so a clock set absurdly far ahead would win
+ * every future merge. Bound it below Jan 1 2100 (epoch ms) to reject bogus values.
  */
-const MAX_CLIENT_TIME = 4102444800000;
+const clientClock = z.number().int().positive().lt(4102444800000);
+const positiveInt = z.number().int().positive();
 
-function isPositiveInt(v: unknown): v is number {
-	return typeof v === 'number' && Number.isInteger(v) && v > 0;
-}
+const mediaSnapshotSchema = z.object({
+	tmdbId: positiveInt,
+	type: z.enum(['movie', 'show']),
+	title: z.string().min(1),
+	year: z.number().int().nullable().default(null),
+	posterPath: z.string().nullable().default(null),
+	overview: z.string().default('')
+});
 
-function isValidPayload(type: SyncEventType, payload: unknown): boolean {
-	if (typeof payload !== 'object' || payload === null) return false;
-	const p = payload as Record<string, unknown>;
-	switch (type) {
-		case 'tracking.added': {
-			const m = p.media as Record<string, unknown> | undefined;
-			return (
-				(TRACKING_STATUSES as readonly string[]).includes(p.status as string) &&
-				!!m &&
-				isPositiveInt(m.tmdbId) &&
-				(m.type === 'movie' || m.type === 'show') &&
-				typeof m.title === 'string'
-			);
-		}
-		case 'tracking.status_changed':
-			return (TRACKING_STATUSES as readonly string[]).includes(p.status as string);
-		case 'tracking.favorite_toggled':
-			return typeof p.favorite === 'boolean';
-		case 'episode.watched':
-		case 'episode.unwatched':
-			return isPositiveInt(p.season) && isPositiveInt(p.episode);
-		case 'tracking.removed':
-			return true;
-	}
-}
+/** Payload schema per event type — the source of truth {@link EventPayloadMap} mirrors. */
+const payloadSchemas = {
+	'tracking.added': z.object({ media: mediaSnapshotSchema, status: z.enum(TRACKING_STATUSES) }),
+	'tracking.status_changed': z.object({ status: z.enum(TRACKING_STATUSES) }),
+	'tracking.favorite_toggled': z.object({ favorite: z.boolean() }),
+	'tracking.removed': z.object({}),
+	'episode.watched': z.object({ season: positiveInt, episode: positiveInt }),
+	'episode.unwatched': z.object({ season: positiveInt, episode: positiveInt })
+} as const;
+
+const envelopeBase = z.object({
+	id: uuid,
+	entityId: z.string().min(1),
+	deviceId: uuid,
+	clientCreatedAt: clientClock,
+	schemaVersion: z.number()
+});
 
 /**
- * Validate an untrusted event (from the network or IndexedDB). Returns the typed
- * envelope when well-formed, else `null`. Re-run **server-side authoritatively** —
- * the client's own validation is only for early feedback (per the app's validate-on-
- * both-sides convention).
+ * Zod schema for an untrusted event envelope — a discriminated union on `type` so the
+ * payload is validated against the matching shape. Shared by the client (early feedback)
+ * and the server (authoritative re-validation, per the validate-on-both-sides convention).
  */
+export const eventEnvelopeSchema = z.discriminatedUnion('type', [
+	envelopeBase.extend({
+		type: z.literal('tracking.added'),
+		payload: payloadSchemas['tracking.added']
+	}),
+	envelopeBase.extend({
+		type: z.literal('tracking.status_changed'),
+		payload: payloadSchemas['tracking.status_changed']
+	}),
+	envelopeBase.extend({
+		type: z.literal('tracking.favorite_toggled'),
+		payload: payloadSchemas['tracking.favorite_toggled']
+	}),
+	envelopeBase.extend({
+		type: z.literal('tracking.removed'),
+		payload: payloadSchemas['tracking.removed']
+	}),
+	envelopeBase.extend({
+		type: z.literal('episode.watched'),
+		payload: payloadSchemas['episode.watched']
+	}),
+	envelopeBase.extend({
+		type: z.literal('episode.unwatched'),
+		payload: payloadSchemas['episode.unwatched']
+	})
+]);
+
+/** Validate an untrusted event; returns the typed envelope when well-formed, else `null`. */
 export function validateEvent(raw: unknown): EventEnvelope | null {
-	if (typeof raw !== 'object' || raw === null) return null;
-	const e = raw as Record<string, unknown>;
-	if (typeof e.id !== 'string' || !UUID_RE.test(e.id)) return null;
-	if (typeof e.deviceId !== 'string' || !UUID_RE.test(e.deviceId)) return null;
-	if (typeof e.type !== 'string' || !(SYNC_EVENT_TYPES as readonly string[]).includes(e.type)) {
-		return null;
-	}
-	if (typeof e.entityId !== 'string' || e.entityId.length === 0) return null;
-	if (
-		typeof e.clientCreatedAt !== 'number' ||
-		!Number.isInteger(e.clientCreatedAt) ||
-		e.clientCreatedAt <= 0 ||
-		e.clientCreatedAt >= MAX_CLIENT_TIME
-	) {
-		return null;
-	}
-	if (typeof e.schemaVersion !== 'number') return null;
-	if (!isValidPayload(e.type as SyncEventType, e.payload)) return null;
-	return e as unknown as EventEnvelope;
+	const result = eventEnvelopeSchema.safeParse(raw);
+	return result.success ? (result.data as EventEnvelope) : null;
 }

@@ -6,6 +6,7 @@ import {
 	mediaId,
 	type EventEnvelope,
 	type EventPayloadMap,
+	type MediaSnapshot,
 	type SyncEventType
 } from '$lib/sync/events';
 import type { SyncRequest, SyncResponse } from '$lib/sync/protocol';
@@ -17,6 +18,17 @@ type PostEvent = Parameters<typeof POST>[0];
 const USER = 'user-1';
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 const MID = mediaId('movie', 603);
+
+// `tracking.added` carries a full media snapshot so the server can seed its catalog
+// cache (title/year/poster) without a TMDB round-trip — hence the fields here.
+const SNAPSHOT: MediaSnapshot = {
+	tmdbId: 603,
+	type: 'movie',
+	title: 'M',
+	year: 1999,
+	posterPath: null,
+	overview: ''
+};
 
 let uuidCounter = 0;
 function nextUuid(): string {
@@ -81,11 +93,15 @@ describe('POST /api/sync guards', () => {
 		expect(err.status).toBe(503);
 	});
 
-	it('400 on a malformed event', async () => {
-		const err = await thrownBy(() =>
-			POST(reqEvent(db, { id: USER }, { deviceId: DEVICE, cursor: 0, events: [{ type: 'nope' }] }))
+	it('400 problem+json on a malformed event, collecting field errors', async () => {
+		const res = await POST(
+			reqEvent(db, { id: USER }, { deviceId: DEVICE, cursor: 0, events: [{ type: 'nope' }] })
 		);
-		expect(err.status).toBe(400);
+		expect(res.status).toBe(400);
+		expect(res.headers.get('content-type')).toContain('application/problem+json');
+		const body = (await res.json()) as { status: number; errors: { field: string }[] };
+		expect(body.status).toBe(400);
+		expect(body.errors.length).toBeGreaterThan(0);
 	});
 });
 
@@ -94,23 +110,7 @@ describe('POST /api/sync push + pull', () => {
 		const body: SyncRequest = {
 			deviceId: DEVICE,
 			cursor: 0,
-			events: [
-				ev(
-					'tracking.added',
-					{
-						media: {
-							tmdbId: 603,
-							type: 'movie',
-							title: 'M',
-							year: 1999,
-							posterPath: null,
-							overview: ''
-						},
-						status: 'watching'
-					},
-					100
-				)
-			]
+			events: [ev('tracking.added', { media: SNAPSHOT, status: 'watching' }, 100)]
 		};
 		const res = await post(reqEvent(db, { id: USER }, body));
 		expect(res.applied).toHaveLength(1);
