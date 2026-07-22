@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-	mediaId,
+	tmdbMediaId,
 	type EventEnvelope,
 	type EventPayloadMap,
 	type SyncEventType
@@ -16,7 +16,7 @@ const DEVICE = '11111111-1111-1111-1111-111111111111';
 let midCounter = 0;
 function newMid(): string {
 	midCounter += 1;
-	return mediaId('movie', midCounter);
+	return tmdbMediaId('movie', midCounter);
 }
 
 let uuidCounter = 0;

@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
 import { episodeWatches, events as eventsTable, tracking, users } from '$lib/server/db/schema';
 import {
-	mediaId,
+	tmdbMediaId,
 	trackingKey,
 	type EventEnvelope,
 	type EventPayloadMap,
@@ -15,7 +15,7 @@ type Db = ReturnType<typeof createTestDb>;
 
 const USER = 'user-1';
 const DEVICE = '11111111-1111-1111-1111-111111111111';
-const MID = mediaId('movie', 603);
+const MID = tmdbMediaId('movie', 603);
 
 let uuidCounter = 0;
 function nextUuid(): string {
