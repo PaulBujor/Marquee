@@ -76,7 +76,7 @@ export interface EventPayloadMap {
 /**
  * An event as produced and stored by a client. `id` is a client-generated UUID that
  * doubles as the global dedup key; `entityId` is the deterministic `mediaId` the event
- * targets. The client never sets `userId`/`seq` — the server assigns those on persist.
+ * targets. The client never sets `userId`/`sequence` — the server assigns those on persist.
  */
 export interface EventEnvelope<T extends SyncEventType = SyncEventType> {
 	id: string;
