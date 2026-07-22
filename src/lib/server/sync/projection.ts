@@ -196,7 +196,7 @@ function insertEventStatement(db: Db, event: ServerEvent): Statement {
 			sequence: event.sequence,
 			type: event.type,
 			entityId: event.entityId,
-			payload: JSON.stringify(event.payload),
+			payload: event.payload,
 			deviceId: event.deviceId,
 			schemaVersion: event.schemaVersion,
 			clientCreatedAt: event.clientCreatedAt,
@@ -206,20 +206,15 @@ function insertEventStatement(db: Db, event: ServerEvent): Statement {
 }
 
 /**
- * Persist a batch of client events for a user and return them augmented with the
- * server-assigned `sequence` (in `clientCreatedAt` order). Already-seen events (by id,
- * scoped to this user) are dropped up front; the log insert is also `ON CONFLICT DO
- * NOTHING` to absorb a race. Dedup is per-user because the events PK is `(user_id, id)`.
+ * Persist a user's incoming events and return them with their server-assigned `sequence`
+ * (in `clientCreatedAt` order). Dedup is per-user (PK is `(user_id, id)`): events already
+ * stored are dropped up front, and duplicate ids *within* the push are collapsed (first
+ * wins) — since only one row per id can persist, projecting a second would desync the
+ * materialized state from the log (breaks {@link rebuildProjection}).
  *
- * Duplicate ids *within* the push are also collapsed (first occurrence wins) before any
- * write: only one row per id can ever persist (composite PK), so projecting more than one
- * event for the same id would let the materialized state disagree with the log — breaking
- * the {@link rebuildProjection} invariant. Collapsing keeps projection and log in lockstep.
- *
- * Writes are chunked for D1's per-batch limits, but each event's log insert and its
- * projection stay in the **same** batch — so a mid-way failure can't leave a persisted
- * event whose projection was skipped. Earlier batches are already committed and safe to
- * re-receive (idempotent); later events stay unsynced and get retried.
+ * Each event's log insert and its projection share one batch (chunked for D1 limits), so a
+ * mid-way failure can't persist an event without its projection; committed batches are
+ * idempotent on retry, and uncommitted events stay unsynced.
  */
 export async function applyEvents(
 	db: Db,
@@ -307,7 +302,7 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 			sequence: row.sequence,
 			type: row.type,
 			entityId: row.entityId,
-			payload: JSON.parse(row.payload),
+			payload: row.payload,
 			deviceId: row.deviceId,
 			clientCreatedAt: row.clientCreatedAt,
 			schemaVersion: row.schemaVersion,

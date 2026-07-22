@@ -73,6 +73,9 @@ export interface EventPayloadMap {
 	'episode.unwatched': { season: number; episode: number };
 }
 
+/** Any event payload — the union of all per-type shapes (used to type the stored JSON column). */
+export type EventPayload = EventPayloadMap[SyncEventType];
+
 /**
  * An event as produced and stored by a client. `id` is a client-generated UUID that
  * doubles as the global dedup key; `entityId` is the deterministic `mediaId` the event

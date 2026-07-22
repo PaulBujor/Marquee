@@ -8,7 +8,7 @@ import {
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
 // Relative (not `$lib`) so drizzle-kit's esbuild bundler resolves it outside Vite.
-import { SYNC_EVENT_TYPES, TRACKING_STATUSES } from '../../sync/events';
+import { SYNC_EVENT_TYPES, TRACKING_STATUSES, type EventPayload } from '../../sync/events';
 
 /**
  * Account states for the gated (waitlist) auth flow:
@@ -178,8 +178,9 @@ export const events = sqliteTable(
 		type: text('type', { enum: SYNC_EVENT_TYPES }).notNull(),
 		// The aggregate the event targets — the deterministic `mediaId` (`type:tmdbId`).
 		entityId: text('entity_id').notNull(),
-		// JSON.stringify of the event payload (shape depends on `type`).
-		payload: text('payload').notNull(),
+		// Event payload as JSON — Drizzle (de)serializes it; SQLite has no native JSON
+		// type, so it's stored as text. Shape depends on `type` (see `EventPayloadMap`).
+		payload: text('payload', { mode: 'json' }).$type<EventPayload>().notNull(),
 		deviceId: text('device_id').notNull(),
 		schemaVersion: integer('schema_version').notNull().default(1),
 		// Epoch **ms** on the originating device — the LWW ordering clock. Plain integer

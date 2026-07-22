@@ -44,7 +44,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		sequence: row.sequence,
 		type: row.type,
 		entityId: row.entityId,
-		payload: JSON.parse(row.payload),
+		payload: row.payload,
 		deviceId: row.deviceId,
 		clientCreatedAt: row.clientCreatedAt,
 		schemaVersion: row.schemaVersion,
