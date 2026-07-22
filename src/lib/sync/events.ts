@@ -7,6 +7,7 @@
  * imports — so it can be imported from both `src/lib/server` and browser code.
  */
 import { z } from 'zod';
+import { v5 as uuidv5 } from 'uuid';
 
 /** Bumped when the envelope/payload shapes change, so future events can be migrated. */
 export const EVENT_SCHEMA_VERSION = 1;
@@ -101,9 +102,43 @@ export interface ServerEvent<T extends SyncEventType = SyncEventType> extends Ev
 	serverReceivedAt: number;
 }
 
-/** Deterministic id for a title in the catalog, e.g. `movie:603`. */
-export function mediaId(type: 'movie' | 'show', tmdbId: number): string {
-	return `${type}:${tmdbId}`;
+/** Metadata providers we can hydrate a title from. Custom (user-authored) media is a separate, deferred concern. */
+export const MEDIA_PROVIDERS = ['tmdb'] as const;
+export type MediaProvider = (typeof MEDIA_PROVIDERS)[number];
+
+/**
+ * How a media row is sourced: `linked` = provider-backed (shareable/crowdsourced),
+ * `custom` = user-authored (private). Only `linked` rows are ever surfaced to other users.
+ */
+export const MEDIA_SOURCES = ['linked', 'custom'] as const;
+export type MediaSource = (typeof MEDIA_SOURCES)[number];
+
+/**
+ * Fixed UUIDv5 namespace for Marquee media ids. **Never change this** — it would
+ * repoint every derived media id and orphan the events that reference them.
+ */
+const MEDIA_ID_NAMESPACE = 'b7c8e9a0-3f2d-4c1b-9e6a-8d5f4a2b1c0e';
+
+/**
+ * Our own, **provider-agnostic** media id: a deterministic UUIDv5 derived from
+ * `(provider, externalId)`. Every device derives the same id offline with no
+ * coordination, and switching providers (or becoming our own) needs no remap.
+ */
+export function mediaId(provider: MediaProvider, externalId: string): string {
+	return uuidv5(`${provider}:${externalId}`, MEDIA_ID_NAMESPACE);
+}
+
+/**
+ * TMDB's stable external id for a title — `${type}/${tmdbId}`. TMDB numbers movies
+ * and shows independently, so the bare number is ambiguous; the type disambiguates.
+ */
+export function tmdbExternalId(type: 'movie' | 'show', tmdbId: number): string {
+	return `${type}/${tmdbId}`;
+}
+
+/** Convenience: our media id for a TMDB-sourced title. */
+export function tmdbMediaId(type: 'movie' | 'show', tmdbId: number): string {
+	return mediaId('tmdb', tmdbExternalId(type, tmdbId));
 }
 
 /** Deterministic PK for a user's tracking row of a title. */
