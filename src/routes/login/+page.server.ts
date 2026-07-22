@@ -1,26 +1,20 @@
 import { fail, redirect } from '@sveltejs/kit';
 import {
-	CODE_REGEX,
 	CODE_TTL_MINUTES,
-	EMAIL_REGEX,
 	joinWaitlist,
 	LINK_TTL_MINUTES,
 	normalizeEmail,
 	requestSignIn,
 	setSessionCookie,
-	verifyCode,
-	type SignInMode
+	verifyCode
 } from '$lib/server/auth';
+import { codeField, emailField, firstError, signInModeField } from '$lib/validation';
 import { createEmailSender } from '$lib/server/email';
 import type { Actions, PageServerLoad } from './$types';
 
 const SERVICE_UNAVAILABLE = 'Service unavailable.';
 const INVALID_EMAIL = 'Enter a valid email address.';
 const SEND_FAILED = "We couldn't send the email right now. Please try again shortly.";
-
-function parseMode(value: FormDataEntryValue | null): SignInMode {
-	return value === 'standalone' ? 'standalone' : 'browser';
-}
 
 /** Map a `?error=` from the magic-link redirect to a message shown on the form. */
 function linkErrorMessage(error: string | null): string | null {
@@ -65,7 +59,10 @@ export const actions: Actions = {
 
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
-		if (!EMAIL_REGEX.test(email.trim())) return fail(400, { email, message: INVALID_EMAIL });
+		const parsedEmail = emailField.safeParse(email);
+		if (!parsedEmail.success) {
+			return fail(400, { email, message: firstError(parsedEmail.error) ?? INVALID_EMAIL });
+		}
 
 		const sender = createEmailSender(platform.env);
 		try {
@@ -74,7 +71,7 @@ export const actions: Actions = {
 				email,
 				sender,
 				origin: url.origin,
-				mode: parseMode(data.get('mode')),
+				mode: signInModeField.parse(data.get('mode')),
 				ip: getClientAddress()
 			});
 			return {
@@ -99,7 +96,7 @@ export const actions: Actions = {
 		// Display-only: echoed back so the combined browser card (link + code) survives a
 		// wrong code instead of collapsing to a code-only view. Verification ignores it.
 		const method = data.get('method') === 'link_and_code' ? 'link_and_code' : 'code';
-		if (!CODE_REGEX.test(code)) {
+		if (!codeField.safeParse(code).success) {
 			return fail(400, {
 				step: 'code' as const,
 				email,
@@ -134,7 +131,10 @@ export const actions: Actions = {
 
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
-		if (!EMAIL_REGEX.test(email.trim())) return fail(400, { email, message: INVALID_EMAIL });
+		const parsedEmail = emailField.safeParse(email);
+		if (!parsedEmail.success) {
+			return fail(400, { email, message: firstError(parsedEmail.error) ?? INVALID_EMAIL });
+		}
 
 		const sender = createEmailSender(platform.env);
 		try {
