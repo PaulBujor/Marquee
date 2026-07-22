@@ -74,7 +74,11 @@ describe('projectEvent via applyEvents', () => {
 		// Two events sharing an id but carrying different payloads. Only one row can persist
 		// (composite PK), so exactly one must be projected — else a rebuild would diverge.
 		const first = ev('tracking.status_changed', MID, { status: 'watching' }, 100);
-		const collidingId = { ...first, payload: { status: 'completed' as const }, clientCreatedAt: 200 };
+		const collidingId = {
+			...first,
+			payload: { status: 'completed' as const },
+			clientCreatedAt: 200
+		};
 		const applied = await applyEvents(db, USER, [first, collidingId]);
 		expect(applied).toHaveLength(1); // second dropped as a dup id
 		expect(await db.select().from(eventsTable)).toHaveLength(1);
