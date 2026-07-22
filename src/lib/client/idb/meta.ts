@@ -1,4 +1,4 @@
-/** `meta` store accessors: the durable `deviceId` and the sync `cursor`. */
+/** `meta` store accessors: the durable `deviceId`, the sync `cursor`, and the owning `userId`. */
 import { openDb, type MetaEntry, type MetaKey, type MetaValues } from './db';
 
 async function getMeta<K extends MetaKey>(key: K): Promise<MetaValues[K] | undefined> {
@@ -22,7 +22,7 @@ export async function getDeviceId(): Promise<string> {
 	return id;
 }
 
-/** Highest server `seq` pulled so far (0 = never synced). */
+/** Highest server `sequence` pulled so far (0 = never synced). */
 export async function getCursor(): Promise<number> {
 	return (await getMeta('cursor')) ?? 0;
 }

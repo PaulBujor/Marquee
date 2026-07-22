@@ -31,8 +31,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const rows = await locals.db
 		.select()
 		.from(eventsTable)
-		.where(and(eq(eventsTable.userId, locals.user.id), gt(eventsTable.seq, cursor)))
-		.orderBy(eventsTable.seq)
+		.where(and(eq(eventsTable.userId, locals.user.id), gt(eventsTable.sequence, cursor)))
+		.orderBy(eventsTable.sequence)
 		.limit(SYNC_PAGE_SIZE + 1);
 
 	const hasMore = rows.length > SYNC_PAGE_SIZE;
@@ -41,10 +41,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const pulled: ServerEvent[] = page.map((row) => ({
 		id: row.id,
 		userId: row.userId,
-		seq: row.seq,
+		sequence: row.sequence,
 		type: row.type,
 		entityId: row.entityId,
-		payload: JSON.parse(row.payload),
+		payload: row.payload,
 		deviceId: row.deviceId,
 		clientCreatedAt: row.clientCreatedAt,
 		schemaVersion: row.schemaVersion,
@@ -52,7 +52,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}));
 
 	const response: SyncResponse = {
-		cursor: pulled.length > 0 ? pulled[pulled.length - 1].seq : cursor,
+		cursor: pulled.length > 0 ? pulled[pulled.length - 1].sequence : cursor,
 		events: pulled,
 		// Ack every id the client sent (including dedup no-ops) so it can clear its outbox.
 		applied: events.map((e) => e.id),

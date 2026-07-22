@@ -38,6 +38,7 @@
 	},
 	"env": {
 		"preview": {
+			"name": "marquee-preview",
 			"d1_databases": [
 				{
 					"binding": "DB",

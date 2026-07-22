@@ -6,19 +6,10 @@ import {
 	mediaId,
 	trackingKey,
 	validateEvent,
-	type EventEnvelope,
-	type MediaSnapshot
+	type EventEnvelope
 } from './events';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
-const SNAPSHOT: MediaSnapshot = {
-	tmdbId: 603,
-	type: 'movie',
-	title: 'The Matrix',
-	year: 1999,
-	posterPath: '/m.jpg',
-	overview: 'x'
-};
 
 describe('key helpers', () => {
 	it('builds deterministic ids', () => {
@@ -43,11 +34,16 @@ describe('createEvent', () => {
 describe('validateEvent', () => {
 	it('accepts every well-formed event type', () => {
 		const cases: EventEnvelope[] = [
-			createEvent('tracking.added', 'movie:603', { media: SNAPSHOT, status: 'watching' }, DEVICE),
+			createEvent('tracking.added', 'movie:603', { status: 'watching' }, DEVICE),
 			createEvent('tracking.status_changed', 'movie:603', { status: 'completed' }, DEVICE),
+			createEvent('tracking.status_changed', 'movie:603', { status: 'did_not_finish' }, DEVICE),
 			createEvent('tracking.favorite_toggled', 'movie:603', { favorite: false }, DEVICE),
+			createEvent('tracking.rated', 'movie:603', { rating: 5 }, DEVICE),
+			createEvent('tracking.rated', 'movie:603', { rating: null }, DEVICE),
 			createEvent('episode.watched', 'show:1396', { season: 1, episode: 2 }, DEVICE),
 			createEvent('episode.unwatched', 'show:1396', { season: 1, episode: 2 }, DEVICE),
+			// Season 0 is valid — TMDB numbers Specials as season 0.
+			createEvent('episode.watched', 'show:1396', { season: 0, episode: 1 }, DEVICE),
 			createEvent('tracking.removed', 'movie:603', {}, DEVICE)
 		];
 		for (const ev of cases) expect(validateEvent(ev)).toEqual(ev);
@@ -76,15 +72,32 @@ describe('validateEvent', () => {
 				createEvent('episode.watched', 'show:1396', { season: 1.5, episode: 2 }, DEVICE)
 			)
 		).toBeNull();
+		// episode is 1-based (0 rejected); a negative season is rejected
+		expect(
+			validateEvent(createEvent('episode.watched', 'show:1396', { season: 1, episode: 0 }, DEVICE))
+		).toBeNull();
+		expect(
+			validateEvent(createEvent('episode.watched', 'show:1396', { season: -1, episode: 1 }, DEVICE))
+		).toBeNull();
+		// schemaVersion must be a positive integer
+		expect(validateEvent({ ...good, schemaVersion: 0 })).toBeNull();
 		expect(
 			validateEvent({
-				...createEvent(
-					'tracking.added',
-					'movie:603',
-					{ media: SNAPSHOT, status: 'watching' },
-					DEVICE
-				),
-				payload: { status: 'watching' } // missing media
+				...createEvent('tracking.added', 'movie:603', { status: 'watching' }, DEVICE),
+				payload: { status: 'invalid' } // bad status
+			})
+		).toBeNull();
+		// rating out of the 1–5 range
+		expect(
+			validateEvent({
+				...createEvent('tracking.rated', 'movie:603', { rating: 5 }, DEVICE),
+				payload: { rating: 6 }
+			})
+		).toBeNull();
+		expect(
+			validateEvent({
+				...createEvent('tracking.rated', 'movie:603', { rating: 5 }, DEVICE),
+				payload: { rating: 0 }
 			})
 		).toBeNull();
 	});

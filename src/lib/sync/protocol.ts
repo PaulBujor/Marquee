@@ -9,10 +9,14 @@ import { eventEnvelopeSchema, type EventEnvelope, type ServerEvent } from './eve
 /** Max events returned in one pull; the client loops on `hasMore` until drained. */
 export const SYNC_PAGE_SIZE = 500;
 
-/** Max events accepted in one push, to bound request size / work per invocation. */
+/** Max events accepted in one push, to bound work per invocation. */
 export const SYNC_MAX_PUSH = 1000;
 
-/** DTO for the `POST /api/sync` request body — the server parses against this authoritatively. */
+/**
+ * DTO for the `POST /api/sync` request body — the server parses against this authoritatively.
+ * Events only: media is reference data synced on a separate parallel channel (MRQ-111), never
+ * in the sync request.
+ */
 export const syncRequestSchema = z.object({
 	deviceId: z.string().min(1),
 	cursor: z.number().int().nonnegative(),
@@ -21,16 +25,16 @@ export const syncRequestSchema = z.object({
 
 export interface SyncRequest {
 	deviceId: string;
-	/** Highest server `seq` the client already holds; pull returns events after it. */
+	/** Highest server `sequence` the client already holds; pull returns events after it. */
 	cursor: number;
 	/** Local unsynced events to push. May be empty for a pull-only sync. */
 	events: EventEnvelope[];
 }
 
 export interface SyncResponse {
-	/** New cursor — the `seq` of the last returned event, or the request cursor if none. */
+	/** New cursor — the `sequence` of the last returned event, or the request cursor if none. */
 	cursor: number;
-	/** Events with `seq > request.cursor`, ascending, capped at {@link SYNC_PAGE_SIZE}. */
+	/** Events with `sequence > request.cursor`, ascending, capped at {@link SYNC_PAGE_SIZE}. */
 	events: ServerEvent[];
 	/** Ids the server accepted (including dedup no-ops) — the client clears these from its outbox. */
 	applied: string[];

@@ -1,9 +1,10 @@
 /**
  * Client-side IndexedDB: the offline store backing the sync pipeline. It holds an
  * `events` outbox (local events awaiting push) plus materialized `tracking` /
- * `media` / `episodeWatches` stores that are the client-side projection of the
- * same event log the server materializes. `upcoming` is provisioned now and
- * populated later by the Timeline epic; `meta` holds the `deviceId` and cursor.
+ * `episodeWatches` stores (the client-side projection of the same event log the
+ * server materializes) and a `media` reference cache (populated off a separate
+ * channel, not derived from events). `upcoming` is provisioned now and populated
+ * later by the Timeline epic; `meta` holds the `deviceId`, sync `cursor`, and `userId`.
  *
  * Client-safe (browser only) — never imported from server code.
  */
@@ -30,9 +31,12 @@ export interface ClientTracking {
 	mediaId: string;
 	status: TrackingStatus;
 	favorite: boolean;
+	/** Optional user rating 1–5; null = unrated. */
+	rating: number | null;
 	removed: boolean;
 	statusUpdatedAt: number;
 	favoriteUpdatedAt: number;
+	ratingUpdatedAt: number;
 	removedUpdatedAt: number;
 }
 

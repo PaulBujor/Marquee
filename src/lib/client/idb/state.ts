@@ -12,7 +12,8 @@ function localEpisodeId(mediaId: string, season: number, episode: number): strin
 	return `${mediaId}::s${season}e${episode}`;
 }
 
-type TrackingClock = 'statusUpdatedAt' | 'favoriteUpdatedAt' | 'removedUpdatedAt';
+type TrackingClock =
+	'statusUpdatedAt' | 'favoriteUpdatedAt' | 'ratingUpdatedAt' | 'removedUpdatedAt';
 
 /** Read-modify-write a tracking row under LWW guard on `clockField`. */
 async function upsertTracking(
@@ -27,9 +28,11 @@ async function upsertTracking(
 		mediaId,
 		status: 'want_to_watch',
 		favorite: false,
+		rating: null,
 		removed: false,
 		statusUpdatedAt: 0,
 		favoriteUpdatedAt: 0,
+		ratingUpdatedAt: 0,
 		removedUpdatedAt: 0
 	};
 	if (clock >= row[clockField]) {
@@ -44,43 +47,45 @@ async function upsertTracking(
 export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 	const db = await openDb();
 	const clock = event.clientCreatedAt;
-	const mediaId = event.entityId;
+	const entityId = event.entityId;
 
 	switch (event.type) {
 		case 'tracking.added': {
 			const payload = event.payload as EventPayloadMap['tracking.added'];
-			const transaction = db.transaction('media', 'readwrite');
-			const current = await transaction.store.get(mediaId);
-			if (!current || clock >= current.updatedAt) {
-				await transaction.store.put({ id: mediaId, ...payload.media, updatedAt: clock });
-			}
-			await transaction.done;
-			// Status and revive are independent LWW fields (mirrors the server): a stale
+			// Media is reference data, handled off the event log; an add only asserts tracking
+			// state. Status and revive are independent LWW fields (mirrors the server): a stale
 			// add can't un-remove a title a newer removal tombstoned.
-			await upsertTracking(db, mediaId, clock, 'statusUpdatedAt', (t) => {
+			await upsertTracking(db, entityId, clock, 'statusUpdatedAt', (t) => {
 				t.status = payload.status;
 			});
-			await upsertTracking(db, mediaId, clock, 'removedUpdatedAt', (t) => {
+			await upsertTracking(db, entityId, clock, 'removedUpdatedAt', (t) => {
 				t.removed = false;
 			});
 			break;
 		}
 		case 'tracking.status_changed': {
 			const payload = event.payload as EventPayloadMap['tracking.status_changed'];
-			await upsertTracking(db, mediaId, clock, 'statusUpdatedAt', (t) => {
+			await upsertTracking(db, entityId, clock, 'statusUpdatedAt', (t) => {
 				t.status = payload.status;
 			});
 			break;
 		}
 		case 'tracking.favorite_toggled': {
 			const payload = event.payload as EventPayloadMap['tracking.favorite_toggled'];
-			await upsertTracking(db, mediaId, clock, 'favoriteUpdatedAt', (t) => {
+			await upsertTracking(db, entityId, clock, 'favoriteUpdatedAt', (t) => {
 				t.favorite = payload.favorite;
 			});
 			break;
 		}
+		case 'tracking.rated': {
+			const payload = event.payload as EventPayloadMap['tracking.rated'];
+			await upsertTracking(db, entityId, clock, 'ratingUpdatedAt', (t) => {
+				t.rating = payload.rating;
+			});
+			break;
+		}
 		case 'tracking.removed': {
-			await upsertTracking(db, mediaId, clock, 'removedUpdatedAt', (t) => {
+			await upsertTracking(db, entityId, clock, 'removedUpdatedAt', (t) => {
 				t.removed = true;
 			});
 			break;
@@ -89,13 +94,13 @@ export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 		case 'episode.unwatched': {
 			const payload = event.payload as EventPayloadMap['episode.watched'];
 			const watched = event.type === 'episode.watched';
-			const id = localEpisodeId(mediaId, payload.season, payload.episode);
+			const id = localEpisodeId(entityId, payload.season, payload.episode);
 			const transaction = db.transaction('episodeWatches', 'readwrite');
 			const current = await transaction.store.get(id);
 			if (!current || clock >= current.updatedAt) {
 				const row: ClientEpisodeWatch = {
 					id,
-					mediaId,
+					mediaId: entityId,
 					season: payload.season,
 					episode: payload.episode,
 					watched,

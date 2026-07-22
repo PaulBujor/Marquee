@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "fc6567bd-ce0a-436f-8f81-652cc7a4cffc",
+  "id": "5627a5e5-33d2-4732-8808-c4998cfc9149",
   "prevId": "14f717de-475a-4915-8b12-ca6c80d1db64",
   "tables": {
     "email_change_tokens": {
@@ -183,7 +183,7 @@
         "id": {
           "name": "id",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -194,8 +194,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "seq": {
-          "name": "seq",
+        "sequence": {
+          "name": "sequence",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -253,11 +253,11 @@
         }
       },
       "indexes": {
-        "events_user_seq_idx": {
-          "name": "events_user_seq_idx",
+        "events_user_sequence_idx": {
+          "name": "events_user_sequence_idx",
           "columns": [
             "user_id",
-            "seq"
+            "sequence"
           ],
           "isUnique": true
         }
@@ -277,7 +277,15 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "events_user_id_id_pk": {
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "name": "events_user_id_id_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -530,8 +538,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "last_seq": {
-          "name": "last_seq",
+        "last_sequence": {
+          "name": "last_sequence",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -599,6 +607,13 @@
           "autoincrement": false,
           "default": false
         },
+        "rating": {
+          "name": "rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "removed": {
           "name": "removed",
           "type": "integer",
@@ -617,6 +632,14 @@
         },
         "favorite_updated_at": {
           "name": "favorite_updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "rating_updated_at": {
+          "name": "rating_updated_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

@@ -15,6 +15,7 @@
 	}: { user: PageData['user']; codeTtlMinutes: number; form: ActionData } = $props();
 
 	let submitting = $state(false);
+	let loggingOut = $state(false);
 	let code = $state('');
 	let codeForm = $state<HTMLFormElement | null>(null);
 
@@ -50,6 +51,15 @@
 			code = '';
 			// On success the account email changed; refetch so the header/page reflect it.
 			if (result.type === 'success') await invalidateAll();
+		};
+	};
+
+	// Logout redirects to /login; hold the button in a loading state until that navigation lands.
+	const trackLogout = () => {
+		loggingOut = true;
+		return async ({ update }: { update: () => Promise<void> }) => {
+			await update();
+			loggingOut = false;
 		};
 	};
 </script>
@@ -129,10 +139,15 @@
 	</Card.Content>
 	<Card.Footer class="border-t pt-4">
 		<!-- Sign out submits the existing root `?/logout` action (redirects to /login). -->
-		<form method="POST" action="/?/logout" use:enhance>
-			<Button type="submit" variant="ghost" class="px-0 text-destructive hover:text-destructive">
+		<form method="POST" action="/?/logout" use:enhance={trackLogout}>
+			<Button
+				type="submit"
+				variant="ghost"
+				disabled={loggingOut}
+				class="px-0 text-destructive hover:text-destructive"
+			>
 				<LogOutIcon class="size-4" />
-				Log out
+				{loggingOut ? 'Logging out…' : 'Log out'}
 			</Button>
 		</form>
 	</Card.Footer>

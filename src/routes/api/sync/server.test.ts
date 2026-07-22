@@ -6,7 +6,6 @@ import {
 	mediaId,
 	type EventEnvelope,
 	type EventPayloadMap,
-	type MediaSnapshot,
 	type SyncEventType
 } from '$lib/sync/events';
 import type { SyncRequest, SyncResponse } from '$lib/sync/protocol';
@@ -18,17 +17,6 @@ type PostEvent = Parameters<typeof POST>[0];
 const USER = 'user-1';
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 const MID = mediaId('movie', 603);
-
-// `tracking.added` carries a full media snapshot so the server can seed its catalog
-// cache (title/year/poster) without a TMDB round-trip — hence the fields here.
-const SNAPSHOT: MediaSnapshot = {
-	tmdbId: 603,
-	type: 'movie',
-	title: 'M',
-	year: 1999,
-	posterPath: null,
-	overview: ''
-};
 
 let uuidCounter = 0;
 function nextUuid(): string {
@@ -106,16 +94,16 @@ describe('POST /api/sync guards', () => {
 });
 
 describe('POST /api/sync push + pull', () => {
-	it('persists a push and assigns monotonic seq from 1', async () => {
+	it('persists a push and assigns monotonic sequence from 1', async () => {
 		const body: SyncRequest = {
 			deviceId: DEVICE,
 			cursor: 0,
-			events: [ev('tracking.added', { media: SNAPSHOT, status: 'watching' }, 100)]
+			events: [ev('tracking.added', { status: 'watching' }, 100)]
 		};
 		const res = await post(reqEvent(db, { id: USER }, body));
 		expect(res.applied).toHaveLength(1);
 		expect(res.events).toHaveLength(1);
-		expect(res.events[0].seq).toBe(1);
+		expect(res.events[0].sequence).toBe(1);
 		expect(res.cursor).toBe(1);
 		expect(res.hasMore).toBe(false);
 	});

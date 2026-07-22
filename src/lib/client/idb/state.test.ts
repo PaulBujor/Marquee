@@ -4,21 +4,12 @@ import {
 	mediaId,
 	type EventEnvelope,
 	type EventPayloadMap,
-	type MediaSnapshot,
 	type SyncEventType
 } from '$lib/sync/events';
 import { openDb } from './db';
 import { applyEventToIdb, getEpisodeWatches, getTracking } from './state';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
-const SNAPSHOT: MediaSnapshot = {
-	tmdbId: 1,
-	type: 'movie',
-	title: 'X',
-	year: 2000,
-	posterPath: null,
-	overview: ''
-};
 
 // Distinct mediaId per test — fake-indexeddb persists across a file's tests, so
 // isolating by key avoids cross-test interference without resetting the singleton.
@@ -62,17 +53,8 @@ describe('applyEventToIdb', () => {
 		MID = newMid();
 	});
 
-	it('materializes media + tracking from tracking.added', async () => {
-		await applyEventToIdb(
-			ev(
-				'tracking.added',
-				MID,
-				{ media: { ...SNAPSHOT, tmdbId: midCounter }, status: 'watching' },
-				100
-			)
-		);
-		const db = await openDb();
-		expect(await db.get('media', MID)).toMatchObject({ id: MID, title: 'X' });
+	it('materializes tracking from an add', async () => {
+		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 100));
 		const tracked = await getTracking();
 		expect(tracked.find((t) => t.mediaId === MID)).toMatchObject({
 			status: 'watching',
@@ -94,6 +76,13 @@ describe('applyEventToIdb', () => {
 		expect(row?.favorite).toBe(true);
 	});
 
+	it('applies a rating and clears it by LWW', async () => {
+		await applyEventToIdb(ev('tracking.rated', MID, { rating: 5 }, 100));
+		expect((await trackingRow(MID))?.rating).toBe(5);
+		await applyEventToIdb(ev('tracking.rated', MID, { rating: null }, 200));
+		expect((await trackingRow(MID))?.rating).toBeNull();
+	});
+
 	it('applies episode watched/unwatched by LWW', async () => {
 		await applyEventToIdb(ev('episode.watched', MID, { season: 1, episode: 1 }, 200));
 		await applyEventToIdb(ev('episode.unwatched', MID, { season: 1, episode: 1 }, 100));
@@ -103,23 +92,9 @@ describe('applyEventToIdb', () => {
 	});
 
 	it('does not undo a newer removal with an older re-add (revive fix mirror)', async () => {
-		await applyEventToIdb(
-			ev(
-				'tracking.added',
-				MID,
-				{ media: { ...SNAPSHOT, tmdbId: midCounter }, status: 'watching' },
-				100
-			)
-		);
+		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 100));
 		await applyEventToIdb(ev('tracking.removed', MID, {}, 300));
-		await applyEventToIdb(
-			ev(
-				'tracking.added',
-				MID,
-				{ media: { ...SNAPSHOT, tmdbId: midCounter }, status: 'watching' },
-				200
-			)
-		);
+		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 200));
 		expect((await trackingRow(MID))?.removed).toBe(true); // removal@300 still wins
 	});
 });

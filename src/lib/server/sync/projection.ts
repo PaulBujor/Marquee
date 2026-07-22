@@ -1,18 +1,18 @@
 /**
- * Server-side projection of the event log into the materialized tables
- * (`media`, `tracking`, `episode_watches`). The log is authoritative; these
- * tables are strictly derivable from it (see {@link rebuildProjection}).
+ * Server-side projection of the event log into the materialized user-state tables
+ * (`tracking`, `episode_watches`). The log is authoritative; those tables are strictly
+ * derivable from it (see {@link rebuildProjection}). Media is reference data synced on a
+ * separate parallel channel (MRQ-111), not through the event log — nothing here touches it.
  *
- * Idempotency and conflict resolution live in SQL: every projection write is an
- * upsert guarded by `ON CONFLICT DO UPDATE ... WHERE <clock> >= existing`, so
- * re-applying an event is a no-op and conflicts resolve per **field** last-write-wins
- * keyed by the event's `clientCreatedAt` (epoch ms) — no read-before-write needed.
+ * Idempotency and conflict resolution live in SQL: every write is an upsert guarded by
+ * `ON CONFLICT DO UPDATE ... WHERE <clock> >= existing`, so re-applying is a no-op and
+ * conflicts resolve per **field** last-write-wins keyed by `clientCreatedAt` (epoch ms).
  */
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { createDb } from '../db';
-import { episodeWatches, events as eventsTable, media, syncState, tracking } from '../db/schema';
+import { episodeWatches, events as eventsTable, syncState, tracking } from '../db/schema';
 import {
 	episodeKey,
 	trackingKey,
@@ -50,16 +50,16 @@ function runBatch(db: Db, statements: Statement[]): Promise<unknown[]> {
  * invocations receive disjoint blocks. Returns the new high-water mark; the
  * caller owns `[highWater - count + 1 .. highWater]`.
  */
-async function reserveSeqBlock(db: Db, userId: string, count: number): Promise<number> {
+async function reserveSequenceBlock(db: Db, userId: string, count: number): Promise<number> {
 	const [row] = await db
 		.insert(syncState)
-		.values({ userId, lastSeq: count })
+		.values({ userId, lastSequence: count })
 		.onConflictDoUpdate({
 			target: syncState.userId,
-			set: { lastSeq: sql`${syncState.lastSeq} + ${count}` }
+			set: { lastSequence: sql`${syncState.lastSequence} + ${count}` }
 		})
-		.returning({ lastSeq: syncState.lastSeq });
-	return row.lastSeq;
+		.returning({ lastSequence: syncState.lastSequence });
+	return row.lastSequence;
 }
 
 /**
@@ -91,41 +91,17 @@ function trackingUpsert(
 		});
 }
 
-/** Build the materialized-table upserts for a single (server-augmented) event. */
+/** Build the materialized user-state upserts for a single (server-augmented) event. */
 export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 	const clock = event.clientCreatedAt;
-	const mediaId = event.entityId;
 
 	switch (event.type) {
 		case 'tracking.added': {
 			const payload = event.payload as EventPayloadMap['tracking.added'];
+			// An add asserts the tracking entry: set the status and revive from any tombstone
+			// as two independent LWW fields, so a stale add can't un-remove a title a newer
+			// removal deleted. (Media is reference data, handled off the event log.)
 			return [
-				// Catalog cache (its own clock).
-				db
-					.insert(media)
-					.values({
-						id: mediaId,
-						tmdbId: payload.media.tmdbId,
-						type: payload.media.type,
-						title: payload.media.title,
-						year: payload.media.year,
-						posterPath: payload.media.posterPath,
-						overview: payload.media.overview,
-						updatedAt: clock
-					})
-					.onConflictDoUpdate({
-						target: media.id,
-						set: {
-							title: payload.media.title,
-							year: payload.media.year,
-							posterPath: payload.media.posterPath,
-							overview: payload.media.overview,
-							updatedAt: clock
-						},
-						setWhere: sql`${clock} >= ${media.updatedAt}`
-					}),
-				// Assert the status and revive from any tombstone as two independent LWW
-				// fields, so a stale add can't un-remove a title a newer removal deleted.
 				trackingUpsert(
 					db,
 					event,
@@ -162,6 +138,17 @@ export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 				)
 			];
 		}
+		case 'tracking.rated': {
+			const payload = event.payload as EventPayloadMap['tracking.rated'];
+			return [
+				trackingUpsert(
+					db,
+					event,
+					{ rating: payload.rating, ratingUpdatedAt: clock },
+					tracking.ratingUpdatedAt
+				)
+			];
+		}
 		case 'tracking.removed': {
 			return [
 				trackingUpsert(
@@ -176,14 +163,14 @@ export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 		case 'episode.unwatched': {
 			const payload = event.payload as EventPayloadMap['episode.watched'];
 			const watched = event.type === 'episode.watched';
-			const episodeId = episodeKey(event.userId, mediaId, payload.season, payload.episode);
+			const episodeId = episodeKey(event.userId, event.entityId, payload.season, payload.episode);
 			return [
 				db
 					.insert(episodeWatches)
 					.values({
 						id: episodeId,
 						userId: event.userId,
-						mediaId,
+						mediaId: event.entityId,
 						season: payload.season,
 						episode: payload.episode,
 						watched,
@@ -199,17 +186,17 @@ export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 	}
 }
 
-/** The append-only log insert for one event (dedup by client uuid PK). */
+/** The append-only log insert for one event (dedup by the composite `(user_id, id)` PK). */
 function insertEventStatement(db: Db, event: ServerEvent): Statement {
 	return db
 		.insert(eventsTable)
 		.values({
 			id: event.id,
 			userId: event.userId,
-			seq: event.seq,
+			sequence: event.sequence,
 			type: event.type,
 			entityId: event.entityId,
-			payload: JSON.stringify(event.payload),
+			payload: event.payload,
 			deviceId: event.deviceId,
 			schemaVersion: event.schemaVersion,
 			clientCreatedAt: event.clientCreatedAt,
@@ -219,14 +206,15 @@ function insertEventStatement(db: Db, event: ServerEvent): Statement {
 }
 
 /**
- * Persist a batch of client events for a user and return them augmented with the
- * server-assigned `seq` (in `clientCreatedAt` order). Already-seen events (by id) are
- * dropped up front; the log insert is also `ON CONFLICT DO NOTHING` to absorb a race.
+ * Persist a user's incoming events and return them with their server-assigned `sequence`
+ * (in `clientCreatedAt` order). Dedup is per-user (PK is `(user_id, id)`): events already
+ * stored are dropped up front, and duplicate ids *within* the push are collapsed (first
+ * wins) — since only one row per id can persist, projecting a second would desync the
+ * materialized state from the log (breaks {@link rebuildProjection}).
  *
- * Writes are chunked for D1's per-batch limits, but each event's log insert and its
- * projection stay in the **same** batch — so a mid-way failure can't leave a persisted
- * event whose projection was skipped. Earlier batches are already committed and safe to
- * re-receive (idempotent); later events stay unsynced and get retried.
+ * Each event's log insert and its projection share one batch (chunked for D1 limits), so a
+ * mid-way failure can't persist an event without its projection; committed batches are
+ * idempotent on retry, and uncommitted events stay unsynced.
  */
 export async function applyEvents(
 	db: Db,
@@ -235,31 +223,36 @@ export async function applyEvents(
 ): Promise<ServerEvent[]> {
 	if (incoming.length === 0) return [];
 
-	// Dedup, chunked to stay under D1's bound-parameter limit.
+	// Collapse duplicate ids within this push (keep first occurrence) — see the doc note.
+	const byId = new Map<string, EventEnvelope>();
+	for (const e of incoming) if (!byId.has(e.id)) byId.set(e.id, e);
+	const unique = [...byId.values()];
+
+	// Dedup within this user's events (PK is composite), chunked for D1's param limit.
 	const seen = new Set<string>();
 	for (const ids of chunk(
-		incoming.map((e) => e.id),
+		unique.map((e) => e.id),
 		DEDUP_CHUNK
 	)) {
 		const rows = await db
 			.select({ id: eventsTable.id })
 			.from(eventsTable)
-			.where(inArray(eventsTable.id, ids));
+			.where(and(eq(eventsTable.userId, userId), inArray(eventsTable.id, ids)));
 		for (const row of rows) seen.add(row.id);
 	}
-	const fresh = incoming.filter((e) => !seen.has(e.id));
+	const fresh = unique.filter((e) => !seen.has(e.id));
 	if (fresh.length === 0) return [];
 
-	// Assign seq in causal (clientCreatedAt) order.
+	// Assign sequence in causal (clientCreatedAt) order.
 	fresh.sort((a, b) => a.clientCreatedAt - b.clientCreatedAt);
-	const highWater = await reserveSeqBlock(db, userId, fresh.length);
+	const highWater = await reserveSequenceBlock(db, userId, fresh.length);
 	const start = highWater - fresh.length + 1;
 	const receivedAt = Date.now();
 
 	const serverEvents: ServerEvent[] = fresh.map((e, i) => ({
 		...e,
 		userId,
-		seq: start + i,
+		sequence: start + i,
 		serverReceivedAt: receivedAt
 	}));
 
@@ -281,9 +274,9 @@ export async function applyEvents(
 }
 
 /**
- * Recovery / test oracle: drop a user's materialized rows and rebuild them by
- * replaying the event log in `seq` order. The global `media` cache is left intact
- * (it's shared and derivable from every user's `tracking.added` events).
+ * Recovery / test oracle: drop a user's materialized rows and rebuild them by replaying
+ * the event log in `sequence` order. Media is reference data (not derived from the log),
+ * so it's untouched by a rebuild.
  */
 export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 	await db.delete(tracking).where(eq(tracking.userId, userId));
@@ -293,7 +286,7 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 		.select()
 		.from(eventsTable)
 		.where(eq(eventsTable.userId, userId))
-		.orderBy(eventsTable.seq);
+		.orderBy(eventsTable.sequence);
 
 	let batch: Statement[] = [];
 	const flush = async () => {
@@ -306,10 +299,10 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 		const event: ServerEvent = {
 			id: row.id,
 			userId: row.userId,
-			seq: row.seq,
+			sequence: row.sequence,
 			type: row.type,
 			entityId: row.entityId,
-			payload: JSON.parse(row.payload),
+			payload: row.payload,
 			deviceId: row.deviceId,
 			clientCreatedAt: row.clientCreatedAt,
 			schemaVersion: row.schemaVersion,

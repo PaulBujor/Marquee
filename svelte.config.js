@@ -20,9 +20,12 @@ const config = {
 				// docs these require 'unsafe-inline'. Google Fonts stylesheet is loaded in app.html.
 				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
 				'font-src': ['self', 'https://fonts.gstatic.com'],
-				// data: for inline/blur placeholders; TMDB poster host for when the TMDB client lands.
-				'img-src': ['self', 'data:', 'https://image.tmdb.org'],
+				// data: for inline/blur placeholders; TMDB host for posters/backdrops/cast; YouTube
+				// host for click-to-load trailer thumbnails.
+				'img-src': ['self', 'data:', 'https://image.tmdb.org', 'https://img.youtube.com'],
 				'connect-src': ['self'],
+				// The click-to-load trailer embeds a youtube-nocookie iframe only after the user opts in.
+				'frame-src': ['https://www.youtube-nocookie.com'],
 				'object-src': ['none'],
 				'base-uri': ['self'],
 				'frame-ancestors': ['none']

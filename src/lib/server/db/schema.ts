@@ -1,7 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+	integer,
+	sqliteTable,
+	text,
+	index,
+	primaryKey,
+	uniqueIndex
+} from 'drizzle-orm/sqlite-core';
 // Relative (not `$lib`) so drizzle-kit's esbuild bundler resolves it outside Vite.
-import { SYNC_EVENT_TYPES, TRACKING_STATUSES } from '../../sync/events';
+import { SYNC_EVENT_TYPES, TRACKING_STATUSES, type EventPayload } from '../../sync/events';
 
 /**
  * Account states for the gated (waitlist) auth flow:
@@ -143,63 +150,73 @@ export type EmailChangeToken = typeof emailChangeTokens.$inferSelect;
 /* ------------------------------------------------------------------ *
  * Offline & Sync — event-sourced tracking model.
  *
- * The append-only `events` log is the source of truth; `media`, `tracking`
- * and `episode_watches` are materialized *projections* of it (see
- * `src/lib/server/sync/projection.ts`). Unlike `users`, these tables have no
- * `updated_at` trigger: every write flows through the projection code, which
- * sets the LWW clocks explicitly — there are no raw-SQL edits to catch.
+ * The append-only `events` log is the source of truth for *what the user did*;
+ * `tracking` and `episode_watches` are materialized *projections* of it (see
+ * `src/lib/server/sync/projection.ts`). `media` is separate **reference data** — a
+ * catalog cache synced on its own parallel channel, not derived from the log. Unlike
+ * `users`, these tables have no `updated_at` trigger: every write flows through
+ * projection code, which sets the LWW clocks explicitly — no raw-SQL edits to catch.
  * ------------------------------------------------------------------ */
 
 /**
- * Append-only event log. The primary key is the **client-supplied** UUID (so it
- * has no `$defaultFn`), which is also the global dedup key — replaying a synced
- * event is a no-op. `seq` is a per-user monotonic counter assigned by the server
- * (see `syncState`); the client sync cursor is the highest `seq` it has pulled.
+ * Append-only event log. `id` is the **client-supplied** UUID (so it has no
+ * `$defaultFn`) and the per-user dedup key — replaying a synced event is a no-op. The
+ * primary key is **composite `(user_id, id)`**, not `id` alone: ids are client-minted and
+ * untrusted, so scoping by user means a forced or colliding UUID from one user can never
+ * collide with (and drop) another user's event — no id remapping needed. `sequence` is a
+ * per-user monotonic counter assigned by the server (see `syncState`); the client sync
+ * cursor is the highest `sequence` it has pulled.
  */
 export const events = sqliteTable(
 	'events',
 	{
-		id: text('id').primaryKey(),
+		id: text('id').notNull(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
-		seq: integer('seq').notNull(),
+		sequence: integer('sequence').notNull(),
 		type: text('type', { enum: SYNC_EVENT_TYPES }).notNull(),
 		// The aggregate the event targets — the deterministic `mediaId` (`type:tmdbId`).
 		entityId: text('entity_id').notNull(),
-		// JSON.stringify of the event payload (shape depends on `type`).
-		payload: text('payload').notNull(),
+		// Event payload as JSON — Drizzle (de)serializes it; SQLite has no native JSON
+		// type, so it's stored as text. Shape depends on `type` (see `EventPayloadMap`).
+		payload: text('payload', { mode: 'json' }).$type<EventPayload>().notNull(),
 		deviceId: text('device_id').notNull(),
 		schemaVersion: integer('schema_version').notNull().default(1),
 		// Epoch **ms** on the originating device — the LWW ordering clock. Plain integer
 		// (not `timestamp` mode, which is Unix seconds) to preserve millisecond precision.
 		clientCreatedAt: integer('client_created_at').notNull(),
 		// Audit-only wall-clock; `timestamp` mode stores Unix seconds, so it's coarser
-		// than the ms `clientCreatedAt`. Not used for ordering or LWW (that's `seq` /
+		// than the ms `clientCreatedAt`. Not used for ordering or LWW (that's `sequence` /
 		// `clientCreatedAt`), so the reduced precision is fine.
 		serverReceivedAt: integer('server_received_at', { mode: 'timestamp' })
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [uniqueIndex('events_user_seq_idx').on(table.userId, table.seq)]
+	(table) => [
+		primaryKey({ columns: [table.userId, table.id] }),
+		uniqueIndex('events_user_sequence_idx').on(table.userId, table.sequence)
+	]
 );
 
 /**
  * Per-user sequence allocator. A single upsert-with-RETURNING against this row
- * atomically reserves a disjoint block of `seq` values, so concurrent sync
- * requests (separate Worker invocations) never collide on `events_user_seq_idx`.
+ * atomically reserves a disjoint block of `sequence` values, so concurrent sync
+ * requests (separate Worker invocations) never collide on `events_user_sequence_idx`.
  */
 export const syncState = sqliteTable('sync_state', {
 	userId: text('user_id')
 		.primaryKey()
 		.references(() => users.id, { onDelete: 'cascade' }),
-	lastSeq: integer('last_seq').notNull().default(0)
+	lastSequence: integer('last_sequence').notNull().default(0)
 });
 
 /**
- * Global media catalog cache (not user-scoped). Populated from the `MediaSnapshot`
- * carried by `tracking.added` events. Mirrors `MediaSearchResult`; TMDB remains the
- * real source, this is a display cache so tracked titles render offline.
+ * Global media catalog cache (not user-scoped) — **reference data, not a projection of
+ * the event log**, keyed by our media id which events reference via `entityId`. Synced on
+ * a separate parallel channel (MRQ-111), never through `/api/sync`; scaffolding for now.
+ * Mirrors `MediaSearchResult`; TMDB remains the real source, this is a display cache so
+ * tracked titles render offline.
  */
 export const media = sqliteTable(
 	'media',
@@ -240,9 +257,12 @@ export const tracking = sqliteTable(
 		mediaId: text('media_id').notNull(),
 		status: text('status', { enum: TRACKING_STATUSES }).notNull().default('want_to_watch'),
 		favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
+		// Optional user rating 1–5; null = unrated.
+		rating: integer('rating'),
 		removed: integer('removed', { mode: 'boolean' }).notNull().default(false),
 		statusUpdatedAt: integer('status_updated_at').notNull().default(0),
 		favoriteUpdatedAt: integer('favorite_updated_at').notNull().default(0),
+		ratingUpdatedAt: integer('rating_updated_at').notNull().default(0),
 		removedUpdatedAt: integer('removed_updated_at').notNull().default(0),
 		addedAt: integer('added_at', { mode: 'timestamp' })
 			.notNull()

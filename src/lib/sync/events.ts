@@ -11,23 +11,34 @@ import { z } from 'zod';
 /** Bumped when the envelope/payload shapes change, so future events can be migrated. */
 export const EVENT_SCHEMA_VERSION = 1;
 
-/** Tracking status for a title on a user's watchlist. */
-export const TRACKING_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
+/** Tracking status for a title on a user's watchlist (`did_not_finish` = started but abandoned). */
+export const TRACKING_STATUSES = [
+	'want_to_watch',
+	'watching',
+	'completed',
+	'did_not_finish'
+] as const;
 export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
 
 /**
- * The kinds of events the foundation supports. `tracking.*` are the lifecycle of a
- * watchlist entry; `episode.*` are per-episode watched state. Adding a title is
- * `tracking.added` (it carries a media snapshot but acts on the tracking entry).
+ * The kinds of events the foundation supports. Events record only *what the user did*;
+ * media metadata is separate reference data (see {@link MediaSnapshot}). `tracking.*`
+ * are the lifecycle of a watchlist entry, keyed to a title by `entityId` (our media id);
+ * `episode.*` are per-episode watched state.
  *
- * Episodes get a `watched`/`unwatched` pair (a binary toggle reads cleaner than a
+ * Episodes keep a `watched`/`unwatched` pair (a binary toggle reads cleaner than a
  * boolean payload), while `status` is an enum, so it's one `status_changed` carrying
  * the new value rather than an event per status.
+ *
+ * Future: re-watches (a completed title marked watching again, its episodes re-watched)
+ * will need a richer episode model than a single boolean — likely a watch-session or
+ * count dimension, added via a `schemaVersion` bump. Not supported yet.
  */
 export const SYNC_EVENT_TYPES = [
 	'tracking.added',
 	'tracking.status_changed',
 	'tracking.favorite_toggled',
+	'tracking.rated',
 	'tracking.removed',
 	'episode.watched',
 	'episode.unwatched'
@@ -35,9 +46,11 @@ export const SYNC_EVENT_TYPES = [
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
 
 /**
- * A minimal media descriptor carried by `tracking.added` so the server can populate
- * its catalog cache without a TMDB round-trip. Mirrors `MediaSearchResult`
- * (`src/lib/server/tmdb/types.ts`) — TMDB stays the real source, this is display cache.
+ * A minimal media descriptor. Media is *reference data*, synced on a separate parallel
+ * channel (MRQ-111) — **never** inside the `/api/sync` request, which carries events only.
+ * Events refer to a title by `entityId` (our media id), never by embedding this. Mirrors
+ * `MediaSearchResult` (`src/lib/server/tmdb/types.ts`) — TMDB stays the real source, this is
+ * a display cache the client holds for offline rendering.
  */
 export interface MediaSnapshot {
 	tmdbId: number;
@@ -50,18 +63,23 @@ export interface MediaSnapshot {
 
 /** Payload shape per event type — the discriminated union that drives projection. */
 export interface EventPayloadMap {
-	'tracking.added': { media: MediaSnapshot; status: TrackingStatus };
+	'tracking.added': { status: TrackingStatus };
 	'tracking.status_changed': { status: TrackingStatus };
 	'tracking.favorite_toggled': { favorite: boolean };
+	/** Optional user rating, 1–5; `null` clears it. */
+	'tracking.rated': { rating: number | null };
 	'tracking.removed': Record<string, never>;
 	'episode.watched': { season: number; episode: number };
 	'episode.unwatched': { season: number; episode: number };
 }
 
+/** Any event payload — the union of all per-type shapes (used to type the stored JSON column). */
+export type EventPayload = EventPayloadMap[SyncEventType];
+
 /**
  * An event as produced and stored by a client. `id` is a client-generated UUID that
  * doubles as the global dedup key; `entityId` is the deterministic `mediaId` the event
- * targets. The client never sets `userId`/`seq` — the server assigns those on persist.
+ * targets. The client never sets `userId`/`sequence` — the server assigns those on persist.
  */
 export interface EventEnvelope<T extends SyncEventType = SyncEventType> {
 	id: string;
@@ -77,8 +95,8 @@ export interface EventEnvelope<T extends SyncEventType = SyncEventType> {
 /** The persisted shape the server returns on pull: an envelope augmented with server-assigned fields. */
 export interface ServerEvent<T extends SyncEventType = SyncEventType> extends EventEnvelope<T> {
 	userId: string;
-	/** Per-user monotonic sequence assigned by the server; the sync cursor is the highest seq pulled. */
-	seq: number;
+	/** Per-user monotonic sequence assigned by the server; the sync cursor is the highest pulled. */
+	sequence: number;
 	/** Epoch ms the server received the event. */
 	serverReceivedAt: number;
 }
@@ -127,25 +145,19 @@ const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-
  * every future merge. Bound it below Jan 1 2100 (epoch ms) to reject bogus values.
  */
 const clientClock = z.number().int().positive().lt(4102444800000);
-const positiveInt = z.number().int().positive();
-
-const mediaSnapshotSchema = z.object({
-	tmdbId: positiveInt,
-	type: z.enum(['movie', 'show']),
-	title: z.string().min(1),
-	year: z.number().int().nullable().default(null),
-	posterPath: z.string().nullable().default(null),
-	overview: z.string().default('')
-});
+// Season may be 0 — TMDB numbers Specials as season 0 — but the episode within it is 1-based.
+const seasonNumber = z.number().int().nonnegative();
+const episodeNumber = z.number().int().positive();
 
 /** Payload schema per event type — the source of truth {@link EventPayloadMap} mirrors. */
 const payloadSchemas = {
-	'tracking.added': z.object({ media: mediaSnapshotSchema, status: z.enum(TRACKING_STATUSES) }),
+	'tracking.added': z.object({ status: z.enum(TRACKING_STATUSES) }),
 	'tracking.status_changed': z.object({ status: z.enum(TRACKING_STATUSES) }),
 	'tracking.favorite_toggled': z.object({ favorite: z.boolean() }),
+	'tracking.rated': z.object({ rating: z.number().int().min(1).max(5).nullable() }),
 	'tracking.removed': z.object({}),
-	'episode.watched': z.object({ season: positiveInt, episode: positiveInt }),
-	'episode.unwatched': z.object({ season: positiveInt, episode: positiveInt })
+	'episode.watched': z.object({ season: seasonNumber, episode: episodeNumber }),
+	'episode.unwatched': z.object({ season: seasonNumber, episode: episodeNumber })
 } as const;
 
 const envelopeBase = z.object({
@@ -153,7 +165,7 @@ const envelopeBase = z.object({
 	entityId: z.string().min(1),
 	deviceId: uuid,
 	clientCreatedAt: clientClock,
-	schemaVersion: z.number()
+	schemaVersion: z.number().int().positive()
 });
 
 /**
@@ -173,6 +185,10 @@ export const eventEnvelopeSchema = z.discriminatedUnion('type', [
 	envelopeBase.extend({
 		type: z.literal('tracking.favorite_toggled'),
 		payload: payloadSchemas['tracking.favorite_toggled']
+	}),
+	envelopeBase.extend({
+		type: z.literal('tracking.rated'),
+		payload: payloadSchemas['tracking.rated']
 	}),
 	envelopeBase.extend({
 		type: z.literal('tracking.removed'),
