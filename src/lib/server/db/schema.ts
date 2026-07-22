@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text, index } from 'drizzle-orm/sqlite-core';
+import {
+	integer,
+	sqliteTable,
+	text,
+	index,
+	primaryKey,
+	uniqueIndex
+} from 'drizzle-orm/sqlite-core';
+// Relative (not `$lib`) so drizzle-kit's esbuild bundler resolves it outside Vite.
+import { SYNC_EVENT_TYPES, TRACKING_STATUSES, type EventPayload } from '../../sync/events';
 
 /**
  * Account states for the gated (waitlist) auth flow:
@@ -137,3 +146,157 @@ export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type LoginToken = typeof loginTokens.$inferSelect;
 export type EmailChangeToken = typeof emailChangeTokens.$inferSelect;
+
+/* ------------------------------------------------------------------ *
+ * Offline & Sync — event-sourced tracking model.
+ *
+ * The append-only `events` log is the source of truth for *what the user did*;
+ * `tracking` and `episode_watches` are materialized *projections* of it (see
+ * `src/lib/server/sync/projection.ts`). `media` is separate **reference data** — a
+ * catalog cache synced on its own parallel channel, not derived from the log. Unlike
+ * `users`, these tables have no `updated_at` trigger: every write flows through
+ * projection code, which sets the LWW clocks explicitly — no raw-SQL edits to catch.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Append-only event log. `id` is the **client-supplied** UUID (so it has no
+ * `$defaultFn`) and the per-user dedup key — replaying a synced event is a no-op. The
+ * primary key is **composite `(user_id, id)`**, not `id` alone: ids are client-minted and
+ * untrusted, so scoping by user means a forced or colliding UUID from one user can never
+ * collide with (and drop) another user's event — no id remapping needed. `sequence` is a
+ * per-user monotonic counter assigned by the server (see `syncState`); the client sync
+ * cursor is the highest `sequence` it has pulled.
+ */
+export const events = sqliteTable(
+	'events',
+	{
+		id: text('id').notNull(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		sequence: integer('sequence').notNull(),
+		type: text('type', { enum: SYNC_EVENT_TYPES }).notNull(),
+		// The aggregate the event targets — the deterministic `mediaId` (`type:tmdbId`).
+		entityId: text('entity_id').notNull(),
+		// Event payload as JSON — Drizzle (de)serializes it; SQLite has no native JSON
+		// type, so it's stored as text. Shape depends on `type` (see `EventPayloadMap`).
+		payload: text('payload', { mode: 'json' }).$type<EventPayload>().notNull(),
+		deviceId: text('device_id').notNull(),
+		schemaVersion: integer('schema_version').notNull().default(1),
+		// Epoch **ms** on the originating device — the LWW ordering clock. Plain integer
+		// (not `timestamp` mode, which is Unix seconds) to preserve millisecond precision.
+		clientCreatedAt: integer('client_created_at').notNull(),
+		// Audit-only wall-clock; `timestamp` mode stores Unix seconds, so it's coarser
+		// than the ms `clientCreatedAt`. Not used for ordering or LWW (that's `sequence` /
+		// `clientCreatedAt`), so the reduced precision is fine.
+		serverReceivedAt: integer('server_received_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [
+		primaryKey({ columns: [table.userId, table.id] }),
+		uniqueIndex('events_user_sequence_idx').on(table.userId, table.sequence)
+	]
+);
+
+/**
+ * Per-user sequence allocator. A single upsert-with-RETURNING against this row
+ * atomically reserves a disjoint block of `sequence` values, so concurrent sync
+ * requests (separate Worker invocations) never collide on `events_user_sequence_idx`.
+ */
+export const syncState = sqliteTable('sync_state', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	lastSequence: integer('last_sequence').notNull().default(0)
+});
+
+/**
+ * Global media catalog cache (not user-scoped) — **reference data, not a projection of
+ * the event log**, keyed by our media id which events reference via `entityId`. Synced on
+ * a separate parallel channel (MRQ-111), never through `/api/sync`; scaffolding for now.
+ * Mirrors `MediaSearchResult`; TMDB remains the real source, this is a display cache so
+ * tracked titles render offline.
+ */
+export const media = sqliteTable(
+	'media',
+	{
+		// Deterministic `mediaId` — `${type}:${tmdbId}`.
+		id: text('id').primaryKey(),
+		tmdbId: integer('tmdb_id').notNull(),
+		type: text('type', { enum: ['movie', 'show'] }).notNull(),
+		title: text('title').notNull(),
+		year: integer('year'),
+		posterPath: text('poster_path'),
+		overview: text('overview').notNull().default(''),
+		// Epoch **ms** (plain integer, not `timestamp`/seconds) — it's an LWW clock
+		// compared against event `clientCreatedAt`, so units must match.
+		updatedAt: integer('updated_at')
+			.notNull()
+			.$defaultFn(() => Date.now())
+	},
+	(table) => [uniqueIndex('media_tmdb_idx').on(table.tmdbId, table.type)]
+);
+
+/**
+ * A user's tracking row for a title. `mediaId` intentionally has **no FK** to
+ * `media`: a `tracking.status_changed` can arrive from another device before this
+ * server has seen the corresponding `tracking.added`, so decoupling avoids FK
+ * failures and keeps event ordering robust. Per-field LWW clocks (epoch ms of the
+ * winning event's `clientCreatedAt`) let independent fields merge without clobber.
+ * `removed` is a tombstone so a delete can lose to a later re-add deterministically.
+ */
+export const tracking = sqliteTable(
+	'tracking',
+	{
+		// Deterministic PK — `${userId}::${mediaId}`.
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		mediaId: text('media_id').notNull(),
+		status: text('status', { enum: TRACKING_STATUSES }).notNull().default('want_to_watch'),
+		favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
+		// Optional user rating 1–5; null = unrated.
+		rating: integer('rating'),
+		removed: integer('removed', { mode: 'boolean' }).notNull().default(false),
+		statusUpdatedAt: integer('status_updated_at').notNull().default(0),
+		favoriteUpdatedAt: integer('favorite_updated_at').notNull().default(0),
+		ratingUpdatedAt: integer('rating_updated_at').notNull().default(0),
+		removedUpdatedAt: integer('removed_updated_at').notNull().default(0),
+		addedAt: integer('added_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		updatedAt: integer('updated_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [index('tracking_user_status_idx').on(table.userId, table.status)]
+);
+
+/**
+ * Per-episode watched state for a user + show. Progress rings are *derived* from
+ * these rows, never stored. `updatedAt` is the epoch-ms LWW clock.
+ */
+export const episodeWatches = sqliteTable(
+	'episode_watches',
+	{
+		// Deterministic PK — `${userId}::${mediaId}::s{S}e{E}`.
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		mediaId: text('media_id').notNull(),
+		season: integer('season').notNull(),
+		episode: integer('episode').notNull(),
+		watched: integer('watched', { mode: 'boolean' }).notNull().default(false),
+		updatedAt: integer('updated_at').notNull().default(0)
+	},
+	(table) => [index('episode_watches_user_media_idx').on(table.userId, table.mediaId)]
+);
+
+export type Event = typeof events.$inferSelect;
+export type SyncState = typeof syncState.$inferSelect;
+export type Media = typeof media.$inferSelect;
+export type Tracking = typeof tracking.$inferSelect;
+export type EpisodeWatch = typeof episodeWatches.$inferSelect;
