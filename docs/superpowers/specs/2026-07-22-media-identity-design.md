@@ -70,17 +70,17 @@ const MEDIA_ID_NAMESPACE = 'b7c8e9a0-3f2d-4c1b-9e6a-8d5f4a2b1c0e';
 
 /** Our own, provider-agnostic media id: a deterministic v5 UUID from (provider, externalId). */
 export function mediaId(provider: MediaProvider, externalId: string): string {
-  return uuidv5(`${provider}:${externalId}`, MEDIA_ID_NAMESPACE);
+	return uuidv5(`${provider}:${externalId}`, MEDIA_ID_NAMESPACE);
 }
 
 /** TMDB's stable external id for a title — `${type}/${tmdbId}` (movie 603 ≠ show 603). */
 export function tmdbExternalId(type: 'movie' | 'show', tmdbId: number): string {
-  return `${type}/${tmdbId}`;
+	return `${type}/${tmdbId}`;
 }
 
 /** Convenience: our media id for a TMDB title. */
 export function tmdbMediaId(type: 'movie' | 'show', tmdbId: number): string {
-  return mediaId('tmdb', tmdbExternalId(type, tmdbId));
+	return mediaId('tmdb', tmdbExternalId(type, tmdbId));
 }
 ```
 
@@ -99,18 +99,18 @@ export function tmdbMediaId(type: 'movie' | 'show', tmdbId: number): string {
 
 Replace the TMDB-specific columns with the provider-agnostic model:
 
-| Column        | Type    | Notes                                                        |
-| ------------- | ------- | ------------------------------------------------------------ |
-| `id`          | text PK | our UUID (v5 for provider-sourced)                           |
-| `provider`    | text    | `'tmdb'` (default); provider slug                            |
-| `external_id` | text    | provider's id, e.g. `movie/603`; nullable (custom = null)    |
-| `source`      | text    | `'linked' \| 'custom'`, default `'linked'`                   |
-| `type`        | text    | `'movie' \| 'show'` — media kind, **not** provider identity  |
-| `title`       | text    | unchanged                                                    |
-| `year`        | integer | unchanged, nullable                                          |
-| `poster_path` | text    | unchanged, nullable                                          |
-| `overview`    | text    | unchanged, default `''`                                      |
-| `updated_at`  | integer | unchanged, epoch-ms LWW clock                                |
+| Column        | Type    | Notes                                                       |
+| ------------- | ------- | ----------------------------------------------------------- |
+| `id`          | text PK | our UUID (v5 for provider-sourced)                          |
+| `provider`    | text    | `'tmdb'` (default); provider slug                           |
+| `external_id` | text    | provider's id, e.g. `movie/603`; nullable (custom = null)   |
+| `source`      | text    | `'linked' \| 'custom'`, default `'linked'`                  |
+| `type`        | text    | `'movie' \| 'show'` — media kind, **not** provider identity |
+| `title`       | text    | unchanged                                                   |
+| `year`        | integer | unchanged, nullable                                         |
+| `poster_path` | text    | unchanged, nullable                                         |
+| `overview`    | text    | unchanged, default `''`                                     |
+| `updated_at`  | integer | unchanged, epoch-ms LWW clock                               |
 
 - Drop `tmdb_id` (integer) and the `media_tmdb_idx` unique index on
   `(tmdb_id, type)`.
@@ -122,11 +122,15 @@ Replace the TMDB-specific columns with the provider-agnostic model:
 
 ### Migration
 
-- New migration **0005** via `pnpm db:generate --name provider_agnostic_media`
-  (never edit 0004 — it is applied to remote D1). Inspect the generated SQL; the
-  `media` table is empty so a drop/recreate is safe.
-- Hand-write the matching `drizzle/down/0005_provider_agnostic_media.down.sql`
-  that restores the previous `media` shape (per `AGENTS.md` — up/down in
+- New migration(s) via `pnpm db:generate` (never edit 0004 — it is applied to
+  remote D1). Implemented as a **two-pass split** — **0005** (add
+  `provider`/`external_id`/`source` + new unique index) then **0006** (drop
+  `tmdb_id` + old index) — because drizzle-kit's column-rename resolver needs an
+  interactive TTY when a table both adds and removes columns in one diff, which
+  is unavailable headless; splitting so each pass is add-only or drop-only skips
+  the prompt. The `media` table is empty, so this is safe.
+- Hand-write the matching `drizzle/down/0005_*.down.sql` and
+  `drizzle/down/0006_*.down.sql` that reverse each (per `AGENTS.md` — up/down in
   lockstep, plain SQL, no `--> statement-breakpoint`).
 
 ### Route
