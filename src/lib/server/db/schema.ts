@@ -186,7 +186,7 @@ export const events = sqliteTable(
 		// (not `timestamp` mode, which is Unix seconds) to preserve millisecond precision.
 		clientCreatedAt: integer('client_created_at').notNull(),
 		// Audit-only wall-clock; `timestamp` mode stores Unix seconds, so it's coarser
-		// than the ms `clientCreatedAt`. Not used for ordering or LWW (that's `seq` /
+		// than the ms `clientCreatedAt`. Not used for ordering or LWW (that's `sequence` /
 		// `clientCreatedAt`), so the reduced precision is fine.
 		serverReceivedAt: integer('server_received_at', { mode: 'timestamp' })
 			.notNull()
