@@ -46,11 +46,11 @@ export const SYNC_EVENT_TYPES = [
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
 
 /**
- * A minimal media descriptor. Media is *reference data*: the client caches it (relationally,
- * for offline) and pushes it in the sync request's `media` sidecar so the server can populate
- * its catalog cache without a TMDB round-trip. Events refer to a title by `entityId` (our media
- * id), never by embedding this. Mirrors `MediaSearchResult` (`src/lib/server/tmdb/types.ts`) —
- * TMDB stays the real source, this is a display cache.
+ * A minimal media descriptor. Media is *reference data*, synced on a separate parallel
+ * channel (MRQ-111) — **never** inside the `/api/sync` request, which carries events only.
+ * Events refer to a title by `entityId` (our media id), never by embedding this. Mirrors
+ * `MediaSearchResult` (`src/lib/server/tmdb/types.ts`) — TMDB stays the real source, this is
+ * a display cache the client holds for offline rendering.
  */
 export interface MediaSnapshot {
 	tmdbId: number;
@@ -142,7 +142,9 @@ const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-
  * every future merge. Bound it below Jan 1 2100 (epoch ms) to reject bogus values.
  */
 const clientClock = z.number().int().positive().lt(4102444800000);
-const positiveInt = z.number().int().positive();
+// Season may be 0 — TMDB numbers Specials as season 0 — but the episode within it is 1-based.
+const seasonNumber = z.number().int().nonnegative();
+const episodeNumber = z.number().int().positive();
 
 /** Payload schema per event type — the source of truth {@link EventPayloadMap} mirrors. */
 const payloadSchemas = {
@@ -151,8 +153,8 @@ const payloadSchemas = {
 	'tracking.favorite_toggled': z.object({ favorite: z.boolean() }),
 	'tracking.rated': z.object({ rating: z.number().int().min(1).max(5).nullable() }),
 	'tracking.removed': z.object({}),
-	'episode.watched': z.object({ season: positiveInt, episode: positiveInt }),
-	'episode.unwatched': z.object({ season: positiveInt, episode: positiveInt })
+	'episode.watched': z.object({ season: seasonNumber, episode: episodeNumber }),
+	'episode.unwatched': z.object({ season: seasonNumber, episode: episodeNumber })
 } as const;
 
 const envelopeBase = z.object({
@@ -160,7 +162,7 @@ const envelopeBase = z.object({
 	entityId: z.string().min(1),
 	deviceId: uuid,
 	clientCreatedAt: clientClock,
-	schemaVersion: z.number()
+	schemaVersion: z.number().int().positive()
 });
 
 /**

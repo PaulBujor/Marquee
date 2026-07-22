@@ -211,6 +211,11 @@ function insertEventStatement(db: Db, event: ServerEvent): Statement {
  * scoped to this user) are dropped up front; the log insert is also `ON CONFLICT DO
  * NOTHING` to absorb a race. Dedup is per-user because the events PK is `(user_id, id)`.
  *
+ * Duplicate ids *within* the push are also collapsed (first occurrence wins) before any
+ * write: only one row per id can ever persist (composite PK), so projecting more than one
+ * event for the same id would let the materialized state disagree with the log — breaking
+ * the {@link rebuildProjection} invariant. Collapsing keeps projection and log in lockstep.
+ *
  * Writes are chunked for D1's per-batch limits, but each event's log insert and its
  * projection stay in the **same** batch — so a mid-way failure can't leave a persisted
  * event whose projection was skipped. Earlier batches are already committed and safe to
@@ -223,10 +228,15 @@ export async function applyEvents(
 ): Promise<ServerEvent[]> {
 	if (incoming.length === 0) return [];
 
+	// Collapse duplicate ids within this push (keep first occurrence) — see the doc note.
+	const byId = new Map<string, EventEnvelope>();
+	for (const e of incoming) if (!byId.has(e.id)) byId.set(e.id, e);
+	const unique = [...byId.values()];
+
 	// Dedup within this user's events (PK is composite), chunked for D1's param limit.
 	const seen = new Set<string>();
 	for (const ids of chunk(
-		incoming.map((e) => e.id),
+		unique.map((e) => e.id),
 		DEDUP_CHUNK
 	)) {
 		const rows = await db
@@ -235,7 +245,7 @@ export async function applyEvents(
 			.where(and(eq(eventsTable.userId, userId), inArray(eventsTable.id, ids)));
 		for (const row of rows) seen.add(row.id);
 	}
-	const fresh = incoming.filter((e) => !seen.has(e.id));
+	const fresh = unique.filter((e) => !seen.has(e.id));
 	if (fresh.length === 0) return [];
 
 	// Assign sequence in causal (clientCreatedAt) order.

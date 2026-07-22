@@ -70,6 +70,22 @@ describe('projectEvent via applyEvents', () => {
 		expect(await db.select().from(tracking)).toHaveLength(1);
 	});
 
+	it('collapses duplicate ids within one push, keeping projection == log', async () => {
+		// Two events sharing an id but carrying different payloads. Only one row can persist
+		// (composite PK), so exactly one must be projected — else a rebuild would diverge.
+		const first = ev('tracking.status_changed', MID, { status: 'watching' }, 100);
+		const collidingId = { ...first, payload: { status: 'completed' as const }, clientCreatedAt: 200 };
+		const applied = await applyEvents(db, USER, [first, collidingId]);
+		expect(applied).toHaveLength(1); // second dropped as a dup id
+		expect(await db.select().from(eventsTable)).toHaveLength(1);
+		expect((await trackingRow(db)).status).toBe('watching'); // first occurrence won
+
+		// The materialized state must equal a replay of the log.
+		const before = await trackingRow(db);
+		await rebuildProjection(db, USER);
+		expect(await trackingRow(db)).toEqual(before);
+	});
+
 	it('scopes dedup per user — a colliding id from another user is not dropped', async () => {
 		const USER2 = 'user-2';
 		await db.insert(users).values({ id: USER2, email: 'u2@x.com', status: 'enabled' });

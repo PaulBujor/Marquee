@@ -42,6 +42,8 @@ describe('validateEvent', () => {
 			createEvent('tracking.rated', 'movie:603', { rating: null }, DEVICE),
 			createEvent('episode.watched', 'show:1396', { season: 1, episode: 2 }, DEVICE),
 			createEvent('episode.unwatched', 'show:1396', { season: 1, episode: 2 }, DEVICE),
+			// Season 0 is valid — TMDB numbers Specials as season 0.
+			createEvent('episode.watched', 'show:1396', { season: 0, episode: 1 }, DEVICE),
 			createEvent('tracking.removed', 'movie:603', {}, DEVICE)
 		];
 		for (const ev of cases) expect(validateEvent(ev)).toEqual(ev);
@@ -70,6 +72,15 @@ describe('validateEvent', () => {
 				createEvent('episode.watched', 'show:1396', { season: 1.5, episode: 2 }, DEVICE)
 			)
 		).toBeNull();
+		// episode is 1-based (0 rejected); a negative season is rejected
+		expect(
+			validateEvent(createEvent('episode.watched', 'show:1396', { season: 1, episode: 0 }, DEVICE))
+		).toBeNull();
+		expect(
+			validateEvent(createEvent('episode.watched', 'show:1396', { season: -1, episode: 1 }, DEVICE))
+		).toBeNull();
+		// schemaVersion must be a positive integer
+		expect(validateEvent({ ...good, schemaVersion: 0 })).toBeNull();
 		expect(
 			validateEvent({
 				...createEvent('tracking.added', 'movie:603', { status: 'watching' }, DEVICE),
