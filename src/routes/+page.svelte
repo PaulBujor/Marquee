@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { flip } from 'svelte/animate';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
@@ -67,6 +68,16 @@
 			library.markNext(item);
 		}, 650);
 	}
+
+	// When a caught-up show leaves Continue Watching, collapse its width + fade (rather than
+	// vanish); paired with animate:flip so the remaining cards slide into place.
+	function collapse(node: HTMLElement, { duration = 320 } = {}) {
+		const width = node.offsetWidth;
+		return {
+			duration,
+			css: (t: number) => `opacity:${t};width:${t * width}px;overflow:hidden`
+		};
+	}
 </script>
 
 <svelte:head><title>Marquee</title></svelte:head>
@@ -82,8 +93,8 @@
 				<div class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
 					{#each inProgress as item (item.mediaId)}
 						{@const progress = showProgress(item)}
-						{#if progress?.next}
-							<div class="w-28 shrink-0">
+						<div class="w-28 shrink-0" animate:flip={{ duration: 320 }} transition:collapse>
+							{#if progress?.next}
 								<div class="relative">
 									<a
 										href={resolve('/title/[type]/[id]', {
@@ -121,8 +132,8 @@
 								<div class="text-[0.7rem] text-muted-foreground">
 									S{progress.next.season} · E{progress.next.episode}
 								</div>
-							</div>
-						{/if}
+							{/if}
+						</div>
 					{/each}
 				</div>
 			</section>
