@@ -2,6 +2,7 @@
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import ConfirmDialog from './confirm-dialog.svelte';
+	import MediaBadge from './media-badge.svelte';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import HeartIcon from '@lucide/svelte/icons/heart';
@@ -82,7 +83,7 @@
 		{/if}
 	</div>
 	{#if didNotFinish}
-		<span class="text-xs font-medium text-muted-foreground">Didn't finish</span>
+		<MediaBadge variant="status" class="self-start">Didn't finish</MediaBadge>
 	{/if}
 </div>
 
