@@ -4,7 +4,8 @@
  * `episodeWatches` stores (the client-side projection of the same event log the
  * server materializes) and a `media` reference cache (populated off a separate
  * channel, not derived from events). `upcoming` is provisioned now and populated
- * later by the Timeline epic; `meta` holds the `deviceId`, sync `cursor`, and `userId`.
+ * later by the Timeline epic; `meta` holds the `deviceId` and sync `cursor`. The database
+ * itself is namespaced per user (`marquee-<userId>`, see {@link setActiveUser}).
  *
  * Client-safe (browser only) — never imported from server code.
  */
@@ -65,7 +66,6 @@ export interface UpcomingEpisode {
 export interface MetaValues {
 	deviceId: string;
 	cursor: number;
-	userId: string;
 }
 export type MetaKey = keyof MetaValues;
 /** A single `meta` row — a known key paired with its typed value. */
@@ -90,11 +90,28 @@ const DB_NAME = 'marquee';
 const DB_VERSION = 1;
 
 let dbPromise: Promise<MarqueeDatabase> | null = null;
+let activeUserId: string | null = null;
 
-/** Open (once) the singleton database, creating stores/indexes on first use. */
+/**
+ * Scope the local store to a signed-in user. The database is **namespaced per user**
+ * (`marquee-<userId>`), so switching accounts opens a *different* database — the prior
+ * user's data (including unsynced events) is never cleared or exposed to another account.
+ * Call once on login (from the root layout) before any store access. Passing `null` (logout)
+ * detaches; the next {@link openDb} will throw until a user is set again.
+ */
+export function setActiveUser(userId: string | null): void {
+	if (userId === activeUserId) return;
+	activeUserId = userId;
+	dbPromise = null; // the next openDb opens the new user's database
+}
+
+/** Open (once per active user) that user's database, creating stores/indexes on first use. */
 export function openDb(): Promise<MarqueeDatabase> {
+	if (!activeUserId) {
+		throw new Error('openDb: no active user — call setActiveUser() first');
+	}
 	if (!dbPromise) {
-		dbPromise = openDB<MarqueeDB>(DB_NAME, DB_VERSION, {
+		dbPromise = openDB<MarqueeDB>(`${DB_NAME}-${activeUserId}`, DB_VERSION, {
 			upgrade(db) {
 				const events = db.createObjectStore('events', { keyPath: 'id' });
 				events.createIndex('by_synced', 'synced');

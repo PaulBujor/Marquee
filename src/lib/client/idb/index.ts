@@ -9,7 +9,7 @@ import { applyEventToIdb } from './state';
 import { getDeviceId } from './meta';
 import { createEvent, type EventPayloadMap, type SyncEventType } from '$lib/sync/events';
 
-export { openDb } from './db';
+export { openDb, setActiveUser } from './db';
 export type {
 	ClientMedia,
 	ClientTracking,
@@ -19,7 +19,7 @@ export type {
 } from './db';
 export { getUnsynced, markSynced, enqueueEvent } from './outbox';
 export { applyEventToIdb, getTracking, getTrackingByMediaId, getEpisodeWatches } from './state';
-export { getDeviceId, getCursor, setCursor, getUserId, setUserId } from './meta';
+export { getDeviceId, getCursor, setCursor } from './meta';
 
 /**
  * Record a local tracking change: stamp it as an event, enqueue it for sync, and

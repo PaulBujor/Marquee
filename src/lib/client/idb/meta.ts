@@ -30,12 +30,3 @@ export async function getCursor(): Promise<number> {
 export async function setCursor(cursor: number): Promise<void> {
 	await setMeta('cursor', cursor);
 }
-
-/** The signed-in user this store belongs to (used to reset the DB on user switch). */
-export async function getUserId(): Promise<string | undefined> {
-	return getMeta('userId');
-}
-
-export async function setUserId(userId: string): Promise<void> {
-	await setMeta('userId', userId);
-}
