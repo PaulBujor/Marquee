@@ -3,6 +3,7 @@
 	import { buttonVariants } from '$lib/components/ui/button';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import ProgressRing from '$lib/components/media/progress-ring.svelte';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import { LibraryState } from '$lib/tracking/library.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import {
@@ -51,7 +52,7 @@
 	const list = $derived(
 		filterAndSortLibrary(library.items, { tab, type: typeFilter, year, genre, sort })
 	);
-	const hasFilters = $derived(year !== null || genre !== null);
+	const hasFilters = $derived(typeFilter !== 'all' || year !== null || genre !== null);
 </script>
 
 <svelte:head><title>Marquee</title></svelte:head>
@@ -81,6 +82,7 @@
 											type="show"
 											mediaId={item.mediaId}
 											posterPath={item.posterPath}
+											isFavorite={item.favorite}
 											alt={item.title}
 										/>
 									</a>
@@ -106,54 +108,47 @@
 			</section>
 		{/if}
 
-		<!-- Tabs -->
-		<div class="mb-3 flex gap-1.5">
-			{#each TABS as t (t.key)}
-				<button
-					type="button"
-					onclick={() => (tab = t.key)}
-					aria-pressed={tab === t.key}
-					class="flex-1 rounded-full border px-2 py-2 text-xs font-semibold transition-colors {tab ===
-					t.key
-						? 'border-primary bg-primary text-primary-foreground'
-						: 'border-border text-muted-foreground hover:text-foreground'}"
-				>
-					{t.label}
-				</button>
-			{/each}
-		</div>
+		<!-- Primary navigation: the four lists as tabs -->
+		<Tabs.Root value={tab} onValueChange={(v) => (tab = v as LibraryTab)} class="mb-3">
+			<Tabs.List class="w-full">
+				{#each TABS as t (t.key)}
+					<Tabs.Trigger value={t.key}>{t.label}</Tabs.Trigger>
+				{/each}
+			</Tabs.List>
+		</Tabs.Root>
 
-		<!-- Type filter + Filters/sort disclosure -->
-		<div class="mb-3 flex items-center gap-1.5">
-			{#each TYPES as t (t.key)}
-				<button
-					type="button"
-					onclick={() => (typeFilter = t.key)}
-					aria-pressed={typeFilter === t.key}
-					class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors {typeFilter ===
-					t.key
-						? 'border-primary text-primary'
-						: 'border-border text-muted-foreground hover:text-foreground'}"
-				>
-					{t.label}
-				</button>
-			{/each}
+		<!-- Secondary: everything else tucked behind one control -->
+		<div class="mb-3 flex justify-end">
 			<button
 				type="button"
 				onclick={() => (filtersOpen = !filtersOpen)}
 				aria-expanded={filtersOpen}
-				class="ml-auto rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors {filtersOpen ||
+				class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors {filtersOpen ||
 				hasFilters
 					? 'border-primary text-primary'
 					: 'border-border text-muted-foreground hover:text-foreground'}"
 			>
-				Filters &amp; sort
+				Filters &amp; sort{hasFilters ? ' ·' : ''}
 			</button>
 		</div>
 
 		{#if filtersOpen}
-			<div class="mb-4 flex flex-wrap gap-3 rounded-xl bg-secondary/40 p-3 text-sm">
-				<label class="flex items-center gap-2">
+			<div
+				class="mb-4 grid grid-cols-2 gap-3 rounded-xl bg-secondary/40 p-3 text-sm sm:grid-cols-4"
+			>
+				<label class="flex flex-col gap-1">
+					<span class="text-xs font-medium text-muted-foreground">Type</span>
+					<select
+						value={typeFilter}
+						onchange={(e) => (typeFilter = e.currentTarget.value as 'all' | 'movie' | 'show')}
+						class="rounded-md border border-border bg-background px-2 py-1"
+					>
+						{#each TYPES as t (t.key)}
+							<option value={t.key}>{t.label}</option>
+						{/each}
+					</select>
+				</label>
+				<label class="flex flex-col gap-1">
 					<span class="text-xs font-medium text-muted-foreground">Sort</span>
 					<select bind:value={sort} class="rounded-md border border-border bg-background px-2 py-1">
 						<option value="added">Date added</option>
@@ -161,7 +156,7 @@
 						<option value="year">Release year</option>
 					</select>
 				</label>
-				<label class="flex items-center gap-2">
+				<label class="flex flex-col gap-1">
 					<span class="text-xs font-medium text-muted-foreground">Year</span>
 					<select
 						value={year ?? ''}
@@ -174,7 +169,7 @@
 						{/each}
 					</select>
 				</label>
-				<label class="flex items-center gap-2">
+				<label class="flex flex-col gap-1">
 					<span class="text-xs font-medium text-muted-foreground">Genre</span>
 					<select
 						value={genre ?? ''}
