@@ -3,24 +3,25 @@
 	// channel, MRQ-111b) when present, else the TMDB URL. Re-checks after each sync so a poster
 	// swaps to its local blob once fetched, and revokes its object URL on teardown / id change.
 	import { getMediaImages } from '$lib/client/idb/images';
-	import { posterUrl } from '$lib/media';
+	import { posterUrl, POSTER_SIZE, type TmdbImageSize } from '$lib/media';
 	import { sync } from '$lib/client/sync/engine.svelte';
 
+	interface Props {
+		id: string;
+		path: string | null;
+		kind?: 'poster' | 'backdrop';
+		size?: TmdbImageSize;
+		alt?: string;
+		class?: string;
+	}
 	let {
 		id,
 		path,
 		kind = 'poster',
-		size = 'w342',
+		size = POSTER_SIZE,
 		alt = '',
 		class: className = ''
-	}: {
-		id: string;
-		path: string | null;
-		kind?: 'poster' | 'backdrop';
-		size?: string;
-		alt?: string;
-		class?: string;
-	} = $props();
+	}: Props = $props();
 
 	let objectUrl = $state<string | null>(null);
 	const networkUrl = $derived(posterUrl(path, size));

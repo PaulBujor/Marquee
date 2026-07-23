@@ -4,8 +4,8 @@
  * after the media sync; bounded per run so a large list fills in over several cycles.
  */
 import { getAllMedia } from '$lib/client/idb';
-import { getMediaImages, putMediaImages } from '$lib/client/idb/images';
-import { proxiedImageUrl } from '$lib/media';
+import { getMediaImages, putMediaImages, type MediaImageBlobs } from '$lib/client/idb/images';
+import { BACKDROP_SIZE, POSTER_SIZE, proxiedImageUrl } from '$lib/media';
 
 /** Max titles whose images are fetched in one run (a big list fills in over several cycles). */
 export const IMAGE_SYNC_MAX = 12;
@@ -34,13 +34,13 @@ export async function runImageSync(fetchFn: typeof fetch = fetch): Promise<{ sto
 		if (!needPoster && !needBackdrop) continue;
 
 		processed++;
-		const updates: { poster?: Blob; backdrop?: Blob } = {};
+		const updates: MediaImageBlobs = {};
 		if (needPoster) {
-			const blob = await fetchBlob(fetchFn, proxiedImageUrl(m.posterPath, 'w342')!);
+			const blob = await fetchBlob(fetchFn, proxiedImageUrl(m.posterPath, POSTER_SIZE)!);
 			if (blob) updates.poster = blob;
 		}
 		if (needBackdrop) {
-			const blob = await fetchBlob(fetchFn, proxiedImageUrl(m.backdropPath, 'w780')!);
+			const blob = await fetchBlob(fetchFn, proxiedImageUrl(m.backdropPath, BACKDROP_SIZE)!);
 			if (blob) updates.backdrop = blob;
 		}
 		if (updates.poster || updates.backdrop) {
