@@ -48,6 +48,18 @@ export interface EpisodeCoord {
 	episode: number;
 }
 
+/**
+ * The season number a provider uses for Specials. TMDB numbers them season 0; naming it
+ * keeps the "skip Specials" rule from reading as a bare `>= 1`. Per-provider variance (other
+ * catalogues may model Specials differently) is deferred to the Custom Media / provider epic.
+ */
+export const SPECIALS_SEASON = 0;
+
+/** Whether a season is the Specials season, i.e. not part of the main 1..N progression. */
+export function isSpecialsSeason(seasonNumber: number): boolean {
+	return seasonNumber === SPECIALS_SEASON;
+}
+
 /** Stable key for an episode's watched-state, matching the client `episodeWatches` set. */
 export function watchedKey(season: number, episode: number): string {
 	return `${season}:${episode}`;
@@ -67,7 +79,7 @@ export function seasonEpisodes(season: SeasonCounts): EpisodeCoord[] {
  */
 export function allEpisodes(seasons: SeasonCounts[]): EpisodeCoord[] {
 	return seasons
-		.filter((s) => s.seasonNumber >= 1)
+		.filter((s) => !isSpecialsSeason(s.seasonNumber))
 		.sort((a, b) => a.seasonNumber - b.seasonNumber)
 		.flatMap(seasonEpisodes);
 }

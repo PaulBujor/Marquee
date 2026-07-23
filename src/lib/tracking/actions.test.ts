@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
 	allEpisodes,
 	isSeasonFullyWatched,
+	isSpecialsSeason,
 	nextEpisode,
 	nextFavorite,
 	reconciledStatus,
 	seasonEpisodes,
+	SPECIALS_SEASON,
 	statusEventType,
 	toTrackingView,
 	watchedKey
@@ -68,6 +70,13 @@ describe('episode helpers', () => {
 			{ season: 1, episode: 2 },
 			{ season: 1, episode: 3 }
 		]);
+	});
+
+	it('identifies the Specials season by name, not a bare number', () => {
+		expect(SPECIALS_SEASON).toBe(0);
+		expect(isSpecialsSeason(0)).toBe(true);
+		expect(isSpecialsSeason(1)).toBe(false);
+		expect(isSpecialsSeason(2)).toBe(false);
 	});
 
 	it('flattens all real seasons, skipping Specials (season 0)', () => {

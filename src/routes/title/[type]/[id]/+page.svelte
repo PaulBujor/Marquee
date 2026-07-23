@@ -383,8 +383,9 @@
 												currentSeason.seasonNumber,
 												ep.episodeNumber
 											)}
-											<button
-												type="button"
+											<Button
+												variant="ghost"
+												size="icon"
 												onclick={() =>
 													tracking.setEpisodeWatched(
 														currentSeason.seasonNumber,
@@ -394,12 +395,12 @@
 												disabled={tracking.busy}
 												aria-pressed={watched}
 												aria-label={`${watched ? 'Unmark' : 'Mark'} S${currentSeason.seasonNumber}E${ep.episodeNumber} watched`}
-												class="flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors {watched
+												class="size-6 shrink-0 rounded-full border {watched
 													? 'border-primary bg-primary text-primary-foreground'
 													: 'border-border text-transparent hover:border-primary'}"
 											>
 												<CheckIcon class="size-3.5" />
-											</button>
+											</Button>
 										{/if}
 									</div>
 									{#if ep.airDate || ep.overview}

@@ -4,6 +4,15 @@
 
 	// A small controlled confirm dialog for actions that are awkward to undo (e.g. bulk
 	// "mark season/series watched"). The parent binds `open` and handles `onconfirm`.
+	interface Props {
+		open?: boolean;
+		title: string;
+		description?: string;
+		confirmLabel?: string;
+		confirmVariant?: 'default' | 'destructive';
+		busy?: boolean;
+		onconfirm: () => void;
+	}
 	let {
 		open = $bindable(false),
 		title,
@@ -12,15 +21,7 @@
 		confirmVariant = 'default',
 		busy = false,
 		onconfirm
-	}: {
-		open?: boolean;
-		title: string;
-		description?: string;
-		confirmLabel?: string;
-		confirmVariant?: 'default' | 'destructive';
-		busy?: boolean;
-		onconfirm: () => void;
-	} = $props();
+	}: Props = $props();
 </script>
 
 <Dialog.Root bind:open>
@@ -31,9 +32,11 @@
 				<Dialog.Description>{description}</Dialog.Description>
 			{/if}
 		</Dialog.Header>
-		<Dialog.Footer class="gap-2 sm:flex-col sm:gap-2">
-			<Button variant={confirmVariant} onclick={onconfirm} disabled={busy}>{confirmLabel}</Button>
+		<!-- Cancel first in the DOM so the footer's `flex-col-reverse` (mobile) puts the primary
+		action on top, and the `sm:flex-row sm:justify-end` (desktop) puts it rightmost. -->
+		<Dialog.Footer>
 			<Dialog.Close class={buttonVariants({ variant: 'ghost' })}>Cancel</Dialog.Close>
+			<Button variant={confirmVariant} onclick={onconfirm} disabled={busy}>{confirmLabel}</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

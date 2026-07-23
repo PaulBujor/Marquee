@@ -11,7 +11,11 @@
 
 	// Shared tracking action row for the detail page. For a show, "mark watched" marks the whole
 	// series (confirmed, since it's hard to undo) — the season list lives on `tracking`.
-	let { tracking, type }: { tracking: TrackingState; type: 'movie' | 'show' } = $props();
+	interface Props {
+		tracking: TrackingState;
+		type: 'movie' | 'show';
+	}
+	let { tracking, type }: Props = $props();
 
 	let removeOpen = $state(false);
 	let markSeriesOpen = $state(false);
@@ -96,7 +100,14 @@
 				You can remove this title entirely, or keep it as didn't finish.
 			</Dialog.Description>
 		</Dialog.Header>
-		<Dialog.Footer class="gap-2 sm:flex-col sm:gap-2">
+		<!-- Cancel first in the DOM so the footer's `flex-col-reverse` (mobile) stacks the
+		destructive action on top and Cancel at the bottom; `sm:flex-row sm:justify-end` puts
+		Remove rightmost on desktop. -->
+		<Dialog.Footer>
+			<Dialog.Close class={buttonVariants({ variant: 'ghost' })}>Cancel</Dialog.Close>
+			<Button variant="outline" onclick={chooseDidNotFinish} disabled={tracking.busy}>
+				Mark as didn't finish
+			</Button>
 			<Button
 				variant="destructive"
 				onclick={() => tracking.remove().then(() => (removeOpen = false))}
@@ -104,10 +115,6 @@
 			>
 				Remove
 			</Button>
-			<Button variant="outline" onclick={chooseDidNotFinish} disabled={tracking.busy}>
-				Mark as didn't finish
-			</Button>
-			<Dialog.Close class={buttonVariants({ variant: 'ghost' })}>Cancel</Dialog.Close>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
