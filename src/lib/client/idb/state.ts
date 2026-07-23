@@ -123,6 +123,12 @@ export async function getTracking(status?: ClientTracking['status']): Promise<Cl
 	return rows.filter((r) => !r.removed);
 }
 
+/** The tracking row for a single title, or undefined if never tracked. Includes tombstoned (removed) rows — the caller decides how to read them (see `toTrackingView`). */
+export async function getTrackingByMediaId(mediaId: string): Promise<ClientTracking | undefined> {
+	const db = await openDb();
+	return db.get('tracking', mediaId);
+}
+
 /** Watched-episode rows for a show. */
 export async function getEpisodeWatches(mediaId: string): Promise<ClientEpisodeWatch[]> {
 	const db = await openDb();

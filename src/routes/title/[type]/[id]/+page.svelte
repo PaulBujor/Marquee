@@ -6,8 +6,10 @@
 	import { Button } from '$lib/components/ui/button';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
+	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
+	import { tmdbMediaId } from '$lib/sync/events';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ClockIcon from '@lucide/svelte/icons/clock';
@@ -19,6 +21,8 @@
 
 	const detail = $derived(data.detail);
 	const heroUrl = $derived(posterUrl(detail.backdropPath, 'w780'));
+	// Our own media id for the tracking event pipeline (provider-agnostic, MRQ-112).
+	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
 
 	// Overview/cast/trailer live under a "Details" toggle (default open). When watch-tracking
 	// lands it can default this collapsed for in-progress shows; read-only for now.
@@ -157,6 +161,9 @@
 				<MediaBadge variant="genre">{genre}</MediaBadge>
 			{/each}
 		</div>
+
+		<!-- Watch-tracking controls: add / mark watched / favorite / remove, above the description -->
+		<TrackingControls {mediaId} />
 
 		<!-- Collapsible details: overview, cast, trailer -->
 		<div class="flex flex-col gap-4">

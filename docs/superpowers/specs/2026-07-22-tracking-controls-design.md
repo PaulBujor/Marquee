@@ -3,7 +3,8 @@
 **Date:** 2026-07-22
 **Branch:** `paul/mrq-41-event-writing-layer` (stacked on
 `paul/mrq-112-provider-agnostic-media-identity`, PR #87)
-**Status:** DRAFT — awaiting decision on the add-flow UX (see Open questions)
+**Status:** built & browser-verified (Playwright, via a throwaway harness route — the
+real detail page is auth-gated). Flow decided by review; see Decisions.
 
 ## Context
 
@@ -38,10 +39,10 @@ From `reference/watchlist-ui-concept.jsx` (detail page, ~L1290–1334):
 The reference's detail page assumes the title is **already on the user's list**
 (`selected` comes from the user's items). Our detail page is reached from
 **search** — the title is typically **untracked**. The reference specifies no
-"Add to watchlist" affordance or status-picker for that first add. This is the
-one real UX decision blocking implementation (see Open questions).
+"Add to watchlist" affordance or status-picker for that first add. That was the
+one real UX decision; it was settled in review (see Decisions below).
 
-## Proposed design (pending the add-flow decision)
+## Design
 
 ### Read model
 
@@ -53,16 +54,20 @@ one real UX decision blocking implementation (see Open questions).
 
 ### Action logic (pure, TDD'd)
 
-A small `src/lib/tracking/actions.ts` mapping a UI intent + current state to the
-correct event — the testable core:
+A small `src/lib/tracking/actions.ts` of pure helpers — the testable core the
+component composes with `recordEvent`:
 
-- `setStatus(current, next)`: emit `tracking.added` when `current` is
-  untracked/removed, else `tracking.status_changed`.
-- `toggleFavorite(current)`: emit `tracking.favorite_toggled` with the negated
-  value (added implicitly if the title wasn't tracked — decision below).
+- `toTrackingView(row)`: collapse a `ClientTracking` row (or `undefined`) into
+  `{ tracked: false } | { tracked: true; status; favorite }`; a removed
+  tombstone reads as untracked.
+- `statusEventType(view)`: `'tracking.added'` when untracked (the first status
+  asserts the row), else `'tracking.status_changed'`.
+- `nextFavorite(view)`: the favorite value to write next (favoriting an untracked
+  title implicitly adds it).
 
-These return `{ type, payload }` for the component to pass to `recordEvent`, so
-the branching logic is covered by unit tests without a DOM.
+Keeping these free of IndexedDB/DOM lets the branching be unit-tested; the
+component picks the literal `recordEvent(type, mid, payload)` call per branch so
+the event type/payload correlation stays type-safe.
 
 ### Component
 
@@ -72,26 +77,37 @@ for favorite). Reactive to the local read model; each action calls `recordEvent`
 then re-reads. Wired into the detail page where the placeholder comment is.
 
 **Testing reality:** this repo has no Svelte component test harness (vitest is
-node-env, `*.test.ts` only), so the component itself is covered only by
-typecheck + build in CI, same as the existing detail page. The pure logic and
-read helper get real unit tests. The visual layer needs manual verification —
-which is why this pauses for review rather than shipping blind.
+node-env, `*.test.ts` only), so the component itself is covered by typecheck +
+build in CI (same as the existing detail page) plus **manual Playwright
+verification against real IndexedDB** through a throwaway unauthenticated harness
+route (`/dev-tracking-test`, deleted before commit) — the real detail page is
+auth-gated. Verified: the full state progression, favorite toggle, the remove
+dialog's three paths, and persistence across reload. The pure logic
+(`actions.ts`) and read helper (`getTrackingByMediaId`) have real unit tests.
 
-## Open questions (need a decision before building)
+## Decisions (from review) — the built flow
 
-1. **Add-flow affordance.** For an untracked title from search, how is it added?
-   Options: (a) a primary "Add to watchlist" button that, once added, becomes the
-   status picker; (b) always show the status picker, and picking any status
-   performs the add; (c) a `+`/bookmark icon that adds as `want_to_watch`, with
-   status changeable afterward. Recommendation: **(b)** — one control, fewest
-   taps, matches the reference's single status pill.
-2. **Favorite before tracking.** Can you favorite an untracked title (implicitly
-   adding it), or is favorite only available once tracked? Recommendation:
-   **implicit add** (favoriting adds a `want_to_watch` row), so the Heart always
-   works — but confirm.
-3. **Status set → `did_not_finish`.** Surface all four statuses in the picker, or
-   keep `did_not_finish` to a secondary action? Recommendation: all four in a
-   dropdown; `did_not_finish` reads oddly as a primary toggle.
+The control sits **high up, above the description** (right after the
+rating/runtime/genre meta row, before the collapsible Details toggle). Primary
+button progresses:
+
+- **untracked** → `[+ Want to Watch]` → emits `tracking.added { want_to_watch }`.
+- **tracked, not completed** → `[✓ Mark Watched]` (→ `completed`) plus a `[×]`
+  remove button (tooltip "Remove").
+- **completed** → `[✓ Watched]` (secondary/active); clicking reverts to
+  `want_to_watch`. `[×]` still present.
+
+The **`[×]` opens a dialog** with three choices: **Remove** (destructive/red →
+`tracking.removed`), **Mark as didn't finish** (→ `status_changed {
+did_not_finish }`), **Cancel**. A **favorite Heart** toggle is always shown;
+favoriting an untracked title implicitly adds it as `want_to_watch` (the
+projection upserts a default row).
+
+**UI refinements deferred** (foundation-first, per review — "refine the UI when we
+get to it"): no explicit status _label_/pill yet, so `watching` and
+`did_not_finish` both currently render as `[Mark Watched] [×]`; no `watching`
+affordance in the primary control (episode tracking will drive that later); the
+`[×]` tooltip is a native `title`, not the Tooltip component.
 
 ## Stack position
 
