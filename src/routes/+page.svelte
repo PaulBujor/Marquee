@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import ProgressRing from '$lib/components/media/progress-ring.svelte';
@@ -12,6 +13,7 @@
 		continueWatching,
 		filterAndSortLibrary,
 		showProgress,
+		type LibraryItem,
 		type LibrarySort,
 		type LibraryTab
 	} from '$lib/tracking/library';
@@ -53,6 +55,18 @@
 		filterAndSortLibrary(library.items, { tab, type: typeFilter, year, genre, sort })
 	);
 	const hasFilters = $derived(typeFilter !== 'all' || year !== null || genre !== null);
+
+	// Quick-mark debounce (mirrors the detail page's next-episode row): fill the check, hold a
+	// beat, then mark + advance — so a mis-tap is visible and the card doesn't jump instantly.
+	const marking = new SvelteSet<string>();
+	function markNextSoon(item: LibraryItem) {
+		if (marking.has(item.mediaId) || library.busy) return;
+		marking.add(item.mediaId);
+		setTimeout(() => {
+			marking.delete(item.mediaId);
+			library.markNext(item);
+		}, 650);
+	}
 </script>
 
 <svelte:head><title>Marquee</title></svelte:head>
@@ -88,12 +102,18 @@
 									</a>
 									<button
 										type="button"
-										onclick={() => library.markNext(item)}
-										disabled={library.busy}
+										onclick={() => markNextSoon(item)}
+										disabled={library.busy || marking.has(item.mediaId)}
 										aria-label={`Mark S${progress.next.season} E${progress.next.episode} of ${item.title} watched`}
-										class="absolute right-1.5 bottom-1.5 flex size-9 items-center justify-center rounded-full bg-black/60 text-white disabled:opacity-60"
+										class="absolute right-1.5 bottom-1.5 flex size-9 items-center justify-center rounded-full text-white transition-colors {marking.has(
+											item.mediaId
+										)
+											? 'bg-primary'
+											: 'bg-black/60'}"
 									>
-										<ProgressRing progress={progress.fraction} size={34} class="absolute" />
+										{#if !marking.has(item.mediaId)}
+											<ProgressRing progress={progress.fraction} size={34} class="absolute" />
+										{/if}
 										<CheckIcon class="size-3.5" />
 									</button>
 								</div>
