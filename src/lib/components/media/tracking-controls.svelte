@@ -3,19 +3,14 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
-	import type { SeasonCounts } from '$lib/tracking/actions';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import HeartIcon from '@lucide/svelte/icons/heart';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import XIcon from '@lucide/svelte/icons/x';
 
 	// Shared tracking action row for the detail page. For a show, "mark watched" marks the whole
-	// series (confirmed, since it's hard to undo) and needs the season list to seed episodes.
-	let {
-		tracking,
-		type,
-		seasons = []
-	}: { tracking: TrackingState; type: 'movie' | 'show'; seasons?: SeasonCounts[] } = $props();
+	// series (confirmed, since it's hard to undo) — the season list lives on `tracking`.
+	let { tracking, type }: { tracking: TrackingState; type: 'movie' | 'show' } = $props();
 
 	let removeOpen = $state(false);
 	let markSeriesOpen = $state(false);
@@ -122,5 +117,5 @@
 	description="This marks every episode of every season watched. You can't easily undo it."
 	confirmLabel="Mark series watched"
 	busy={tracking.busy}
-	onconfirm={() => tracking.markSeriesWatched(seasons).then(() => (markSeriesOpen = false))}
+	onconfirm={() => tracking.markSeriesWatched().then(() => (markSeriesOpen = false))}
 />

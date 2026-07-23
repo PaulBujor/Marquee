@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
-	import type { EpisodeCoord, SeasonCounts } from '$lib/tracking/actions';
+	import type { EpisodeCoord } from '$lib/tracking/actions';
 	import CheckIcon from '@lucide/svelte/icons/check';
 
 	// The fast path for shows: mark the next unwatched episode without scrolling to the list.
@@ -9,15 +9,13 @@
 	// season data the page has loaded (best-effort).
 	let {
 		tracking,
-		seasons,
 		episodeName
 	}: {
 		tracking: TrackingState;
-		seasons: SeasonCounts[];
 		episodeName?: (season: number, episode: number) => string | undefined;
 	} = $props();
 
-	const next = $derived(tracking.nextEpisode(seasons));
+	const next = $derived(tracking.nextEpisode());
 
 	// On mark: fill the circle for the just-marked episode, hold briefly, then let the row
 	// transition to the new next episode. `frozen` pins the display during that beat.

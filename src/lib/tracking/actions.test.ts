@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
 	allEpisodes,
+	isSeasonFullyWatched,
 	nextEpisode,
 	nextFavorite,
+	reconciledStatus,
 	seasonEpisodes,
 	statusEventType,
 	toTrackingView,
@@ -106,5 +108,51 @@ describe('nextEpisode', () => {
 	it('returns null once every real episode is watched', () => {
 		const watched = new Set(['1:1', '1:2', '2:1', '2:2']);
 		expect(nextEpisode(seasons, watched)).toBeNull();
+	});
+});
+
+describe('isSeasonFullyWatched', () => {
+	it('is true when every episode of the season is watched', () => {
+		const watched = new Set(['1:1', '1:2', '1:3']);
+		expect(isSeasonFullyWatched({ seasonNumber: 1, episodeCount: 3 }, watched)).toBe(true);
+	});
+
+	it('is false when any episode is missing', () => {
+		const watched = new Set(['1:1', '1:3']);
+		expect(isSeasonFullyWatched({ seasonNumber: 1, episodeCount: 3 }, watched)).toBe(false);
+	});
+
+	it('is false for a season with no episodes', () => {
+		expect(isSeasonFullyWatched({ seasonNumber: 0, episodeCount: 0 }, new Set())).toBe(false);
+	});
+});
+
+describe('reconciledStatus', () => {
+	it('does not derive anything for something with no episodes (movies)', () => {
+		expect(reconciledStatus('want_to_watch', 0, 0)).toBeNull();
+	});
+
+	it('completes when the last episode is watched', () => {
+		expect(reconciledStatus('watching', 10, 10)).toBe('completed');
+		expect(reconciledStatus('want_to_watch', 10, 10)).toBe('completed');
+	});
+
+	it('leaves an already-correct status alone', () => {
+		expect(reconciledStatus('completed', 10, 10)).toBeNull();
+		expect(reconciledStatus('watching', 5, 10)).toBeNull();
+	});
+
+	it('un-completes when an episode is unwatched', () => {
+		expect(reconciledStatus('completed', 9, 10)).toBe('watching');
+	});
+
+	it('moves want-to-watch to watching once any episode is watched', () => {
+		expect(reconciledStatus('want_to_watch', 1, 10)).toBe('watching');
+		expect(reconciledStatus('want_to_watch', 0, 10)).toBeNull();
+	});
+
+	it('respects an explicit "did not finish" and never overrides it', () => {
+		expect(reconciledStatus('did_not_finish', 10, 10)).toBeNull();
+		expect(reconciledStatus('did_not_finish', 3, 10)).toBeNull();
 	});
 });

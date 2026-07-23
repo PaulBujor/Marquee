@@ -82,3 +82,30 @@ export function nextEpisode(seasons: SeasonCounts[], watched: Set<string>): Epis
 	}
 	return null;
 }
+
+/** Whether every episode of a season is watched (false for an episode-less season). */
+export function isSeasonFullyWatched(season: SeasonCounts, watched: Set<string>): boolean {
+	if (season.episodeCount < 1) return false;
+	return seasonEpisodes(season).every((c) => watched.has(watchedKey(c.season, c.episode)));
+}
+
+/**
+ * Derive the status a show should move to from its episode-watch progress, or null when no
+ * change is warranted. This is the completion sequence (MRQ-55): watching the last episode
+ * completes it, unwatching one un-completes it, and the first watch starts it. It needs the
+ * **total episode count** (TMDB reference data, not in the event log), so it runs where that's
+ * known and records a `status_changed`. An explicit `did_not_finish` is never auto-overridden;
+ * `totalEpisodes === 0` (movies) derives nothing.
+ */
+export function reconciledStatus(
+	current: TrackingStatus,
+	watchedCount: number,
+	totalEpisodes: number
+): TrackingStatus | null {
+	if (totalEpisodes === 0 || current === 'did_not_finish') return null;
+	const allWatched = watchedCount >= totalEpisodes;
+	if (allWatched) return current === 'completed' ? null : 'completed';
+	if (current === 'completed') return 'watching';
+	if (current === 'want_to_watch' && watchedCount > 0) return 'watching';
+	return null;
+}

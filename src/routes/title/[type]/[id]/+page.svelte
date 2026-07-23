@@ -30,7 +30,7 @@
 
 	// Reactive local tracking state (IndexedDB-backed). Recreated + reloaded whenever the title
 	// changes; SSR renders the neutral untracked state, then this hydrates on the client.
-	const tracking = $derived(new TrackingState(mediaId));
+	const tracking = $derived(new TrackingState(mediaId, detail.seasons));
 	$effect(() => {
 		tracking.load();
 	});
@@ -190,9 +190,9 @@
 		     when tracked; the action row adapts (movie → mark watched; show → mark series watched). -->
 		<div class="flex flex-col gap-2">
 			{#if detail.type === 'show' && tracking.view.tracked}
-				<NextEpisodeRow {tracking} seasons={detail.seasons} {episodeName} />
+				<NextEpisodeRow {tracking} {episodeName} />
 			{/if}
-			<TrackingControls {tracking} type={detail.type} seasons={detail.seasons} />
+			<TrackingControls {tracking} type={detail.type} />
 		</div>
 
 		<!-- Collapsible details: overview, cast, trailer -->
@@ -319,7 +319,7 @@
 					{/each}
 				</div>
 
-				{#if tracking.view.tracked && selectedSeasonSummary}
+				{#if tracking.view.tracked && selectedSeasonSummary && !tracking.isSeasonWatched(selectedSeasonSummary)}
 					<Button
 						variant="outline"
 						size="sm"
