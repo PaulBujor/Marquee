@@ -1,10 +1,10 @@
-# Tracking controls on the detail page (PR2 — MRQ-50 / MRQ-51, closes MRQ-41 wiring)
+# Tracking controls on the detail page (PR2 — MRQ-41/50/51 + episode/season/series: MRQ-48/49/53/113)
 
-**Date:** 2026-07-22
+**Date:** 2026-07-22 (revised 2026-07-23 after review)
 **Branch:** `paul/mrq-41-event-writing-layer` (stacked on
 `paul/mrq-112-provider-agnostic-media-identity`, PR #87)
-**Status:** built & browser-verified (Playwright, via a throwaway harness route — the
-real detail page is auth-gated). Flow decided by review; see Decisions.
+**Status:** built & browser-verified (Playwright, on the real auth-gated detail page via
+a seeded local session — both a movie and a series). See "Revision 2" for the final shape.
 
 ## Context
 
@@ -19,11 +19,14 @@ This PR wires the pipeline into the detail page: set/change **status** (MRQ-50)
 and toggle **favorite** (MRQ-51), writing through `recordEvent` with the media id
 from PR1 (`tmdbMediaId(type, tmdbId)`).
 
-**Deferred to their own PRs:** user rating 1–5 (MRQ-114 — the reference shows only
-the TMDB /10 rating, so our rating control's placement is unspecified), episode
-watched-state (MRQ-48/53), bulk actions (MRQ-49/113), the client sync engine that
-pushes/pulls the outbox (MRQ-43 — offline-first means the local write is
-authoritative now; server sync lands later).
+Episode-level and bulk tracking were **pulled into this PR during review** (see
+Revision 2): per-episode watched, mark-next-episode, mark-season-watched,
+mark-series-watched (MRQ-48/49/53/113).
+
+**Still deferred to their own PRs:** user rating 1–5 (MRQ-114), auto status
+transitions / completion sequence on the last episode (MRQ-55 — episode marks do
+**not** auto-change status here), and the client sync engine that pushes/pulls the
+outbox (MRQ-43 — offline-first means the local write is authoritative now).
 
 ## What the reference determines
 
@@ -108,6 +111,52 @@ get to it"): no explicit status _label_/pill yet, so `watching` and
 `did_not_finish` both currently render as `[Mark Watched] [×]`; no `watching`
 affordance in the primary control (episode tracking will drive that later); the
 `[×]` tooltip is a native `title`, not the Tooltip component.
+
+## Revision 2 — review feedback (2026-07-23), the final built shape
+
+Testing the first cut surfaced three fixes and a series-specific redesign:
+
+1. **Favorite is hidden until tracked.** The Heart only renders once the title is on
+   a list (it was showing — and confusing — on untracked titles).
+2. **Status is now visible.** A status pill (`Want to Watch` / `Watching` /
+   `Completed` / `Didn't finish`) renders whenever tracked, so "didn't finish" is a
+   real, legible state. "Didn't finish" is still **set from the `[×]` popup**, not a
+   primary control; the pill only reflects it.
+3. **Movies vs. series are tuned separately** instead of sharing one flow.
+
+**Movie (tracked):** status pill + `Mark watched` (→ completed; `Watched` reverts) +
+`[×]` (Remove / Mark as didn't finish / Cancel) + Heart.
+
+**Series (tracked):** two rows —
+
+- **Row 1** — next-episode quick-mark: "Next: S_·E_ · <title>" → marks that episode
+  watched; the row recomputes the next unwatched episode and disappears when the show
+  is fully watched. Title is best-effort from whatever season the page has cached.
+- **Row 2** — the action row: status pill + `Mark series watched` (**confirm dialog** —
+  seeds `episode.watched` for every real episode + sets `completed`) + `[×]` + Heart.
+
+Plus, in the seasons section (tracked only): a **`Mark Season N watched`** button
+(**confirm dialog**, bulk-seeds that season) and a **per-episode watched toggle** on
+each episode row.
+
+### Architecture added for this
+
+- `src/lib/tracking/tracking.svelte.ts` — a reactive `TrackingState` class (runes)
+  that wraps `recordEvent` + the IDB reads (`getTrackingByMediaId`,
+  `getEpisodeWatches`) and exposes `view`, `watched` (a `Set` of `"season:episode"`),
+  `ready`, `busy`, and the write actions. The page holds one via
+  `const tracking = $derived(new TrackingState(mediaId))` + an `$effect` that reloads
+  it; child controls receive it as a prop, so the whole page shares one optimistic
+  source of truth.
+- Pure, unit-tested helpers in `actions.ts`: `nextEpisode`, `allEpisodes`,
+  `seasonEpisodes`, `watchedKey` (Specials/season 0 excluded from progression).
+- `next-episode-row.svelte` and a reusable `confirm-dialog.svelte`.
+
+Bulk marks seed one `episode.watched` per episode (per the AGENTS.md sync-push bound).
+Verified end-to-end in the browser on The Matrix (movie) and Breaking Bad (series):
+add, mark watched, DNF-via-popup with a visible pill, next-episode advance, mark
+season (confirm), mark series (confirm → completed, row disappears), and per-episode
+toggles.
 
 ## Stack position
 
