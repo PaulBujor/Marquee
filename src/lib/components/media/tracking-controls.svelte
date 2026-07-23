@@ -4,7 +4,6 @@
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
 	import type { SeasonCounts } from '$lib/tracking/actions';
-	import type { TrackingStatus } from '$lib/sync/events';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import HeartIcon from '@lucide/svelte/icons/heart';
 	import PlusIcon from '@lucide/svelte/icons/plus';
@@ -18,19 +17,15 @@
 		seasons = []
 	}: { tracking: TrackingState; type: 'movie' | 'show'; seasons?: SeasonCounts[] } = $props();
 
-	const STATUS_LABELS: Record<TrackingStatus, string> = {
-		want_to_watch: 'Want to Watch',
-		watching: 'Watching',
-		completed: 'Completed',
-		did_not_finish: "Didn't finish"
-	};
-
 	let removeOpen = $state(false);
 	let markSeriesOpen = $state(false);
 
 	const view = $derived(tracking.view);
 	const done = $derived(view.tracked && view.status === 'completed');
 	const favorite = $derived(view.tracked && view.favorite);
+	// Status is conveyed by the buttons (add / mark watched / watched). Only "didn't finish" —
+	// which the buttons can't express — gets an explicit label below them.
+	const didNotFinish = $derived(view.tracked && view.status === 'did_not_finish');
 
 	function markWatched() {
 		if (done) {
@@ -47,52 +42,52 @@
 	}
 </script>
 
-<div class="flex flex-wrap items-center gap-2">
-	{#if !view.tracked}
-		<Button
-			onclick={() => tracking.add()}
-			disabled={!tracking.ready || tracking.busy}
-			class="gap-1.5"
-		>
-			<PlusIcon class="size-4" />
-			Add to list
-		</Button>
-	{:else}
-		<span
-			class="rounded-full border border-border px-2.5 py-1 text-xs font-bold tracking-widest text-muted-foreground uppercase"
-		>
-			{STATUS_LABELS[view.status]}
-		</span>
-		<Button
-			variant={done ? 'secondary' : 'default'}
-			onclick={markWatched}
-			disabled={tracking.busy}
-			class="gap-1.5"
-		>
-			<CheckIcon class="size-4" />
-			{done ? 'Watched' : type === 'show' ? 'Mark series watched' : 'Mark watched'}
-		</Button>
-		<Button
-			variant="outline"
-			size="icon"
-			onclick={() => (removeOpen = true)}
-			disabled={tracking.busy}
-			aria-label="Remove from list"
-			title="Remove"
-		>
-			<XIcon class="size-4" />
-		</Button>
-		<Button
-			variant="ghost"
-			size="icon"
-			onclick={() => tracking.toggleFavorite()}
-			disabled={tracking.busy}
-			aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'}
-			aria-pressed={favorite}
-			title="Favorite"
-		>
-			<HeartIcon class="size-5 {favorite ? 'fill-primary text-primary' : ''}" />
-		</Button>
+<div class="flex flex-col gap-1.5">
+	<div class="flex flex-wrap items-center gap-2">
+		{#if !view.tracked}
+			<Button
+				onclick={() => tracking.add()}
+				disabled={!tracking.ready || tracking.busy}
+				class="gap-1.5"
+			>
+				<PlusIcon class="size-4" />
+				Add to list
+			</Button>
+		{:else}
+			<Button
+				variant={done ? 'secondary' : 'default'}
+				onclick={markWatched}
+				disabled={tracking.busy}
+				class="gap-1.5"
+			>
+				<CheckIcon class="size-4" />
+				{done ? 'Watched' : type === 'show' ? 'Mark series watched' : 'Mark watched'}
+			</Button>
+			<Button
+				variant="outline"
+				size="icon"
+				onclick={() => (removeOpen = true)}
+				disabled={tracking.busy}
+				aria-label="Remove from list"
+				title="Remove"
+			>
+				<XIcon class="size-4" />
+			</Button>
+			<Button
+				variant="ghost"
+				size="icon"
+				onclick={() => tracking.toggleFavorite()}
+				disabled={tracking.busy}
+				aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'}
+				aria-pressed={favorite}
+				title="Favorite"
+			>
+				<HeartIcon class="size-5 {favorite ? 'fill-primary text-primary' : ''}" />
+			</Button>
+		{/if}
+	</div>
+	{#if didNotFinish}
+		<span class="text-xs font-medium text-muted-foreground">Didn't finish</span>
 	{/if}
 </div>
 
