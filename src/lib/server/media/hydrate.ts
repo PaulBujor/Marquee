@@ -12,10 +12,14 @@ import type { TmdbClient } from '$lib/server/tmdb';
 
 type Db = ReturnType<typeof createDb>;
 
+/** A TMDB external id (`movie/603`) parsed into its media type and numeric id. */
+export interface ParsedTmdbExternalId {
+	type: 'movie' | 'show';
+	tmdbId: number;
+}
+
 /** Parse a TMDB external id (`movie/603`, `show/1396`) into its type + numeric id, or null. */
-export function parseTmdbExternalId(
-	externalId: string
-): { type: 'movie' | 'show'; tmdbId: number } | null {
+export function parseTmdbExternalId(externalId: string): ParsedTmdbExternalId | null {
 	const match = /^(movie|show)\/(\d+)$/.exec(externalId);
 	if (!match) return null;
 	return { type: match[1] as 'movie' | 'show', tmdbId: Number(match[2]) };
