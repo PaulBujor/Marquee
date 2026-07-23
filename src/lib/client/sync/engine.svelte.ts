@@ -2,12 +2,13 @@
  * The client sync engine: a browser-only singleton that drives {@link runSync} on the
  * right triggers (app open/foreground, reconnect, a light interval, and a write-nudge),
  * coalesces overlapping requests, retries with backoff, and exposes a reactive
- * {@link SyncEngine.status} for a future sync-pending indicator (MRQ-95).
+ * {@link SyncEngine.status} (plus {@link SyncEngine.lastError} detail) for a future
+ * sync-pending indicator / error-reporting affordance (MRQ-95).
  *
  * Mirrors the `theme`/`pwa` rune singletons. Start it from the root layout when a user is
  * signed in; the store must already be scoped to that user (`setActiveUser`).
  */
-import { backoffDelay, runSync } from './sync';
+import { backoffDelay, runSync, toSyncErrorInfo, type SyncErrorInfo } from './sync';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 
@@ -18,6 +19,8 @@ const INTERVAL_MS = 45_000;
 
 class SyncEngine {
 	status = $state<SyncStatus>('idle');
+	/** Detail of the most recent failure, retained for future error reporting; cleared on success. */
+	lastError = $state<SyncErrorInfo | null>(null);
 	/** Bumped each time a sync pulls+applies remote events, so open views can re-read local state. */
 	revision = $state(0);
 
@@ -91,9 +94,11 @@ class SyncEngine {
 			const { pulled } = await runSync();
 			if (pulled > 0) this.revision++; // let open views re-read the freshly-applied state
 			this.#attempt = 0;
+			this.lastError = null;
 			this.status = 'idle';
-		} catch {
+		} catch (err) {
 			this.status = 'error';
+			this.lastError = toSyncErrorInfo(err, this.#attempt, Date.now());
 			this.#retryTimer = setTimeout(() => {
 				this.#retryTimer = null;
 				void this.#sync();

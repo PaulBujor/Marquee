@@ -6,7 +6,7 @@ import { enqueueEvent, getUnsynced } from '$lib/client/idb/outbox';
 import { getTracking } from '$lib/client/idb/state';
 import { getCursor } from '$lib/client/idb/meta';
 import type { SyncRequest, SyncResponse } from '$lib/sync/protocol';
-import { backoffDelay, runSync } from './sync';
+import { backoffDelay, runSync, SyncError, toSyncErrorInfo } from './sync';
 
 setActiveUser('sync-test-user');
 const DEVICE = '11111111-1111-1111-1111-111111111111';
@@ -43,6 +43,26 @@ describe('backoffDelay', () => {
 		expect(backoffDelay(1)).toBe(4000);
 		expect(backoffDelay(2)).toBe(8000);
 		expect(backoffDelay(20)).toBe(60000);
+	});
+});
+
+describe('toSyncErrorInfo', () => {
+	it('captures message, HTTP status, attempt and time from a SyncError', () => {
+		expect(toSyncErrorInfo(new SyncError(503), 2, 1234)).toEqual({
+			message: 'sync failed: HTTP 503',
+			status: 503,
+			attempt: 2,
+			at: 1234
+		});
+	});
+
+	it('captures a generic error with no HTTP status', () => {
+		expect(toSyncErrorInfo(new Error('boom'), 0, 5)).toEqual({
+			message: 'boom',
+			status: undefined,
+			attempt: 0,
+			at: 5
+		});
 	});
 });
 
