@@ -11,7 +11,7 @@
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
-	import { tmdbMediaId } from '$lib/sync/events';
+	import { tmdbMediaId, tmdbExternalId, type MediaRecord } from '$lib/sync/events';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
@@ -29,9 +29,31 @@
 	// Our own media id for the tracking event pipeline (provider-agnostic, MRQ-112).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
 
+	// Media snapshot cached locally on track (renders lists offline; identity for the media
+	// channel). Built from the TMDB data the page already has.
+	const mediaRecord = $derived<MediaRecord>({
+		id: mediaId,
+		provider: 'tmdb',
+		externalId: tmdbExternalId(detail.type, detail.tmdbId),
+		source: 'linked',
+		type: detail.type,
+		title: detail.title,
+		year: detail.year,
+		posterPath: detail.posterPath,
+		backdropPath: detail.backdropPath,
+		overview: detail.overview,
+		seasons:
+			detail.type === 'show'
+				? detail.seasons.map((s) => ({
+						seasonNumber: s.seasonNumber,
+						episodeCount: s.episodeCount
+					}))
+				: null
+	});
+
 	// Reactive local tracking state (IndexedDB-backed). Recreated + reloaded whenever the title
 	// changes; SSR renders the neutral untracked state, then this hydrates on the client.
-	const tracking = $derived(new TrackingState(mediaId, detail.seasons));
+	const tracking = $derived(new TrackingState(mediaId, mediaRecord));
 	$effect(() => {
 		void sync.revision; // re-read local state whenever a background sync pulls new events
 		tracking.load();

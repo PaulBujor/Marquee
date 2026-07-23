@@ -9,6 +9,7 @@
  * signed in; the store must already be scoped to that user (`setActiveUser`).
  */
 import { backoffDelay, runSync, toSyncErrorInfo, type SyncErrorInfo } from './sync';
+import { runMediaSync } from './media-sync';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 
@@ -92,7 +93,15 @@ class SyncEngine {
 		}
 		try {
 			const { pulled } = await runSync();
-			if (pulled > 0) this.revision++; // let open views re-read the freshly-applied state
+			// Media rides its own channel, after events. A media failure is non-fatal — events are
+			// already synced — so it's caught here and retried on the next cycle, not backed off.
+			let mediaApplied = 0;
+			try {
+				mediaApplied = (await runMediaSync()).applied;
+			} catch {
+				/* retry media next cycle */
+			}
+			if (pulled > 0 || mediaApplied > 0) this.revision++; // let open views re-read
 			this.#attempt = 0;
 			this.lastError = null;
 			this.status = 'idle';

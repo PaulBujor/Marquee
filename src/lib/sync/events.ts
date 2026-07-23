@@ -23,7 +23,7 @@ export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
 
 /**
  * The kinds of events the foundation supports. Events record only *what the user did*;
- * media metadata is separate reference data (see {@link MediaSnapshot}). `tracking.*`
+ * media metadata is separate reference data (see {@link MediaRecord}). `tracking.*`
  * are the lifecycle of a watchlist entry, keyed to a title by `entityId` (our media id);
  * `episode.*` are per-episode watched state.
  *
@@ -46,20 +46,33 @@ export const SYNC_EVENT_TYPES = [
 ] as const;
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
 
+/** A season's episode count — the minimum a show needs for progress / next-episode. */
+export interface MediaSeason {
+	seasonNumber: number;
+	episodeCount: number;
+}
+
 /**
- * A minimal media descriptor. Media is *reference data*, synced on a separate parallel
- * channel (MRQ-111) — **never** inside the `/api/sync` request, which carries events only.
- * Events refer to a title by `entityId` (our media id), never by embedding this. Mirrors
- * `MediaSearchResult` (`src/lib/server/tmdb/types.ts`) — TMDB stays the real source, this is
- * a display cache the client holds for offline rendering.
+ * A media reference record — the shared shape of the server `media` row, the client media
+ * store, and the media-channel DTO. Media is *reference data*, synced on a separate parallel
+ * channel (MRQ-111) — **never** inside `/api/sync`, which carries events only. Events refer
+ * to a title by `entityId` (this `id`), never by embedding this. `id` is our provider-agnostic
+ * media id ({@link mediaId}); TMDB stays the real source, this is the display cache clients hold
+ * for offline rendering. `seasons` is null for movies.
  */
-export interface MediaSnapshot {
-	tmdbId: number;
+export interface MediaRecord {
+	id: string;
+	provider: MediaProvider;
+	/** The provider's id (e.g. `movie/603`); null for purely-custom media. */
+	externalId: string | null;
+	source: MediaSource;
 	type: 'movie' | 'show';
 	title: string;
 	year: number | null;
 	posterPath: string | null;
+	backdropPath: string | null;
 	overview: string;
+	seasons: MediaSeason[] | null;
 }
 
 /** Payload shape per event type — the discriminated union that drives projection. */
