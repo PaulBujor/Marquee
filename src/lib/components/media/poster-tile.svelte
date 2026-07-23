@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
 	import { Film, Tv, Heart, FileQuestion } from '@lucide/svelte';
+	import MediaImage from './media-image.svelte';
 
 	let {
 		type = 'movie',
@@ -9,6 +10,8 @@
 		gradientFrom,
 		gradientTo,
 		posterUrl,
+		mediaId,
+		posterPath,
 		alt = '',
 		class: className,
 		children,
@@ -21,6 +24,9 @@
 		gradientTo?: string;
 		/** Poster image URL; when set it renders behind the overlays, gradient is the fallback. */
 		posterUrl?: string | null;
+		/** When set (with `posterPath`), the poster renders offline-capably from the cached blob. */
+		mediaId?: string;
+		posterPath?: string | null;
 		/** Alt text for the poster image. */
 		alt?: string;
 		class?: string;
@@ -39,7 +45,15 @@
 		: undefined}
 	{...restProps}
 >
-	{#if posterUrl}
+	{#if mediaId}
+		<MediaImage
+			id={mediaId}
+			path={posterPath ?? null}
+			kind="poster"
+			{alt}
+			class="absolute inset-0 h-full w-full object-cover"
+		/>
+	{:else if posterUrl}
 		<img
 			src={posterUrl}
 			{alt}

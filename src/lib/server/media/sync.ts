@@ -26,6 +26,7 @@ function toRecord(row: Media): MediaRecord {
 		posterPath: row.posterPath,
 		backdropPath: row.backdropPath,
 		overview: row.overview,
+		genres: row.genres ?? [],
 		seasons: row.seasons
 	};
 }

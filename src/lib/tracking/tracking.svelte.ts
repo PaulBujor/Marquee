@@ -16,7 +16,6 @@ import {
 	allEpisodes,
 	isSeasonFullyWatched,
 	nextEpisode,
-	reconciledStatus,
 	seasonEpisodes,
 	toTrackingView,
 	statusEventType,
@@ -26,6 +25,7 @@ import {
 	type SeasonCounts,
 	type TrackingView
 } from './actions';
+import { reconcileStatus } from './reconcile';
 
 export class TrackingState {
 	readonly mediaId: string;
@@ -152,19 +152,8 @@ export class TrackingState {
 		}
 	}
 
-	/**
-	 * Move the status in line with episode progress (completion sequence). Reads the freshly
-	 * projected episode counts, so it must run after the episode event has been applied. Only
-	 * touches a tracked, non-DNF row (see {@link reconciledStatus}).
-	 */
-	async #reconcileStatus(): Promise<void> {
-		const total = allEpisodes(this.seasons).length;
-		if (total === 0) return;
-		const row = await getTrackingByMediaId(this.mediaId);
-		if (!row || row.removed) return;
-		const episodes = await getEpisodeWatches(this.mediaId);
-		const watchedCount = episodes.filter((e) => e.watched && e.season >= 1).length;
-		const next = reconciledStatus(row.status, watchedCount, total);
-		if (next) await recordEvent('tracking.status_changed', this.mediaId, { status: next });
+	/** Move the status in line with episode progress (completion sequence) — see {@link reconcileStatus}. */
+	#reconcileStatus(): Promise<void> {
+		return reconcileStatus(this.mediaId, this.seasons);
 	}
 }

@@ -38,6 +38,8 @@ export interface ClientTracking {
 	favoriteUpdatedAt: number;
 	ratingUpdatedAt: number;
 	removedUpdatedAt: number;
+	/** Earliest event clock seen for this title (epoch ms) — the "date added" for list sorting. */
+	addedAt: number;
 }
 
 /** Materialized per-episode watched state. `id` = `${mediaId}::s{S}e{E}`. */
