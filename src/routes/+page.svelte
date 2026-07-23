@@ -69,13 +69,14 @@
 		}, 650);
 	}
 
-	// When a caught-up show leaves Continue Watching, collapse its width + fade (rather than
-	// vanish); paired with animate:flip so the remaining cards slide into place.
-	function collapse(node: HTMLElement, { duration = 320 } = {}) {
+	// When a caught-up show leaves Continue Watching, fade it out and collapse its width at the
+	// same time (opacity eased a touch faster so it reads as a fade, not just a shrink); the
+	// remaining cards (animate:flip) slide into place concurrently. `t` runs 1→0 on exit.
+	function collapse(node: HTMLElement, { duration = 380 } = {}) {
 		const width = node.offsetWidth;
 		return {
 			duration,
-			css: (t: number) => `opacity:${t};width:${t * width}px;overflow:hidden`
+			css: (t: number) => `opacity:${t * t};width:${t * width}px;overflow:hidden`
 		};
 	}
 </script>
