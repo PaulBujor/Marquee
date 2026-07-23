@@ -67,7 +67,8 @@ export async function hydrateMedia(
 			backdropPath: detail.backdropPath,
 			overview: detail.overview,
 			genres: detail.genres,
-			seasons
+			seasons,
+			lastAired: detail.lastAired
 		})
 		.onConflictDoNothing();
 

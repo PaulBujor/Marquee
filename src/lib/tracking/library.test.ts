@@ -22,6 +22,7 @@ function item(over: Partial<LibraryItem> = {}): LibraryItem {
 		posterPath: null,
 		genres: [],
 		seasons: null,
+		lastAired: null,
 		watched: new Set(),
 		...over
 	};

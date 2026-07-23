@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+	airedEpisodes,
 	allEpisodes,
+	isAired,
 	isSeasonFullyWatched,
 	isSpecialsSeason,
 	nextEpisode,
@@ -117,6 +119,36 @@ describe('nextEpisode', () => {
 	it('returns null once every real episode is watched', () => {
 		const watched = new Set(['1:1', '1:2', '2:1', '2:2']);
 		expect(nextEpisode(seasons, watched)).toBeNull();
+	});
+});
+
+describe('aired boundary', () => {
+	const seasons = [
+		{ seasonNumber: 1, episodeCount: 3 },
+		{ seasonNumber: 2, episodeCount: 3 }
+	];
+
+	it('isAired caps at the frontier (null = uncapped)', () => {
+		const frontier = { season: 2, episode: 1 };
+		expect(isAired({ season: 1, episode: 3 }, frontier)).toBe(true);
+		expect(isAired({ season: 2, episode: 1 }, frontier)).toBe(true);
+		expect(isAired({ season: 2, episode: 2 }, frontier)).toBe(false);
+		expect(isAired({ season: 2, episode: 2 }, null)).toBe(true);
+	});
+
+	it('airedEpisodes drops episodes past the frontier', () => {
+		expect(airedEpisodes(seasons, { season: 2, episode: 1 })).toEqual([
+			{ season: 1, episode: 1 },
+			{ season: 1, episode: 2 },
+			{ season: 1, episode: 3 },
+			{ season: 2, episode: 1 }
+		]);
+	});
+
+	it('nextEpisode returns null once caught up to the aired frontier (ignores unaired)', () => {
+		const watched = new Set(['1:1', '1:2', '1:3', '2:1']);
+		expect(nextEpisode(seasons, watched, { season: 2, episode: 1 })).toBeNull();
+		expect(nextEpisode(seasons, watched)).toEqual({ season: 2, episode: 2 }); // uncapped
 	});
 });
 

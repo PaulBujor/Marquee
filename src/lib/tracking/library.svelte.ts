@@ -44,6 +44,7 @@ export class LibraryState {
 				posterPath: m?.posterPath ?? null,
 				genres: m?.genres ?? [],
 				seasons: isShow ? (m?.seasons ?? null) : null,
+				lastAired: m?.lastAired ?? null,
 				watched
 			});
 		}

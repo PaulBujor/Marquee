@@ -24,6 +24,7 @@ function stub(overrides: Partial<MediaDetail> = {}) {
 			cast: [],
 			trailer: null,
 			seasons: [],
+			lastAired: null,
 			...overrides
 		};
 	};

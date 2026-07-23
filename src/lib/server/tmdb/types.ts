@@ -112,6 +112,8 @@ export interface TmdbTvDetailsResponse {
 	images?: TmdbImages;
 	videos?: TmdbVideosResponse;
 	seasons?: TmdbSeasonSummary[];
+	/** The most recently aired episode — the "aired frontier" (null before a show premieres). */
+	last_episode_to_air?: { season_number: number; episode_number: number } | null;
 }
 
 /** A season summary from a `/tv/{id}` response (TMDB includes season 0 = "Specials"). */
@@ -176,6 +178,8 @@ export interface MediaDetail {
 	trailer: MediaTrailer | null;
 	/** Season summaries for shows (ordered as TMDB returns them); empty for movies. */
 	seasons: Season[];
+	/** Most recently aired episode for a show (the aired frontier); null for movies / not-yet-aired. */
+	lastAired: { season: number; episode: number } | null;
 }
 
 /** A normalized season summary for the detail page's season selector. */

@@ -84,21 +84,48 @@ export function allEpisodes(seasons: SeasonCounts[]): EpisodeCoord[] {
 		.flatMap(seasonEpisodes);
 }
 
+/** Whether an episode has aired, given the show's aired frontier. A null frontier ⇒ no cap. */
+export function isAired(coord: EpisodeCoord, lastAired: EpisodeCoord | null): boolean {
+	if (!lastAired) return true;
+	return (
+		coord.season < lastAired.season ||
+		(coord.season === lastAired.season && coord.episode <= lastAired.episode)
+	);
+}
+
+/** Episodes that have aired — {@link allEpisodes} capped at the aired frontier `lastAired`. */
+export function airedEpisodes(
+	seasons: SeasonCounts[],
+	lastAired: EpisodeCoord | null
+): EpisodeCoord[] {
+	return allEpisodes(seasons).filter((c) => isAired(c, lastAired));
+}
+
 /**
- * The next episode to watch: the first (by season then episode) not in `watched`, skipping
- * Specials. Returns null when every real episode is already watched.
+ * The next episode to watch: the first aired episode (by season then episode) not in `watched`,
+ * skipping Specials. Returns null when every aired episode is watched. `lastAired` caps it to
+ * aired episodes so a caught-up show has no "next" (default null = no cap).
  */
-export function nextEpisode(seasons: SeasonCounts[], watched: Set<string>): EpisodeCoord | null {
-	for (const coord of allEpisodes(seasons)) {
+export function nextEpisode(
+	seasons: SeasonCounts[],
+	watched: Set<string>,
+	lastAired: EpisodeCoord | null = null
+): EpisodeCoord | null {
+	for (const coord of airedEpisodes(seasons, lastAired)) {
 		if (!watched.has(watchedKey(coord.season, coord.episode))) return coord;
 	}
 	return null;
 }
 
-/** Whether every episode of a season is watched (false for an episode-less season). */
-export function isSeasonFullyWatched(season: SeasonCounts, watched: Set<string>): boolean {
-	if (season.episodeCount < 1) return false;
-	return seasonEpisodes(season).every((c) => watched.has(watchedKey(c.season, c.episode)));
+/** Whether every **aired** episode of a season is watched (false when it has no aired episodes). */
+export function isSeasonFullyWatched(
+	season: SeasonCounts,
+	watched: Set<string>,
+	lastAired: EpisodeCoord | null = null
+): boolean {
+	const aired = seasonEpisodes(season).filter((c) => isAired(c, lastAired));
+	if (aired.length === 0) return false;
+	return aired.every((c) => watched.has(watchedKey(c.season, c.episode)));
 }
 
 /**

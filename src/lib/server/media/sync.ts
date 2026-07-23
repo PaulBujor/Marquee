@@ -27,7 +27,8 @@ function toRecord(row: Media): MediaRecord {
 		backdropPath: row.backdropPath,
 		overview: row.overview,
 		genres: row.genres ?? [],
-		seasons: row.seasons
+		seasons: row.seasons,
+		lastAired: row.lastAired ?? null
 	};
 }
 

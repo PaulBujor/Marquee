@@ -110,7 +110,14 @@ function normalizeDetails(
 					airYear: parseYear(s.air_date),
 					posterPath: s.poster_path ?? null,
 					overview: s.overview ?? ''
-				}))
+				})),
+		lastAired:
+			isMovie || !tv.last_episode_to_air
+				? null
+				: {
+						season: tv.last_episode_to_air.season_number,
+						episode: tv.last_episode_to_air.episode_number
+					}
 	};
 }
 

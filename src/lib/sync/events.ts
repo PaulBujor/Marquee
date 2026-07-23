@@ -74,6 +74,8 @@ export interface MediaRecord {
 	overview: string;
 	genres: string[];
 	seasons: MediaSeason[] | null;
+	/** Most recently aired episode (aired frontier) for a show; null for movies / not-yet-aired. */
+	lastAired: { season: number; episode: number } | null;
 }
 
 /** Payload shape per event type — the discriminated union that drives projection. */
