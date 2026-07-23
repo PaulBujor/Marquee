@@ -75,7 +75,16 @@ export interface MediaRecord {
 	genres: string[];
 	seasons: MediaSeason[] | null;
 	/** Most recently aired episode (aired frontier) for a show; null for movies / not-yet-aired. */
-	lastAired: { season: number; episode: number } | null;
+	lastAired: EpisodeCoord | null;
+}
+
+/**
+ * A single episode coordinate (season + episode number) within a show. The canonical shape for
+ * an episode reference across the app — the tracking helpers re-export this rather than redefine it.
+ */
+export interface EpisodeCoord {
+	season: number;
+	episode: number;
 }
 
 /** Payload shape per event type — the discriminated union that drives projection. */
@@ -86,8 +95,8 @@ export interface EventPayloadMap {
 	/** Optional user rating, 1–5; `null` clears it. */
 	'tracking.rated': { rating: number | null };
 	'tracking.removed': Record<string, never>;
-	'episode.watched': { season: number; episode: number };
-	'episode.unwatched': { season: number; episode: number };
+	'episode.watched': EpisodeCoord;
+	'episode.unwatched': EpisodeCoord;
 }
 
 /** Any event payload — the union of all per-type shapes (used to type the stored JSON column). */

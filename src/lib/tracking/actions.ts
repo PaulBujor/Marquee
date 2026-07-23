@@ -4,7 +4,10 @@
  * toggle direction) is unit-testable; the component composes these with
  * `recordEvent`. See `TrackingControls.svelte`.
  */
-import type { TrackingStatus } from '$lib/sync/events';
+import type { EpisodeCoord, TrackingStatus } from '$lib/sync/events';
+
+/** An episode coordinate; re-exported from the event model so there's one canonical definition. */
+export type { EpisodeCoord };
 
 /** The user-facing tracking state of a title, derived from its local tracking row. */
 export type TrackingView =
@@ -40,12 +43,6 @@ export function nextFavorite(view: TrackingView): boolean {
 export interface SeasonCounts {
 	seasonNumber: number;
 	episodeCount: number;
-}
-
-/** A single episode coordinate within a show. */
-export interface EpisodeCoord {
-	season: number;
-	episode: number;
 }
 
 /**

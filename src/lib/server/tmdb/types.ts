@@ -1,4 +1,5 @@
 /** Types for the TMDB client. Only the fields the app consumes are modelled. */
+import type { EpisodeCoord } from '$lib/sync/events';
 
 /** A single row from TMDB `/search/multi` (movies, tv, and people mixed). */
 export interface TmdbMultiSearchItem {
@@ -113,7 +114,13 @@ export interface TmdbTvDetailsResponse {
 	videos?: TmdbVideosResponse;
 	seasons?: TmdbSeasonSummary[];
 	/** The most recently aired episode — the "aired frontier" (null before a show premieres). */
-	last_episode_to_air?: { season_number: number; episode_number: number } | null;
+	last_episode_to_air?: TmdbEpisodeRef | null;
+}
+
+/** TMDB's minimal episode reference (`last_episode_to_air`) — season + episode number. */
+export interface TmdbEpisodeRef {
+	season_number: number;
+	episode_number: number;
 }
 
 /** A season summary from a `/tv/{id}` response (TMDB includes season 0 = "Specials"). */
@@ -179,7 +186,7 @@ export interface MediaDetail {
 	/** Season summaries for shows (ordered as TMDB returns them); empty for movies. */
 	seasons: Season[];
 	/** Most recently aired episode for a show (the aired frontier); null for movies / not-yet-aired. */
-	lastAired: { season: number; episode: number } | null;
+	lastAired: EpisodeCoord | null;
 }
 
 /** A normalized season summary for the detail page's season selector. */
