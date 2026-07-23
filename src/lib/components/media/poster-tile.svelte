@@ -3,20 +3,7 @@
 	import { Film, Tv, Heart, FileQuestion } from '@lucide/svelte';
 	import MediaImage from './media-image.svelte';
 
-	let {
-		type = 'movie',
-		isCustom = false,
-		isFavorite = false,
-		gradientFrom,
-		gradientTo,
-		posterUrl,
-		mediaId,
-		posterPath,
-		alt = '',
-		class: className,
-		children,
-		...restProps
-	}: {
+	interface Props {
 		type?: 'movie' | 'show';
 		isCustom?: boolean;
 		isFavorite?: boolean;
@@ -31,7 +18,21 @@
 		alt?: string;
 		class?: string;
 		children?: import('svelte').Snippet;
-	} = $props();
+	}
+	let {
+		type = 'movie',
+		isCustom = false,
+		isFavorite = false,
+		gradientFrom,
+		gradientTo,
+		posterUrl,
+		mediaId,
+		posterPath,
+		alt = '',
+		class: className,
+		children,
+		...restProps
+	}: Props = $props();
 </script>
 
 <div
