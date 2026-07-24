@@ -157,11 +157,17 @@
 	<title>{detail.title} · Marquee</title>
 </svelte:head>
 
-<!-- Fixed header over the hero: an always-reachable back control that echoes the title once the
-in-content <h1> scrolls out of view. Blur is stronger here (over artwork) than the other headers;
-the always-on backing also covers the status-bar / Dynamic Island strip. -->
+<!-- Fixed header over the hero: the back control is always reachable, but the blur backing + title
+fade in together only once the in-content <h1> scrolls out of view — over the hero the header is
+fully transparent. Blur is stronger here (over artwork) than the other headers. -->
 <header class="fixed inset-x-0 top-0 z-40">
-	<HeaderScrim strong />
+	<div
+		class="absolute inset-0 transition-opacity duration-300 {titleInView
+			? 'opacity-0'
+			: 'opacity-100'}"
+	>
+		<HeaderScrim strong />
+	</div>
 	<div
 		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
 	>

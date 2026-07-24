@@ -89,31 +89,30 @@
 		>
 			<ChevronLeftIcon class="size-4" />
 		</Button>
-		<h1 class="font-serif text-xl font-semibold">Search</h1>
-	</div>
-
-	<div class="relative">
-		<Input
-			bind:ref={searchInput}
-			type="search"
-			bind:value={query}
-			oninput={onInput}
-			placeholder="Search movies and shows"
-			aria-label="Search movies and shows"
-			autocomplete="off"
-			autocapitalize="none"
-			class="appearance-none pr-11 [&::-webkit-search-cancel-button]:appearance-none"
-		/>
-		{#if query}
-			<button
-				type="button"
-				onclick={clearSearch}
-				aria-label="Clear search"
-				class="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-			>
-				<XIcon class="size-4" />
-			</button>
-		{/if}
+		<!-- The search field sits where a page title would; back button + input share one row + size. -->
+		<div class="relative flex-1">
+			<Input
+				bind:ref={searchInput}
+				type="search"
+				bind:value={query}
+				oninput={onInput}
+				placeholder="Search movies and shows"
+				aria-label="Search movies and shows"
+				autocomplete="off"
+				autocapitalize="none"
+				class="appearance-none pr-11 [&::-webkit-search-cancel-button]:appearance-none"
+			/>
+			{#if query}
+				<button
+					type="button"
+					onclick={clearSearch}
+					aria-label="Clear search"
+					class="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+				>
+					<XIcon class="size-4" />
+				</button>
+			{/if}
+		</div>
 	</div>
 </PageHeader>
 
