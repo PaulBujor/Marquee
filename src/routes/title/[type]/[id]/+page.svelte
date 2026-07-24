@@ -11,8 +11,7 @@
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import MediaImage from '$lib/components/media/media-image.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { posterUrl, proxiedImageUrl } from '$lib/media.js';
-	import { sampleCornerLuminance } from '$lib/luminance.js';
+	import { posterUrl } from '$lib/media.js';
 	import { tmdbMediaId, tmdbExternalId, type MediaRecord } from '$lib/sync/events';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
@@ -105,23 +104,9 @@
 	let titleEl = $state<HTMLElement | null>(null);
 	let titleInView = $state(true);
 	const showTitle = $derived(!titleInView);
-	// Average luminance of the backdrop's top-left corner (where the back button sits), or null
-	// when it can't be read — drives a contrasting button colour over the hero, else a fallback.
-	let heroLuminance = $state<number | null>(null);
-	// Over the hero (a backdrop exists and its title hasn't scrolled away), the floating controls
-	// need dark content on bright artwork / light content on dark artwork.
+	// Over the hero (a backdrop exists and its title hasn't scrolled away) the back button floats
+	// on artwork, so it wears a dark frosted-glass chip that stays legible on any backdrop.
 	const overHero = $derived(!!detail.backdropPath && titleInView);
-	const heroContentDark = $derived(heroLuminance !== null ? heroLuminance > 0.55 : null);
-	// Frosted-glass chip for the back button while it floats over the hero: light content on dark
-	// artwork, dark content on bright artwork, and a theme-neutral fallback when luminance is
-	// unknown. Determined by the artwork, so it overrides the app light/dark mode explicitly.
-	const floatingChrome = $derived(
-		heroContentDark === true
-			? 'border-white/25 bg-white/15 text-white backdrop-blur-md hover:bg-white/25 hover:text-white dark:hover:bg-white/25 active:bg-white/30 dark:active:bg-white/30'
-			: heroContentDark === false
-				? 'border-black/15 bg-black/10 text-black backdrop-blur-md hover:bg-black/20 hover:text-black dark:hover:bg-black/20 active:bg-black/25 dark:active:bg-black/25'
-				: 'border-border bg-background/60 text-foreground backdrop-blur-md hover:bg-background/80 dark:hover:bg-background/80'
-	);
 
 	// Observe the in-content <h1> so the header knows when to reveal the title.
 	$effect(() => {
@@ -133,21 +118,6 @@
 		});
 		io.observe(el);
 		return () => io.disconnect();
-	});
-
-	// Sample the backdrop luminance via the same-origin image proxy (untainted canvas). A small
-	// size is plenty for an average; failures (offline, no path) leave the frosted fallback.
-	$effect(() => {
-		heroLuminance = null;
-		const url = proxiedImageUrl(detail.backdropPath, 'w185');
-		if (!url) return;
-		let cancelled = false;
-		sampleCornerLuminance(url).then((l) => {
-			if (!cancelled) heroLuminance = l;
-		});
-		return () => {
-			cancelled = true;
-		};
 	});
 
 	// Pre-select the season holding the next watchable episode once local watch state has loaded
@@ -210,8 +180,8 @@
 </svelte:head>
 
 <!-- Fixed header over the hero: an always-reachable back control that, once the in-content title
-scrolls out of view, gains a blur+gradient backing and echoes the title. Over the hero its colour
-is chosen to contrast the artwork behind it (frosted fallback when luminance can't be read). -->
+scrolls out of view, gains a blur+gradient backing and echoes the title. Over the hero the back
+button wears a dark frosted-glass chip so it stays legible on any backdrop. -->
 <header class="fixed inset-x-0 top-0 z-40">
 	<div
 		class="pointer-events-none absolute inset-0 backdrop-blur-md transition-opacity duration-200 {showTitle
@@ -227,7 +197,9 @@ is chosen to contrast the artwork behind it (frosted fallback when luminance can
 			variant={overHero ? 'ghost' : 'outline'}
 			size="icon"
 			shape="round"
-			class="shrink-0 transition-colors {overHero ? floatingChrome : 'text-muted-foreground'}"
+			class="shrink-0 transition-colors {overHero
+				? 'border-white/20 bg-black/40 text-white backdrop-blur-md hover:bg-black/55 hover:text-white active:bg-black/60 dark:hover:bg-black/55'
+				: 'text-muted-foreground'}"
 			aria-label="Go back"
 		>
 			<ChevronLeftIcon class="size-4" />

@@ -243,7 +243,7 @@
 						<span class="text-xs font-medium text-muted-foreground">Sort</span>
 						<select
 							bind:value={sort}
-							class="rounded-lg border border-border bg-background px-3 py-2 transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+							class="h-10 rounded-full border border-border bg-background px-4 transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
 						>
 							<option value="added">Date added</option>
 							<option value="title">Title</option>
@@ -256,7 +256,7 @@
 							value={year ?? ''}
 							onchange={(e) =>
 								(year = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-							class="rounded-lg border border-border bg-background px-3 py-2 transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+							class="h-10 rounded-full border border-border bg-background px-4 transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
 						>
 							<option value="">Any</option>
 							{#each years as y (y)}
@@ -269,7 +269,7 @@
 						<select
 							value={genre ?? ''}
 							onchange={(e) => (genre = e.currentTarget.value || null)}
-							class="rounded-lg border border-border bg-background px-3 py-2 transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+							class="h-10 rounded-full border border-border bg-background px-4 transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
 						>
 							<option value="">Any</option>
 							{#each genres as g (g)}

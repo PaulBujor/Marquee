@@ -27,8 +27,8 @@
 				<ToggleGroup.Item
 					value={m.value}
 					class="flex-1 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground {i === 0
-						? 'rounded-l-lg!'
-						: ''} {i === themeModes.length - 1 ? 'rounded-r-lg!' : ''}"
+						? 'rounded-l-full!'
+						: ''} {i === themeModes.length - 1 ? 'rounded-r-full!' : ''}"
 				>
 					{m.label}
 				</ToggleGroup.Item>
