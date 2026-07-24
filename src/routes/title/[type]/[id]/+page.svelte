@@ -10,6 +10,7 @@
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import MediaImage from '$lib/components/media/media-image.svelte';
+	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
 	import { tmdbMediaId, tmdbExternalId, type MediaRecord } from '$lib/sync/events';
@@ -160,10 +161,7 @@
 in-content <h1> scrolls out of view. Blur is stronger here (over artwork) than the other headers;
 the always-on backing also covers the status-bar / Dynamic Island strip. -->
 <header class="fixed inset-x-0 top-0 z-40">
-	<div
-		class="pointer-events-none absolute inset-0 backdrop-blur-xl"
-		style="background:linear-gradient(to bottom, var(--color-background) 0%, var(--color-background) 18%, color-mix(in oklab, var(--color-background) 72%, transparent) 42%, color-mix(in oklab, var(--color-background) 28%, transparent) 66%, transparent 100%); -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 42%, rgb(0 0 0 / 0.55) 64%, rgb(0 0 0 / 0.2) 84%, transparent 100%); mask-image:linear-gradient(to bottom, #000 0%, #000 42%, rgb(0 0 0 / 0.55) 64%, rgb(0 0 0 / 0.2) 84%, transparent 100%);"
-	></div>
+	<HeaderScrim strong />
 	<div
 		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
 	>
