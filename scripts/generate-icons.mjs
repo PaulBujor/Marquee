@@ -37,7 +37,8 @@ const LIGHT_BG = '#f7f6f3';
 // landscape swaps w/h. The splash renders the logo at the OS icon size (iconPt * dpr).
 const DEVICES = [
 	{ name: 'iphone15pro', w: 1179, h: 2556, dpr: 3, iconPt: 60 },
-	{ name: 'ipadair', w: 1908, h: 2746, dpr: 2, iconPt: 76 }
+	// iPad Air (10.9"/11", 4th/5th/M2): 820x1180 pt @2 = 1640x2360 px.
+	{ name: 'ipadair', w: 1640, h: 2360, dpr: 2, iconPt: 76 }
 ];
 
 const logo = await readFile(SRC);

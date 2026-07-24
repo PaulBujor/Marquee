@@ -9,7 +9,7 @@ import { applyEventToIdb } from './state';
 import { getDeviceId } from './meta';
 import { createEvent, type EventPayloadMap, type SyncEventType } from '$lib/sync/events';
 
-export { openDb, setActiveUser } from './db';
+export { openDb, setActiveUser, wipeLocalData } from './db';
 export type {
 	ClientMedia,
 	ClientTracking,

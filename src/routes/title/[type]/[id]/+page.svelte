@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { slide } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
@@ -10,6 +10,7 @@
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import MediaImage from '$lib/components/media/media-image.svelte';
+	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
 	import { tmdbMediaId, tmdbExternalId, type MediaRecord } from '$lib/sync/events';
@@ -53,31 +54,25 @@
 		lastAired: detail.lastAired
 	});
 
-	// Reactive local tracking state (IndexedDB-backed). Recreated + reloaded whenever the title
-	// changes; SSR renders the neutral untracked state, then this hydrates on the client.
+	// Reactive local tracking state (IndexedDB-backed); recreated per title, reloaded on sync pulls.
 	const tracking = $derived(new TrackingState(mediaId, mediaRecord));
 	$effect(() => {
-		void sync.revision; // re-read local state whenever a background sync pulls new events
+		void sync.revision;
 		tracking.load();
 	});
 
-	// Overview/cast/trailer live under a "Details" toggle (default open). When watch-tracking
-	// lands it can default this collapsed for in-progress shows; read-only for now.
 	let detailsOpen = $state(true);
-	// The trailer iframe stays out of the DOM until the user clicks the thumbnail — click-to-load
-	// keeps the YouTube embed (and its CSP surface) off the page for anyone who never plays it.
+	// Click-to-load keeps the YouTube embed (and its CSP surface) off the page until played.
 	let showTrailer = $state(false);
 
-	// Seasons switch client-side: episodes are fetched from our own JSON endpoint and cached, so
-	// picking a season never touches the URL or browser history. The server load seeds the default
-	// season for first paint / SSR.
+	// Seasons switch client-side (fetched from our JSON endpoint + cached); server seeds the first.
 	type SeasonData = NonNullable<PageData['season']>;
-	// Seed once from the SSR data (untrack marks the initial read as intentional, mirroring search).
 	let selectedSeason = $state(untrack(() => data.season?.seasonNumber ?? null));
 	let seasonCache = $state<Record<number, SeasonData>>(
 		untrack(() => (data.season ? { [data.season.seasonNumber]: data.season } : {}))
 	);
 	let seasonLoading = $state(false);
+	let preselectedFor = $state<string | null>(null);
 	const currentSeason = $derived(
 		selectedSeason !== null ? (seasonCache[selectedSeason] ?? null) : null
 	);
@@ -86,21 +81,44 @@
 			? (detail.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
 			: null
 	);
-	// Per-season "mark watched" confirmation (bulk, hard to undo).
 	let seasonConfirmOpen = $state(false);
 
-	// Resolve an episode title from whatever season the page has cached (best-effort — the next
-	// episode may live in a season not yet fetched, in which case the row shows just S/E).
+	// Episode title from the cached season data, if that season has been fetched.
 	function episodeName(season: number, episode: number): string | undefined {
 		return seasonCache[season]?.episodes.find((e) => e.episodeNumber === episode)?.name;
 	}
 
-	// Mirror the search page's back behaviour: pop history when we arrived from within the app,
-	// otherwise fall back to the search page. Reset per-title state when navigating between titles.
+	// The fixed header reveals the title once the in-content <h1> scrolls out of view.
+	let titleEl = $state<HTMLElement | null>(null);
+	let titleInView = $state(true);
+	$effect(() => {
+		const el = titleEl;
+		if (!el || typeof IntersectionObserver === 'undefined') return;
+		const io = new IntersectionObserver(([entry]) => (titleInView = entry.isIntersecting), {
+			rootMargin: '-56px 0px 0px 0px'
+		});
+		io.observe(el);
+		return () => io.disconnect();
+	});
+
+	// Pre-select the season of the next watchable episode once watch state loads (season 1 when
+	// caught up). Runs after the SSR seed / nav reset; `preselectedFor` keeps it to once per title.
+	$effect(() => {
+		if (detail.type !== 'show' || !tracking.ready || preselectedFor === mediaId) return;
+		preselectedFor = mediaId;
+		const target = tracking.nextEpisode()?.season ?? 1;
+		if (target !== selectedSeason && detail.seasons.some((s) => s.seasonNumber === target)) {
+			void selectSeason(target);
+		}
+	});
+
+	// Back = pop history when we came from within the app, else the search page. Reset per-title.
 	let cameFromApp = $state(false);
 	afterNavigate((nav) => {
 		cameFromApp = nav.from != null;
 		showTrailer = false;
+		titleInView = true;
+		preselectedFor = null;
 		selectedSeason = data.season?.seasonNumber ?? null;
 		seasonCache = data.season ? { [data.season.seasonNumber]: data.season } : {};
 		seasonLoading = false;
@@ -139,20 +157,42 @@
 	<title>{detail.title} · Marquee</title>
 </svelte:head>
 
-{#snippet backButton(extraClass: string)}
-	<Button
-		onclick={goBack}
-		variant="outline"
-		size="icon"
-		shape="round"
-		class="text-muted-foreground {extraClass}"
-		aria-label="Go back"
+<!-- Fixed header over the hero: the back control is always reachable, but the blur backing + title
+fade in together only once the in-content <h1> scrolls out of view — over the hero the header is
+fully transparent. Blur is stronger here (over artwork) than the other headers. -->
+<header class="fixed inset-x-0 top-0 z-40">
+	<div
+		class="absolute inset-0 transition-opacity duration-300 {titleInView
+			? 'opacity-0'
+			: 'opacity-100'}"
 	>
-		<ChevronLeftIcon class="size-4" />
-	</Button>
-{/snippet}
+		<HeaderScrim strong />
+	</div>
+	<div
+		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
+	>
+		<Button
+			onclick={goBack}
+			variant="outline"
+			size="icon"
+			shape="round"
+			class="shrink-0 text-muted-foreground"
+			aria-label="Go back"
+		>
+			<ChevronLeftIcon class="size-4" />
+		</Button>
+		{#if !titleInView}
+			<h2
+				class="min-w-0 flex-1 truncate font-serif text-lg font-semibold"
+				transition:fade={{ duration: 150 }}
+			>
+				{detail.title}
+			</h2>
+		{/if}
+	</div>
+</header>
 
-<main class="mx-auto w-full max-w-lg">
+<main class="mx-auto w-full max-w-2xl">
 	{#if detail.backdropPath}
 		<div class="relative">
 			<MediaImage
@@ -166,15 +206,14 @@
 			<div
 				class="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent"
 			></div>
-			{@render backButton('absolute top-4 left-5 z-10 bg-background dark:bg-background')}
 		</div>
 	{/if}
 
-	<div class="flex flex-col gap-4 px-5 pb-10 {detail.backdropPath ? '-mt-14' : 'pt-4'}">
-		{#if !detail.backdropPath}
-			{@render backButton('self-start')}
-		{/if}
-
+	<div
+		class="flex flex-col gap-4 px-5 pb-10 {detail.backdropPath
+			? '-mt-14'
+			: 'pt-[calc(3.5rem+env(safe-area-inset-top))]'}"
+	>
 		<!-- Poster overlaps the bottom of the backdrop; title/badges sit below the hero -->
 		<div class="flex items-end gap-4">
 			<div class="w-24 shrink-0">
@@ -186,7 +225,7 @@
 				/>
 			</div>
 			<div class="flex min-w-0 flex-1 flex-col gap-2 pb-1">
-				<h1 class="font-serif text-2xl font-semibold">{detail.title}</h1>
+				<h1 bind:this={titleEl} class="font-serif text-2xl font-semibold">{detail.title}</h1>
 				<div class="flex flex-wrap items-center gap-2">
 					<MediaBadge>
 						{detail.type === 'movie' ? 'Movie' : 'Show'}{detail.year ? ` · ${detail.year}` : ''}

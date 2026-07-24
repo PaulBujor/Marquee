@@ -129,18 +129,26 @@ export function isSeasonFullyWatched(
  * Derive the status a show should move to from its episode-watch progress, or null when no
  * change is warranted. This is the completion sequence (MRQ-55): watching the last episode
  * completes it, unwatching one un-completes it, and the first watch starts it. It needs the
- * **total episode count** (TMDB reference data, not in the event log), so it runs where that's
+ * **aired episode count** (TMDB reference data, not in the event log), so it runs where that's
  * known and records a `status_changed`. An explicit `did_not_finish` is never auto-overridden;
- * `totalEpisodes === 0` (movies) derives nothing.
+ * `airedEpisodeCount === 0` (movies) derives nothing.
+ *
+ * `stillAiring` (there are announced episodes not yet aired) keeps a show you're **caught up on
+ * but that hasn't finished airing** in `watching`, not `completed` — you're actively keeping up
+ * with it, so it belongs in the Watching list. A show only completes once it's fully aired *and*
+ * fully watched.
  */
 export function reconciledStatus(
 	current: TrackingStatus,
 	watchedCount: number,
-	totalEpisodes: number
+	airedEpisodeCount: number,
+	stillAiring = false
 ): TrackingStatus | null {
-	if (totalEpisodes === 0 || current === 'did_not_finish') return null;
-	const allWatched = watchedCount >= totalEpisodes;
-	if (allWatched) return current === 'completed' ? null : 'completed';
+	if (airedEpisodeCount === 0 || current === 'did_not_finish') return null;
+	const caughtUp = watchedCount >= airedEpisodeCount;
+	if (caughtUp && !stillAiring) return current === 'completed' ? null : 'completed';
+	// In progress (or caught up on a still-airing show): back out a stale `completed`, and start
+	// a `want_to_watch` title once its first episode is watched.
 	if (current === 'completed') return 'watching';
 	if (current === 'want_to_watch' && watchedCount > 0) return 'watching';
 	return null;

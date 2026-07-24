@@ -1,5 +1,8 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
+	import { afterNavigate, goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { flip } from 'svelte/animate';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { buttonVariants } from '$lib/components/ui/button';
@@ -7,6 +10,7 @@
 	import ProgressRing from '$lib/components/media/progress-ring.svelte';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Popover from '$lib/components/ui/popover';
+	import * as Select from '$lib/components/ui/select';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import SlidersIcon from '@lucide/svelte/icons/sliders-horizontal';
 	import { LibraryState } from '$lib/tracking/library.svelte';
@@ -54,11 +58,65 @@
 		{ key: 'show', label: 'Shows' }
 	];
 
-	let tab = $state<LibraryTab>('want_to_watch');
-	let typeFilter = $state<TypeFilter>('all');
-	let year = $state<number | null>(null);
-	let genre = $state<string | null>(null);
-	let sort = $state<LibrarySort>('added');
+	const SORTS: LibrarySort[] = ['added', 'title', 'year'];
+	const SORT_LABELS: Record<LibrarySort, string> = {
+		added: 'Date added',
+		title: 'Title',
+		year: 'Release year'
+	};
+
+	// Selected tab + filters live in the URL (like the search page), so a view is shareable and
+	// survives reload / back-forward. Defaults are omitted from the query to keep it clean.
+	function readState() {
+		const p = page.url.searchParams;
+		const t = p.get('tab');
+		const ty = p.get('type');
+		const s = p.get('sort');
+		const y = p.get('year');
+		return {
+			tab: (TABS.some((x) => x.key === t) ? t : 'want_to_watch') as LibraryTab,
+			typeFilter: (TYPES.some((x) => x.key === ty) ? ty : 'all') as TypeFilter,
+			sort: (SORTS.includes(s as LibrarySort) ? s : 'added') as LibrarySort,
+			year: y && Number.isFinite(Number(y)) ? Number(y) : null,
+			genre: p.get('genre') || null
+		};
+	}
+
+	const initial = untrack(() => readState());
+	let tab = $state<LibraryTab>(initial.tab);
+	let typeFilter = $state<TypeFilter>(initial.typeFilter);
+	let year = $state<number | null>(initial.year);
+	let genre = $state<string | null>(initial.genre);
+	let sort = $state<LibrarySort>(initial.sort);
+
+	// Mirror state → URL. Skips when already in sync (so seeding / back-forward don't loop). Built
+	// as a plain string (tab/type/sort are enum-safe; genre is encoded) — no URLSearchParams.
+	$effect(() => {
+		const parts: string[] = [];
+		if (tab !== 'want_to_watch') parts.push(`tab=${tab}`);
+		if (typeFilter !== 'all') parts.push(`type=${typeFilter}`);
+		if (sort !== 'added') parts.push(`sort=${sort}`);
+		if (year !== null) parts.push(`year=${year}`);
+		if (genre !== null) parts.push(`genre=${encodeURIComponent(genre)}`);
+		const qs = parts.join('&');
+		const target = qs ? `/?${qs}` : '/';
+		if (page.url.pathname === '/' && target !== `${page.url.pathname}${page.url.search}`) {
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- own route + query string
+			goto(target, { replaceState: true, keepFocus: true, noScroll: true });
+		}
+	});
+
+	// Re-seed from the URL on back/forward and direct entry (mirrors the search page).
+	afterNavigate((nav) => {
+		if (nav.type === 'popstate' || nav.type === 'enter') {
+			const s = readState();
+			tab = s.tab;
+			typeFilter = s.typeFilter;
+			sort = s.sort;
+			year = s.year;
+			genre = s.genre;
+		}
+	});
 
 	const inProgress = $derived(continueWatching(library.items));
 	const years = $derived(availableYears(library.items));
@@ -97,10 +155,10 @@
 <svelte:head><title>Marquee</title></svelte:head>
 
 {#if data.user}
-	<main class="mx-auto w-full max-w-2xl px-5 pb-16">
+	<main class="mx-auto w-full max-w-3xl px-5 pt-2 pb-16">
 		<!-- Continue watching — in-progress shows only (movies have no next episode) -->
 		{#if inProgress.length > 0}
-			<section class="mb-7">
+			<section class="mb-6">
 				<h2 class="mb-2.5 text-xs font-bold tracking-widest text-muted-foreground uppercase">
 					Continue Watching
 				</h2>
@@ -171,8 +229,13 @@
 				variant="outline"
 				size="sm"
 			>
-				{#each TYPES as t (t.key)}
-					<ToggleGroup.Item value={t.key}>{t.label}</ToggleGroup.Item>
+				{#each TYPES as t, i (t.key)}
+					<ToggleGroup.Item
+						value={t.key}
+						class={`${i === 0 ? 'rounded-l-full!' : ''} ${i === TYPES.length - 1 ? 'rounded-r-full!' : ''}`}
+					>
+						{t.label}
+					</ToggleGroup.Item>
 				{/each}
 			</ToggleGroup.Root>
 
@@ -187,51 +250,60 @@
 					Filters &amp; sort
 				</Popover.Trigger>
 				<Popover.Content align="end" class="w-64 space-y-3">
-					<label class="flex flex-col gap-1 text-sm">
+					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Sort</span>
-						<select
-							bind:value={sort}
-							class="rounded-md border border-border bg-background px-2 py-1"
+						<Select.Root
+							type="single"
+							value={sort}
+							onValueChange={(v) => v && (sort = v as LibrarySort)}
 						>
-							<option value="added">Date added</option>
-							<option value="title">Title</option>
-							<option value="year">Release year</option>
-						</select>
-					</label>
-					<label class="flex flex-col gap-1 text-sm">
+							<Select.Trigger class="w-full">{SORT_LABELS[sort]}</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="added">Date added</Select.Item>
+								<Select.Item value="title">Title</Select.Item>
+								<Select.Item value="year">Release year</Select.Item>
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Year</span>
-						<select
-							value={year ?? ''}
-							onchange={(e) =>
-								(year = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-							class="rounded-md border border-border bg-background px-2 py-1"
+						<Select.Root
+							type="single"
+							value={year === null ? '' : String(year)}
+							onValueChange={(v) => (year = v ? Number(v) : null)}
 						>
-							<option value="">Any</option>
-							{#each years as y (y)}
-								<option value={y}>{y}</option>
-							{/each}
-						</select>
-					</label>
-					<label class="flex flex-col gap-1 text-sm">
+							<Select.Trigger class="w-full">{year ?? 'Any'}</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="">Any</Select.Item>
+								{#each years as y (y)}
+									<Select.Item value={String(y)}>{y}</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Genre</span>
-						<select
+						<Select.Root
+							type="single"
 							value={genre ?? ''}
-							onchange={(e) => (genre = e.currentTarget.value || null)}
-							class="rounded-md border border-border bg-background px-2 py-1"
+							onValueChange={(v) => (genre = v || null)}
 						>
-							<option value="">Any</option>
-							{#each genres as g (g)}
-								<option value={g}>{g}</option>
-							{/each}
-						</select>
-					</label>
+							<Select.Trigger class="w-full">{genre ?? 'Any'}</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="">Any</Select.Item>
+								{#each genres as g (g)}
+									<Select.Item value={g}>{g}</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
 				</Popover.Content>
 			</Popover.Root>
 		</div>
 
 		<!-- Poster grid -->
 		{#if list.length > 0}
-			<div class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4">
+			<div class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5">
 				{#each list as item (item.mediaId)}
 					<a
 						href={resolve('/title/[type]/[id]', {

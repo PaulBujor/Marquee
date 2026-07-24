@@ -106,6 +106,17 @@ describe('applyEventToIdb', () => {
 		expect((await getEpisodeWatches(MID))[0].watched).toBe(false); // newer unwatch wins
 	});
 
+	it('clears episode watches on removal and a stale watch cannot resurrect them', async () => {
+		// remove() emits an unwatch per watched episode (newer clock) then the tombstone.
+		await applyEventToIdb(ev('episode.watched', MID, { season: 1, episode: 2 }, 100));
+		await applyEventToIdb(ev('episode.unwatched', MID, { season: 1, episode: 2 }, 200));
+		await applyEventToIdb(ev('tracking.removed', MID, {}, 200));
+		expect((await getEpisodeWatches(MID))[0].watched).toBe(false);
+		// A late-arriving copy of the original watch (older clock) must not revive progress.
+		await applyEventToIdb(ev('episode.watched', MID, { season: 1, episode: 2 }, 100));
+		expect((await getEpisodeWatches(MID))[0].watched).toBe(false);
+	});
+
 	it('does not undo a newer removal with an older re-add (revive fix mirror)', async () => {
 		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 100));
 		await applyEventToIdb(ev('tracking.removed', MID, {}, 300));

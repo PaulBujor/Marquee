@@ -196,4 +196,13 @@ describe('reconciledStatus', () => {
 		expect(reconciledStatus('did_not_finish', 10, 10)).toBeNull();
 		expect(reconciledStatus('did_not_finish', 3, 10)).toBeNull();
 	});
+
+	it('keeps a caught-up but still-airing show in watching, not completed', () => {
+		// All aired episodes watched, but more are still to come → stays "watching".
+		expect(reconciledStatus('watching', 10, 10, true)).toBeNull();
+		// First watch of a caught-up still-airing show starts it watching (not completed).
+		expect(reconciledStatus('want_to_watch', 10, 10, true)).toBe('watching');
+		// A previously-"completed" show that's airing again (new episodes aired) reverts to watching.
+		expect(reconciledStatus('completed', 10, 10, true)).toBe('watching');
+	});
 });

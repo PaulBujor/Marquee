@@ -117,6 +117,29 @@ export function setActiveUser(userId: string | null): void {
 	dbPromise = null; // the next openDb opens the new user's database
 }
 
+/**
+ * Delete the active user's local database (offline replica + outbox + cursor). The next
+ * {@link openDb} recreates it empty, so a fresh sync re-pulls everything from the server — used by
+ * the "clear local data" reset. Caller should flush pending events first (unsynced edits are lost)
+ * and reload afterwards. No-op when no user is active.
+ */
+export async function wipeLocalData(): Promise<void> {
+	if (!activeUserId || typeof indexedDB === 'undefined') return;
+	const name = `${DB_NAME}-${activeUserId}`;
+	if (dbPromise) {
+		const db = await dbPromise.catch(() => null);
+		db?.close();
+		dbPromise = null;
+	}
+	await new Promise<void>((resolve, reject) => {
+		const req = indexedDB.deleteDatabase(name);
+		req.onsuccess = () => resolve();
+		req.onerror = () => reject(req.error);
+		// Another tab holds the DB open — the delete completes once it closes; don't hang the reset.
+		req.onblocked = () => resolve();
+	});
+}
+
 /** Open (once per active user) that user's database, creating stores/indexes on first use. */
 export function openDb(): Promise<MarqueeDatabase> {
 	if (!activeUserId) {
