@@ -1,5 +1,0 @@
-- main [ref=e3]:
-  - heading "Marquee" [level=1] [ref=e4]
-  - paragraph [ref=e5]: Track the movies and shows you're watching.
-  - link "Sign in" [ref=e6] [cursor=pointer]:
-    - /url: ./login

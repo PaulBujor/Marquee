@@ -1,3 +1,10 @@
+<!--
+	Intentional divergence from the shadcn-svelte "nova" registry: it styles the active state with
+	`data-active:` (written against a newer Bits UI), but the pinned bits-ui@2.18 Tabs.Trigger emits
+	`data-state="active"`. So the active-state variants below use `data-[state=active]:` instead —
+	without this the selected tab renders unstyled. Revert to the registry version only when Bits UI
+	is upgraded to the one the registry targets; don't blindly re-run `shadcn-svelte add tabs`.
+-->
 <script lang="ts">
 	import { Tabs as TabsPrimitive } from 'bits-ui';
 	import { cn } from '$lib/utils.js';

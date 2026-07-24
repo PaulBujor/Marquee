@@ -57,3 +57,6 @@ coverage/
 
 # Throwaway PWA-asset generator dump; source of truth is dev-assets/logo*.png
 dev-assets/pwa-assets/
+
+# Playwright MCP scratch (snapshots/console dumps from local verification)
+.playwright-mcp/
