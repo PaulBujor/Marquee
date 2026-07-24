@@ -1,13 +1,37 @@
 <script lang="ts">
 	import './layout.css';
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import AppHeader from '$lib/components/app-header.svelte';
 	import InstallPrompt from '$lib/components/install-prompt.svelte';
 	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
 	import { theme } from '$lib/state/theme.svelte.js';
+	import { setActiveUser } from '$lib/client/idb';
+	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
+
+	// Scope the local store to the signed-in user *before* any tracking UI opens it (the layout
+	// script runs before child pages mount). Per-user database (`marquee-<id>`) — a wrong-account
+	// login opens a different DB, never clearing the prior user's data. `untrack`: a deliberate
+	// one-shot read of the initial user; the effect below handles any later change.
+	if (typeof window !== 'undefined') {
+		const initialUser = untrack(() => data.user);
+		if (initialUser) setActiveUser(initialUser.id);
+	}
+
+	// Drive background event sync while signed in; tear down (and detach the store) on logout.
+	$effect(() => {
+		if (!data.user) {
+			sync.stop();
+			setActiveUser(null);
+			return;
+		}
+		setActiveUser(data.user.id);
+		sync.start();
+		return () => sync.stop();
+	});
 
 	$effect(() => {
 		document.documentElement.classList.toggle('dark', theme.isDark);

@@ -1,4 +1,4 @@
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { createDb } from '$lib/server/db';
 import { validateSession, deleteSessionCookie, SESSION_COOKIE } from '$lib/server/auth';
@@ -42,3 +42,13 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 };
 
 export const handle: Handle = sequence(database, authentication, securityHeaders);
+
+// Central capture for **unexpected** server errors (uncaught throws in load/actions/endpoints —
+// e.g. a failed `/api/sync` projection or a D1 error; `error(status)` throws are "expected" and
+// skip this). Logged structured so Cloudflare observability (logs/traces, see wrangler.jsonc)
+// picks them up; a correlation `id` goes to the log only, never leaking internals to the client.
+export const handleError: HandleServerError = ({ error, event }) => {
+	const id = crypto.randomUUID();
+	console.error(`[server-error ${id}] ${event.request.method} ${event.url.pathname}`, error);
+	return { message: 'Something went wrong on our end.' };
+};

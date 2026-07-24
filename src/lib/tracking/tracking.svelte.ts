@@ -10,6 +10,7 @@
  */
 import { SvelteSet } from 'svelte/reactivity';
 import { getEpisodeWatches, getTrackingByMediaId, recordEvent } from '$lib/client/idb';
+import { sync } from '$lib/client/sync/engine.svelte';
 import type { TrackingStatus } from '$lib/sync/events';
 import {
 	allEpisodes,
@@ -74,6 +75,7 @@ export class TrackingState {
 		try {
 			await work();
 			await this.load();
+			sync.requestSync(); // nudge a push so the change reaches the server promptly
 		} finally {
 			this.busy = false;
 		}

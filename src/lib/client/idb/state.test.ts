@@ -6,8 +6,10 @@ import {
 	type EventPayloadMap,
 	type SyncEventType
 } from '$lib/sync/events';
-import { openDb } from './db';
+import { openDb, setActiveUser } from './db';
 import { applyEventToIdb, getEpisodeWatches, getTracking, getTrackingByMediaId } from './state';
+
+setActiveUser('test-user'); // the store is namespaced per user; scope it before opening
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 

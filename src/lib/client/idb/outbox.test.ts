@@ -1,7 +1,10 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { createEvent } from '$lib/sync/events';
+import { setActiveUser } from './db';
 import { enqueueEvent, getUnsynced, markSynced } from './outbox';
+
+setActiveUser('test-user'); // the store is namespaced per user; scope it before opening
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 

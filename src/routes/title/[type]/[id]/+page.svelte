@@ -13,6 +13,7 @@
 	import { posterUrl } from '$lib/media.js';
 	import { tmdbMediaId } from '$lib/sync/events';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
+	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
@@ -32,6 +33,7 @@
 	// changes; SSR renders the neutral untracked state, then this hydrates on the client.
 	const tracking = $derived(new TrackingState(mediaId, detail.seasons));
 	$effect(() => {
+		void sync.revision; // re-read local state whenever a background sync pulls new events
 		tracking.load();
 	});
 
