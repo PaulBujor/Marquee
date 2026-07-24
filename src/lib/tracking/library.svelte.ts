@@ -59,7 +59,10 @@ export class LibraryState {
 		this.busy = true;
 		try {
 			await recordEvent('episode.watched', item.mediaId, progress.next);
-			await reconcileStatus(item.mediaId, item.seasons ?? []);
+			// Pass the aired frontier so completion is derived from *aired* episodes — matching the
+			// detail page (TrackingState). Without it a caught-up airing show wouldn't reconcile
+			// consistently across the two surfaces.
+			await reconcileStatus(item.mediaId, item.seasons ?? [], item.lastAired);
 			sync.requestSync();
 			await this.load();
 		} finally {
