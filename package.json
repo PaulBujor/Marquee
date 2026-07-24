@@ -11,6 +11,8 @@
 		"dev": "vite dev",
 		"build": "wrangler types && vite build",
 		"preview": "wrangler dev",
+		"cron:dev": "wrangler dev -c wrangler.cron.jsonc --test-scheduled",
+		"cron:deploy": "wrangler deploy -c wrangler.cron.jsonc",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "wrangler types && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
