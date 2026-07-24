@@ -27,7 +27,8 @@ function stub() {
 			genres: [],
 			cast: [],
 			trailer: null,
-			seasons: []
+			seasons: [],
+			lastAired: null
 		};
 	};
 	return { client: { getDetails }, calls: () => calls };

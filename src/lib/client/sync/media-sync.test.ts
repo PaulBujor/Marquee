@@ -23,7 +23,8 @@ function record(externalId: string): MediaRecord {
 		backdropPath: '/b.jpg',
 		overview: '',
 		genres: [],
-		seasons: null
+		seasons: null,
+		lastAired: null
 	};
 }
 

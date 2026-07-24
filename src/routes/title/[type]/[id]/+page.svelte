@@ -49,7 +49,8 @@
 						seasonNumber: s.seasonNumber,
 						episodeCount: s.episodeCount
 					}))
-				: null
+				: null,
+		lastAired: detail.lastAired
 	});
 
 	// Reactive local tracking state (IndexedDB-backed). Recreated + reloaded whenever the title
@@ -405,7 +406,7 @@
 												>{ep.runtime} min</span
 											>
 										{/if}
-										{#if tracking.view.tracked && currentSeason}
+										{#if tracking.view.tracked && currentSeason && tracking.hasAired(currentSeason.seasonNumber, ep.episodeNumber)}
 											{@const watched = tracking.isWatched(
 												currentSeason.seasonNumber,
 												ep.episodeNumber

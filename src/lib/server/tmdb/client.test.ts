@@ -241,7 +241,8 @@ describe('createTmdbClient.getDetails', () => {
 				{ id: 2, name: 'Elliot Page', character: 'Ariadne', profilePath: null }
 			],
 			trailer: { key: 'yt-trailer', name: 'Official Trailer' },
-			seasons: []
+			seasons: [],
+			lastAired: null
 		});
 	});
 
@@ -364,7 +365,8 @@ describe('createTmdbClient.getDetails', () => {
 			genres: [],
 			cast: [],
 			trailer: null,
-			seasons: []
+			seasons: [],
+			lastAired: null
 		});
 	});
 

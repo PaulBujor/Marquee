@@ -4,7 +4,7 @@
  * "next episode". `LibraryState` (`library.svelte.ts`) builds `LibraryItem`s from IndexedDB.
  */
 import {
-	allEpisodes,
+	airedEpisodes,
 	nextEpisode,
 	watchedKey,
 	type EpisodeCoord,
@@ -27,6 +27,7 @@ export interface LibraryItem {
 	posterPath: string | null;
 	genres: string[];
 	seasons: SeasonCounts[] | null;
+	lastAired: EpisodeCoord | null;
 	watched: Set<string>;
 }
 
@@ -51,14 +52,14 @@ export interface ShowProgress {
 /** Watched/total + next episode for a show, or null for a movie / a show with no episodes. */
 export function showProgress(item: LibraryItem): ShowProgress | null {
 	if (item.type !== 'show' || !item.seasons) return null;
-	const episodes = allEpisodes(item.seasons);
+	const episodes = airedEpisodes(item.seasons, item.lastAired);
 	if (episodes.length === 0) return null;
 	const watched = episodes.filter((c) => item.watched.has(watchedKey(c.season, c.episode))).length;
 	return {
 		watched,
 		total: episodes.length,
 		fraction: watched / episodes.length,
-		next: nextEpisode(item.seasons, item.watched)
+		next: nextEpisode(item.seasons, item.watched, item.lastAired)
 	};
 }
 

@@ -251,6 +251,9 @@ export const media = sqliteTable(
 		overview: text('overview').notNull().default(''),
 		// Genre names as JSON (`["Action","Sci-Fi"]`) for the lists genre filter.
 		genres: text('genres', { mode: 'json' }).$type<string[]>(),
+		// Most recently aired episode (aired frontier) for shows — caps "next episode"/progress to
+		// aired episodes so a caught-up show leaves Continue Watching and unaired eps aren't markable.
+		lastAired: text('last_aired', { mode: 'json' }).$type<{ season: number; episode: number }>(),
 		// Season episode counts as JSON (`[{seasonNumber, episodeCount}]`) for shows; null for
 		// movies. Powers Continue Watching progress / next-episode without loading full episodes.
 		seasons: text('seasons', { mode: 'json' }).$type<MediaSeason[]>(),
