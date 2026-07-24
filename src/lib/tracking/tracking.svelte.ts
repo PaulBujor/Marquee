@@ -73,9 +73,10 @@ export class TrackingState {
 		return isSeasonFullyWatched(season, this.watched, this.#lastAired);
 	}
 
-	/** Whether an episode has aired (so unaired episodes can't be marked). */
+	/** Whether an episode has aired (so unaired episodes can't be marked). A null aired frontier
+	 * means the show hasn't started airing — nothing has aired yet. */
 	hasAired(season: number, episode: number): boolean {
-		return isAired({ season, episode }, this.#lastAired);
+		return this.#lastAired !== null && isAired({ season, episode }, this.#lastAired);
 	}
 
 	/** The next aired episode to watch, or null when caught up to the aired frontier. */

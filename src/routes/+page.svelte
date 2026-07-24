@@ -10,6 +10,7 @@
 	import ProgressRing from '$lib/components/media/progress-ring.svelte';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Popover from '$lib/components/ui/popover';
+	import * as Select from '$lib/components/ui/select';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import SlidersIcon from '@lucide/svelte/icons/sliders-horizontal';
 	import { LibraryState } from '$lib/tracking/library.svelte';
@@ -58,6 +59,11 @@
 	];
 
 	const SORTS: LibrarySort[] = ['added', 'title', 'year'];
+	const SORT_LABELS: Record<LibrarySort, string> = {
+		added: 'Date added',
+		title: 'Title',
+		year: 'Release year'
+	};
 
 	// Selected tab + filters live in the URL (like the search page), so a view is shareable and
 	// survives reload / back-forward. Defaults are omitted from the query to keep it clean.
@@ -244,44 +250,53 @@
 					Filters &amp; sort
 				</Popover.Trigger>
 				<Popover.Content align="end" class="w-64 space-y-3">
-					<label class="flex flex-col gap-1 text-sm">
+					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Sort</span>
-						<select
-							bind:value={sort}
-							class="h-10 rounded-full border border-border bg-background px-4 transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+						<Select.Root
+							type="single"
+							value={sort}
+							onValueChange={(v) => v && (sort = v as LibrarySort)}
 						>
-							<option value="added">Date added</option>
-							<option value="title">Title</option>
-							<option value="year">Release year</option>
-						</select>
-					</label>
-					<label class="flex flex-col gap-1 text-sm">
+							<Select.Trigger class="w-full">{SORT_LABELS[sort]}</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="added">Date added</Select.Item>
+								<Select.Item value="title">Title</Select.Item>
+								<Select.Item value="year">Release year</Select.Item>
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Year</span>
-						<select
-							value={year ?? ''}
-							onchange={(e) =>
-								(year = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-							class="h-10 rounded-full border border-border bg-background px-4 transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+						<Select.Root
+							type="single"
+							value={year === null ? '' : String(year)}
+							onValueChange={(v) => (year = v ? Number(v) : null)}
 						>
-							<option value="">Any</option>
-							{#each years as y (y)}
-								<option value={y}>{y}</option>
-							{/each}
-						</select>
-					</label>
-					<label class="flex flex-col gap-1 text-sm">
+							<Select.Trigger class="w-full">{year ?? 'Any'}</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="">Any</Select.Item>
+								{#each years as y (y)}
+									<Select.Item value={String(y)}>{y}</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Genre</span>
-						<select
+						<Select.Root
+							type="single"
 							value={genre ?? ''}
-							onchange={(e) => (genre = e.currentTarget.value || null)}
-							class="h-10 rounded-full border border-border bg-background px-4 transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+							onValueChange={(v) => (genre = v || null)}
 						>
-							<option value="">Any</option>
-							{#each genres as g (g)}
-								<option value={g}>{g}</option>
-							{/each}
-						</select>
-					</label>
+							<Select.Trigger class="w-full">{genre ?? 'Any'}</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="">Any</Select.Item>
+								{#each genres as g (g)}
+									<Select.Item value={g}>{g}</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
 				</Popover.Content>
 			</Popover.Root>
 		</div>

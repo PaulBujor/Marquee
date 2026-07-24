@@ -66,13 +66,8 @@
 			<!-- List-membership actions as one segmented control: the primary status action and
 			removing from the list. Favorite is a separate, unrelated toggle. -->
 			<ButtonGroup>
-				<Button
-					variant={watchedState ? 'secondary' : 'default'}
-					onclick={markWatched}
-					disabled={tracking.busy}
-					class="gap-1.5"
-				>
-					<CheckIcon class="size-4" />
+				<Button variant="outline" onclick={markWatched} disabled={tracking.busy} class="gap-1.5">
+					<CheckIcon class="size-4 {watchedState ? 'text-primary' : ''}" />
 					{watchedState ? 'Watched' : type === 'show' ? 'Mark series watched' : 'Mark watched'}
 				</Button>
 				<Button
