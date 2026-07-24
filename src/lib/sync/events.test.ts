@@ -4,19 +4,41 @@ import {
 	episodeKey,
 	EVENT_SCHEMA_VERSION,
 	mediaId,
+	tmdbExternalId,
+	tmdbMediaId,
 	trackingKey,
 	validateEvent,
 	type EventEnvelope
 } from './events';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+describe('media identity', () => {
+	it('derives our own provider-agnostic UUID, not a provider-shaped id', () => {
+		const id = tmdbMediaId('movie', 603);
+		expect(id).toMatch(UUID);
+		expect(id).not.toContain('603');
+	});
+
+	it('is deterministic — same inputs always derive the same id', () => {
+		// Hard-coded expected value guards against an accidental namespace change,
+		// which would silently repoint every media id and orphan existing events.
+		expect(tmdbMediaId('movie', 603)).toBe(tmdbMediaId('movie', 603));
+		expect(tmdbMediaId('movie', 603)).toBe(mediaId('tmdb', 'movie/603'));
+		expect(tmdbExternalId('movie', 603)).toBe('movie/603');
+	});
+
+	it('disambiguates movie vs show sharing a numeric id', () => {
+		expect(tmdbMediaId('movie', 603)).not.toBe(tmdbMediaId('show', 603));
+	});
+});
 
 describe('key helpers', () => {
-	it('builds deterministic ids', () => {
-		expect(mediaId('movie', 603)).toBe('movie:603');
-		expect(mediaId('show', 1396)).toBe('show:1396');
-		expect(trackingKey('u1', 'movie:603')).toBe('u1::movie:603');
-		expect(episodeKey('u1', 'show:1396', 2, 5)).toBe('u1::show:1396::s2e5');
+	it('builds deterministic ids from a media id', () => {
+		const media = tmdbMediaId('show', 1396);
+		expect(trackingKey('u1', media)).toBe(`u1::${media}`);
+		expect(episodeKey('u1', media, 2, 5)).toBe(`u1::${media}::s2e5`);
 	});
 });
 

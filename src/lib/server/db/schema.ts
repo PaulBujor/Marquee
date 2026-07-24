@@ -8,7 +8,13 @@ import {
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
 // Relative (not `$lib`) so drizzle-kit's esbuild bundler resolves it outside Vite.
-import { SYNC_EVENT_TYPES, TRACKING_STATUSES, type EventPayload } from '../../sync/events';
+import {
+	MEDIA_PROVIDERS,
+	MEDIA_SOURCES,
+	SYNC_EVENT_TYPES,
+	TRACKING_STATUSES,
+	type EventPayload
+} from '../../sync/events';
 
 /**
  * Account states for the gated (waitlist) auth flow:
@@ -176,7 +182,7 @@ export const events = sqliteTable(
 			.references(() => users.id, { onDelete: 'cascade' }),
 		sequence: integer('sequence').notNull(),
 		type: text('type', { enum: SYNC_EVENT_TYPES }).notNull(),
-		// The aggregate the event targets — the deterministic `mediaId` (`type:tmdbId`).
+		// The aggregate the event targets — our own media id (see `mediaId()`).
 		entityId: text('entity_id').notNull(),
 		// Event payload as JSON — Drizzle (de)serializes it; SQLite has no native JSON
 		// type, so it's stored as text. Shape depends on `type` (see `EventPayloadMap`).
@@ -213,17 +219,28 @@ export const syncState = sqliteTable('sync_state', {
 
 /**
  * Global media catalog cache (not user-scoped) — **reference data, not a projection of
- * the event log**, keyed by our media id which events reference via `entityId`. Synced on
- * a separate parallel channel (MRQ-111), never through `/api/sync`; scaffolding for now.
- * Mirrors `MediaSearchResult`; TMDB remains the real source, this is a display cache so
- * tracked titles render offline.
+ * the event log**, keyed by our own media id which events reference via `entityId`. Synced
+ * on a separate parallel channel (MRQ-111), never through `/api/sync`; scaffolding for now.
+ * TMDB remains the real source, this is a display cache so tracked titles render offline.
+ *
+ * Identity is **provider-agnostic** (MRQ-112): `id` is ours (a deterministic v5 UUID for
+ * provider-sourced titles), and `{provider, externalId}` records where it came from — so a
+ * provider switch or outage needs no id remap. `source` distinguishes provider-backed
+ * (`linked`) from user-authored (`custom`) rows; `media.linked` aliasing is deferred to the
+ * Custom Media epic and slots on top of this without a further identity migration.
  */
 export const media = sqliteTable(
 	'media',
 	{
-		// Deterministic `mediaId` — `${type}:${tmdbId}`.
+		// Our own media id — a deterministic v5 UUID for provider-sourced titles (see
+		// `mediaId()`); a random client UUID for custom entries (deferred, Custom Media epic).
 		id: text('id').primaryKey(),
-		tmdbId: integer('tmdb_id').notNull(),
+		// Which catalog the row came from. Default `tmdb` — the only provider today.
+		provider: text('provider', { enum: MEDIA_PROVIDERS }).notNull().default('tmdb'),
+		// The provider's own id, e.g. `movie/603`. Null for purely-custom entries.
+		externalId: text('external_id'),
+		// `linked` = provider-backed (shareable); `custom` = user-authored (private).
+		source: text('source', { enum: MEDIA_SOURCES }).notNull().default('linked'),
 		type: text('type', { enum: ['movie', 'show'] }).notNull(),
 		title: text('title').notNull(),
 		year: integer('year'),
@@ -235,7 +252,9 @@ export const media = sqliteTable(
 			.notNull()
 			.$defaultFn(() => Date.now())
 	},
-	(table) => [uniqueIndex('media_tmdb_idx').on(table.tmdbId, table.type)]
+	// Natural key for provider-sourced rows. Custom rows carry `external_id = null`; SQLite
+	// treats each NULL as distinct in a UNIQUE index, so multiple custom rows never collide.
+	(table) => [uniqueIndex('media_provider_external_idx').on(table.provider, table.externalId)]
 );
 
 /**

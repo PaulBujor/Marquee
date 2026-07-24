@@ -36,6 +36,20 @@
       "when": 1784667072147,
       "tag": "0004_sync_event_model",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1784753647390,
+      "tag": "0005_media_provider_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784753669560,
+      "tag": "0006_media_drop_tmdb_id",
+      "breakpoints": true
     }
   ]
 }
