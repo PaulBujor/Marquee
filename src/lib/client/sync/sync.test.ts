@@ -6,7 +6,7 @@ import { enqueueEvent, getUnsynced } from '$lib/client/idb/outbox';
 import { getTracking } from '$lib/client/idb/state';
 import { getCursor } from '$lib/client/idb/meta';
 import type { SyncRequest, SyncResponse } from '$lib/sync/protocol';
-import { backoffDelay, runSync, SyncError, toSyncErrorInfo } from './sync';
+import { runSync, SyncError, toSyncErrorInfo } from './sync';
 
 setActiveUser('sync-test-user');
 const DEVICE = '11111111-1111-1111-1111-111111111111';
@@ -36,15 +36,6 @@ function stub(responses: SyncResponse[]) {
 	}) as unknown as typeof fetch;
 	return { fetchFn, requests };
 }
-
-describe('backoffDelay', () => {
-	it('grows exponentially from 2s and caps at 60s', () => {
-		expect(backoffDelay(0)).toBe(2000);
-		expect(backoffDelay(1)).toBe(4000);
-		expect(backoffDelay(2)).toBe(8000);
-		expect(backoffDelay(20)).toBe(60000);
-	});
-});
 
 describe('toSyncErrorInfo', () => {
 	it('captures message, HTTP status, attempt and time from a SyncError', () => {

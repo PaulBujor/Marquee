@@ -10,7 +10,7 @@
  * Client-safe (browser only) — never imported from server code.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { EventEnvelope, MediaSnapshot, TrackingStatus } from '$lib/sync/events';
+import type { EventEnvelope, MediaRecord, TrackingStatus } from '$lib/sync/events';
 
 /**
  * An outbox event: the envelope plus a `synced` flag (0 = pending push, 1 = acked).
@@ -22,8 +22,7 @@ export interface OutboxEvent extends EventEnvelope {
 }
 
 /** Cached catalog entry (mirrors the server `media` row); `updatedAt` is the LWW clock (epoch ms). */
-export interface ClientMedia extends MediaSnapshot {
-	id: string;
+export interface ClientMedia extends MediaRecord {
 	updatedAt: number;
 }
 

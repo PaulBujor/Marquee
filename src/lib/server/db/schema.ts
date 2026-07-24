@@ -13,7 +13,8 @@ import {
 	MEDIA_SOURCES,
 	SYNC_EVENT_TYPES,
 	TRACKING_STATUSES,
-	type EventPayload
+	type EventPayload,
+	type MediaSeason
 } from '../../sync/events';
 
 /**
@@ -245,7 +246,12 @@ export const media = sqliteTable(
 		title: text('title').notNull(),
 		year: integer('year'),
 		posterPath: text('poster_path'),
+		// Header image (TMDB backdrop) — the media channel pulls poster + backdrop only.
+		backdropPath: text('backdrop_path'),
 		overview: text('overview').notNull().default(''),
+		// Season episode counts as JSON (`[{seasonNumber, episodeCount}]`) for shows; null for
+		// movies. Powers Continue Watching progress / next-episode without loading full episodes.
+		seasons: text('seasons', { mode: 'json' }).$type<MediaSeason[]>(),
 		// Epoch **ms** (plain integer, not `timestamp`/seconds) — it's an LWW clock
 		// compared against event `clientCreatedAt`, so units must match.
 		updatedAt: integer('updated_at')

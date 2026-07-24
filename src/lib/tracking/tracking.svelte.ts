@@ -9,9 +9,9 @@
  * {@link recordEvent} — local event + optimistic projection — then reload.
  */
 import { SvelteSet } from 'svelte/reactivity';
-import { getEpisodeWatches, getTrackingByMediaId, recordEvent } from '$lib/client/idb';
+import { getEpisodeWatches, getTrackingByMediaId, putMedia, recordEvent } from '$lib/client/idb';
 import { sync } from '$lib/client/sync/engine.svelte';
-import type { TrackingStatus } from '$lib/sync/events';
+import type { MediaRecord, TrackingStatus } from '$lib/sync/events';
 import {
 	allEpisodes,
 	isSeasonFullyWatched,
@@ -40,9 +40,13 @@ export class TrackingState {
 	/** True while a write is in flight, to disable controls and prevent double-submits. */
 	busy = $state(false);
 
-	constructor(mediaId: string, seasons: SeasonCounts[] = []) {
+	/** The title's media snapshot (from the detail page's TMDB data), cached locally on track. */
+	readonly #media: MediaRecord | null;
+
+	constructor(mediaId: string, media: MediaRecord | null = null) {
 		this.mediaId = mediaId;
-		this.seasons = seasons;
+		this.#media = media;
+		this.seasons = media?.seasons ?? [];
 	}
 
 	/** Load tracking + episode-watched state from IndexedDB into the reactive fields. */
@@ -73,6 +77,9 @@ export class TrackingState {
 	async #run(work: () => Promise<void>): Promise<void> {
 		this.busy = true;
 		try {
+			// Cache the media locally so this device renders lists offline and has identity to
+			// push on the media channel (idempotent; the snapshot comes from the detail page).
+			if (this.#media) await putMedia(this.#media);
 			await work();
 			await this.load();
 			sync.requestSync(); // nudge a push so the change reaches the server promptly

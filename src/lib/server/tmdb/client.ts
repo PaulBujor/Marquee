@@ -1,3 +1,4 @@
+import { CircuitBreaker, withRetry } from '$lib/resilience';
 import type {
 	MediaDetail,
 	MediaSearchResult,
@@ -10,6 +11,14 @@ import type {
 } from './types';
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+/**
+ * Module-level circuit breaker (persists across requests in a Worker isolate) so a sustained
+ * TMDB outage fails fast instead of every request retrying into a wall. Retries use short
+ * server-side backoff — a metadata fetch shouldn't hold a request open for long.
+ */
+const tmdbBreaker = new CircuitBreaker({ maxFailures: 5, cooldownMs: 30_000 });
+const TMDB_RETRY = { maxAttempts: 3, baseMs: 300, maxMs: 3000 };
 
 /** How many cast members the detail page shows (TMDB orders `cast` by billing). */
 const CAST_LIMIT = 10;
@@ -127,22 +136,41 @@ function normalizeSeason(data: TmdbSeasonDetailResponse): SeasonDetail {
  */
 export function createTmdbClient(apiKey: string) {
 	async function request(path: string, params: Record<string, string>): Promise<unknown> {
+		if (!tmdbBreaker.canAttempt()) {
+			throw new TmdbError('TMDB temporarily unavailable (circuit open)', 503);
+		}
 		const url = new URL(`${TMDB_BASE_URL}${path}`);
 		url.searchParams.set('api_key', apiKey);
 		for (const [key, value] of Object.entries(params)) {
 			url.searchParams.set(key, value);
 		}
 
-		let res: Response;
 		try {
-			res = await fetch(url, { headers: { accept: 'application/json' } });
+			// Retry only transient failures (network error → 502, or 5xx/429); a 4xx (bad id/key)
+			// won't fix by retrying, so fail fast.
+			const data = await withRetry(
+				async () => {
+					let res: Response;
+					try {
+						res = await fetch(url, { headers: { accept: 'application/json' } });
+					} catch (err) {
+						throw new TmdbError(`TMDB request failed: ${String(err)}`, 502);
+					}
+					if (!res.ok) throw new TmdbError(`TMDB responded ${res.status}`, res.status);
+					return res.json();
+				},
+				{
+					...TMDB_RETRY,
+					shouldRetry: (err) =>
+						err instanceof TmdbError && (err.status >= 500 || err.status === 429)
+				}
+			);
+			tmdbBreaker.recordSuccess();
+			return data;
 		} catch (err) {
-			throw new TmdbError(`TMDB request failed: ${String(err)}`, 502);
+			tmdbBreaker.recordFailure();
+			throw err;
 		}
-		if (!res.ok) {
-			throw new TmdbError(`TMDB responded ${res.status}`, res.status);
-		}
-		return res.json();
 	}
 
 	return {
