@@ -45,11 +45,6 @@ export function toSyncErrorInfo(err: unknown, attempt: number, at: number): Sync
 	};
 }
 
-/** Exponential backoff (ms) for retry attempt `n`: 2s, 4s, 8s, … capped at 60s. */
-export function backoffDelay(attempt: number): number {
-	return Math.min(2000 * 2 ** attempt, 60000);
-}
-
 /**
  * One sync pass: push local unsynced events and pull everything since the cursor, looping
  * until the server has no more pages and the outbox is drained. Idempotent — the server
