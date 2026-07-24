@@ -99,6 +99,10 @@ class SyncEngine {
 		} catch (err) {
 			this.status = 'error';
 			this.lastError = toSyncErrorInfo(err, this.#attempt, Date.now());
+			// Surface the failure in the browser console; the server side of it is captured by
+			// the `handleError` hook → Cloudflare observability. (A dedicated client error-reporting
+			// sink is a separate future concern.)
+			console.error('[sync] failed', this.lastError);
 			this.#retryTimer = setTimeout(() => {
 				this.#retryTimer = null;
 				void this.#sync();
