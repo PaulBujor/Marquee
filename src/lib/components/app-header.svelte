@@ -9,9 +9,11 @@
 <!-- Sticky app header: content scrolls blurred beneath it, faded out by a top→transparent
 gradient. Aligned to the dashboard's max-w-2xl content column; clears the iOS status bar. -->
 <header class="sticky top-0 z-40">
+	<!-- Progressive blur: masking the backdrop-filter layer with a top→transparent alpha gradient
+	fades the blur out gradually (no hard cut-off line at the header's edge). -->
 	<div
 		class="pointer-events-none absolute inset-0 backdrop-blur-md"
-		style="background:linear-gradient(to bottom, var(--color-background), color-mix(in oklab, var(--color-background) 70%, transparent) 70%, transparent);"
+		style="background:linear-gradient(to bottom, var(--color-background), color-mix(in oklab, var(--color-background) 55%, transparent) 55%, transparent); -webkit-mask-image:linear-gradient(to bottom, black 0%, black 30%, transparent 100%); mask-image:linear-gradient(to bottom, black 0%, black 30%, transparent 100%);"
 	></div>
 	<div
 		class="relative mx-auto flex w-full max-w-3xl items-center justify-between px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4"

@@ -223,8 +223,13 @@
 				variant="outline"
 				size="sm"
 			>
-				{#each TYPES as t (t.key)}
-					<ToggleGroup.Item value={t.key}>{t.label}</ToggleGroup.Item>
+				{#each TYPES as t, i (t.key)}
+					<ToggleGroup.Item
+						value={t.key}
+						class={`${i === 0 ? 'rounded-l-full!' : ''} ${i === TYPES.length - 1 ? 'rounded-r-full!' : ''}`}
+					>
+						{t.label}
+					</ToggleGroup.Item>
 				{/each}
 			</ToggleGroup.Root>
 
