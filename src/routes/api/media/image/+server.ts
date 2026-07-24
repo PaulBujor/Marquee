@@ -21,9 +21,13 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const upstream = await fetch(tmdbImageUrl(path, size as TmdbImageSize));
 	if (!upstream.ok) error(502, 'Upstream image error');
 
+	// Defensive: only ever relay an actual image back, never some other content type.
+	const contentType = upstream.headers.get('content-type') ?? '';
+	if (!contentType.startsWith('image/')) error(502, 'Upstream is not an image');
+
 	return new Response(upstream.body, {
 		headers: {
-			'content-type': upstream.headers.get('content-type') ?? 'image/jpeg',
+			'content-type': contentType,
 			'cache-control': 'public, max-age=31536000, immutable'
 		}
 	});
