@@ -6,8 +6,14 @@
 	import { Button } from '$lib/components/ui/button';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
+	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
+	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
+	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
+	import { tmdbMediaId } from '$lib/sync/events';
+	import { TrackingState } from '$lib/tracking/tracking.svelte';
+	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ClockIcon from '@lucide/svelte/icons/clock';
@@ -19,6 +25,15 @@
 
 	const detail = $derived(data.detail);
 	const heroUrl = $derived(posterUrl(detail.backdropPath, 'w780'));
+	// Our own media id for the tracking event pipeline (provider-agnostic, MRQ-112).
+	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
+
+	// Reactive local tracking state (IndexedDB-backed). Recreated + reloaded whenever the title
+	// changes; SSR renders the neutral untracked state, then this hydrates on the client.
+	const tracking = $derived(new TrackingState(mediaId, detail.seasons));
+	$effect(() => {
+		tracking.load();
+	});
 
 	// Overview/cast/trailer live under a "Details" toggle (default open). When watch-tracking
 	// lands it can default this collapsed for in-progress shows; read-only for now.
@@ -40,6 +55,19 @@
 	const currentSeason = $derived(
 		selectedSeason !== null ? (seasonCache[selectedSeason] ?? null) : null
 	);
+	const selectedSeasonSummary = $derived(
+		selectedSeason !== null
+			? (detail.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
+			: null
+	);
+	// Per-season "mark watched" confirmation (bulk, hard to undo).
+	let seasonConfirmOpen = $state(false);
+
+	// Resolve an episode title from whatever season the page has cached (best-effort — the next
+	// episode may live in a season not yet fetched, in which case the row shows just S/E).
+	function episodeName(season: number, episode: number): string | undefined {
+		return seasonCache[season]?.episodes.find((e) => e.episodeNumber === episode)?.name;
+	}
 
 	// Mirror the search page's back behaviour: pop history when we arrived from within the app,
 	// otherwise fall back to the search page. Reset per-title state when navigating between titles.
@@ -156,6 +184,15 @@
 			{#each detail.genres as genre (genre)}
 				<MediaBadge variant="genre">{genre}</MediaBadge>
 			{/each}
+		</div>
+
+		<!-- Watch-tracking controls, above the description. Shows get an extra "next episode" row
+		     when tracked; the action row adapts (movie → mark watched; show → mark series watched). -->
+		<div class="flex flex-col gap-2">
+			{#if detail.type === 'show' && tracking.view.tracked}
+				<NextEpisodeRow {tracking} {episodeName} />
+			{/if}
+			<TrackingControls {tracking} type={detail.type} />
 		</div>
 
 		<!-- Collapsible details: overview, cast, trailer -->
@@ -282,6 +319,33 @@
 					{/each}
 				</div>
 
+				{#if tracking.view.tracked && selectedSeasonSummary && !tracking.isSeasonWatched(selectedSeasonSummary)}
+					<Button
+						variant="outline"
+						size="sm"
+						class="self-start"
+						onclick={() => (seasonConfirmOpen = true)}
+						disabled={tracking.busy}
+					>
+						Mark {selectedSeasonSummary.name} watched
+					</Button>
+					<ConfirmDialog
+						bind:open={seasonConfirmOpen}
+						title="Mark this season as watched?"
+						description={`This marks every episode of ${selectedSeasonSummary.name} watched.`}
+						confirmLabel="Mark season watched"
+						busy={tracking.busy}
+						onconfirm={() =>
+							selectedSeasonSummary &&
+							tracking
+								.markSeasonWatched({
+									seasonNumber: selectedSeasonSummary.seasonNumber,
+									episodeCount: selectedSeasonSummary.episodeCount
+								})
+								.then(() => (seasonConfirmOpen = false))}
+					/>
+				{/if}
+
 				{#if seasonLoading}
 					<ul class="flex flex-col">
 						{#each Array.from({ length: 10 }, (_, i) => i) as i (i)}
@@ -314,7 +378,30 @@
 												>{ep.runtime} min</span
 											>
 										{/if}
-										<!-- Mark-as-viewed check lands here with the tracking epic (Offline & Sync). -->
+										{#if tracking.view.tracked && currentSeason}
+											{@const watched = tracking.isWatched(
+												currentSeason.seasonNumber,
+												ep.episodeNumber
+											)}
+											<Button
+												variant="ghost"
+												size="icon"
+												onclick={() =>
+													tracking.setEpisodeWatched(
+														currentSeason.seasonNumber,
+														ep.episodeNumber,
+														!watched
+													)}
+												disabled={tracking.busy}
+												aria-pressed={watched}
+												aria-label={`${watched ? 'Unmark' : 'Mark'} S${currentSeason.seasonNumber}E${ep.episodeNumber} watched`}
+												class="size-6 shrink-0 rounded-full border {watched
+													? 'border-primary bg-primary text-primary-foreground'
+													: 'border-border text-transparent hover:border-primary'}"
+											>
+												<CheckIcon class="size-3.5" />
+											</Button>
+										{/if}
 									</div>
 									{#if ep.airDate || ep.overview}
 										<div class="flex flex-col gap-0.5 pl-9">

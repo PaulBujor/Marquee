@@ -22,11 +22,16 @@ describe('media identity', () => {
 	});
 
 	it('is deterministic — same inputs always derive the same id', () => {
-		// Hard-coded expected value guards against an accidental namespace change,
-		// which would silently repoint every media id and orphan existing events.
 		expect(tmdbMediaId('movie', 603)).toBe(tmdbMediaId('movie', 603));
 		expect(tmdbMediaId('movie', 603)).toBe(mediaId('tmdb', 'movie/603'));
 		expect(tmdbExternalId('movie', 603)).toBe('movie/603');
+	});
+
+	it('pins the derived id so an accidental MEDIA_ID_NAMESPACE change fails CI', () => {
+		// Changing the namespace (or the derivation) would silently repoint every media id and
+		// orphan every event that references it. These exact values are hard-pinned so CI catches it.
+		expect(tmdbMediaId('movie', 603)).toBe('9653e713-97d4-5065-b752-93fa34429e37');
+		expect(tmdbMediaId('show', 603)).toBe('c2d609d4-a708-51e4-927b-e8602792143f');
 	});
 
 	it('disambiguates movie vs show sharing a numeric id', () => {

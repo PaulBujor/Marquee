@@ -7,7 +7,7 @@ import {
 	type SyncEventType
 } from '$lib/sync/events';
 import { openDb } from './db';
-import { applyEventToIdb, getEpisodeWatches, getTracking } from './state';
+import { applyEventToIdb, getEpisodeWatches, getTracking, getTrackingByMediaId } from './state';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 
@@ -60,6 +60,19 @@ describe('applyEventToIdb', () => {
 			status: 'watching',
 			removed: false
 		});
+	});
+
+	it('reads a single title by media id, including a removed tombstone', async () => {
+		expect(await getTrackingByMediaId(MID)).toBeUndefined();
+		await applyEventToIdb(ev('tracking.added', MID, { status: 'want_to_watch' }, 100));
+		expect(await getTrackingByMediaId(MID)).toMatchObject({
+			status: 'want_to_watch',
+			removed: false
+		});
+		await applyEventToIdb(ev('tracking.removed', MID, {}, 200));
+		// getTracking() hides it, but the by-id read still returns the tombstone.
+		expect((await getTracking()).find((t) => t.mediaId === MID)).toBeUndefined();
+		expect(await getTrackingByMediaId(MID)).toMatchObject({ removed: true });
 	});
 
 	it('resolves status by last-write-wins regardless of arrival order', async () => {
