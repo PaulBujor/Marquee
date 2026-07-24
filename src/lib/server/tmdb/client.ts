@@ -101,23 +101,21 @@ function normalizeDetails(
 			profilePath: c.profile_path ?? null
 		})),
 		trailer: trailer ? { key: trailer.key, name: trailer.name } : null,
+		releaseDate: isMovie ? (movie.release_date ?? null) : null,
+		status: isMovie ? null : (tv.status ?? null),
+		inProduction: isMovie ? null : (tv.in_production ?? null),
+		firstAirDate: isMovie ? null : (tv.first_air_date ?? null),
+		lastAirDate: isMovie ? null : (tv.last_air_date ?? null),
 		seasons: isMovie
 			? []
 			: (tv.seasons ?? []).map((s) => ({
 					seasonNumber: s.season_number,
 					name: s.name ?? '',
 					episodeCount: s.episode_count ?? 0,
-					airYear: parseYear(s.air_date),
+					airDate: s.air_date ?? null,
 					posterPath: s.poster_path ?? null,
 					overview: s.overview ?? ''
-				})),
-		lastAired:
-			isMovie || !tv.last_episode_to_air
-				? null
-				: {
-						season: tv.last_episode_to_air.season_number,
-						episode: tv.last_episode_to_air.episode_number
-					}
+				}))
 	};
 }
 

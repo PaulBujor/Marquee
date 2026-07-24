@@ -6,13 +6,14 @@
 import {
 	airedEpisodes,
 	nextEpisode,
+	todayIso,
 	watchedKey,
-	type EpisodeCoord,
-	type SeasonCounts
+	type EpisodeAir,
+	type EpisodeCoord
 } from './actions';
 import type { TrackingStatus } from '$lib/sync/events';
 
-/** A tracked title joined with its media reference + episode-watch state. */
+/** A tracked title joined with its media reference + episode metadata + episode-watch state. */
 export interface LibraryItem {
 	mediaId: string;
 	/** Provider external id (e.g. `movie/603`) — the detail-page route key; null for custom media. */
@@ -26,8 +27,10 @@ export interface LibraryItem {
 	year: number | null;
 	posterPath: string | null;
 	genres: string[];
-	seasons: SeasonCounts[] | null;
-	lastAired: EpisodeCoord | null;
+	/** TMDB `in_production` — still-airing signal for completion; null for movies. */
+	inProduction: boolean | null;
+	/** Episode metadata (coords + air dates) — empty for movies / shows not yet synced. */
+	episodes: EpisodeAir[];
 	watched: Set<string>;
 }
 
@@ -49,17 +52,17 @@ export interface ShowProgress {
 	next: EpisodeCoord | null;
 }
 
-/** Watched/total + next episode for a show, or null for a movie / a show with no episodes. */
-export function showProgress(item: LibraryItem): ShowProgress | null {
-	if (item.type !== 'show' || !item.seasons) return null;
-	const episodes = airedEpisodes(item.seasons, item.lastAired);
-	if (episodes.length === 0) return null;
-	const watched = episodes.filter((c) => item.watched.has(watchedKey(c.season, c.episode))).length;
+/** Watched/total + next episode for a show, or null for a movie / a show with no aired episodes. */
+export function showProgress(item: LibraryItem, today: string = todayIso()): ShowProgress | null {
+	if (item.type !== 'show') return null;
+	const aired = airedEpisodes(item.episodes, today);
+	if (aired.length === 0) return null;
+	const watched = aired.filter((e) => item.watched.has(watchedKey(e.season, e.episode))).length;
 	return {
 		watched,
-		total: episodes.length,
-		fraction: watched / episodes.length,
-		next: nextEpisode(item.seasons, item.watched, item.lastAired)
+		total: aired.length,
+		fraction: watched / aired.length,
+		next: nextEpisode(item.episodes, item.watched, today)
 	};
 }
 

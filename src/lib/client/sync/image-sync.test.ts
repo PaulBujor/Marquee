@@ -21,8 +21,14 @@ function media(externalId: string): MediaRecord {
 		backdropPath: '/b.jpg',
 		overview: '',
 		genres: [],
+		releaseDate: null,
+		status: null,
+		inProduction: null,
+		firstAirDate: null,
+		lastAirDate: null,
+		version: 1,
 		seasons: null,
-		lastAired: null
+		episodes: null
 	};
 }
 

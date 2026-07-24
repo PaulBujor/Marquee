@@ -12,14 +12,24 @@ import { createEvent, type EventPayloadMap, type SyncEventType } from '$lib/sync
 export { openDb, setActiveUser, wipeLocalData } from './db';
 export type {
 	ClientMedia,
+	ClientSeason,
+	ClientEpisode,
 	ClientTracking,
 	ClientEpisodeWatch,
-	UpcomingEpisode,
 	MarqueeDatabase
 } from './db';
 export { getUnsynced, markSynced, enqueueEvent } from './outbox';
 export { applyEventToIdb, getTracking, getTrackingByMediaId, getEpisodeWatches } from './state';
-export { putMedia, getMedia, getAllMedia, getLinkedMediaRefs, getMissingMediaIds } from './media';
+export {
+	putMedia,
+	getMedia,
+	getAllMedia,
+	getSeasons,
+	getEpisodes,
+	getEpisodesAiringFrom,
+	getLinkedMediaRefs,
+	getMediaVersions
+} from './media';
 export { getDeviceId, getCursor, setCursor } from './meta';
 
 /**

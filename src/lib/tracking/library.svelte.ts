@@ -5,8 +5,14 @@
  */
 /* eslint-disable svelte/prefer-svelte-reactivity -- the Map/Sets here are transient locals rebuilt
    on each load(), never mutated in place; reactivity comes from reassigning `items`. */
-import { getAllMedia, getEpisodeWatches, getTracking, recordEvent } from '$lib/client/idb';
-import { watchedKey } from './actions';
+import {
+	getAllMedia,
+	getEpisodeWatches,
+	getEpisodes,
+	getTracking,
+	recordEvent
+} from '$lib/client/idb';
+import { watchedKey, type EpisodeAir } from './actions';
 import { showProgress, type LibraryItem } from './library';
 import { reconcileStatus } from './reconcile';
 import { sync } from '$lib/client/sync/engine.svelte';
@@ -16,7 +22,7 @@ export class LibraryState {
 	ready = $state(false);
 	busy = $state(false);
 
-	/** Load all non-removed tracked titles joined with media + (for shows) episode-watch state. */
+	/** Load all non-removed tracked titles joined with media + (for shows) episode metadata + watches. */
 	async load(): Promise<void> {
 		const [tracking, media] = await Promise.all([getTracking(), getAllMedia()]);
 		const byId = new Map(media.map((m) => [m.id, m]));
@@ -25,11 +31,16 @@ export class LibraryState {
 			const m = byId.get(t.mediaId);
 			const isShow = m?.type === 'show';
 			let watched = new Set<string>();
+			let episodes: EpisodeAir[] = [];
 			if (isShow) {
-				const episodes = await getEpisodeWatches(t.mediaId);
+				const [watches, eps] = await Promise.all([
+					getEpisodeWatches(t.mediaId),
+					getEpisodes(t.mediaId)
+				]);
 				watched = new Set(
-					episodes.filter((e) => e.watched).map((e) => watchedKey(e.season, e.episode))
+					watches.filter((e) => e.watched).map((e) => watchedKey(e.season, e.episode))
 				);
+				episodes = eps.map((e) => ({ season: e.season, episode: e.episode, airDate: e.airDate }));
 			}
 			items.push({
 				mediaId: t.mediaId,
@@ -43,8 +54,8 @@ export class LibraryState {
 				year: m?.year ?? null,
 				posterPath: m?.posterPath ?? null,
 				genres: m?.genres ?? [],
-				seasons: isShow ? (m?.seasons ?? null) : null,
-				lastAired: m?.lastAired ?? null,
+				inProduction: m?.inProduction ?? null,
+				episodes,
 				watched
 			});
 		}
@@ -59,10 +70,9 @@ export class LibraryState {
 		this.busy = true;
 		try {
 			await recordEvent('episode.watched', item.mediaId, progress.next);
-			// Pass the aired frontier so completion is derived from *aired* episodes — matching the
-			// detail page (TrackingState). Without it a caught-up airing show wouldn't reconcile
-			// consistently across the two surfaces.
-			await reconcileStatus(item.mediaId, item.seasons ?? [], item.lastAired);
+			// Pass episode air dates + production status so completion is derived from *aired*
+			// episodes — matching the detail page (TrackingState) across both surfaces.
+			await reconcileStatus(item.mediaId, item.episodes, item.inProduction);
 			sync.requestSync();
 			await this.load();
 		} finally {

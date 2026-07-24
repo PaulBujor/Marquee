@@ -3,7 +3,7 @@
  * missing, and push identity for the ones it has so the server can hydrate them for other
  * devices. Runs after the event sync (media is heavier, so it's a separate call). Testable core.
  */
-import { getAllMedia, getLinkedMediaRefs, getTracking, putMedia } from '$lib/client/idb';
+import { getLinkedMediaRefs, getMediaVersions, putMedia } from '$lib/client/idb';
 import {
 	MEDIA_SYNC_MAX,
 	type MediaSyncRequest,
@@ -11,25 +11,14 @@ import {
 } from '$lib/sync/media-protocol';
 
 export async function runMediaSync(fetchFn: typeof fetch = fetch): Promise<{ applied: number }> {
-	const [tracked, localMedia, refs] = await Promise.all([
-		getTracking(),
-		getAllMedia(),
-		getLinkedMediaRefs()
-	]);
+	const [have, refs] = await Promise.all([getMediaVersions(), getLinkedMediaRefs()]);
 
-	const haveIds = new Set(localMedia.map((m) => m.id));
-	const missing = tracked.map((t) => t.mediaId).filter((id) => !haveIds.has(id));
-	// Re-pull show rows that predate the aired frontier (seasons present, `lastAired` null) — the
-	// channel otherwise only fetches missing rows, so a stale record never gains it.
-	const staleShows = localMedia
-		.filter((m) => m.type === 'show' && m.seasons != null && m.lastAired == null)
-		.map((m) => m.id);
-	const need = [...new Set([...missing, ...staleShows])];
-	if (need.length === 0 && refs.length === 0) return { applied: 0 };
-
+	// Report what we have + at which version; the server derives the referenced universe from the
+	// event log and returns rows we're missing or behind on (version-diff staleness, MRQ-122). We
+	// push identity for our linked rows so the server can hydrate them for other devices.
 	const body: MediaSyncRequest = {
 		refs: refs.slice(0, MEDIA_SYNC_MAX),
-		need: need.slice(0, MEDIA_SYNC_MAX)
+		have: have.slice(0, MEDIA_SYNC_MAX)
 	};
 	const res = await fetchFn('/api/media/sync', {
 		method: 'POST',

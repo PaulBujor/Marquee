@@ -6,13 +6,16 @@
 import { z } from 'zod';
 import { MEDIA_PROVIDERS, type MediaRecord } from './events';
 
-/** Max identity refs / needed ids accepted in one media-sync call. */
+/** Max identity refs / have-entries accepted in one media-sync call. */
 export const MEDIA_SYNC_MAX = 500;
 
 /**
  * Request body: `refs` are identity hints for media the client has (so the server can hydrate
- * + store them), `need` are our media ids the client references but lacks locally (returned if
- * the server already has them). The server only acts on ids the user's own events reference.
+ * + store them), `have` reports each media id the client references locally with the `version`
+ * it holds. The server returns rows the client is **missing OR behind on** (server version >
+ * client version) — the version-diff staleness signal (MRQ-122), so a refreshed row propagates
+ * without the old "re-pull everything" heuristic. The server only acts on ids the user's own
+ * events reference (anti-abuse).
  */
 export const mediaSyncRequestSchema = z.object({
 	refs: z
@@ -23,7 +26,9 @@ export const mediaSyncRequestSchema = z.object({
 			})
 		)
 		.max(MEDIA_SYNC_MAX),
-	need: z.array(z.string().min(1)).max(MEDIA_SYNC_MAX)
+	have: z
+		.array(z.object({ id: z.string().min(1), version: z.number().int().nonnegative() }))
+		.max(MEDIA_SYNC_MAX)
 });
 
 export type MediaSyncRequest = z.infer<typeof mediaSyncRequestSchema>;

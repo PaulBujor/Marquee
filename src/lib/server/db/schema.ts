@@ -13,8 +13,7 @@ import {
 	MEDIA_SOURCES,
 	SYNC_EVENT_TYPES,
 	TRACKING_STATUSES,
-	type EventPayload,
-	type MediaSeason
+	type EventPayload
 } from '../../sync/events';
 
 /**
@@ -229,6 +228,11 @@ export const syncState = sqliteTable('sync_state', {
  * provider switch or outage needs no id remap. `source` distinguishes provider-backed
  * (`linked`) from user-authored (`custom`) rows; `media.linked` aliasing is deferred to the
  * Custom Media epic and slots on top of this without a further identity migration.
+ *
+ * Season/episode structure lives in the relational `seasons`/`episodes` child tables (below),
+ * carrying per-episode air dates — the calendar (MRQ-65) and air-date watchability read those,
+ * replacing the old `lastAired` frontier + `seasons` JSON. `version` is the content revision
+ * (bumped on each refresh that changes data) and `refreshedAt` drives the refresh TTL (MRQ-39).
  */
 export const media = sqliteTable(
 	'media',
@@ -251,12 +255,19 @@ export const media = sqliteTable(
 		overview: text('overview').notNull().default(''),
 		// Genre names as JSON (`["Action","Sci-Fi"]`) for the lists genre filter.
 		genres: text('genres', { mode: 'json' }).$type<string[]>(),
-		// Most recently aired episode (aired frontier) for shows — caps "next episode"/progress to
-		// aired episodes so a caught-up show leaves Continue Watching and unaired eps aren't markable.
-		lastAired: text('last_aired', { mode: 'json' }).$type<{ season: number; episode: number }>(),
-		// Season episode counts as JSON (`[{seasonNumber, episodeCount}]`) for shows; null for
-		// movies. Powers Continue Watching progress / next-episode without loading full episodes.
-		seasons: text('seasons', { mode: 'json' }).$type<MediaSeason[]>(),
+		// Movie-only: full release date (`YYYY-MM-DD`); null for shows.
+		releaseDate: text('release_date'),
+		// Show-only: TMDB series `status`, `in_production` flag, and first/last air dates.
+		status: text('status'),
+		inProduction: integer('in_production', { mode: 'boolean' }),
+		firstAirDate: text('first_air_date'),
+		lastAirDate: text('last_air_date'),
+		// Content revision — bumped on each refresh that changes data; the client staleness signal (MRQ-122).
+		version: integer('version').notNull().default(1),
+		// Epoch **ms** of the last TMDB pull — drives the refresh TTL (MRQ-39 cron / on-demand refresh).
+		// SQL default 0 so an ALTER-ADD backfills existing rows as maximally stale (→ refreshed on
+		// next touch); the hydrate/refresh code sets it explicitly on every write.
+		refreshedAt: integer('refreshed_at').notNull().default(0),
 		// Epoch **ms** (plain integer, not `timestamp`/seconds) — it's an LWW clock
 		// compared against event `clientCreatedAt`, so units must match.
 		updatedAt: integer('updated_at')
@@ -266,6 +277,55 @@ export const media = sqliteTable(
 	// Natural key for provider-sourced rows. Custom rows carry `external_id = null`; SQLite
 	// treats each NULL as distinct in a UNIQUE index, so multiple custom rows never collide.
 	(table) => [uniqueIndex('media_provider_external_idx').on(table.provider, table.externalId)]
+);
+
+/**
+ * A show's season (reference data). Composite PK `(media_id, season_number)`; `media_id` cascades
+ * on media delete. TMDB numbers Specials as season 0. Movies have no rows here.
+ */
+export const seasons = sqliteTable(
+	'seasons',
+	{
+		mediaId: text('media_id')
+			.notNull()
+			.references(() => media.id, { onDelete: 'cascade' }),
+		seasonNumber: integer('season_number').notNull(),
+		name: text('name').notNull().default(''),
+		overview: text('overview').notNull().default(''),
+		// Season premiere date (`YYYY-MM-DD`), or null.
+		airDate: text('air_date'),
+		posterPath: text('poster_path'),
+		episodeCount: integer('episode_count').notNull().default(0)
+	},
+	(table) => [primaryKey({ columns: [table.mediaId, table.seasonNumber] })]
+);
+
+/**
+ * A show's episode (reference data). Composite PK `(media_id, season_number, episode_number)`;
+ * `media_id` cascades on media delete. `air_date` is the released-status source of truth (an
+ * episode is aired once `air_date <= today`; null = unannounced). Indexed on `air_date` for the
+ * upcoming-releases calendar (MRQ-65) and next-episode queries.
+ */
+export const episodes = sqliteTable(
+	'episodes',
+	{
+		mediaId: text('media_id')
+			.notNull()
+			.references(() => media.id, { onDelete: 'cascade' }),
+		seasonNumber: integer('season_number').notNull(),
+		episodeNumber: integer('episode_number').notNull(),
+		name: text('name').notNull().default(''),
+		overview: text('overview').notNull().default(''),
+		// Air date (`YYYY-MM-DD`), or null when unannounced / not yet scheduled.
+		airDate: text('air_date'),
+		runtime: integer('runtime'),
+		stillPath: text('still_path')
+	},
+	(table) => [
+		primaryKey({ columns: [table.mediaId, table.seasonNumber, table.episodeNumber] }),
+		index('episodes_media_idx').on(table.mediaId),
+		index('episodes_air_date_idx').on(table.airDate)
+	]
 );
 
 /**
@@ -328,5 +388,7 @@ export const episodeWatches = sqliteTable(
 export type Event = typeof events.$inferSelect;
 export type SyncState = typeof syncState.$inferSelect;
 export type Media = typeof media.$inferSelect;
+export type SeasonRow = typeof seasons.$inferSelect;
+export type EpisodeRow = typeof episodes.$inferSelect;
 export type Tracking = typeof tracking.$inferSelect;
 export type EpisodeWatch = typeof episodeWatches.$inferSelect;

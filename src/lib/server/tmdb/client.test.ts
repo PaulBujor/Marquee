@@ -161,6 +161,9 @@ const TV_DETAILS: TmdbTvDetailsResponse = {
 	id: 1396,
 	name: 'Breaking Bad',
 	first_air_date: '2008-01-20',
+	last_air_date: '2013-09-29',
+	status: 'Ended',
+	in_production: false,
 	overview: 'A chemistry teacher turned meth cook.',
 	poster_path: '/bb.jpg',
 	backdrop_path: '/bb-backdrop.jpg',
@@ -241,12 +244,16 @@ describe('createTmdbClient.getDetails', () => {
 				{ id: 2, name: 'Elliot Page', character: 'Ariadne', profilePath: null }
 			],
 			trailer: { key: 'yt-trailer', name: 'Official Trailer' },
-			seasons: [],
-			lastAired: null
+			releaseDate: '2010-07-16',
+			status: null,
+			inProduction: null,
+			firstAirDate: null,
+			lastAirDate: null,
+			seasons: []
 		});
 	});
 
-	it('normalizes a show detail (name/first_air_date/episode_run_time)', async () => {
+	it('normalizes a show detail (name/first_air_date/status/in_production)', async () => {
 		mockFetch(TV_DETAILS);
 		const detail = await createTmdbClient('key').getDetails('show', 1396);
 
@@ -257,7 +264,12 @@ describe('createTmdbClient.getDetails', () => {
 			year: 2008,
 			runtime: 47,
 			genres: ['Drama'],
-			trailer: { key: 'bb-trailer', name: 'Trailer' }
+			trailer: { key: 'bb-trailer', name: 'Trailer' },
+			releaseDate: null,
+			status: 'Ended',
+			inProduction: false,
+			firstAirDate: '2008-01-20',
+			lastAirDate: '2013-09-29'
 		});
 		expect(detail.cast).toEqual([
 			{ id: 3, name: 'Bryan Cranston', character: 'Walter White', profilePath: '/bc.jpg' }
@@ -267,7 +279,7 @@ describe('createTmdbClient.getDetails', () => {
 				seasonNumber: 0,
 				name: 'Specials',
 				episodeCount: 8,
-				airYear: 2009,
+				airDate: '2009-02-17',
 				posterPath: '/s0.jpg',
 				overview: 'Extras.'
 			},
@@ -275,7 +287,7 @@ describe('createTmdbClient.getDetails', () => {
 				seasonNumber: 1,
 				name: 'Season 1',
 				episodeCount: 7,
-				airYear: 2008,
+				airDate: '2008-01-20',
 				posterPath: '/s1.jpg',
 				overview: 'The beginning.'
 			}
@@ -365,8 +377,12 @@ describe('createTmdbClient.getDetails', () => {
 			genres: [],
 			cast: [],
 			trailer: null,
-			seasons: [],
-			lastAired: null
+			releaseDate: null,
+			status: null,
+			inProduction: null,
+			firstAirDate: null,
+			lastAirDate: null,
+			seasons: []
 		});
 	});
 

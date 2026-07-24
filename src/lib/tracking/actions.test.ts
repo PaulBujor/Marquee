@@ -1,19 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import {
 	airedEpisodes,
-	allEpisodes,
 	isAired,
 	isSeasonFullyWatched,
 	isSpecialsSeason,
+	isStillAiring,
+	mainEpisodes,
 	nextEpisode,
 	nextFavorite,
 	reconciledStatus,
-	seasonEpisodes,
 	SPECIALS_SEASON,
 	statusEventType,
+	todayIso,
 	toTrackingView,
-	watchedKey
+	watchedKey,
+	type EpisodeAir
 } from './actions';
+
+const TODAY = '2026-07-24';
+
+/** Build an episode record. */
+function ep(season: number, episode: number, airDate: string | null): EpisodeAir {
+	return { season, episode, airDate };
+}
+
+// A show spanning Specials + two seasons, with aired, future, and unannounced episodes.
+const show: EpisodeAir[] = [
+	ep(0, 1, '2020-01-01'), // Specials — excluded from the main progression
+	ep(1, 1, '2026-01-01'), // aired
+	ep(1, 2, '2026-02-01'), // aired
+	ep(2, 1, '2026-07-01'), // aired
+	ep(2, 2, '2026-12-01'), // future
+	ep(2, 3, null) // unannounced
+];
 
 describe('toTrackingView', () => {
 	it('treats a missing row as untracked', () => {
@@ -66,105 +85,90 @@ describe('episode helpers', () => {
 		expect(watchedKey(2, 5)).toBe('2:5');
 	});
 
-	it('enumerates a season 1..episodeCount', () => {
-		expect(seasonEpisodes({ seasonNumber: 1, episodeCount: 3 })).toEqual([
-			{ season: 1, episode: 1 },
-			{ season: 1, episode: 2 },
-			{ season: 1, episode: 3 }
-		]);
-	});
-
 	it('identifies the Specials season by name, not a bare number', () => {
 		expect(SPECIALS_SEASON).toBe(0);
 		expect(isSpecialsSeason(0)).toBe(true);
 		expect(isSpecialsSeason(1)).toBe(false);
-		expect(isSpecialsSeason(2)).toBe(false);
 	});
 
-	it('flattens all real seasons, skipping Specials (season 0)', () => {
-		const seasons = [
-			{ seasonNumber: 0, episodeCount: 4 },
-			{ seasonNumber: 1, episodeCount: 2 },
-			{ seasonNumber: 2, episodeCount: 1 }
-		];
-		expect(allEpisodes(seasons)).toEqual([
-			{ season: 1, episode: 1 },
-			{ season: 1, episode: 2 },
-			{ season: 2, episode: 1 }
+	it('mainEpisodes drops Specials and sorts by (season, episode)', () => {
+		const scrambled = [ep(2, 1, null), ep(1, 2, null), ep(0, 1, null), ep(1, 1, null)];
+		expect(mainEpisodes(scrambled)).toEqual([ep(1, 1, null), ep(1, 2, null), ep(2, 1, null)]);
+	});
+
+	it('todayIso formats an epoch as YYYY-MM-DD (UTC)', () => {
+		expect(todayIso(Date.UTC(2026, 6, 24, 10, 0, 0))).toBe('2026-07-24');
+	});
+});
+
+describe('isAired', () => {
+	it('is true for an air date on or before today', () => {
+		expect(isAired({ airDate: '2026-07-01' }, TODAY)).toBe(true);
+		expect(isAired({ airDate: TODAY }, TODAY)).toBe(true);
+	});
+
+	it('is false for a future air date', () => {
+		expect(isAired({ airDate: '2026-12-01' }, TODAY)).toBe(false);
+	});
+
+	it('treats a null air date as not yet aired', () => {
+		expect(isAired({ airDate: null }, TODAY)).toBe(false);
+	});
+});
+
+describe('airedEpisodes', () => {
+	it('returns aired, non-Specials episodes in order (drops future + unannounced)', () => {
+		expect(airedEpisodes(show, TODAY)).toEqual([
+			ep(1, 1, '2026-01-01'),
+			ep(1, 2, '2026-02-01'),
+			ep(2, 1, '2026-07-01')
 		]);
 	});
 });
 
 describe('nextEpisode', () => {
-	const seasons = [
-		{ seasonNumber: 0, episodeCount: 3 }, // Specials — ignored
-		{ seasonNumber: 1, episodeCount: 2 },
-		{ seasonNumber: 2, episodeCount: 2 }
-	];
-
 	it('returns S1E1 when nothing is watched', () => {
-		expect(nextEpisode(seasons, new Set())).toEqual({ season: 1, episode: 1 });
+		expect(nextEpisode(show, new Set(), TODAY)).toEqual({ season: 1, episode: 1 });
 	});
 
 	it('returns the first gap in order across seasons', () => {
-		const watched = new Set(['1:1', '1:2']);
-		expect(nextEpisode(seasons, watched)).toEqual({ season: 2, episode: 1 });
+		expect(nextEpisode(show, new Set(['1:1', '1:2']), TODAY)).toEqual({ season: 2, episode: 1 });
 	});
 
-	it('skips already-watched episodes even mid-season', () => {
-		const watched = new Set(['1:1']);
-		expect(nextEpisode(seasons, watched)).toEqual({ season: 1, episode: 2 });
-	});
-
-	it('returns null once every real episode is watched', () => {
-		const watched = new Set(['1:1', '1:2', '2:1', '2:2']);
-		expect(nextEpisode(seasons, watched)).toBeNull();
-	});
-});
-
-describe('aired boundary', () => {
-	const seasons = [
-		{ seasonNumber: 1, episodeCount: 3 },
-		{ seasonNumber: 2, episodeCount: 3 }
-	];
-
-	it('isAired caps at the frontier (null = uncapped)', () => {
-		const frontier = { season: 2, episode: 1 };
-		expect(isAired({ season: 1, episode: 3 }, frontier)).toBe(true);
-		expect(isAired({ season: 2, episode: 1 }, frontier)).toBe(true);
-		expect(isAired({ season: 2, episode: 2 }, frontier)).toBe(false);
-		expect(isAired({ season: 2, episode: 2 }, null)).toBe(true);
-	});
-
-	it('airedEpisodes drops episodes past the frontier', () => {
-		expect(airedEpisodes(seasons, { season: 2, episode: 1 })).toEqual([
-			{ season: 1, episode: 1 },
-			{ season: 1, episode: 2 },
-			{ season: 1, episode: 3 },
-			{ season: 2, episode: 1 }
-		]);
-	});
-
-	it('nextEpisode returns null once caught up to the aired frontier (ignores unaired)', () => {
-		const watched = new Set(['1:1', '1:2', '1:3', '2:1']);
-		expect(nextEpisode(seasons, watched, { season: 2, episode: 1 })).toBeNull();
-		expect(nextEpisode(seasons, watched)).toEqual({ season: 2, episode: 2 }); // uncapped
+	it('returns null once caught up to the aired frontier (ignores future/unannounced)', () => {
+		expect(nextEpisode(show, new Set(['1:1', '1:2', '2:1']), TODAY)).toBeNull();
 	});
 });
 
 describe('isSeasonFullyWatched', () => {
-	it('is true when every episode of the season is watched', () => {
-		const watched = new Set(['1:1', '1:2', '1:3']);
-		expect(isSeasonFullyWatched({ seasonNumber: 1, episodeCount: 3 }, watched)).toBe(true);
+	it('is true when every aired episode of the season is watched (unaired ignored)', () => {
+		// Season 2 has one aired episode (2:1); 2:2 is future, 2:3 unannounced.
+		expect(isSeasonFullyWatched(show, 2, new Set(['2:1']), TODAY)).toBe(true);
 	});
 
-	it('is false when any episode is missing', () => {
-		const watched = new Set(['1:1', '1:3']);
-		expect(isSeasonFullyWatched({ seasonNumber: 1, episodeCount: 3 }, watched)).toBe(false);
+	it('is false when an aired episode is missing', () => {
+		expect(isSeasonFullyWatched(show, 1, new Set(['1:1']), TODAY)).toBe(false);
 	});
 
-	it('is false for a season with no episodes', () => {
-		expect(isSeasonFullyWatched({ seasonNumber: 0, episodeCount: 0 }, new Set())).toBe(false);
+	it('is false for a season with no aired episodes', () => {
+		const future = [ep(3, 1, '2027-01-01')];
+		expect(isSeasonFullyWatched(future, 3, new Set(), TODAY)).toBe(false);
+	});
+});
+
+describe('isStillAiring', () => {
+	it('is true while in production', () => {
+		expect(isStillAiring(show, true, TODAY)).toBe(true);
+	});
+
+	it('is true when announced-but-unaired episodes remain (even if not in production)', () => {
+		// `show` has a future (2:2) and an unannounced (2:3) episode.
+		expect(isStillAiring(show, false, TODAY)).toBe(true);
+	});
+
+	it('is false when every non-Specials episode has aired and it is not in production', () => {
+		const done = [ep(1, 1, '2026-01-01'), ep(1, 2, '2026-02-01')];
+		expect(isStillAiring(done, false, TODAY)).toBe(false);
 	});
 });
 
@@ -198,11 +202,8 @@ describe('reconciledStatus', () => {
 	});
 
 	it('keeps a caught-up but still-airing show in watching, not completed', () => {
-		// All aired episodes watched, but more are still to come → stays "watching".
 		expect(reconciledStatus('watching', 10, 10, true)).toBeNull();
-		// First watch of a caught-up still-airing show starts it watching (not completed).
 		expect(reconciledStatus('want_to_watch', 10, 10, true)).toBe('watching');
-		// A previously-"completed" show that's airing again (new episodes aired) reverts to watching.
 		expect(reconciledStatus('completed', 10, 10, true)).toBe('watching');
 	});
 });

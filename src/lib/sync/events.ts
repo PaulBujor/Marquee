@@ -46,19 +46,47 @@ export const SYNC_EVENT_TYPES = [
 ] as const;
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
 
-/** A season's episode count — the minimum a show needs for progress / next-episode. */
+/**
+ * A season's reference metadata (a show's, nested in a {@link MediaRecord}). Air date + counts
+ * come from TMDB; not a projection of the event log.
+ */
 export interface MediaSeason {
 	seasonNumber: number;
+	name: string;
+	overview: string;
+	/** Season premiere date (`YYYY-MM-DD`), or null when TMDB has none. */
+	airDate: string | null;
+	posterPath: string | null;
 	episodeCount: number;
 }
 
 /**
- * A media reference record — the shared shape of the server `media` row, the client media
- * store, and the media-channel DTO. Media is *reference data*, synced on a separate parallel
- * channel (MRQ-111) — **never** inside `/api/sync`, which carries events only. Events refer
- * to a title by `entityId` (this `id`), never by embedding this. `id` is our provider-agnostic
- * media id ({@link mediaId}); TMDB stays the real source, this is the display cache clients hold
- * for offline rendering. `seasons` is null for movies.
+ * A single episode's reference metadata (a show's, nested in a {@link MediaRecord}). `airDate`
+ * is the released-status source of truth — an episode counts as aired once `airDate <= today`;
+ * **null means unannounced / not yet aired** (so it isn't watchable and feeds the calendar).
+ */
+export interface MediaEpisode {
+	season: number;
+	episode: number;
+	name: string;
+	overview: string;
+	/** Air date (`YYYY-MM-DD`), or null when unannounced / not yet scheduled. */
+	airDate: string | null;
+	runtime: number | null;
+	stillPath: string | null;
+}
+
+/**
+ * A media reference record — the shared shape of the server `media` row (+ its `seasons`/`episodes`
+ * child rows), the client media store, and the media-channel DTO. Media is *reference data*, synced
+ * on a separate parallel channel (MRQ-111) — **never** inside `/api/sync`, which carries events
+ * only. Events refer to a title by `entityId` (this `id`), never by embedding this. `id` is our
+ * provider-agnostic media id ({@link mediaId}); TMDB stays the real source, this is the display
+ * cache clients hold for offline rendering.
+ *
+ * Show-only fields (`status`/`inProduction`/`firstAirDate`/`lastAirDate`/`seasons`/`episodes`) are
+ * null for movies; the movie-only `releaseDate` is null for shows. `version` is bumped server-side
+ * on each refresh that changes content — the client staleness signal (MRQ-122).
  */
 export interface MediaRecord {
 	id: string;
@@ -73,9 +101,22 @@ export interface MediaRecord {
 	backdropPath: string | null;
 	overview: string;
 	genres: string[];
+	/** Full movie release date (`YYYY-MM-DD`), or null. Movies only. */
+	releaseDate: string | null;
+	/** TMDB series status (e.g. `Returning Series`, `Ended`, `Canceled`); null for movies. */
+	status: string | null;
+	/** TMDB `in_production` — still-airing signal for completion/refresh; null for movies. */
+	inProduction: boolean | null;
+	/** First air date of the series (`YYYY-MM-DD`); null for movies. */
+	firstAirDate: string | null;
+	/** Last air date of the series so far (`YYYY-MM-DD`); null for movies / not-yet-aired. */
+	lastAirDate: string | null;
+	/** Content version, bumped server-side on each refresh that changes data (staleness signal). */
+	version: number;
+	/** Season metadata for shows; null for movies. */
 	seasons: MediaSeason[] | null;
-	/** Most recently aired episode (aired frontier) for a show; null for movies / not-yet-aired. */
-	lastAired: EpisodeCoord | null;
+	/** Per-episode metadata (with air dates) for shows; null for movies. */
+	episodes: MediaEpisode[] | null;
 }
 
 /**

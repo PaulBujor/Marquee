@@ -2,15 +2,22 @@
  * Client-side IndexedDB: the offline store backing the sync pipeline. It holds an
  * `events` outbox (local events awaiting push) plus materialized `tracking` /
  * `episodeWatches` stores (the client-side projection of the same event log the
- * server materializes) and a `media` reference cache (populated off a separate
- * channel, not derived from events). `upcoming` is provisioned now and populated
- * later by the Timeline epic; `meta` holds the `deviceId` and sync `cursor`. The database
- * itself is namespaced per user (`marquee-<userId>`, see {@link setActiveUser}).
+ * server materializes) and a `media` reference cache with its `seasons` / `episodes`
+ * child stores (populated off a separate channel, not derived from events; episodes
+ * carry air dates for watchability + the upcoming calendar). `meta` holds the `deviceId`
+ * and sync `cursor`. The database itself is namespaced per user (`marquee-<userId>`,
+ * see {@link setActiveUser}).
  *
  * Client-safe (browser only) — never imported from server code.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { EventEnvelope, MediaRecord, TrackingStatus } from '$lib/sync/events';
+import type {
+	EventEnvelope,
+	MediaEpisode,
+	MediaRecord,
+	MediaSeason,
+	TrackingStatus
+} from '$lib/sync/events';
 
 /**
  * An outbox event: the envelope plus a `synced` flag (0 = pending push, 1 = acked).
@@ -21,9 +28,29 @@ export interface OutboxEvent extends EventEnvelope {
 	synced: 0 | 1;
 }
 
-/** Cached catalog entry (mirrors the server `media` row); `updatedAt` is the LWW clock (epoch ms). */
-export interface ClientMedia extends MediaRecord {
+/** The scalar part of a media record — everything except the nested season/episode arrays, which
+ * live in their own stores (mirroring the server's relational `seasons`/`episodes` tables). */
+export type MediaScalars = Omit<MediaRecord, 'seasons' | 'episodes'>;
+
+/** Cached catalog entry (media scalars); `updatedAt` is the LWW clock (epoch ms). */
+export interface ClientMedia extends MediaScalars {
 	updatedAt: number;
+}
+
+/** A cached season row. `id` = `${mediaId}::s{seasonNumber}`; indexed by media for grouped reads. */
+export interface ClientSeason extends MediaSeason {
+	id: string;
+	mediaId: string;
+}
+
+/**
+ * A cached episode row (with its air date). `id` = `${mediaId}::s{S}e{E}`. Indexed by media
+ * (per-title reads) and by `airDate` (the upcoming-releases calendar range scan, MRQ-65). An
+ * episode with a null `airDate` is simply absent from the `by_airDate` index.
+ */
+export interface ClientEpisode extends MediaEpisode {
+	id: string;
+	mediaId: string;
 }
 
 /** Materialized tracking row (single-user client, so keyed by `mediaId`). Per-field LWW clocks. */
@@ -49,17 +76,6 @@ export interface ClientEpisodeWatch {
 	episode: number;
 	watched: boolean;
 	updatedAt: number;
-}
-
-/** Cached upcoming release (populated by the later Timeline epic). */
-export interface UpcomingEpisode {
-	id: string;
-	mediaId: string;
-	season: number;
-	episode: number;
-	title: string;
-	airDate: string;
-	cachedAt: number;
 }
 
 /**
@@ -90,16 +106,21 @@ interface MarqueeDB extends DBSchema {
 	};
 	tracking: { key: string; value: ClientTracking; indexes: { by_status: string } };
 	media: { key: string; value: ClientMedia };
+	seasons: { key: string; value: ClientSeason; indexes: { by_media: string } };
+	episodes: {
+		key: string;
+		value: ClientEpisode;
+		indexes: { by_media: string; by_airDate: string };
+	};
 	mediaImages: { key: string; value: MediaImages };
 	episodeWatches: { key: string; value: ClientEpisodeWatch; indexes: { by_media: string } };
-	upcoming: { key: string; value: UpcomingEpisode; indexes: { by_media: string } };
 	meta: { key: MetaKey; value: MetaEntry };
 }
 
 export type MarqueeDatabase = IDBPDatabase<MarqueeDB>;
 
 const DB_NAME = 'marquee';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<MarqueeDatabase> | null = null;
 let activeUserId: string | null = null;
@@ -159,16 +180,27 @@ export function openDb(): Promise<MarqueeDatabase> {
 				}
 				if (!db.objectStoreNames.contains('media'))
 					db.createObjectStore('media', { keyPath: 'id' });
+				// Relational season/episode reference stores (v3) — mirror the server's
+				// seasons/episodes tables; episodes carry air dates for watchability + the calendar.
+				if (!db.objectStoreNames.contains('seasons')) {
+					const seasons = db.createObjectStore('seasons', { keyPath: 'id' });
+					seasons.createIndex('by_media', 'mediaId');
+				}
+				if (!db.objectStoreNames.contains('episodes')) {
+					const episodes = db.createObjectStore('episodes', { keyPath: 'id' });
+					episodes.createIndex('by_media', 'mediaId');
+					episodes.createIndex('by_airDate', 'airDate');
+				}
 				if (!db.objectStoreNames.contains('mediaImages'))
 					db.createObjectStore('mediaImages', { keyPath: 'id' });
 				if (!db.objectStoreNames.contains('episodeWatches')) {
 					const episodeWatches = db.createObjectStore('episodeWatches', { keyPath: 'id' });
 					episodeWatches.createIndex('by_media', 'mediaId');
 				}
-				if (!db.objectStoreNames.contains('upcoming')) {
-					const upcoming = db.createObjectStore('upcoming', { keyPath: 'id' });
-					upcoming.createIndex('by_media', 'mediaId');
-				}
+				// `upcoming` (v2) is superseded by the `episodes` store's `by_airDate` index — drop it.
+				// Cast to the untyped DB: `upcoming` is no longer part of the typed schema.
+				const legacy = db as unknown as IDBPDatabase;
+				if (legacy.objectStoreNames.contains('upcoming')) legacy.deleteObjectStore('upcoming');
 				if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
 			}
 		});

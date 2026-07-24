@@ -8,6 +8,15 @@ import {
 	type LibraryItem
 } from './library';
 
+/** A season 1 with `count` already-aired episodes (dates in the past). */
+function airedSeason(count: number): { season: number; episode: number; airDate: string | null }[] {
+	return Array.from({ length: count }, (_, i) => ({
+		season: 1,
+		episode: i + 1,
+		airDate: '2020-01-01'
+	}));
+}
+
 function item(over: Partial<LibraryItem> = {}): LibraryItem {
 	return {
 		mediaId: over.mediaId ?? 'm',
@@ -21,8 +30,8 @@ function item(over: Partial<LibraryItem> = {}): LibraryItem {
 		year: 2000,
 		posterPath: null,
 		genres: [],
-		seasons: null,
-		lastAired: null,
+		inProduction: null,
+		episodes: [],
 		watched: new Set(),
 		...over
 	};
@@ -33,15 +42,25 @@ describe('showProgress', () => {
 		expect(showProgress(item({ type: 'movie' }))).toBeNull();
 	});
 
-	it('computes watched/total and the next episode for a show', () => {
+	it('computes watched/total and the next episode from aired episodes', () => {
+		const p = showProgress(
+			item({ type: 'show', episodes: airedSeason(4), watched: new Set(['1:1', '1:2']) })
+		);
+		expect(p).toEqual({ watched: 2, total: 4, fraction: 0.5, next: { season: 1, episode: 3 } });
+	});
+
+	it('counts only aired episodes toward total (a future episode is not "remaining")', () => {
 		const p = showProgress(
 			item({
 				type: 'show',
-				seasons: [{ seasonNumber: 1, episodeCount: 4 }],
-				watched: new Set(['1:1', '1:2'])
+				episodes: [
+					{ season: 1, episode: 1, airDate: '2020-01-01' },
+					{ season: 1, episode: 2, airDate: '2999-01-01' } // far-future → unaired
+				],
+				watched: new Set(['1:1'])
 			})
 		);
-		expect(p).toEqual({ watched: 2, total: 4, fraction: 0.5, next: { season: 1, episode: 3 } });
+		expect(p).toEqual({ watched: 1, total: 1, fraction: 1, next: null });
 	});
 });
 
@@ -53,14 +72,14 @@ describe('continueWatching', () => {
 				mediaId: 'inprogress',
 				type: 'show',
 				status: 'watching',
-				seasons: [{ seasonNumber: 1, episodeCount: 3 }],
+				episodes: airedSeason(3),
 				watched: new Set(['1:1'])
 			}),
 			item({
 				mediaId: 'done',
 				type: 'show',
 				status: 'completed',
-				seasons: [{ seasonNumber: 1, episodeCount: 2 }],
+				episodes: airedSeason(2),
 				watched: new Set(['1:1', '1:2'])
 			})
 		];
