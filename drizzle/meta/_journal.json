@@ -57,6 +57,13 @@
       "when": 1784809981279,
       "tag": "0007_media_backdrop_seasons",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1784814916157,
+      "tag": "0008_media_genres",
+      "breakpoints": true
     }
   ]
 }

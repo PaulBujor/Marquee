@@ -38,6 +38,7 @@ export interface ClientTracking {
 	favoriteUpdatedAt: number;
 	ratingUpdatedAt: number;
 	removedUpdatedAt: number;
+	addedAt: number;
 }
 
 /** Materialized per-episode watched state. `id` = `${mediaId}::s{S}e{E}`. */

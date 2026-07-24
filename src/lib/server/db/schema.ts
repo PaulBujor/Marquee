@@ -249,6 +249,8 @@ export const media = sqliteTable(
 		// Header image (TMDB backdrop) — the media channel pulls poster + backdrop only.
 		backdropPath: text('backdrop_path'),
 		overview: text('overview').notNull().default(''),
+		// Genre names as JSON (`["Action","Sci-Fi"]`) for the lists genre filter.
+		genres: text('genres', { mode: 'json' }).$type<string[]>(),
 		// Season episode counts as JSON (`[{seasonNumber, episodeCount}]`) for shows; null for
 		// movies. Powers Continue Watching progress / next-episode without loading full episodes.
 		seasons: text('seasons', { mode: 'json' }).$type<MediaSeason[]>(),

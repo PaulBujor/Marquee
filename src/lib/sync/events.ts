@@ -72,6 +72,7 @@ export interface MediaRecord {
 	posterPath: string | null;
 	backdropPath: string | null;
 	overview: string;
+	genres: string[];
 	seasons: MediaSeason[] | null;
 }
 

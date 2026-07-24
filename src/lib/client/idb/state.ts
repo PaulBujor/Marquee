@@ -24,7 +24,8 @@ async function upsertTracking(
 	mutate: (t: ClientTracking) => void
 ): Promise<void> {
 	const transaction = db.transaction('tracking', 'readwrite');
-	const row: ClientTracking = (await transaction.store.get(mediaId)) ?? {
+	const existing = await transaction.store.get(mediaId);
+	const row: ClientTracking = existing ?? {
 		mediaId,
 		status: 'want_to_watch',
 		favorite: false,
@@ -33,13 +34,16 @@ async function upsertTracking(
 		statusUpdatedAt: 0,
 		favoriteUpdatedAt: 0,
 		ratingUpdatedAt: 0,
-		removedUpdatedAt: 0
+		removedUpdatedAt: 0,
+		addedAt: clock
 	};
+	// `addedAt` = earliest event clock seen (order-independent), for the "date added" sort.
+	row.addedAt = Math.min(existing?.addedAt ?? clock, clock);
 	if (clock >= row[clockField]) {
 		mutate(row);
 		row[clockField] = clock;
-		await transaction.store.put(row);
 	}
+	await transaction.store.put(row);
 	await transaction.done;
 }
 

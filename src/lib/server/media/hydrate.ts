@@ -66,6 +66,7 @@ export async function hydrateMedia(
 			posterPath: detail.posterPath,
 			backdropPath: detail.backdropPath,
 			overview: detail.overview,
+			genres: detail.genres,
 			seasons
 		})
 		.onConflictDoNothing();

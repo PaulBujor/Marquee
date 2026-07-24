@@ -22,6 +22,7 @@ function record(externalId: string): MediaRecord {
 		posterPath: '/p.jpg',
 		backdropPath: '/b.jpg',
 		overview: '',
+		genres: [],
 		seasons: null
 	};
 }
