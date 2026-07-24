@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Button, buttonVariants } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
+	import { Button } from '$lib/components/ui/button';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import MediaBadge from './media-badge.svelte';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
@@ -91,33 +91,34 @@
 	{/if}
 </div>
 
-<!-- Remove: destructive, or keep as "didn't finish", or cancel -->
-<Dialog.Root bind:open={removeOpen}>
-	<Dialog.Content>
-		<Dialog.Header>
-			<Dialog.Title>Remove from your list?</Dialog.Title>
-			<Dialog.Description>
+<!-- Remove: destructive, or keep as "didn't finish", or cancel. AlertDialog (not Dialog) — a
+destructive choice the user must resolve, so no outside-click/Escape dismiss. -->
+<AlertDialog.Root bind:open={removeOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>Remove from your list?</AlertDialog.Title>
+			<AlertDialog.Description>
 				You can remove this title entirely, or keep it as didn't finish.
-			</Dialog.Description>
-		</Dialog.Header>
-		<!-- Cancel first in the DOM so the footer's `flex-col-reverse` (mobile) stacks the
-		destructive action on top and Cancel at the bottom; `sm:flex-row sm:justify-end` puts
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<!-- Cancel first in the DOM so the footer's flex-col-reverse (mobile) stacks the
+		destructive action on top and Cancel at the bottom; sm:flex-row justify-end puts
 		Remove rightmost on desktop. -->
-		<Dialog.Footer>
-			<Dialog.Close class={buttonVariants({ variant: 'ghost' })}>Cancel</Dialog.Close>
-			<Button variant="outline" onclick={chooseDidNotFinish} disabled={tracking.busy}>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+			<AlertDialog.Action variant="outline" onclick={chooseDidNotFinish} disabled={tracking.busy}>
 				Mark as didn't finish
-			</Button>
-			<Button
+			</AlertDialog.Action>
+			<AlertDialog.Action
 				variant="destructive"
 				onclick={() => tracking.remove().then(() => (removeOpen = false))}
 				disabled={tracking.busy}
 			>
 				Remove
-			</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
 
 <ConfirmDialog
 	bind:open={markSeriesOpen}

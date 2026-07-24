@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { Button, buttonVariants } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 
-	// A small controlled confirm dialog for actions that are awkward to undo (e.g. bulk
-	// "mark season/series watched"). The parent binds `open` and handles `onconfirm`.
+	// A small controlled confirmation for actions that are awkward to undo (e.g. bulk "mark
+	// season/series watched"). An **alert** dialog (not a plain dialog): it takes role=alertdialog,
+	// traps focus, and doesn't dismiss on outside-click/Escape — the user must choose. The parent
+	// binds `open`; `onconfirm` fires on the action (the dialog auto-closes).
 	interface Props {
 		open?: boolean;
 		title: string;
@@ -24,19 +25,21 @@
 	}: Props = $props();
 </script>
 
-<Dialog.Root bind:open>
-	<Dialog.Content>
-		<Dialog.Header>
-			<Dialog.Title>{title}</Dialog.Title>
+<AlertDialog.Root bind:open>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{title}</AlertDialog.Title>
 			{#if description}
-				<Dialog.Description>{description}</Dialog.Description>
+				<AlertDialog.Description>{description}</AlertDialog.Description>
 			{/if}
-		</Dialog.Header>
-		<!-- Cancel first in the DOM so the footer's `flex-col-reverse` (mobile) puts the primary
-		action on top, and the `sm:flex-row sm:justify-end` (desktop) puts it rightmost. -->
-		<Dialog.Footer>
-			<Dialog.Close class={buttonVariants({ variant: 'ghost' })}>Cancel</Dialog.Close>
-			<Button variant={confirmVariant} onclick={onconfirm} disabled={busy}>{confirmLabel}</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
+		</AlertDialog.Header>
+		<!-- Cancel first in the DOM so the footer's flex-col-reverse (mobile) puts the primary
+		action on top, and sm:flex-row justify-end (desktop) puts it rightmost. -->
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+			<AlertDialog.Action variant={confirmVariant} onclick={onconfirm} disabled={busy}>
+				{confirmLabel}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
