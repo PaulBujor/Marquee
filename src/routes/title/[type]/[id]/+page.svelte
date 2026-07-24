@@ -183,13 +183,12 @@
 scrolls out of view, gains a blur+gradient backing and echoes the title. Over the hero the back
 button wears a dark frosted-glass chip so it stays legible on any backdrop. -->
 <header class="fixed inset-x-0 top-0 z-40">
-	<!-- Progressive blur (see AppHeader): the alpha-gradient mask fades the backdrop-filter out so
-	there's no hard blur line at the header's edge. -->
+	<!-- Progressive blur, always on so it also covers the status-bar / Dynamic Island strip (content
+	scrolls up under a fixed header). Stronger + a steeper, curve-like gradient than the other
+	headers since it sits over artwork. The alpha-gradient mask fades the blur out — no hard line. -->
 	<div
-		class="pointer-events-none absolute inset-0 backdrop-blur-md transition-opacity duration-200 {showTitle
-			? 'opacity-100'
-			: 'opacity-0'}"
-		style="background:linear-gradient(to bottom, var(--color-background), color-mix(in oklab, var(--color-background) 55%, transparent) 55%, transparent); -webkit-mask-image:linear-gradient(to bottom, black 0%, black 30%, transparent 100%); mask-image:linear-gradient(to bottom, black 0%, black 30%, transparent 100%);"
+		class="pointer-events-none absolute inset-0 backdrop-blur-xl"
+		style="background:linear-gradient(to bottom, var(--color-background) 0%, var(--color-background) 18%, color-mix(in oklab, var(--color-background) 72%, transparent) 42%, color-mix(in oklab, var(--color-background) 28%, transparent) 66%, transparent 100%); -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 42%, rgb(0 0 0 / 0.55) 64%, rgb(0 0 0 / 0.2) 84%, transparent 100%); mask-image:linear-gradient(to bottom, #000 0%, #000 42%, rgb(0 0 0 / 0.55) 64%, rgb(0 0 0 / 0.2) 84%, transparent 100%);"
 	></div>
 	<div
 		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
