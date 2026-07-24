@@ -76,7 +76,7 @@
 	<title>Search · Marquee</title>
 </svelte:head>
 
-<main class="mx-auto flex w-full max-w-lg flex-col gap-4 px-5 py-4">
+<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 py-4">
 	<div class="flex items-center gap-3">
 		<Button
 			onclick={goBack}

@@ -7,6 +7,7 @@
 import { getEpisodeWatches, getTrackingByMediaId, recordEvent } from '$lib/client/idb';
 import {
 	airedEpisodes,
+	allEpisodes,
 	isAired,
 	reconciledStatus,
 	type EpisodeCoord,
@@ -19,9 +20,11 @@ export async function reconcileStatus(
 	lastAired: EpisodeCoord | null = null
 ): Promise<void> {
 	// Completion is measured against **aired** episodes, so a show counts as complete once every
-	// released episode is watched (unaired episodes don't hold it back).
+	// released episode is watched (unaired episodes don't hold it back). But a show still has
+	// episodes to come (announced but unaired) stays "watching" even when caught up — see below.
 	const total = airedEpisodes(seasons, lastAired).length;
 	if (total === 0) return;
+	const stillAiring = total < allEpisodes(seasons).length;
 	const row = await getTrackingByMediaId(mediaId);
 	if (!row || row.removed) return;
 	const episodes = await getEpisodeWatches(mediaId);
@@ -29,6 +32,6 @@ export async function reconcileStatus(
 		(e) =>
 			e.watched && e.season >= 1 && isAired({ season: e.season, episode: e.episode }, lastAired)
 	).length;
-	const next = reconciledStatus(row.status, watchedCount, total);
+	const next = reconciledStatus(row.status, watchedCount, total, stillAiring);
 	if (next) await recordEvent('tracking.status_changed', mediaId, { status: next });
 }

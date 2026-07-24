@@ -120,9 +120,25 @@ export class TrackingState {
 		);
 	}
 
-	/** Remove the title from all lists (tombstone). */
+	/**
+	 * Remove the title from all lists (tombstone). Removing a series also **clears its episode
+	 * watches** — an unwatch per watched episode, so a later re-add starts with a clean history.
+	 * Event-sourced and rebuild-safe: the unwatches live in the log and (being newer) win LWW, so
+	 * a replay/re-pull can't resurrect the old progress.
+	 */
 	remove(): Promise<void> {
-		return this.#run(() => recordEvent('tracking.removed', this.mediaId, {}));
+		return this.#run(async () => {
+			const episodes = await getEpisodeWatches(this.mediaId);
+			for (const e of episodes) {
+				if (e.watched) {
+					await recordEvent('episode.unwatched', this.mediaId, {
+						season: e.season,
+						episode: e.episode
+					});
+				}
+			}
+			await recordEvent('tracking.removed', this.mediaId, {});
+		});
 	}
 
 	/** Toggle a single episode's watched state, then reconcile the show's status. */

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import { ButtonGroup } from '$lib/components/ui/button-group';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import MediaBadge from './media-badge.svelte';
@@ -54,25 +55,29 @@
 				Add to list
 			</Button>
 		{:else}
-			<Button
-				variant={done ? 'secondary' : 'default'}
-				onclick={markWatched}
-				disabled={tracking.busy}
-				class="gap-1.5"
-			>
-				<CheckIcon class="size-4" />
-				{done ? 'Watched' : type === 'show' ? 'Mark series watched' : 'Mark watched'}
-			</Button>
-			<Button
-				variant="outline"
-				size="icon"
-				onclick={() => (removeOpen = true)}
-				disabled={tracking.busy}
-				aria-label="Remove from list"
-				title="Remove"
-			>
-				<XIcon class="size-4" />
-			</Button>
+			<!-- List-membership actions as one segmented control: the primary status action and
+			removing from the list. Favorite is a separate, unrelated toggle. -->
+			<ButtonGroup>
+				<Button
+					variant={done ? 'secondary' : 'default'}
+					onclick={markWatched}
+					disabled={tracking.busy}
+					class="gap-1.5"
+				>
+					<CheckIcon class="size-4" />
+					{done ? 'Watched' : type === 'show' ? 'Mark series watched' : 'Mark watched'}
+				</Button>
+				<Button
+					variant="outline"
+					size="icon"
+					onclick={() => (removeOpen = true)}
+					disabled={tracking.busy}
+					aria-label="Remove from list"
+					title="Remove"
+				>
+					<XIcon class="size-4" />
+				</Button>
+			</ButtonGroup>
 			<Button
 				variant="ghost"
 				size="icon"
