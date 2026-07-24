@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import PageHeader from '$lib/components/page-header.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -76,7 +77,7 @@
 	<title>Search · Marquee</title>
 </svelte:head>
 
-<main class="mx-auto flex w-full max-w-lg flex-col gap-4 px-5 py-4">
+<PageHeader>
 	<div class="flex items-center gap-3">
 		<Button
 			onclick={goBack}
@@ -101,20 +102,22 @@
 			aria-label="Search movies and shows"
 			autocomplete="off"
 			autocapitalize="none"
-			class="h-8 appearance-none pr-9 [&::-webkit-search-cancel-button]:appearance-none"
+			class="appearance-none pr-11 [&::-webkit-search-cancel-button]:appearance-none"
 		/>
 		{#if query}
 			<button
 				type="button"
 				onclick={clearSearch}
 				aria-label="Clear search"
-				class="absolute top-1/2 right-1 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+				class="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 			>
 				<XIcon class="size-4" />
 			</button>
 		{/if}
 	</div>
+</PageHeader>
 
+<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-16">
 	{#if searching}
 		<ul class="flex flex-col gap-3">
 			{#each [0, 1, 2, 3] as i (i)}

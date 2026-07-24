@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import { ButtonGroup } from '$lib/components/ui/button-group';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import MediaBadge from './media-badge.svelte';
@@ -27,9 +28,17 @@
 	// which the buttons can't express — gets an explicit label below them.
 	const didNotFinish = $derived(view.tracked && view.status === 'did_not_finish');
 
+	// A show you're caught up on (every aired episode watched) — no "next" remaining. Being up to
+	// date reads as "watched": you shouldn't be prompted to mark the whole series (which would also
+	// mark unaired episodes). Still-airing shows stay `watching`; this is a display concern.
+	const caughtUp = $derived(
+		type === 'show' && view.tracked && tracking.watched.size > 0 && tracking.nextEpisode() === null
+	);
+	const watchedState = $derived(done || (caughtUp && view.tracked && view.status === 'watching'));
+
 	function markWatched() {
-		if (done) {
-			tracking.setStatus('want_to_watch'); // revert; leaves episode history intact
+		if (watchedState) {
+			tracking.setStatus('want_to_watch'); // step back from watched / up-to-date (keeps history)
 		} else if (type === 'show') {
 			markSeriesOpen = true; // confirm — marks every episode watched
 		} else {
@@ -54,25 +63,29 @@
 				Add to list
 			</Button>
 		{:else}
-			<Button
-				variant={done ? 'secondary' : 'default'}
-				onclick={markWatched}
-				disabled={tracking.busy}
-				class="gap-1.5"
-			>
-				<CheckIcon class="size-4" />
-				{done ? 'Watched' : type === 'show' ? 'Mark series watched' : 'Mark watched'}
-			</Button>
-			<Button
-				variant="outline"
-				size="icon"
-				onclick={() => (removeOpen = true)}
-				disabled={tracking.busy}
-				aria-label="Remove from list"
-				title="Remove"
-			>
-				<XIcon class="size-4" />
-			</Button>
+			<!-- List-membership actions as one segmented control: the primary status action and
+			removing from the list. Favorite is a separate, unrelated toggle. -->
+			<ButtonGroup>
+				<Button
+					variant={watchedState ? 'secondary' : 'default'}
+					onclick={markWatched}
+					disabled={tracking.busy}
+					class="gap-1.5"
+				>
+					<CheckIcon class="size-4" />
+					{watchedState ? 'Watched' : type === 'show' ? 'Mark series watched' : 'Mark watched'}
+				</Button>
+				<Button
+					variant="outline"
+					size="icon"
+					onclick={() => (removeOpen = true)}
+					disabled={tracking.busy}
+					aria-label="Remove from list"
+					title="Remove"
+				>
+					<XIcon class="size-4" />
+				</Button>
+			</ButtonGroup>
 			<Button
 				variant="ghost"
 				size="icon"

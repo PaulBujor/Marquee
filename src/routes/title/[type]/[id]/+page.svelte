@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { slide } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
@@ -78,6 +78,9 @@
 		untrack(() => (data.season ? { [data.season.seasonNumber]: data.season } : {}))
 	);
 	let seasonLoading = $state(false);
+	// Guards the one-shot season pre-selection so it runs once per title and never overrides a
+	// manual pick (reset on navigation).
+	let preselectedFor = $state<string | null>(null);
 	const currentSeason = $derived(
 		selectedSeason !== null ? (seasonCache[selectedSeason] ?? null) : null
 	);
@@ -95,12 +98,49 @@
 		return seasonCache[season]?.episodes.find((e) => e.episodeNumber === episode)?.name;
 	}
 
+	// Fixed header state: once the in-content title scrolls out of view, the header shows its
+	// blur+gradient backing and echoes the title; while it's still visible the header floats
+	// transparently over the hero and its controls read against the artwork behind them.
+	let titleEl = $state<HTMLElement | null>(null);
+	let titleInView = $state(true);
+	const showTitle = $derived(!titleInView);
+	// Over the hero (a backdrop exists and its title hasn't scrolled away) the back button floats
+	// on artwork, so it wears a dark frosted-glass chip that stays legible on any backdrop.
+	const overHero = $derived(!!detail.backdropPath && titleInView);
+
+	// Observe the in-content <h1> so the header knows when to reveal the title.
+	$effect(() => {
+		const el = titleEl;
+		if (!el || typeof IntersectionObserver === 'undefined') return;
+		const io = new IntersectionObserver(([entry]) => (titleInView = entry.isIntersecting), {
+			// Trip just before the title slides fully under the fixed header.
+			rootMargin: '-56px 0px 0px 0px'
+		});
+		io.observe(el);
+		return () => io.disconnect();
+	});
+
+	// Pre-select the season holding the next watchable episode once local watch state has loaded
+	// (a show's next aired-unwatched episode; season 1 when caught up / fully watched). Runs after
+	// the SSR seed and the navigation reset; the `preselectedFor` guard keeps it to once per title
+	// and out of the way of manual season picks.
+	$effect(() => {
+		if (detail.type !== 'show' || !tracking.ready || preselectedFor === mediaId) return;
+		preselectedFor = mediaId;
+		const target = tracking.nextEpisode()?.season ?? 1;
+		if (target !== selectedSeason && detail.seasons.some((s) => s.seasonNumber === target)) {
+			void selectSeason(target);
+		}
+	});
+
 	// Mirror the search page's back behaviour: pop history when we arrived from within the app,
 	// otherwise fall back to the search page. Reset per-title state when navigating between titles.
 	let cameFromApp = $state(false);
 	afterNavigate((nav) => {
 		cameFromApp = nav.from != null;
 		showTrailer = false;
+		titleInView = true;
+		preselectedFor = null;
 		selectedSeason = data.season?.seasonNumber ?? null;
 		seasonCache = data.season ? { [data.season.seasonNumber]: data.season } : {};
 		seasonLoading = false;
@@ -139,20 +179,44 @@
 	<title>{detail.title} · Marquee</title>
 </svelte:head>
 
-{#snippet backButton(extraClass: string)}
-	<Button
-		onclick={goBack}
-		variant="outline"
-		size="icon"
-		shape="round"
-		class="text-muted-foreground {extraClass}"
-		aria-label="Go back"
+<!-- Fixed header over the hero: an always-reachable back control that, once the in-content title
+scrolls out of view, gains a blur+gradient backing and echoes the title. Over the hero the back
+button wears a dark frosted-glass chip so it stays legible on any backdrop. -->
+<header class="fixed inset-x-0 top-0 z-40">
+	<!-- Progressive blur, always on so it also covers the status-bar / Dynamic Island strip (content
+	scrolls up under a fixed header). Stronger + a steeper, curve-like gradient than the other
+	headers since it sits over artwork. The alpha-gradient mask fades the blur out — no hard line. -->
+	<div
+		class="pointer-events-none absolute inset-0 backdrop-blur-xl"
+		style="background:linear-gradient(to bottom, var(--color-background) 0%, var(--color-background) 18%, color-mix(in oklab, var(--color-background) 72%, transparent) 42%, color-mix(in oklab, var(--color-background) 28%, transparent) 66%, transparent 100%); -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 42%, rgb(0 0 0 / 0.55) 64%, rgb(0 0 0 / 0.2) 84%, transparent 100%); mask-image:linear-gradient(to bottom, #000 0%, #000 42%, rgb(0 0 0 / 0.55) 64%, rgb(0 0 0 / 0.2) 84%, transparent 100%);"
+	></div>
+	<div
+		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
 	>
-		<ChevronLeftIcon class="size-4" />
-	</Button>
-{/snippet}
+		<Button
+			onclick={goBack}
+			variant={overHero ? 'ghost' : 'outline'}
+			size="icon"
+			shape="round"
+			class="shrink-0 transition-colors {overHero
+				? 'border-white/20 bg-black/40 text-white backdrop-blur-md hover:bg-black/55 hover:text-white active:bg-black/60 dark:hover:bg-black/55'
+				: 'text-muted-foreground'}"
+			aria-label="Go back"
+		>
+			<ChevronLeftIcon class="size-4" />
+		</Button>
+		{#if showTitle}
+			<h2
+				class="min-w-0 flex-1 truncate font-serif text-lg font-semibold"
+				transition:fade={{ duration: 150 }}
+			>
+				{detail.title}
+			</h2>
+		{/if}
+	</div>
+</header>
 
-<main class="mx-auto w-full max-w-lg">
+<main class="mx-auto w-full max-w-2xl">
 	{#if detail.backdropPath}
 		<div class="relative">
 			<MediaImage
@@ -166,15 +230,14 @@
 			<div
 				class="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent"
 			></div>
-			{@render backButton('absolute top-4 left-5 z-10 bg-background dark:bg-background')}
 		</div>
 	{/if}
 
-	<div class="flex flex-col gap-4 px-5 pb-10 {detail.backdropPath ? '-mt-14' : 'pt-4'}">
-		{#if !detail.backdropPath}
-			{@render backButton('self-start')}
-		{/if}
-
+	<div
+		class="flex flex-col gap-4 px-5 pb-10 {detail.backdropPath
+			? '-mt-14'
+			: 'pt-[calc(3.5rem+env(safe-area-inset-top))]'}"
+	>
 		<!-- Poster overlaps the bottom of the backdrop; title/badges sit below the hero -->
 		<div class="flex items-end gap-4">
 			<div class="w-24 shrink-0">
@@ -186,7 +249,7 @@
 				/>
 			</div>
 			<div class="flex min-w-0 flex-1 flex-col gap-2 pb-1">
-				<h1 class="font-serif text-2xl font-semibold">{detail.title}</h1>
+				<h1 bind:this={titleEl} class="font-serif text-2xl font-semibold">{detail.title}</h1>
 				<div class="flex flex-wrap items-center gap-2">
 					<MediaBadge>
 						{detail.type === 'movie' ? 'Movie' : 'Show'}{detail.year ? ` · ${detail.year}` : ''}
