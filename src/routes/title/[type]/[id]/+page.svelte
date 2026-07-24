@@ -9,6 +9,7 @@
 	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
+	import MediaImage from '$lib/components/media/media-image.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
 	import { tmdbMediaId, tmdbExternalId, type MediaRecord } from '$lib/sync/events';
@@ -25,7 +26,6 @@
 	let { data }: { data: PageData } = $props();
 
 	const detail = $derived(data.detail);
-	const heroUrl = $derived(posterUrl(detail.backdropPath, 'w780'));
 	// Our own media id for the tracking event pipeline (provider-agnostic, MRQ-112).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
 
@@ -151,12 +151,14 @@
 {/snippet}
 
 <main class="mx-auto w-full max-w-lg">
-	{#if heroUrl}
+	{#if detail.backdropPath}
 		<div class="relative">
-			<img
-				src={heroUrl}
+			<MediaImage
+				id={mediaId}
+				path={detail.backdropPath}
+				kind="backdrop"
+				size="w780"
 				alt={`${detail.title} backdrop`}
-				decoding="async"
 				class="aspect-video w-full object-cover"
 			/>
 			<div
@@ -166,8 +168,8 @@
 		</div>
 	{/if}
 
-	<div class="flex flex-col gap-4 px-5 pb-10 {heroUrl ? '-mt-14' : 'pt-4'}">
-		{#if !heroUrl}
+	<div class="flex flex-col gap-4 px-5 pb-10 {detail.backdropPath ? '-mt-14' : 'pt-4'}">
+		{#if !detail.backdropPath}
 			{@render backButton('self-start')}
 		{/if}
 

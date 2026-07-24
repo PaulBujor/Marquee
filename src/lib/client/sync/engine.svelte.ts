@@ -14,6 +14,7 @@
  */
 import { runSync, SyncError, toSyncErrorInfo, type SyncErrorInfo } from './sync';
 import { runMediaSync } from './media-sync';
+import { runImageSync } from './image-sync';
 import { CircuitBreaker, withRetry, type RetryOptions } from '$lib/resilience';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
@@ -44,9 +45,10 @@ class SyncEngine {
 	#interval: ReturnType<typeof setInterval> | null = null;
 	#teardown: Array<() => void> = [];
 	#started = false;
-	// Independent breakers so a failing media channel never stops event sync, and vice versa.
+	// Independent breakers so a failing channel never stops the others.
 	#events = new CircuitBreaker(CIRCUIT);
 	#media = new CircuitBreaker(CIRCUIT);
+	#images = new CircuitBreaker(CIRCUIT);
 
 	/** Wire triggers and kick an initial catch-up. Idempotent; browser-only. */
 	start(): void {
@@ -137,16 +139,23 @@ class SyncEngine {
 				// Browser-visible; the server side is captured by the `handleError` hook → observability.
 				console.error('[sync] event sync failed', this.lastError);
 				this.status = 'error';
-				return; // events are the base — don't run media on top of a failed event sync
+				return; // events are the base — don't run media/images on top of a failed event sync
 			}
 
-			// Media channel — best-effort (events are already synced). Backs off + stops on its own
-			// breaker; a media failure never flips the visible status.
+			// Media + image channels — best-effort (events are already synced). Each backs off +
+			// stops on its own breaker; a failure here never flips the visible status. Images ride
+			// after media (they reference the media rows it pulls).
 			try {
 				const res = await this.#runChannel(this.#media, () => runMediaSync());
 				if (res && res.applied > 0) changed = true;
 			} catch (err) {
 				console.warn('[sync] media sync failed (will retry later)', err);
+			}
+			try {
+				const res = await this.#runChannel(this.#images, () => runImageSync());
+				if (res && res.stored > 0) changed = true;
+			} catch (err) {
+				console.warn('[sync] image sync failed (will retry later)', err);
 			}
 
 			if (changed) this.revision++;

@@ -61,6 +61,17 @@ export interface UpcomingEpisode {
 	cachedAt: number;
 }
 
+/**
+ * Cached artwork for a title — poster + backdrop **image bytes** as Blobs, keyed by our media
+ * id, so tracked titles render with zero network and an offline export carries the artwork.
+ */
+export interface MediaImages {
+	id: string;
+	poster: Blob | null;
+	backdrop: Blob | null;
+	updatedAt: number;
+}
+
 /** The `meta` key/value store's known keys and the type each maps to. */
 export interface MetaValues {
 	deviceId: string;
@@ -78,6 +89,7 @@ interface MarqueeDB extends DBSchema {
 	};
 	tracking: { key: string; value: ClientTracking; indexes: { by_status: string } };
 	media: { key: string; value: ClientMedia };
+	mediaImages: { key: string; value: MediaImages };
 	episodeWatches: { key: string; value: ClientEpisodeWatch; indexes: { by_media: string } };
 	upcoming: { key: string; value: UpcomingEpisode; indexes: { by_media: string } };
 	meta: { key: MetaKey; value: MetaEntry };
@@ -86,7 +98,7 @@ interface MarqueeDB extends DBSchema {
 export type MarqueeDatabase = IDBPDatabase<MarqueeDB>;
 
 const DB_NAME = 'marquee';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<MarqueeDatabase> | null = null;
 let activeUserId: string | null = null;
@@ -112,22 +124,28 @@ export function openDb(): Promise<MarqueeDatabase> {
 	if (!dbPromise) {
 		dbPromise = openDB<MarqueeDB>(`${DB_NAME}-${activeUserId}`, DB_VERSION, {
 			upgrade(db) {
-				const events = db.createObjectStore('events', { keyPath: 'id' });
-				events.createIndex('by_synced', 'synced');
-				events.createIndex('by_clientCreatedAt', 'clientCreatedAt');
-
-				const tracking = db.createObjectStore('tracking', { keyPath: 'mediaId' });
-				tracking.createIndex('by_status', 'status');
-
-				db.createObjectStore('media', { keyPath: 'id' });
-
-				const episodeWatches = db.createObjectStore('episodeWatches', { keyPath: 'id' });
-				episodeWatches.createIndex('by_media', 'mediaId');
-
-				const upcoming = db.createObjectStore('upcoming', { keyPath: 'id' });
-				upcoming.createIndex('by_media', 'mediaId');
-
-				db.createObjectStore('meta', { keyPath: 'key' });
+				if (!db.objectStoreNames.contains('events')) {
+					const events = db.createObjectStore('events', { keyPath: 'id' });
+					events.createIndex('by_synced', 'synced');
+					events.createIndex('by_clientCreatedAt', 'clientCreatedAt');
+				}
+				if (!db.objectStoreNames.contains('tracking')) {
+					const tracking = db.createObjectStore('tracking', { keyPath: 'mediaId' });
+					tracking.createIndex('by_status', 'status');
+				}
+				if (!db.objectStoreNames.contains('media'))
+					db.createObjectStore('media', { keyPath: 'id' });
+				if (!db.objectStoreNames.contains('mediaImages'))
+					db.createObjectStore('mediaImages', { keyPath: 'id' });
+				if (!db.objectStoreNames.contains('episodeWatches')) {
+					const episodeWatches = db.createObjectStore('episodeWatches', { keyPath: 'id' });
+					episodeWatches.createIndex('by_media', 'mediaId');
+				}
+				if (!db.objectStoreNames.contains('upcoming')) {
+					const upcoming = db.createObjectStore('upcoming', { keyPath: 'id' });
+					upcoming.createIndex('by_media', 'mediaId');
+				}
+				if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
 			}
 		});
 	}
