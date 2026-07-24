@@ -49,12 +49,9 @@ export interface ShowProgress {
 	next: EpisodeCoord | null;
 }
 
-/** Watched/total + next episode for a show, or null for a movie / a show with nothing aired yet. */
+/** Watched/total + next episode for a show, or null for a movie / a show with no episodes. */
 export function showProgress(item: LibraryItem): ShowProgress | null {
-	// A show with no aired frontier (`lastAired` null) hasn't aired any episode yet — TMDB reports
-	// a last-aired episode for anything that has. So there's nothing to continue or mark: keep such
-	// shows out of Continue Watching rather than treating the null frontier as "everything aired".
-	if (item.type !== 'show' || !item.seasons || item.lastAired === null) return null;
+	if (item.type !== 'show' || !item.seasons) return null;
 	const episodes = airedEpisodes(item.seasons, item.lastAired);
 	if (episodes.length === 0) return null;
 	const watched = episodes.filter((c) => item.watched.has(watchedKey(c.season, c.episode))).length;

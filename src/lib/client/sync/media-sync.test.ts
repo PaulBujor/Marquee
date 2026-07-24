@@ -50,6 +50,29 @@ describe('runMediaSync', () => {
 		expect(result.applied).toBe(1);
 	});
 
+	it('re-requests a stale show record missing its aired frontier (lastAired)', async () => {
+		const showId = mediaId('tmdb', 'show/1396');
+		// A locally-known show whose record predates `lastAired` (has seasons, frontier still null).
+		await putMedia({
+			...record('show/1396'),
+			id: showId,
+			type: 'show',
+			seasons: [{ seasonNumber: 1, episodeCount: 7 }],
+			lastAired: null
+		});
+		const sent: MediaSyncRequest[] = [];
+		const fetchFn = (async (_url: string, init: RequestInit) => {
+			sent.push(JSON.parse(init.body as string) as MediaSyncRequest);
+			return new Response(JSON.stringify({ media: [] }), {
+				status: 200,
+				headers: { 'content-type': 'application/json' }
+			});
+		}) as unknown as typeof fetch;
+
+		await runMediaSync(fetchFn);
+		expect(sent[0].need).toContain(showId);
+	});
+
 	it('pushes identity refs for locally-known linked media', async () => {
 		await putMedia(record('movie/778')); // a locally-captured title
 		const sent: MediaSyncRequest[] = [];

@@ -38,19 +38,10 @@ describe('showProgress', () => {
 			item({
 				type: 'show',
 				seasons: [{ seasonNumber: 1, episodeCount: 4 }],
-				lastAired: { season: 1, episode: 4 },
 				watched: new Set(['1:1', '1:2'])
 			})
 		);
 		expect(p).toEqual({ watched: 2, total: 4, fraction: 0.5, next: { season: 1, episode: 3 } });
-	});
-
-	it('is null for a show with nothing aired yet (null frontier)', () => {
-		expect(
-			showProgress(
-				item({ type: 'show', seasons: [{ seasonNumber: 1, episodeCount: 4 }], lastAired: null })
-			)
-		).toBeNull();
 	});
 });
 
@@ -63,7 +54,6 @@ describe('continueWatching', () => {
 				type: 'show',
 				status: 'watching',
 				seasons: [{ seasonNumber: 1, episodeCount: 3 }],
-				lastAired: { season: 1, episode: 3 },
 				watched: new Set(['1:1'])
 			}),
 			item({
@@ -71,7 +61,6 @@ describe('continueWatching', () => {
 				type: 'show',
 				status: 'completed',
 				seasons: [{ seasonNumber: 1, episodeCount: 2 }],
-				lastAired: { season: 1, episode: 2 },
 				watched: new Set(['1:1', '1:2'])
 			})
 		];

@@ -18,7 +18,13 @@ export async function runMediaSync(fetchFn: typeof fetch = fetch): Promise<{ app
 	]);
 
 	const haveIds = new Set(localMedia.map((m) => m.id));
-	const need = tracked.map((t) => t.mediaId).filter((id) => !haveIds.has(id));
+	const missing = tracked.map((t) => t.mediaId).filter((id) => !haveIds.has(id));
+	// Re-pull show rows that predate the aired frontier (seasons present, `lastAired` null) — the
+	// channel otherwise only fetches missing rows, so a stale record never gains it.
+	const staleShows = localMedia
+		.filter((m) => m.type === 'show' && m.seasons != null && m.lastAired == null)
+		.map((m) => m.id);
+	const need = [...new Set([...missing, ...staleShows])];
 	if (need.length === 0 && refs.length === 0) return { applied: 0 };
 
 	const body: MediaSyncRequest = {
