@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
@@ -7,13 +8,61 @@
 	import PageHeader from '$lib/components/page-header.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
+	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
+	import { getTracking, putMedia, recordEvent } from '$lib/client/idb';
+	import { sync } from '$lib/client/sync/engine.svelte';
+	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
+	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	// Tracked-status lookup (mediaId → status) so each search row can show whether it's on a list,
+	// refreshed after our own writes and after any sync pull applies remote changes.
+	let tracked = $state<Map<string, TrackingStatus>>(new Map());
+	const writing = new SvelteSet<string>();
+	$effect(() => {
+		void sync.revision;
+		refreshTracked();
+	});
+	async function refreshTracked() {
+		const rows = await getTracking();
+		tracked = new Map(rows.map((r) => [r.mediaId, r.status]));
+	}
+
+	async function quickAdd(item: SearchLikeMedia) {
+		const id = tmdbMediaId(item.type, item.tmdbId);
+		if (writing.has(id)) return;
+		writing.add(id);
+		try {
+			// Cache the media locally (offline render + identity for the media channel to hydrate),
+			// then record the add — mirrors TrackingState.add()'s pipeline.
+			await putMedia(mediaRecordFromSearch(item));
+			await recordEvent('tracking.added', id, { status: 'want_to_watch' });
+			sync.requestSync();
+			await refreshTracked();
+		} finally {
+			writing.delete(id);
+		}
+	}
+
+	async function quickRemove(item: SearchLikeMedia) {
+		const id = tmdbMediaId(item.type, item.tmdbId);
+		if (writing.has(id)) return;
+		writing.add(id);
+		try {
+			// Only offered for "want to watch" (no episode watches to clear), so a plain tombstone.
+			await recordEvent('tracking.removed', id, {});
+			sync.requestSync();
+			await refreshTracked();
+		} finally {
+			writing.delete(id);
+		}
+	}
 
 	const DEBOUNCE_MS = 300;
 
@@ -143,10 +192,11 @@
 	{:else if data.results.length > 0}
 		<ul class="flex flex-col gap-1">
 			{#each data.results as item (item.type + item.tmdbId)}
-				<li>
+				{@const id = tmdbMediaId(item.type, item.tmdbId)}
+				<li class="flex items-center gap-1">
 					<a
 						href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
-						class="-mx-2 flex items-center gap-3 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-secondary"
+						class="-ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-secondary"
 					>
 						<div class="w-12 shrink-0">
 							<PosterTile
@@ -163,6 +213,13 @@
 							</div>
 						</div>
 					</a>
+					<SearchQuickAdd
+						title={item.title}
+						status={tracked.get(id)}
+						busy={writing.has(id)}
+						onadd={() => quickAdd(item)}
+						onremove={() => quickRemove(item)}
+					/>
 				</li>
 			{/each}
 		</ul>
