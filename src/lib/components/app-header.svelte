@@ -17,13 +17,13 @@ gradient. Aligned to the dashboard's max-w-2xl content column; clears the iOS st
 		<a href={resolve('/')} class="font-serif text-xl font-semibold">Marquee</a>
 		<div class="flex items-center gap-2">
 			<Button
+				href={resolve('/timeline')}
 				variant="outline"
 				size="icon"
 				shape="round"
 				class="text-muted-foreground"
-				disabled
-				title="Timeline — coming soon"
-				aria-label="Timeline (coming soon)"
+				title="Upcoming"
+				aria-label="Upcoming releases"
 			>
 				<CalendarDaysIcon class="size-4" />
 			</Button>
