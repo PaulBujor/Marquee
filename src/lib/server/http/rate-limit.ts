@@ -3,7 +3,7 @@
  * those outside the window, decides whether this hit is allowed, and returns the list to store back.
  * Kept dependency-free and clock-injected so it's fully unit-testable; the caller owns the store.
  *
- * Used for best-effort, per-isolate defense-in-depth on `/api/sync` (MRQ-109): the real backstop is
+ * Used for best-effort, per-isolate defense-in-depth on `/api/sync`: the real backstop is
  * Cloudflare's edge rate-limiting, but this catches a looping/buggy client hammering one isolate.
  */
 export interface RateLimitResult {

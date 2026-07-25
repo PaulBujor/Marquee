@@ -12,7 +12,7 @@ import type { RequestHandler } from './$types';
  * Per-user rate limit on `/api/sync` — best-effort, per-isolate defense-in-depth against a
  * looping/buggy client (Cloudflare's edge rate-limiting is the real backstop). A normal client syncs
  * on triggers plus a 45s interval, well under this; the cap only trips a runaway. In-memory, so it's
- * not shared across isolates and resets on redeploy — that's fine for its purpose (MRQ-109).
+ * not shared across isolates and resets on redeploy — that's fine for its purpose.
  */
 const SYNC_RATE_WINDOW_MS = 60_000;
 const SYNC_RATE_MAX = 60;
