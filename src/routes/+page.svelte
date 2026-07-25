@@ -130,6 +130,32 @@
 	// narrowing is active (sort is a preference, not a narrowing, so it doesn't count).
 	const advancedActive = $derived(year !== null || genre !== null);
 
+	// Infinite scroll: PAGE_SIZE at a time; reset to the top on view change, keep position on sync grow.
+	const PAGE_SIZE = 30;
+	let visibleCount = $state(PAGE_SIZE);
+	const visible = $derived(list.slice(0, visibleCount));
+	const hasMore = $derived(visibleCount < list.length);
+	$effect(() => {
+		void [tab, typeFilter, year, genre, sort];
+		visibleCount = PAGE_SIZE;
+	});
+
+	let loadMoreSentinel = $state<HTMLElement | null>(null);
+	$effect(() => {
+		const el = loadMoreSentinel;
+		if (!el || typeof IntersectionObserver === 'undefined') return;
+		const io = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting && visibleCount < list.length) {
+					visibleCount = Math.min(visibleCount + PAGE_SIZE, list.length);
+				}
+			},
+			{ rootMargin: '600px' }
+		);
+		io.observe(el);
+		return () => io.disconnect();
+	});
+
 	// Quick-mark debounce (mirrors the detail page's next-episode row): fill the check, hold a
 	// beat, then mark + advance — so a mis-tap is visible and the card doesn't jump instantly.
 	const marking = new SvelteSet<string>();
@@ -306,9 +332,8 @@
 		<!-- Poster grid -->
 		{#if list.length > 0}
 			<div class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5">
-				<!-- flip reflows the survivors; fade eases items in/out when a sync adds/removes titles or
-				a status change moves one out of this list (local transition → no flash on first render). -->
-				{#each list as item (item.mediaId)}
+				<!-- flip reflows survivors; fade eases items in/out on sync add/remove or status change -->
+				{#each visible as item (item.mediaId)}
 					<a
 						href={resolve('/title/[type]/[id]', {
 							type: item.type,
@@ -330,6 +355,15 @@
 					</a>
 				{/each}
 			</div>
+			{#if hasMore}
+				<div
+					bind:this={loadMoreSentinel}
+					class="py-6 text-center text-sm text-muted-foreground"
+					aria-hidden="true"
+				>
+					Loading more…
+				</div>
+			{/if}
 		{:else}
 			<p class="py-16 text-center text-sm text-muted-foreground">
 				{library.ready ? 'Nothing here yet.' : 'Loading…'}
