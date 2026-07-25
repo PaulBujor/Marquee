@@ -90,7 +90,7 @@
 			sort: (SORTS.includes(s as LibrarySort) ? s : 'date') as LibrarySort,
 			year: y && Number.isFinite(Number(y)) ? Number(y) : null,
 			genre: p.get('genre') || null,
-			release: (RELEASES.includes(r as ReleaseFilter) ? r : 'all') as ReleaseFilter
+			release: (RELEASES.includes(r as ReleaseFilter) ? r : 'released') as ReleaseFilter
 		};
 	}
 
@@ -111,7 +111,7 @@
 		if (sort !== 'date') parts.push(`sort=${sort}`);
 		if (year !== null) parts.push(`year=${year}`);
 		if (genre !== null) parts.push(`genre=${encodeURIComponent(genre)}`);
-		if (release !== 'all') parts.push(`release=${release}`);
+		if (release !== 'released') parts.push(`release=${release}`);
 		const qs = parts.join('&');
 		const target = qs ? `/?${qs}` : '/';
 		if (page.url.pathname === '/' && target !== `${page.url.pathname}${page.url.search}`) {
@@ -141,16 +141,20 @@
 	);
 	// Type is surfaced as its own always-visible control; the popover badges when a year/genre
 	// narrowing is active (sort is a preference, not a narrowing, so it doesn't count).
-	const advancedActive = $derived(year !== null || genre !== null || release !== 'all');
+	const advancedActive = $derived(year !== null || genre !== null || release !== 'released');
 
 	const filtersActive = $derived(
-		typeFilter !== 'all' || year !== null || genre !== null || release !== 'all' || sort !== 'date'
+		typeFilter !== 'all' ||
+			year !== null ||
+			genre !== null ||
+			release !== 'released' ||
+			sort !== 'date'
 	);
 	function clearFilters() {
 		typeFilter = 'all';
 		year = null;
 		genre = null;
-		release = 'all';
+		release = 'released';
 		sort = 'date';
 	}
 
@@ -160,7 +164,7 @@
 	const visible = $derived(list.slice(0, visibleCount));
 	const hasMore = $derived(visibleCount < list.length);
 	$effect(() => {
-		void [tab, typeFilter, year, genre, sort];
+		void [tab, typeFilter, year, genre, release, sort];
 		visibleCount = PAGE_SIZE;
 	});
 
