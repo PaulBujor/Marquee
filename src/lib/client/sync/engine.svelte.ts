@@ -34,6 +34,8 @@ const retriableSync = (err: unknown) =>
 
 class SyncEngine {
 	status = $state<SyncStatus>('idle');
+	/** Whether the browser currently reports a network connection — drives the offline indicator (MRQ-95). */
+	online = $state(true);
 	/** Detail of the most recent event-sync failure, retained for future error reporting; cleared on success. */
 	lastError = $state<SyncErrorInfo | null>(null);
 	/** Bumped each time a sync pulls+applies remote data, so open views can re-read local state. */
@@ -55,17 +57,28 @@ class SyncEngine {
 		if (this.#started || typeof window === 'undefined') return;
 		this.#started = true;
 
+		this.online = navigator.onLine;
 		const onVisible = () => {
 			if (document.visibilityState === 'visible') this.requestSync();
 		};
-		const onOnline = () => this.requestSync();
+		const onOnline = () => {
+			this.online = true;
+			this.requestSync();
+		};
+		const onOffline = () => {
+			this.online = false;
+			this.status = 'offline';
+		};
+		const onFocus = () => this.requestSync();
 		document.addEventListener('visibilitychange', onVisible);
 		window.addEventListener('online', onOnline);
-		window.addEventListener('focus', onOnline);
+		window.addEventListener('offline', onOffline);
+		window.addEventListener('focus', onFocus);
 		this.#teardown.push(
 			() => document.removeEventListener('visibilitychange', onVisible),
 			() => window.removeEventListener('online', onOnline),
-			() => window.removeEventListener('focus', onOnline)
+			() => window.removeEventListener('offline', onOffline),
+			() => window.removeEventListener('focus', onFocus)
 		);
 
 		this.#interval = setInterval(() => this.requestSync(), INTERVAL_MS);
@@ -113,6 +126,7 @@ class SyncEngine {
 
 	async #sync(): Promise<void> {
 		if (typeof navigator !== 'undefined' && !navigator.onLine) {
+			this.online = false;
 			this.status = 'offline';
 			return;
 		}
