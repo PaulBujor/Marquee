@@ -19,11 +19,17 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	if (!SIZES.has(size) || !PATH_RE.test(path)) error(400, 'Bad image request');
 
 	const upstream = await fetch(tmdbImageUrl(path, size as TmdbImageSize));
-	if (!upstream.ok) error(502, 'Upstream image error');
+	if (!upstream.ok) {
+		console.error(`media/image: upstream ${upstream.status} for ${size}${path}`);
+		error(502, 'Upstream image error');
+	}
 
 	// Defensive: only ever relay an actual image back, never some other content type.
 	const contentType = upstream.headers.get('content-type') ?? '';
-	if (!contentType.startsWith('image/')) error(502, 'Upstream is not an image');
+	if (!contentType.startsWith('image/')) {
+		console.error(`media/image: non-image content-type "${contentType}" for ${size}${path}`);
+		error(502, 'Upstream is not an image');
+	}
 
 	return new Response(upstream.body, {
 		headers: {

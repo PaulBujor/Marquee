@@ -97,6 +97,8 @@ export class TrackingState {
 			await work();
 			await this.load();
 			sync.requestSync(); // nudge a push so the change reaches the server promptly
+		} catch (err) {
+			console.error(`tracking: write failed for ${this.mediaId}`, err);
 		} finally {
 			this.busy = false;
 		}

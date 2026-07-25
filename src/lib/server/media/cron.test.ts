@@ -113,6 +113,10 @@ describe('refreshInProductionShows', () => {
 		const db = createTestDb();
 		await seedMedia(db, 'movie/9', { type: 'movie', inProduction: null });
 		const { client } = stub();
-		expect(await refreshInProductionShows(db, client, T0)).toEqual({ scanned: 0, changed: 0 });
+		expect(await refreshInProductionShows(db, client, T0)).toEqual({
+			scanned: 0,
+			changed: 0,
+			failed: 0
+		});
 	});
 });

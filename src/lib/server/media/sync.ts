@@ -68,9 +68,16 @@ export async function resolveMediaSync(
 	if (referencedIds.length === 0) return { media: [] };
 
 	// Refresh/hydrate any referenced id we have identity for (TTL-aware; TMDB only when stale).
+	// Isolate per-title failures so one bad title doesn't fail the whole sync — the failed row keeps
+	// its old data and retries next cycle.
 	for (const id of referencedIds) {
 		const ref = refById.get(id);
-		if (ref) await refreshMedia(db, tmdb, ref.provider, ref.externalId);
+		if (!ref) continue;
+		try {
+			await refreshMedia(db, tmdb, ref.provider, ref.externalId);
+		} catch (err) {
+			console.error(`media sync: refresh failed for ${ref.provider}:${ref.externalId}`, err);
+		}
 	}
 
 	const rows = await db.select().from(media).where(inArray(media.id, referencedIds));

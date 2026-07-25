@@ -46,9 +46,9 @@ class SyncEngine {
 	#teardown: Array<() => void> = [];
 	#started = false;
 	// Independent breakers so a failing channel never stops the others.
-	#events = new CircuitBreaker(CIRCUIT);
-	#media = new CircuitBreaker(CIRCUIT);
-	#images = new CircuitBreaker(CIRCUIT);
+	#events = new CircuitBreaker({ ...CIRCUIT, name: 'sync:events' });
+	#media = new CircuitBreaker({ ...CIRCUIT, name: 'sync:media' });
+	#images = new CircuitBreaker({ ...CIRCUIT, name: 'sync:images' });
 
 	/** Wire triggers and kick an initial catch-up. Idempotent; browser-only. */
 	start(): void {

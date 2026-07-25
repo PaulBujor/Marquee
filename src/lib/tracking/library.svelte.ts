@@ -75,6 +75,8 @@ export class LibraryState {
 			await reconcileStatus(item.mediaId, item.episodes, item.inProduction);
 			sync.requestSync();
 			await this.load();
+		} catch (err) {
+			console.error(`markNext: write failed for ${item.mediaId}`, err);
 		} finally {
 			this.busy = false;
 		}

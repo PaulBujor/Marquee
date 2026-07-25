@@ -13,10 +13,14 @@ export const IMAGE_SYNC_MAX = 12;
 async function fetchBlob(fetchFn: typeof fetch, url: string): Promise<Blob | null> {
 	try {
 		const res = await fetchFn(url);
-		if (!res.ok) return null;
+		if (!res.ok) {
+			console.warn(`image sync: fetch ${res.status} for ${url}`);
+			return null;
+		}
 		const blob = await res.blob();
 		return blob.size > 0 ? blob : null;
 	} catch {
+		// A network throw here is usually just offline — expected for a best-effort channel, stay quiet.
 		return null;
 	}
 }
