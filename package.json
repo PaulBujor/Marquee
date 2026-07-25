@@ -9,8 +9,10 @@
 	},
 	"scripts": {
 		"dev": "vite dev",
-		"build": "wrangler types && vite build",
+		"build": "wrangler types && vite build && node scripts/append-cron.mjs",
 		"preview": "wrangler dev",
+		"deploy": "wrangler d1 migrations apply marquee --remote && wrangler deploy",
+		"deploy:preview": "wrangler d1 migrations apply marquee-preview --remote --env preview && wrangler deploy --env preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "wrangler types && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",

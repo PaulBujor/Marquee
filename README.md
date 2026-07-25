@@ -75,29 +75,84 @@ Unit tests run with [Vitest](https://vitest.dev/): `pnpm test`, or `pnpm test:co
 ```
 src/
   lib/
+    sync/          # Shared event model + wire contracts (client- and server-safe)
     server/        # Server-only code — never import from client
       auth/        # Passwordless magic-link: tokens, sessions, request/verify
       db/          # Drizzle schema + migrations (D1)
       email/       # EmailSender — Resend (prod) / Mailpit (dev)
+      media/       # TMDB hydration + the media reference channel (+ refresh cron)
+      sync/        # Server-side event projection
+      tmdb/        # TMDB API client
+    client/
+      idb/         # IndexedDB stores: outbox, projections, media cache
+      sync/        # Sync engine: events + media + image channels
+    tracking/      # Watchlist read models + watchability helpers
     components/    # Shared Svelte components
-  routes/          # SvelteKit file-based routing
+  routes/          # SvelteKit file-based routing (incl. the cron refresh endpoint)
 ```
+
+## Architecture
+
+Marquee is **offline-first**. The client's IndexedDB is a full local replica and the source of truth for your data; the server is a **sync relay + TMDB gateway**, never the sole holder — so the app keeps working (and can export everything) with no network.
+
+### Event-sourced tracking
+
+Every tracking action — add to list, change status, favorite, rate, mark an episode watched — is recorded as an **append-only event** (`tracking.added`, `tracking.status_changed`, `episode.watched`, …), never a direct row update. The event log is the single source of truth; both the client (IndexedDB) and the server (D1) **materialize the same log** into projection tables (`tracking`, `episode_watches`) using identical projection code.
+
+- **Local-first + optimistic** — an action writes its event to a local outbox _and_ applies it to the local projection immediately, so the UI updates with zero latency and works fully offline.
+- **Last-writer-wins merge**, per field, keyed by the event's `clientCreatedAt` (device clock). Event ids are client-minted UUIDs and the `events` primary key is composite `(user_id, id)`, so replaying a synced event is a no-op and a colliding id from one user can never drop another's.
+- **Provider-agnostic media identity** — each title has a deterministic v5 UUID derived from `(provider, externalId)` (e.g. `tmdb` + `movie/603`). Every device derives the same id offline, so events reference titles with no coordination, and the id is _ours_, not the provider's — a TMDB outage changes nothing because we hold our own copy of the metadata. (Since the id derives from the provider id, the same title on a different provider is a different id; linking those is handled by separate alias records, not by reusing an id.)
+
+### Two sync channels
+
+User-action events are tiny; media metadata (posters, seasons, per-episode air dates) is heavy. Bundling them would slow the thing that must feel instant, so they sync on **separate channels**, events first:
+
+| Channel    | Endpoint               | Carries                                                  | Flow                                    |
+| ---------- | ---------------------- | -------------------------------------------------------- | --------------------------------------- |
+| **Events** | `POST /api/sync`       | user-action events                                       | push local outbox + pull after a cursor |
+| **Media**  | `POST /api/media/sync` | reference data (title, images, seasons/episodes + dates) | pull only; server hydrates from TMDB    |
+| **Images** | same-origin proxy      | poster + backdrop bytes                                  | pull, cached as IndexedDB blobs         |
+
+The **sync engine** (`src/lib/client/sync`) runs on app open, foreground, reconnect, and a light interval, in order:
+
+1. **Events** — push everything in the outbox, pull events after the local cursor, apply them through the projection, advance the cursor. This must succeed before the rest.
+2. **Media** — report `have: [{ id, version }]` for local titles; the server returns rows the client is **missing or behind on** and hydrates any it doesn't yet hold from TMDB. Hydration is **server-side**, so shared catalog rows can't be poisoned with client-supplied metadata.
+3. **Images** — fetch missing poster/backdrop bytes through a same-origin proxy, store as blobs keyed by media id.
+
+### How they play together
+
+```
+┌──────────────── client (IndexedDB — source of truth) ─────────────────┐
+│  UI action ─▶ append event ─▶ optimistic projection ─▶ outbox          │
+└────────────────┬─────────────────────────────────────┬────────────────┘
+                 │ 1. events (POST /api/sync)           │ 2. media (POST /api/media/sync)
+                 ▼                                       ▼
+┌──────────────────────── server (Cloudflare Worker + D1) ───────────────┐
+│  events log ─▶ projection (tracking, episode_watches)                  │
+│  media cache ◀─ hydrate / refresh ◀─ TMDB ◀── nightly cron Worker      │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+Events reference a title only by its media id — media is **never embedded in an event**, and the two channels stay decoupled. Media reference rows carry a `version`, bumped server-side whenever a refresh changes content, so clients detect staleness cheaply via the version diff and re-pull only what changed. Refresh is **TTL-aware** (in-production shows re-pull periodically; movies and finished shows don't), and a **nightly cron Worker** sweeps in-production shows so newly-aired episodes surface even when nobody opens the title. Watchability (what's aired, the next episode, whether a show is complete) is derived from the per-episode air dates that model carries.
 
 ## Deployment
 
-Marquee deploys as a **Cloudflare Worker with static assets** (not Cloudflare Pages), configured in `wrangler.jsonc` (`nodejs_compat` flag, D1 binding `DB`).
+Marquee deploys as a single **Cloudflare Worker with static assets** (not Cloudflare Pages), configured in `wrangler.jsonc` (`nodejs_compat` flag, D1 binding `DB`). `pnpm deploy` migrates the remote D1 then deploys; `pnpm deploy:preview` does the same for the `preview` environment.
 
 ```sh
-pnpm build
-pnpm exec wrangler deploy
+pnpm deploy           # migrate marquee + wrangler deploy
+pnpm deploy:preview   # migrate marquee-preview + wrangler deploy --env preview
 ```
 
-If deploying via **Cloudflare Workers Builds** (git-connected), Cloudflare auto-detects the pnpm version from the `packageManager` field, runs `pnpm install --frozen-lockfile`, and honors the `allowBuilds` settings in `pnpm-workspace.yaml` (so native build scripts run). Just set the build command to `pnpm run build`.
+The nightly media-refresh cron rides on this same worker — `pnpm build` appends a `scheduled` handler to the built worker (see `scripts/append-cron.mjs`), and `triggers.crons` is set on both environments. No separate worker.
+
+If deploying via **Cloudflare Workers Builds** (git-connected), Cloudflare auto-detects the pnpm version from the `packageManager` field, runs `pnpm install --frozen-lockfile`, and honors the `allowBuilds` settings in `pnpm-workspace.yaml` (so native build scripts run). Set the build command to `pnpm run build`, and run the D1 migration as a separate step (`wrangler d1 migrations apply marquee --remote`).
 
 Set production secrets with:
 
 ```sh
 pnpm exec wrangler secret put TMDB_API_KEY
+pnpm exec wrangler secret put CRON_SECRET     # gates POST /api/cron/refresh (also a manual trigger)
 pnpm exec wrangler secret put RESEND_API_KEY
 pnpm exec wrangler secret put VAPID_PUBLIC_KEY
 pnpm exec wrangler secret put VAPID_PRIVATE_KEY
