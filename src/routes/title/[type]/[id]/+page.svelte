@@ -13,9 +13,15 @@
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
-	import { tmdbMediaId, tmdbExternalId, type MediaRecord } from '$lib/sync/events';
+	import {
+		tmdbMediaId,
+		tmdbExternalId,
+		type MediaRecord,
+		type TrackingStatus
+	} from '$lib/sync/events';
 	import { isAired, todayIso } from '$lib/tracking/actions';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
+	import { getTracking } from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
@@ -65,10 +71,29 @@
 		tracking.load();
 	});
 
+	// Tracking status + favorite of the *similar* titles, for the badge + heart on each card — we
+	// already hold this offline, keyed by our derived media id. Reloaded on sync pulls / navigation.
+	const STATUS_LABEL: Record<TrackingStatus, string> = {
+		want_to_watch: 'On list',
+		watching: 'Watching',
+		completed: 'Watched',
+		did_not_finish: "Didn't finish"
+	};
+	let similarState = $state<Record<string, { status: TrackingStatus; favorite: boolean }>>({});
+	$effect(() => {
+		void sync.revision;
+		void mediaId;
+		loadSimilarState();
+	});
+	async function loadSimilarState() {
+		const rows = await getTracking();
+		similarState = Object.fromEntries(
+			rows.map((r) => [r.mediaId, { status: r.status, favorite: r.favorite }])
+		);
+	}
+
 	let detailsOpen = $state(true);
-	// Guards the one-time collapse default below to once per title (a later manual toggle sticks).
-	let detailsSettledFor = $state<string | null>(null);
-	// Click-to-load keeps the YouTube embed (and its CSP surface) off the page until played.
+	let similarOpen = $state(true);
 	let showTrailer = $state(false);
 
 	// Seasons switch client-side (fetched from our JSON endpoint + cached); server seeds the first.
@@ -108,15 +133,6 @@
 		return () => io.disconnect();
 	});
 
-	// Collapse the Details section (overview/cast/trailer) by default while a show is in progress, so
-	// the episode list is one tap away instead of a scroll away (MRQ-52). Runs once per title after
-	// tracking loads; a manual toggle afterwards sticks. Movies and non-watching shows stay expanded.
-	$effect(() => {
-		if (!tracking.ready || detailsSettledFor === mediaId) return;
-		detailsSettledFor = mediaId;
-		detailsOpen = !(tracking.view.tracked && tracking.view.status === 'watching');
-	});
-
 	// Pre-select the season of the next watchable episode once watch state loads (season 1 when
 	// caught up). Runs after the SSR seed / nav reset; `preselectedFor` keeps it to once per title.
 	$effect(() => {
@@ -135,7 +151,7 @@
 		showTrailer = false;
 		titleInView = true;
 		preselectedFor = null;
-		detailsSettledFor = null;
+		detailsOpen = true;
 		selectedSeason = data.season?.seasonNumber ?? null;
 		seasonCache = data.season ? { [data.season.seasonNumber]: data.season } : {};
 		seasonLoading = false;
@@ -396,6 +412,56 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				</div>
 			{/if}
 		</div>
+
+		<!-- Similar titles: TMDB recommendations + similar merged, deduped (MRQ-124). Collapsible.
+		Posters use plain posterUrl (network, no offline blob); a status badge + favorite heart are
+		overlaid from local tracking when we already track the title. -->
+		{#if detail.similar.length > 0}
+			<section class="flex flex-col gap-3">
+				<button
+					type="button"
+					onclick={() => (similarOpen = !similarOpen)}
+					aria-expanded={similarOpen}
+					class="flex items-center gap-1.5 self-start text-xs font-bold tracking-widest text-muted-foreground uppercase"
+				>
+					<ChevronDownIcon
+						class="size-3.5 transition-transform duration-150 {similarOpen ? '' : '-rotate-90'}"
+					/>
+					Similar
+				</button>
+				{#if similarOpen}
+					<ul
+						class="no-scrollbar flex gap-3 overflow-x-auto pb-1"
+						transition:slide={{ duration: 200 }}
+					>
+						{#each detail.similar as item (item.tmdbId)}
+							{@const st = similarState[tmdbMediaId(item.type, item.tmdbId)]}
+							<li class="w-24 shrink-0">
+								<a
+									href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
+									class="block"
+								>
+									<PosterTile
+										type={item.type}
+										posterUrl={posterUrl(item.posterPath)}
+										isFavorite={st?.favorite ?? false}
+										alt={item.title}
+									/>
+									<div class="mt-1.5 truncate text-xs font-medium">{item.title}</div>
+									{#if st}
+										<MediaBadge variant="status" class="mt-0.5"
+											>{STATUS_LABEL[st.status]}</MediaBadge
+										>
+									{:else if item.year}
+										<div class="text-[0.7rem] text-muted-foreground">{item.year}</div>
+									{/if}
+								</a>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		{/if}
 
 		<!-- Seasons + episodes (shows only) -->
 		{#if detail.type === 'show' && detail.seasons.length > 0}

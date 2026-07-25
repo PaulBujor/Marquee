@@ -27,7 +27,8 @@ const movieDefaults: MediaDetail = {
 	inProduction: null,
 	firstAirDate: null,
 	lastAirDate: null,
-	seasons: []
+	seasons: [],
+	similar: []
 };
 
 /** A movie TMDB stub exposing getDetails + getSeason, counting detail calls. */

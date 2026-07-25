@@ -249,7 +249,8 @@ describe('createTmdbClient.getDetails', () => {
 			inProduction: null,
 			firstAirDate: null,
 			lastAirDate: null,
-			seasons: []
+			seasons: [],
+			similar: []
 		});
 	});
 
@@ -300,6 +301,44 @@ describe('createTmdbClient.getDetails', () => {
 		expect(detail.seasons).toEqual([]);
 	});
 
+	it('merges recommendations + similar, deduped, poster-only, self excluded', async () => {
+		mockFetch({
+			...MOVIE_DETAILS,
+			recommendations: {
+				results: [
+					{ id: 100, title: 'Rec One', release_date: '2011-05-01', poster_path: '/r1.jpg' },
+					{ id: 101, title: 'No Poster', release_date: '2012-01-01', poster_path: null }
+				]
+			},
+			similar: {
+				results: [
+					{ id: 100, title: 'Rec One (dupe)', poster_path: '/r1.jpg' }, // dedupe by id
+					{ id: 27205, title: 'Itself', poster_path: '/self.jpg' }, // self excluded
+					{ id: 200, title: 'Sim Two', release_date: '2013-03-03', poster_path: '/s2.jpg' }
+				]
+			}
+		});
+		const detail = await createTmdbClient('key').getDetails('movie', 27205);
+		expect(detail.similar).toEqual([
+			{
+				tmdbId: 100,
+				type: 'movie',
+				title: 'Rec One',
+				year: 2011,
+				posterPath: '/r1.jpg',
+				overview: ''
+			},
+			{
+				tmdbId: 200,
+				type: 'movie',
+				title: 'Sim Two',
+				year: 2013,
+				posterPath: '/s2.jpg',
+				overview: ''
+			}
+		]);
+	});
+
 	it('requests the movie path with the append_to_response param', async () => {
 		const spy = mockFetch(MOVIE_DETAILS);
 		await createTmdbClient('secret-key').getDetails('movie', 27205);
@@ -308,7 +347,9 @@ describe('createTmdbClient.getDetails', () => {
 		const url = new URL(String(firstArg));
 		expect(url.origin + url.pathname).toBe('https://api.themoviedb.org/3/movie/27205');
 		expect(url.searchParams.get('api_key')).toBe('secret-key');
-		expect(url.searchParams.get('append_to_response')).toBe('credits,images,videos');
+		expect(url.searchParams.get('append_to_response')).toBe(
+			'credits,images,videos,recommendations,similar'
+		);
 	});
 
 	it('requests the tv path for shows', async () => {
@@ -382,7 +423,8 @@ describe('createTmdbClient.getDetails', () => {
 			inProduction: null,
 			firstAirDate: null,
 			lastAirDate: null,
-			seasons: []
+			seasons: [],
+			similar: []
 		});
 	});
 
