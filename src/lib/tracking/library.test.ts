@@ -5,8 +5,10 @@ import {
 	continueWatching,
 	filterAndSortLibrary,
 	filterUpcoming,
+	groupUpcomingByYear,
 	showProgress,
-	type LibraryItem
+	type LibraryItem,
+	type UpcomingEntry
 } from './library';
 
 /** A season 1 with `count` already-aired episodes (dates in the past). */
@@ -235,6 +237,38 @@ describe('filterUpcoming', () => {
 			})
 		];
 		expect(filterUpcoming(items, today)).toEqual([]);
+	});
+});
+
+describe('groupUpcomingByYear', () => {
+	const entry = (date: string, title: string): UpcomingEntry => ({
+		date,
+		mediaId: `${title}-${date}`,
+		externalId: null,
+		type: 'movie',
+		title,
+		posterPath: null,
+		kind: 'release'
+	});
+
+	it('groups date-sorted entries into years, each with per-day runs, preserving order', () => {
+		const entries = [
+			entry('2026-07-28', 'A'),
+			entry('2026-07-28', 'B'), // same day → same run
+			entry('2026-12-31', 'C'),
+			entry('2027-01-01', 'D'), // year boundary → new year
+			entry('2027-01-01', 'E')
+		];
+		expect(
+			groupUpcomingByYear(entries).map((y) => [y.year, y.days.map(([d, es]) => [d, es.map((e) => e.title)])])
+		).toEqual([
+			['2026', [['2026-07-28', ['A', 'B']], ['2026-12-31', ['C']]]],
+			['2027', [['2027-01-01', ['D', 'E']]]]
+		]);
+	});
+
+	it('returns an empty list for no entries', () => {
+		expect(groupUpcomingByYear([])).toEqual([]);
 	});
 });
 

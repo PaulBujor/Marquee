@@ -4,7 +4,7 @@
 	import PageHeader from '$lib/components/page-header.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { LibraryState } from '$lib/tracking/library.svelte';
-	import { filterUpcoming, type UpcomingEntry } from '$lib/tracking/library';
+	import { filterUpcoming, groupUpcomingByYear } from '$lib/tracking/library';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import type { PageData } from './$types';
@@ -19,17 +19,9 @@
 	});
 
 	const upcoming = $derived(filterUpcoming(library.items));
-	// Group into [date, entries] runs. `upcoming` is already date-sorted, so equal dates are
-	// adjacent — a single linear pass over plain arrays (no Map) preserves order.
-	const groups = $derived.by(() => {
-		const out: [string, UpcomingEntry[]][] = [];
-		for (const e of upcoming) {
-			const last = out[out.length - 1];
-			if (last && last[0] === e.date) last[1].push(e);
-			else out.push([e.date, [e]]);
-		}
-		return out;
-	});
+	// Group into years, each holding per-day runs. The agenda only shows day + month, so a sticky
+	// year divider tells you which year a release lands in (MRQ-131).
+	const years = $derived(groupUpcomingByYear(upcoming));
 
 	// Format `YYYY-MM-DD` as e.g. "Tue, Jul 28" in UTC, so a local timezone can't shift the day.
 	const dateFmt = new Intl.DateTimeFormat(undefined, {
@@ -67,41 +59,56 @@
 			<p class="text-muted-foreground">Sign in to see your upcoming releases.</p>
 			<a href={resolve('/login')} class={buttonVariants()}>Sign in</a>
 		</div>
-	{:else if groups.length > 0}
-		{#each groups as [date, entries] (date)}
-			<section class="flex flex-col gap-2">
-				<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-					{formatDate(date)}
-				</h2>
-				<ul class="flex flex-col gap-1">
-					{#each entries as entry (entry.mediaId + (entry.kind === 'episode' ? `-${entry.season}-${entry.episode}` : ''))}
-						<li>
-							<a
-								href={resolve('/title/[type]/[id]', {
-									type: entry.type,
-									id: entry.externalId?.split('/')[1] ?? ''
-								})}
-								class="-mx-2 flex items-center gap-3 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-secondary"
-							>
-								<div class="w-12 shrink-0">
-									<PosterTile
-										type={entry.type}
-										mediaId={entry.mediaId}
-										posterPath={entry.posterPath}
-										alt={entry.title}
-									/>
-								</div>
-								<div class="flex min-w-0 flex-1 flex-col gap-1">
-									<span class="truncate font-medium">{entry.title}</span>
-									<span class="text-sm text-muted-foreground">
-										{entry.kind === 'episode' ? `S${entry.season} · E${entry.episode}` : 'Release'}
-									</span>
-								</div>
-							</a>
-						</li>
-					{/each}
-				</ul>
-			</section>
+	{:else if years.length > 0}
+		{#each years as { year, days } (year)}
+			<div class="flex flex-col gap-6">
+				<!-- Sticky, centered year divider — stays in view while its releases scroll past, so the
+				day+month rows below always have a year for context. Sits just under the page header. -->
+				<div class="sticky top-[4.25rem] z-10 -mb-2 flex justify-center">
+					<span
+						class="rounded-full border bg-background/80 px-3 py-0.5 text-xs font-bold tracking-widest text-muted-foreground uppercase backdrop-blur"
+					>
+						{year}
+					</span>
+				</div>
+				{#each days as [date, entries] (date)}
+					<section class="flex flex-col gap-2">
+						<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
+							{formatDate(date)}
+						</h2>
+						<ul class="flex flex-col gap-1">
+							{#each entries as entry (entry.mediaId + (entry.kind === 'episode' ? `-${entry.season}-${entry.episode}` : ''))}
+								<li>
+									<a
+										href={resolve('/title/[type]/[id]', {
+											type: entry.type,
+											id: entry.externalId?.split('/')[1] ?? ''
+										})}
+										class="-mx-2 flex items-center gap-3 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-secondary"
+									>
+										<div class="w-12 shrink-0">
+											<PosterTile
+												type={entry.type}
+												mediaId={entry.mediaId}
+												posterPath={entry.posterPath}
+												alt={entry.title}
+											/>
+										</div>
+										<div class="flex min-w-0 flex-1 flex-col gap-1">
+											<span class="truncate font-medium">{entry.title}</span>
+											<span class="text-sm text-muted-foreground">
+												{entry.kind === 'episode'
+													? `S${entry.season} · E${entry.episode}`
+													: 'Release'}
+											</span>
+										</div>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</section>
+				{/each}
+			</div>
 		{/each}
 	{:else}
 		<p class="py-16 text-center text-sm text-muted-foreground">
