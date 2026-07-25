@@ -6,7 +6,7 @@ import { enqueueEvent, getUnsynced } from '$lib/client/idb/outbox';
 import { getTracking } from '$lib/client/idb/state';
 import { getCursor } from '$lib/client/idb/meta';
 import type { SyncRequest, SyncResponse } from '$lib/sync/protocol';
-import { runSync, SyncError, toSyncErrorInfo } from './sync';
+import { parseRetryAfter, runSync, SyncError, toSyncErrorInfo } from './sync';
 
 setActiveUser('sync-test-user');
 const DEVICE = '11111111-1111-1111-1111-111111111111';
@@ -91,5 +91,33 @@ describe('runSync', () => {
 	it('throws on a non-ok response so the caller can back off', async () => {
 		const fetchFn = (async () => new Response('nope', { status: 503 })) as unknown as typeof fetch;
 		await expect(runSync(fetchFn)).rejects.toThrow();
+	});
+
+	it('surfaces a 429 with its Retry-After as retryAfterMs on the SyncError', async () => {
+		const fetchFn = (async () =>
+			new Response(null, {
+				status: 429,
+				headers: { 'Retry-After': '30' }
+			})) as unknown as typeof fetch;
+		await expect(runSync(fetchFn)).rejects.toMatchObject({ status: 429, retryAfterMs: 30_000 });
+	});
+});
+
+describe('parseRetryAfter', () => {
+	it('parses delta-seconds to ms', () => {
+		expect(parseRetryAfter('120')).toBe(120_000);
+		expect(parseRetryAfter('0')).toBe(0);
+	});
+
+	it('parses an HTTP-date relative to now, clamping a past date to 0', () => {
+		const now = Date.parse('2026-01-01T00:00:00Z');
+		expect(parseRetryAfter('Thu, 01 Jan 2026 00:02:00 GMT', now)).toBe(120_000);
+		expect(parseRetryAfter('Thu, 01 Jan 2026 00:00:00 GMT', now + 5000)).toBe(0);
+	});
+
+	it('returns undefined for a missing or unparseable header', () => {
+		expect(parseRetryAfter(null)).toBeUndefined();
+		expect(parseRetryAfter('')).toBeUndefined();
+		expect(parseRetryAfter('soon')).toBeUndefined();
 	});
 });

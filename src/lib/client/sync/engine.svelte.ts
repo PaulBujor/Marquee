@@ -32,6 +32,14 @@ const CIRCUIT = { maxFailures: 3, cooldownMs: 60_000 };
 const retriableSync = (err: unknown) =>
 	!(err instanceof SyncError) || err.status >= 500 || err.status === 429;
 
+/**
+ * On a 429 with a `Retry-After`, wait exactly that long instead of exponential backoff — honor the
+ * server's clock rather than escalating (which a 429 makes wrong). Any other failure keeps normal
+ * backoff. The engine's `maxAttempts` still bounds how many times a single cycle waits.
+ */
+const syncRetryDelay = (err: unknown, computedMs: number): number =>
+	err instanceof SyncError && err.retryAfterMs != null ? err.retryAfterMs : computedMs;
+
 class SyncEngine {
 	status = $state<SyncStatus>('idle');
 	/** Whether the browser currently reports a network connection — drives the offline indicator (MRQ-95). */
@@ -111,11 +119,11 @@ class SyncEngine {
 	async #runChannel<T>(
 		circuit: CircuitBreaker,
 		fn: () => Promise<T>,
-		shouldRetry?: (err: unknown) => boolean
+		retry?: Pick<RetryOptions, 'shouldRetry' | 'retryDelay'>
 	): Promise<T | null> {
 		if (!circuit.canAttempt()) return null;
 		try {
-			const value = await withRetry(fn, { ...RETRY, shouldRetry });
+			const value = await withRetry(fn, { ...RETRY, ...retry });
 			circuit.recordSuccess();
 			return value;
 		} catch (err) {
@@ -141,7 +149,10 @@ class SyncEngine {
 
 			// Event channel — authoritative; drives the visible status.
 			try {
-				const res = await this.#runChannel(this.#events, () => runSync(), retriableSync);
+				const res = await this.#runChannel(this.#events, () => runSync(), {
+					shouldRetry: retriableSync,
+					retryDelay: syncRetryDelay
+				});
 				if (res === null) {
 					this.status = 'error'; // breaker open — keep the error state, skip the rest
 					return;

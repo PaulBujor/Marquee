@@ -5,7 +5,18 @@ import { applyEvents } from '$lib/server/sync/projection';
 import type { EventEnvelope, ServerEvent } from '$lib/sync/events';
 import { syncRequestSchema, SYNC_PAGE_SIZE, type SyncResponse } from '$lib/sync/protocol';
 import { problem, zodProblem } from '$lib/server/http/problem';
+import { slidingWindow } from '$lib/server/http/rate-limit';
 import type { RequestHandler } from './$types';
+
+/**
+ * Per-user rate limit on `/api/sync` — best-effort, per-isolate defense-in-depth against a
+ * looping/buggy client (Cloudflare's edge rate-limiting is the real backstop). A normal client syncs
+ * on triggers plus a 45s interval, well under this; the cap only trips a runaway. In-memory, so it's
+ * not shared across isolates and resets on redeploy — that's fine for its purpose (MRQ-109).
+ */
+const SYNC_RATE_WINDOW_MS = 60_000;
+const SYNC_RATE_MAX = 60;
+const syncHits = new Map<string, number[]>();
 
 /**
  * The sync round trip: push the client's local events and pull everything it's
@@ -15,6 +26,21 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 	if (!locals.db) error(503, 'Service unavailable');
+
+	// Rate limit per user. Return a bare 429 with `Retry-After` — SvelteKit's `error()` can't attach
+	// headers, and the retry hint must stay HTTP-level (not baked into the SyncResponse JSON).
+	const { result, kept } = slidingWindow(
+		syncHits.get(locals.user.id) ?? [],
+		Date.now(),
+		SYNC_RATE_WINDOW_MS,
+		SYNC_RATE_MAX
+	);
+	syncHits.set(locals.user.id, kept);
+	if (result.limited)
+		return new Response(null, {
+			status: 429,
+			headers: { 'Retry-After': String(result.retryAfterSec) }
+		});
 
 	// Parse+validate the whole body against the DTO; every issue is collected into a
 	// problem+json response rather than failing on the first (server is authoritative).

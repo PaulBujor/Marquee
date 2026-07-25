@@ -14,6 +14,12 @@ export interface RetryOptions {
 	maxMs?: number;
 	/** Return false to fail fast without retrying (e.g. a 4xx). Default: always retry. */
 	shouldRetry?: (err: unknown) => boolean;
+	/**
+	 * Override the wait before the next attempt from the thrown error — e.g. honor a `Retry-After`
+	 * on a 429 instead of exponential backoff. Receives the error and the backoff the delay would
+	 * otherwise be; return the ms to sleep. Default: the computed backoff.
+	 */
+	retryDelay?: (err: unknown, computedMs: number) => number;
 }
 
 /** Exponential backoff (ms) for a 0-based attempt index: `baseMs · 2^n`, capped at `maxMs`. */
@@ -36,7 +42,7 @@ export async function withRetry<T>(
 	opts: RetryOptions = {},
 	sleep: (ms: number) => Promise<void> = defaultSleep
 ): Promise<T> {
-	const { maxAttempts = 4, baseMs, maxMs, shouldRetry = () => true } = opts;
+	const { maxAttempts = 4, baseMs, maxMs, shouldRetry = () => true, retryDelay } = opts;
 	let attempt = 0;
 	for (;;) {
 		try {
@@ -44,7 +50,8 @@ export async function withRetry<T>(
 		} catch (err) {
 			attempt++;
 			if (attempt >= maxAttempts || !shouldRetry(err)) throw err;
-			await sleep(backoffDelay(attempt - 1, { baseMs, maxMs }));
+			const computed = backoffDelay(attempt - 1, { baseMs, maxMs });
+			await sleep(retryDelay ? retryDelay(err, computed) : computed);
 		}
 	}
 }
