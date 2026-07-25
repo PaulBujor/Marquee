@@ -36,7 +36,8 @@ function stub() {
 					inProduction: null,
 					firstAirDate: null,
 					lastAirDate: null,
-					seasons: []
+					seasons: [],
+					similar: []
 				};
 			},
 			async getSeason(): Promise<SeasonDetail> {

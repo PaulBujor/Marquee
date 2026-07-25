@@ -44,7 +44,8 @@ function stub() {
 							posterPath: null,
 							overview: ''
 						}
-					]
+					],
+					similar: []
 				};
 			},
 			async getSeason(_showId: number, seasonNumber: number): Promise<SeasonDetail> {

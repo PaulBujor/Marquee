@@ -7,6 +7,7 @@ import type {
 	TmdbMultiSearchItem,
 	TmdbMultiSearchResponse,
 	TmdbSeasonDetailResponse,
+	TmdbSimilarItem,
 	TmdbTvDetailsResponse
 } from './types';
 
@@ -22,6 +23,9 @@ const TMDB_RETRY = { maxAttempts: 3, baseMs: 300, maxMs: 3000 };
 
 /** How many cast members the detail page shows (TMDB orders `cast` by billing). */
 const CAST_LIMIT = 10;
+
+/** How many "similar" titles the detail page's row shows (recommendations + similar, merged). */
+const SIMILAR_LIMIT = 20;
 
 /** Thrown when TMDB responds with a non-2xx status, so callers can map it to a clean HTTP error. */
 export class TmdbError extends Error {
@@ -65,6 +69,44 @@ function normalize(item: TmdbMultiSearchItem): MediaSearchResult | null {
 	}
 	// `person` (and any future media_type) are dropped.
 	return null;
+}
+
+/**
+ * Normalize a `recommendations` / `similar` row. These endpoints don't send `media_type` (it's
+ * implied by the movie-vs-tv endpoint), so the caller passes `type`.
+ */
+function normalizeSimilar(type: 'movie' | 'show', item: TmdbSimilarItem): MediaSearchResult {
+	const isMovie = type === 'movie';
+	return {
+		tmdbId: item.id,
+		type,
+		title: (isMovie ? item.title : item.name) ?? '',
+		year: parseYear(isMovie ? item.release_date : item.first_air_date),
+		posterPath: item.poster_path ?? null,
+		overview: item.overview ?? ''
+	};
+}
+
+/**
+ * Merge the appended `recommendations` + `similar` lists into one "more like this" row:
+ * recommendations first (TMDB's curated picks), then similar (keyword/genre overlap) to backfill,
+ * deduped by id, poster-only (a posterless tile is useless in the row), and capped.
+ */
+function mergeSimilar(
+	type: 'movie' | 'show',
+	selfId: number,
+	recommendations: TmdbSimilarItem[],
+	similar: TmdbSimilarItem[]
+): MediaSearchResult[] {
+	const seen = new Set<number>([selfId]);
+	const out: MediaSearchResult[] = [];
+	for (const item of [...recommendations, ...similar]) {
+		if (seen.has(item.id) || !item.poster_path) continue;
+		seen.add(item.id);
+		out.push(normalizeSimilar(type, item));
+		if (out.length >= SIMILAR_LIMIT) break;
+	}
+	return out;
 }
 
 /** Normalize a raw movie/tv detail response to the app-facing `MediaDetail` shape. */
@@ -115,7 +157,13 @@ function normalizeDetails(
 					airDate: s.air_date ?? null,
 					posterPath: s.poster_path ?? null,
 					overview: s.overview ?? ''
-				}))
+				})),
+		similar: mergeSimilar(
+			type,
+			data.id,
+			data.recommendations?.results ?? [],
+			data.similar?.results ?? []
+		)
 	};
 }
 
@@ -192,11 +240,11 @@ export function createTmdbClient(apiKey: string) {
 			return (data.results ?? []).map(normalize).filter((r): r is MediaSearchResult => r !== null);
 		},
 
-		/** Fetch a single movie/show with credits, images, and videos appended, normalized. */
+		/** Fetch a single movie/show with credits, images, videos, and similar titles appended. */
 		async getDetails(type: 'movie' | 'show', id: number): Promise<MediaDetail> {
 			const path = type === 'movie' ? `/movie/${id}` : `/tv/${id}`;
 			const data = (await request(path, {
-				append_to_response: 'credits,images,videos'
+				append_to_response: 'credits,images,videos,recommendations,similar'
 			})) as TmdbMovieDetailsResponse | TmdbTvDetailsResponse;
 
 			return normalizeDetails(type, data);

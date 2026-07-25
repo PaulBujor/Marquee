@@ -32,7 +32,27 @@ export interface MediaSearchResult {
 	overview: string;
 }
 
-// --- Detail (`/movie/{id}` & `/tv/{id}` with `append_to_response=credits,images,videos`) ---
+/**
+ * A single row from an appended `recommendations` / `similar` list. Same shape as a multi-search
+ * row but **without `media_type`** — the type is implied by the endpoint (movie vs tv), so callers
+ * pass it explicitly to {@link MediaSearchResult}.
+ */
+export interface TmdbSimilarItem {
+	id: number;
+	title?: string;
+	release_date?: string;
+	name?: string;
+	first_air_date?: string;
+	poster_path?: string | null;
+	overview?: string;
+}
+
+/** The appended `recommendations` / `similar` object on a detail response. */
+export interface TmdbSimilarResponse {
+	results?: TmdbSimilarItem[];
+}
+
+// --- Detail (`/movie/{id}` & `/tv/{id}` with `append_to_response=credits,images,videos,recommendations,similar`) ---
 
 /** A genre entry on a detail response. */
 export interface TmdbGenre {
@@ -94,6 +114,8 @@ export interface TmdbMovieDetailsResponse {
 	credits?: TmdbCredits;
 	images?: TmdbImages;
 	videos?: TmdbVideosResponse;
+	recommendations?: TmdbSimilarResponse;
+	similar?: TmdbSimilarResponse;
 }
 
 /** Raw `/tv/{id}` detail response (only consumed fields modelled). */
@@ -112,6 +134,8 @@ export interface TmdbTvDetailsResponse {
 	credits?: TmdbCredits;
 	images?: TmdbImages;
 	videos?: TmdbVideosResponse;
+	recommendations?: TmdbSimilarResponse;
+	similar?: TmdbSimilarResponse;
 	seasons?: TmdbSeasonSummary[];
 	/** One of TMDB's TV statuses: `Returning Series`, `Planned`, `In Production`, `Ended`, `Canceled`, `Pilot`. */
 	status?: string;
@@ -189,6 +213,11 @@ export interface MediaDetail {
 	lastAirDate: string | null;
 	/** Empty for movies. */
 	seasons: Season[];
+	/**
+	 * "More like this" — TMDB `recommendations` + `similar` merged, deduped by id, poster-only,
+	 * capped. Same media `type` as this title (the endpoints don't mix movies and shows).
+	 */
+	similar: MediaSearchResult[];
 }
 
 /** A normalized season summary for the detail page's season selector + hydration. */
