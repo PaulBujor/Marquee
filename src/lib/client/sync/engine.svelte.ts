@@ -16,6 +16,7 @@ import { runSync, SyncError, toSyncErrorInfo, type SyncErrorInfo } from './sync'
 import { runMediaSync } from './media-sync';
 import { runImageSync } from './image-sync';
 import { CircuitBreaker, withRetry, type RetryOptions } from '$lib/resilience';
+import { reportClientError } from '$lib/client/report-error';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 
@@ -161,8 +162,15 @@ class SyncEngine {
 				if (res.pulled > 0) changed = true;
 			} catch (err) {
 				this.lastError = toSyncErrorInfo(err, this.#events.failures, Date.now());
-				// Browser-visible; the server side is captured by the `handleError` hook → observability.
+				// Browser-visible; also forward to the observability sink — client-side
+				// failures never reach the server `handleError` hook on their own.
 				console.error('[sync] event sync failed', this.lastError);
+				reportClientError({
+					message: this.lastError.message,
+					status: this.lastError.status,
+					source: 'sync',
+					at: this.lastError.at
+				});
 				this.status = 'error';
 				return; // events are the base — don't run media/images on top of a failed event sync
 			}
