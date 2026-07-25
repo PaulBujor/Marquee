@@ -3,6 +3,7 @@
 	import { fade, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
@@ -26,6 +27,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
+	import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import StarIcon from '@lucide/svelte/icons/star';
@@ -144,10 +146,35 @@
 		}
 	});
 
-	// Back = pop history when we came from within the app, else the search page. Reset per-title.
+	// Suggestion-chain origin + depth. Normal navigation still pushes one entry per hop (so browser
+	// Back steps back one title at a time), but each "Similar" link carries the chain's origin forward
+	// in `?from=` plus a `hops` counter — so a few hops deep we can also offer a jump straight back to
+	// where the chain started (home, or the search that began it).
+	const originParam = $derived(page.url.searchParams.get('from'));
+	const hops = $derived(Math.max(0, Number(page.url.searchParams.get('hops')) || 0));
+	// The origin to return to: the carried param, else where this title was entered from, else home.
+	let enteredFrom = $state('/');
+	const origin = $derived(originParam ?? enteredFrom);
+	// Offer the jump-to-origin control once the chain is a few hops deep.
+	const showBackToOrigin = $derived(hops >= 3);
+
+	/** A "Similar" card's href: the same route carrying the origin + an incremented hop count. */
+	function similarHref(type: 'movie' | 'show', id: number): string {
+		const path = resolve('/title/[type]/[id]', { type, id: String(id) });
+		return `${path}?from=${encodeURIComponent(origin)}&hops=${hops + 1}`;
+	}
+
+	// Back = pop one hop of history when we came from within the app, else jump to the origin.
 	let cameFromApp = $state(false);
 	afterNavigate((nav) => {
 		cameFromApp = nav.from != null;
+		// On a fresh entry (no `?from` yet, i.e. not a hop) remember where we arrived from, so it
+		// becomes the chain origin — but only home or a search, never another title.
+		if (!originParam) {
+			const f = nav.from?.url;
+			enteredFrom =
+				f && (f.pathname === '/' || f.pathname === '/search') ? `${f.pathname}${f.search}` : '/';
+		}
 		showTrailer = false;
 		titleInView = true;
 		preselectedFor = null;
@@ -157,9 +184,16 @@
 		seasonLoading = false;
 	});
 
+	function goToOrigin() {
+		// `origin` is a runtime URL (home, or a search + query) carried in `?from=`, so it can't be a
+		// branded resolve() result — same shape as the search/home query-string navigations.
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		goto(origin);
+	}
+
 	function goBack() {
 		if (cameFromApp) history.back();
-		else goto(resolve('/search'));
+		else goToOrigin();
 	}
 
 	async function selectSeason(seasonNumber: number) {
@@ -228,6 +262,20 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 		>
 			<ChevronLeftIcon class="size-4" />
 		</Button>
+		{#if showBackToOrigin}
+			<!-- A few suggestions deep: jump straight back to where the chain started (home / search). -->
+			<Button
+				onclick={goToOrigin}
+				variant="outline"
+				size="icon"
+				shape="round"
+				class="shrink-0 text-muted-foreground"
+				aria-label="Back to start"
+				title="Back to start"
+			>
+				<ChevronsLeftIcon class="size-4" />
+			</Button>
+		{/if}
 		{#if !titleInView}
 			<h2
 				class="min-w-0 flex-1 truncate font-serif text-lg font-semibold"
@@ -437,14 +485,11 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						{#each detail.similar as item (item.tmdbId)}
 							{@const st = similarState[tmdbMediaId(item.type, item.tmdbId)]}
 							<li class="w-24 shrink-0">
-								<!-- Replace history on each hop so a suggestion → suggestion → … chain never piles up
-								entries: Back (and the header chevron) always returns to where you entered the chain
-								(home or the originating search), from any depth, instead of one title at a time. -->
-								<a
-									href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
-									data-sveltekit-replacestate
-									class="block"
-								>
+								<!-- Carry the chain origin + hop count forward, so a deep chain can jump back to
+								where it started while normal Back still steps one title at a time. The href is
+								built from resolve() + a query string, which drops resolve()'s branded type. -->
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+								<a href={similarHref(item.type, item.tmdbId)} class="block">
 									<PosterTile
 										type={item.type}
 										posterUrl={posterUrl(item.posterPath)}
