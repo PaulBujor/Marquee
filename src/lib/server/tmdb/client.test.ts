@@ -145,6 +145,12 @@ const MOVIE_DETAILS: TmdbMovieDetailsResponse = {
 		cast: [
 			{ id: 1, name: 'Leonardo DiCaprio', character: 'Cobb', profile_path: '/leo.jpg', order: 0 },
 			{ id: 2, name: 'Elliot Page', character: 'Ariadne', profile_path: null, order: 1 }
+		],
+		crew: [
+			{ id: 10, name: 'Christopher Nolan', job: 'Director', department: 'Directing' },
+			{ id: 10, name: 'Christopher Nolan', job: 'Writer', department: 'Writing' },
+			{ id: 11, name: 'Emma Thomas', job: 'Producer', department: 'Production' },
+			{ id: 12, name: 'Lighting Tech', job: 'Best Boy', department: 'Lighting' }
 		]
 	},
 	images: { backdrops: [{ file_path: '/b1.jpg' }], posters: [{ file_path: '/p1.jpg' }] },
@@ -164,6 +170,7 @@ const TV_DETAILS: TmdbTvDetailsResponse = {
 	last_air_date: '2013-09-29',
 	status: 'Ended',
 	in_production: false,
+	created_by: [{ id: 20, name: 'Vince Gilligan' }],
 	overview: 'A chemistry teacher turned meth cook.',
 	poster_path: '/bb.jpg',
 	backdrop_path: '/bb-backdrop.jpg',
@@ -243,6 +250,10 @@ describe('createTmdbClient.getDetails', () => {
 				{ id: 1, name: 'Leonardo DiCaprio', character: 'Cobb', profilePath: '/leo.jpg' },
 				{ id: 2, name: 'Elliot Page', character: 'Ariadne', profilePath: null }
 			],
+			director: 'Christopher Nolan',
+			writers: ['Christopher Nolan'],
+			producers: ['Emma Thomas'],
+			creators: [],
 			trailer: { key: 'yt-trailer', name: 'Official Trailer' },
 			releaseDate: '2010-07-16',
 			status: null,
@@ -270,7 +281,11 @@ describe('createTmdbClient.getDetails', () => {
 			status: 'Ended',
 			inProduction: false,
 			firstAirDate: '2008-01-20',
-			lastAirDate: '2013-09-29'
+			lastAirDate: '2013-09-29',
+			director: null,
+			writers: [],
+			producers: [],
+			creators: ['Vince Gilligan']
 		});
 		expect(detail.cast).toEqual([
 			{ id: 3, name: 'Bryan Cranston', character: 'Walter White', profilePath: '/bc.jpg' }
@@ -417,6 +432,10 @@ describe('createTmdbClient.getDetails', () => {
 			runtime: null,
 			genres: [],
 			cast: [],
+			director: null,
+			writers: [],
+			producers: [],
+			creators: [],
 			trailer: null,
 			releaseDate: null,
 			status: null,
