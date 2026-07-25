@@ -13,9 +13,10 @@
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
-	import { tmdbMediaId, tmdbExternalId, type MediaRecord } from '$lib/sync/events';
+	import { tmdbMediaId, tmdbExternalId, type MediaRecord, type TrackingStatus } from '$lib/sync/events';
 	import { isAired, todayIso } from '$lib/tracking/actions';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
+	import { getTracking } from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
@@ -64,6 +65,27 @@
 		void sync.revision;
 		tracking.load();
 	});
+
+	// Tracking status + favorite of the *similar* titles, for the badge + heart on each card — we
+	// already hold this offline, keyed by our derived media id. Reloaded on sync pulls / navigation.
+	const STATUS_LABEL: Record<TrackingStatus, string> = {
+		want_to_watch: 'On list',
+		watching: 'Watching',
+		completed: 'Watched',
+		did_not_finish: "Didn't finish"
+	};
+	let similarState = $state<Record<string, { status: TrackingStatus; favorite: boolean }>>({});
+	$effect(() => {
+		void sync.revision;
+		void mediaId;
+		loadSimilarState();
+	});
+	async function loadSimilarState() {
+		const rows = await getTracking();
+		similarState = Object.fromEntries(
+			rows.map((r) => [r.mediaId, { status: r.status, favorite: r.favorite }])
+		);
+	}
 
 	// Details (overview/cast/trailer) start collapsed so the episode list / similar row are close;
 	// the user expands on demand. Reset per title in afterNavigate.
@@ -389,8 +411,9 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			{/if}
 		</div>
 
-		<!-- Similar titles: TMDB recommendations + similar merged, deduped (MRQ-124). Collapsible,
-		display-only (untracked) — plain posterUrl, no offline blob cache. -->
+		<!-- Similar titles: TMDB recommendations + similar merged, deduped (MRQ-124). Collapsible.
+		Posters use plain posterUrl (network, no offline blob); a status badge + favorite heart are
+		overlaid from local tracking when we already track the title. -->
 		{#if detail.similar.length > 0}
 			<section class="flex flex-col gap-3">
 				<button
@@ -407,14 +430,24 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				{#if similarOpen}
 					<ul class="no-scrollbar flex gap-3 overflow-x-auto pb-1" transition:slide={{ duration: 200 }}>
 						{#each detail.similar as item (item.tmdbId)}
+							{@const st = similarState[tmdbMediaId(item.type, item.tmdbId)]}
 							<li class="w-24 shrink-0">
 								<a
 									href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
 									class="block"
 								>
-									<PosterTile type={item.type} posterUrl={posterUrl(item.posterPath)} alt={item.title} />
+									<PosterTile
+										type={item.type}
+										posterUrl={posterUrl(item.posterPath)}
+										isFavorite={st?.favorite ?? false}
+										alt={item.title}
+									/>
 									<div class="mt-1.5 truncate text-xs font-medium">{item.title}</div>
-									{#if item.year}<div class="text-[0.7rem] text-muted-foreground">{item.year}</div>{/if}
+									{#if st}
+										<MediaBadge variant="status" class="mt-0.5">{STATUS_LABEL[st.status]}</MediaBadge>
+									{:else if item.year}
+										<div class="text-[0.7rem] text-muted-foreground">{item.year}</div>
+									{/if}
 								</a>
 							</li>
 						{/each}
