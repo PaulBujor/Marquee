@@ -21,8 +21,21 @@ type TmdbHydrator = Pick<TmdbClient, 'getDetails' | 'getSeason'>;
 /** How long a still-airing show's cache is trusted before a re-pull (12h). */
 export const AIRING_TTL_MS = 12 * 60 * 60 * 1000;
 
-/** Rows per child-table insert — keeps well under D1's bound-parameter limit for big shows. */
-const INSERT_CHUNK = 50;
+/**
+ * D1 caps bound parameters per query at 100, so multi-row inserts must be chunked to stay under it
+ * — a 50-row episode insert is 400 params and fails on D1 (better-sqlite3 in tests has no such cap,
+ * so it doesn't surface there). Chunk size is derived per table from its column count.
+ */
+const D1_MAX_BOUND_PARAMS = 100;
+
+function chunkForD1<T extends object>(rows: T[]): T[][] {
+	if (rows.length === 0) return [];
+	const paramsPerRow = Object.keys(rows[0]).length;
+	const size = Math.max(1, Math.floor(D1_MAX_BOUND_PARAMS / paramsPerRow));
+	const chunks: T[][] = [];
+	for (let i = 0; i < rows.length; i += size) chunks.push(rows.slice(i, i + size));
+	return chunks;
+}
 
 // TMDB's own TV statuses (full set: Returning Series / Planned / In Production / Ended / Canceled /
 // Pilot) for a show that may still gain episodes. `in_production` is the primary signal; these catch
@@ -122,12 +135,8 @@ async function replaceChildren(
 ): Promise<void> {
 	await db.delete(episodes).where(eq(episodes.mediaId, id));
 	await db.delete(seasons).where(eq(seasons.mediaId, id));
-	for (let i = 0; i < seasonRows.length; i += INSERT_CHUNK) {
-		await db.insert(seasons).values(seasonRows.slice(i, i + INSERT_CHUNK));
-	}
-	for (let i = 0; i < episodeRows.length; i += INSERT_CHUNK) {
-		await db.insert(episodes).values(episodeRows.slice(i, i + INSERT_CHUNK));
-	}
+	for (const chunk of chunkForD1(seasonRows)) await db.insert(seasons).values(chunk);
+	for (const chunk of chunkForD1(episodeRows)) await db.insert(episodes).values(chunk);
 }
 
 /**
@@ -198,6 +207,9 @@ export async function refreshMedia(
 			existing.lastAirDate !== scalars.lastAirDate ||
 			existing.releaseDate !== scalars.releaseDate ||
 			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows);
+		// Write the children first: if that throws, the media row keeps its old `refreshedAt`, so the
+		// next sync retries — rather than being stamped fresh-but-empty and never refreshing again.
+		if (detail.type === 'show') await replaceChildren(db, id, seasonRows, episodeRows);
 		await db
 			.update(media)
 			.set({
@@ -209,7 +221,6 @@ export async function refreshMedia(
 				version: changed ? existing.version + 1 : existing.version
 			})
 			.where(eq(media.id, id));
-		if (detail.type === 'show') await replaceChildren(db, id, seasonRows, episodeRows);
 	}
 
 	const stored = await db.select().from(media).where(eq(media.id, id)).limit(1);

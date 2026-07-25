@@ -188,6 +188,17 @@ describe('refreshMedia', () => {
 		]);
 	});
 
+	it('persists every episode of a large show across insert chunks', async () => {
+		// D1 caps a query at 100 bound params, so episode inserts are chunked; verify a show with
+		// more episodes than one chunk still stores them all.
+		const db = createTestDb();
+		const stub = showStub();
+		for (let n = 3; n <= 40; n++) stub.addEpisode({ episodeNumber: n, airDate: '2026-01-01' });
+		const row = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+		const episodeRows = await db.select().from(episodes).where(eq(episodes.mediaId, row!.id));
+		expect(episodeRows).toHaveLength(40);
+	});
+
 	it('within the TTL, returns the cached show without re-fetching', async () => {
 		const db = createTestDb();
 		const stub = showStub();
