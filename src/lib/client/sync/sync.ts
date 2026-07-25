@@ -14,10 +14,37 @@ import { SYNC_MAX_PUSH, type SyncRequest, type SyncResponse } from '$lib/sync/pr
 
 /** Thrown when `/api/sync` returns a non-2xx status, so the engine can back off and retry. */
 export class SyncError extends Error {
-	constructor(readonly status: number) {
+	/**
+	 * @param retryAfterMs When the server sent a `Retry-After` (typically with a 429), how long to
+	 * wait before retrying — the engine honors this instead of its exponential backoff.
+	 */
+	constructor(
+		readonly status: number,
+		readonly retryAfterMs?: number
+	) {
 		super(`sync failed: HTTP ${status}`);
 		this.name = 'SyncError';
 	}
+}
+
+/**
+ * Parse an HTTP `Retry-After` header to milliseconds, supporting **both** forms: delta-seconds
+ * (`"120"`) and an HTTP-date (`"Wed, 21 Oct 2026 07:28:00 GMT"`). Returns undefined when the header
+ * is absent or unparseable, and never negative (a past date clamps to 0). `now` is injectable for tests.
+ */
+export function parseRetryAfter(
+	header: string | null,
+	now: number = Date.now()
+): number | undefined {
+	if (header === null) return undefined;
+	const trimmed = header.trim();
+	if (trimmed === '') return undefined;
+	// Delta-seconds: a bare non-negative integer.
+	if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+	// HTTP-date.
+	const at = Date.parse(trimmed);
+	if (Number.isNaN(at)) return undefined;
+	return Math.max(0, at - now);
 }
 
 /**
@@ -71,7 +98,7 @@ export async function runSync(
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(body)
 		});
-		if (!res.ok) throw new SyncError(res.status);
+		if (!res.ok) throw new SyncError(res.status, parseRetryAfter(res.headers.get('retry-after')));
 
 		const data = (await res.json()) as SyncResponse;
 		if (data.applied.length > 0) await markSynced(data.applied);
