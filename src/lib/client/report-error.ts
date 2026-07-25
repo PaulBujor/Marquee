@@ -1,5 +1,5 @@
 /**
- * Client-side error sink (MRQ-121): forward browser errors to `/api/client-error`, which logs them
+ * Client-side error sink: forward browser errors to `/api/client-error`, which logs them
  * to Cloudflare observability. Best-effort and **silent** — a reporter must never throw or surface a
  * failure of its own (that would turn one error into two). Used by the `handleError` client hook and
  * by the sync engine when a channel fails.

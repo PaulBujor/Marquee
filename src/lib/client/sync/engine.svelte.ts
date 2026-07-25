@@ -151,7 +151,7 @@ class SyncEngine {
 				if (res.pulled > 0) changed = true;
 			} catch (err) {
 				this.lastError = toSyncErrorInfo(err, this.#events.failures, Date.now());
-				// Browser-visible; also forward to the observability sink (MRQ-121) — client-side
+				// Browser-visible; also forward to the observability sink — client-side
 				// failures never reach the server `handleError` hook on their own.
 				console.error('[sync] event sync failed', this.lastError);
 				reportClientError({

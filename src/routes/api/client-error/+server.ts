@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { RequestHandler } from './$types';
 
 /**
- * The client-error sink (MRQ-121): browser-side errors (uncaught client exceptions, sync failures)
+ * The client-error sink: browser-side errors (uncaught client exceptions, sync failures)
  * POST here and are logged **structured** so Cloudflare observability (logs/traces, see
  * wrangler.jsonc) ingests them — the browser console alone never reaches any backend.
  *
