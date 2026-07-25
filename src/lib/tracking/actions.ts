@@ -105,6 +105,52 @@ export function nextEpisode(
 	return null;
 }
 
+/** Minimal season summary the detail page holds up-front (from TMDB detail), before per-episode sync. */
+export interface SeasonSummary {
+	seasonNumber: number;
+	episodeCount: number;
+	/** `YYYY-MM-DD` season air date, or null if unknown. */
+	airDate: string | null;
+}
+
+/**
+ * The episode coords a bulk "mark watched" should seed, derived from the season summaries the detail
+ * page already has — so it works the instant a title is added, before the media channel syncs
+ * per-episode air dates (the MRQ-130 race). Precision by source, per season:
+ *
+ * - If we already hold **per-episode** air dates for the season (`dated`), mark only its aired episodes.
+ * - Else, for a **finished** show (`inProduction === false`) whose season has aired, mark the whole
+ *   season by its `episodeCount` — every episode of a finished, aired season has aired.
+ * - Else (still in production, or the season hasn't aired / has no data), mark nothing: we can't tell
+ *   aired from unaired without per-episode dates, and must not seed a future episode as watched.
+ *
+ * Skips Specials (season 0). `seasonFilter` limits to one season ("mark season watched").
+ */
+export function episodesToMark(
+	seasons: SeasonSummary[],
+	dated: DatedEpisode[],
+	inProduction: boolean | null,
+	today: string,
+	seasonFilter?: number
+): EpisodeCoord[] {
+	const out: EpisodeCoord[] = [];
+	for (const s of seasons) {
+		if (isSpecialsSeason(s.seasonNumber)) continue;
+		if (seasonFilter !== undefined && s.seasonNumber !== seasonFilter) continue;
+		const seasonDated = dated.filter((e) => e.season === s.seasonNumber);
+		if (seasonDated.length > 0) {
+			for (const e of seasonDated) {
+				if (isAired(e, today)) out.push({ season: e.season, episode: e.episode });
+			}
+		} else if (!inProduction && s.airDate !== null && s.airDate <= today) {
+			for (let episode = 1; episode <= s.episodeCount; episode++) {
+				out.push({ season: s.seasonNumber, episode });
+			}
+		}
+	}
+	return out;
+}
+
 /** Whether every **aired** episode of a season is watched (false when it has no aired episodes). */
 export function isSeasonFullyWatched(
 	episodes: DatedEpisode[],

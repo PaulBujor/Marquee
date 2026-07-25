@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	airedEpisodes,
+	episodesToMark,
 	isAired,
 	isSeasonFullyWatched,
 	isSpecialsSeason,
@@ -14,7 +15,8 @@ import {
 	todayIso,
 	toTrackingView,
 	watchedKey,
-	type DatedEpisode
+	type DatedEpisode,
+	type SeasonSummary
 } from './actions';
 
 const TODAY = '2026-07-24';
@@ -205,5 +207,65 @@ describe('reconciledStatus', () => {
 		expect(reconciledStatus('watching', 10, 10, true)).toBeNull();
 		expect(reconciledStatus('want_to_watch', 10, 10, true)).toBe('watching');
 		expect(reconciledStatus('completed', 10, 10, true)).toBe('watching');
+	});
+});
+
+describe('episodesToMark', () => {
+	const TODAY = '2026-07-24';
+	// A finished (not in production) show: S1 aired, S2 aired, plus Specials.
+	const finishedSeasons: SeasonSummary[] = [
+		{ seasonNumber: 0, episodeCount: 3, airDate: '2019-01-01' }, // Specials
+		{ seasonNumber: 1, episodeCount: 2, airDate: '2020-01-01' },
+		{ seasonNumber: 2, episodeCount: 4, airDate: '2021-01-01' }
+	];
+
+	it('marks every episode of a finished show by count when no per-episode data has synced', () => {
+		expect(episodesToMark(finishedSeasons, [], false, TODAY)).toEqual([
+			{ season: 1, episode: 1 },
+			{ season: 1, episode: 2 },
+			{ season: 2, episode: 1 },
+			{ season: 2, episode: 2 },
+			{ season: 2, episode: 3 },
+			{ season: 2, episode: 4 }
+		]);
+	});
+
+	it('limits to one season when a seasonFilter is given, still skipping Specials', () => {
+		expect(episodesToMark(finishedSeasons, [], false, TODAY, 1)).toEqual([
+			{ season: 1, episode: 1 },
+			{ season: 1, episode: 2 }
+		]);
+		// Specials can never be targeted.
+		expect(episodesToMark(finishedSeasons, [], false, TODAY, 0)).toEqual([]);
+	});
+
+	it('prefers per-episode air dates when present, marking only aired episodes', () => {
+		const dated: DatedEpisode[] = [
+			ep(2, 1, '2026-07-01'), // aired
+			ep(2, 2, '2026-12-01'), // future
+			ep(2, 3, null) // unannounced
+		];
+		// S1 has no dated rows → falls back to count (finished, aired). S2 uses the dated rows.
+		expect(episodesToMark(finishedSeasons, dated, false, TODAY)).toEqual([
+			{ season: 1, episode: 1 },
+			{ season: 1, episode: 2 },
+			{ season: 2, episode: 1 }
+		]);
+	});
+
+	it('marks nothing by count for an in-production show (can not tell aired from unaired offline)', () => {
+		const airing: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 8, airDate: '2026-06-01' }];
+		expect(episodesToMark(airing, [], true, TODAY)).toEqual([]);
+		// but precise per-episode data still works for an airing show
+		const dated: DatedEpisode[] = [ep(1, 1, '2026-06-01'), ep(1, 2, '2026-12-01')];
+		expect(episodesToMark(airing, dated, true, TODAY)).toEqual([{ season: 1, episode: 1 }]);
+	});
+
+	it('skips a season that has not aired yet (future or unknown season air date)', () => {
+		const seasons: SeasonSummary[] = [
+			{ seasonNumber: 1, episodeCount: 2, airDate: '2999-01-01' }, // future
+			{ seasonNumber: 2, episodeCount: 2, airDate: null } // unknown
+		];
+		expect(episodesToMark(seasons, [], false, TODAY)).toEqual([]);
 	});
 });
