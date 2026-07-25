@@ -12,7 +12,7 @@
 	import ProgressRing from '$lib/components/media/progress-ring.svelte';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Popover from '$lib/components/ui/popover';
-	import * as Select from '$lib/components/ui/select';
+	import * as NativeSelect from '$lib/components/ui/native-select';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import SlidersIcon from '@lucide/svelte/icons/sliders-horizontal';
 	import { LibraryState } from '$lib/tracking/library.svelte';
@@ -129,6 +129,16 @@
 	// Type is surfaced as its own always-visible control; the popover badges when a year/genre
 	// narrowing is active (sort is a preference, not a narrowing, so it doesn't count).
 	const advancedActive = $derived(year !== null || genre !== null);
+
+	const filtersActive = $derived(
+		typeFilter !== 'all' || year !== null || genre !== null || sort !== 'date'
+	);
+	function clearFilters() {
+		typeFilter = 'all';
+		year = null;
+		genre = null;
+		sort = 'date';
+	}
 
 	// Infinite scroll: PAGE_SIZE at a time; reset to the top on view change, keep position on sync grow.
 	const PAGE_SIZE = 30;
@@ -280,51 +290,51 @@
 				<Popover.Content align="end" class="w-64 space-y-3">
 					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Sort</span>
-						<Select.Root
-							type="single"
+						<NativeSelect.Root
+							class="w-full"
 							value={sort}
-							onValueChange={(v) => v && (sort = v as LibrarySort)}
+							onchange={(e) => (sort = e.currentTarget.value as LibrarySort)}
 						>
-							<Select.Trigger class="w-full">{SORT_LABELS[sort]}</Select.Trigger>
-							<Select.Content>
-								<Select.Item value="added">Date added</Select.Item>
-								<Select.Item value="title">Title</Select.Item>
-								<Select.Item value="date">Release date</Select.Item>
-							</Select.Content>
-						</Select.Root>
+							{#each SORTS as s (s)}
+								<NativeSelect.Option value={s}>{SORT_LABELS[s]}</NativeSelect.Option>
+							{/each}
+						</NativeSelect.Root>
 					</div>
 					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Year</span>
-						<Select.Root
-							type="single"
+						<NativeSelect.Root
+							class="w-full"
 							value={year === null ? '' : String(year)}
-							onValueChange={(v) => (year = v ? Number(v) : null)}
+							onchange={(e) =>
+								(year = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
 						>
-							<Select.Trigger class="w-full">{year ?? 'Any'}</Select.Trigger>
-							<Select.Content>
-								<Select.Item value="">Any</Select.Item>
-								{#each years as y (y)}
-									<Select.Item value={String(y)}>{y}</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Root>
+							<NativeSelect.Option value="">Any</NativeSelect.Option>
+							{#each years as y (y)}
+								<NativeSelect.Option value={String(y)}>{y}</NativeSelect.Option>
+							{/each}
+						</NativeSelect.Root>
 					</div>
 					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Genre</span>
-						<Select.Root
-							type="single"
+						<NativeSelect.Root
+							class="w-full"
 							value={genre ?? ''}
-							onValueChange={(v) => (genre = v || null)}
+							onchange={(e) => (genre = e.currentTarget.value || null)}
 						>
-							<Select.Trigger class="w-full">{genre ?? 'Any'}</Select.Trigger>
-							<Select.Content>
-								<Select.Item value="">Any</Select.Item>
-								{#each genres as g (g)}
-									<Select.Item value={g}>{g}</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Root>
+							<NativeSelect.Option value="">Any</NativeSelect.Option>
+							{#each genres as g (g)}
+								<NativeSelect.Option value={g}>{g}</NativeSelect.Option>
+							{/each}
+						</NativeSelect.Root>
 					</div>
+					<button
+						type="button"
+						onclick={clearFilters}
+						disabled={!filtersActive}
+						class="{buttonVariants({ variant: 'ghost', size: 'sm' })} w-full"
+					>
+						Clear filters
+					</button>
 				</Popover.Content>
 			</Popover.Root>
 		</div>
