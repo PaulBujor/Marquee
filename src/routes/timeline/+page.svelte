@@ -19,16 +19,16 @@
 	});
 
 	const upcoming = $derived(filterUpcoming(library.items));
-	// Group the (already date-sorted) entries by date, preserving order.
+	// Group into [date, entries] runs. `upcoming` is already date-sorted, so equal dates are
+	// adjacent — a single linear pass over plain arrays (no Map) preserves order.
 	const groups = $derived.by(() => {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient local, rebuilt each derivation
-		const map = new Map<string, UpcomingEntry[]>();
+		const out: [string, UpcomingEntry[]][] = [];
 		for (const e of upcoming) {
-			const arr = map.get(e.date);
-			if (arr) arr.push(e);
-			else map.set(e.date, [e]);
+			const last = out[out.length - 1];
+			if (last && last[0] === e.date) last[1].push(e);
+			else out.push([e.date, [e]]);
 		}
-		return [...map];
+		return out;
 	});
 
 	// Format `YYYY-MM-DD` as e.g. "Tue, Jul 28" in UTC, so a local timezone can't shift the day.
