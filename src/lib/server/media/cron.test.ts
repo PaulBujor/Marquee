@@ -4,7 +4,7 @@ import { createTestDb } from '$lib/server/db/test-db';
 import { media } from '$lib/server/db/schema';
 import { mediaId } from '$lib/sync/events';
 import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
-import { refreshStaleShows } from './cron';
+import { refreshInProductionShows } from './cron';
 
 const T0 = Date.UTC(2026, 6, 24);
 
@@ -86,7 +86,7 @@ async function seedMedia(
 	});
 }
 
-describe('refreshStaleShows', () => {
+describe('refreshInProductionShows', () => {
 	it('refreshes only in-production shows (skips movies + finished shows)', async () => {
 		const db = createTestDb();
 		await seedMedia(db, 'show/1', { type: 'show', inProduction: true });
@@ -94,10 +94,9 @@ describe('refreshStaleShows', () => {
 		await seedMedia(db, 'movie/3', { type: 'movie', inProduction: null });
 
 		const { client, detailCalls } = stub();
-		const result = await refreshStaleShows(db, client, T0);
+		const result = await refreshInProductionShows(db, client, T0);
 
 		expect(result.scanned).toBe(1);
-		expect(result.refreshed).toBe(1);
 		expect(detailCalls()).toBe(1); // only show/1 hit TMDB
 
 		// The refreshed show gained episodes → its version bumped.
@@ -114,10 +113,6 @@ describe('refreshStaleShows', () => {
 		const db = createTestDb();
 		await seedMedia(db, 'movie/9', { type: 'movie', inProduction: null });
 		const { client } = stub();
-		expect(await refreshStaleShows(db, client, T0)).toEqual({
-			scanned: 0,
-			refreshed: 0,
-			changed: 0
-		});
+		expect(await refreshInProductionShows(db, client, T0)).toEqual({ scanned: 0, changed: 0 });
 	});
 });

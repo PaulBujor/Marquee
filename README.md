@@ -88,8 +88,7 @@ src/
       sync/        # Sync engine: events + media + image channels
     tracking/      # Watchlist read models + watchability helpers
     components/    # Shared Svelte components
-  routes/          # SvelteKit file-based routing
-  cron/            # Standalone cron Worker (nightly media refresh)
+  routes/          # SvelteKit file-based routing (incl. the cron refresh endpoint)
 ```
 
 ## Architecture
@@ -102,7 +101,7 @@ Every tracking action — add to list, change status, favorite, rate, mark an ep
 
 - **Local-first + optimistic** — an action writes its event to a local outbox _and_ applies it to the local projection immediately, so the UI updates with zero latency and works fully offline.
 - **Last-writer-wins merge**, per field, keyed by the event's `clientCreatedAt` (device clock). Event ids are client-minted UUIDs and the `events` primary key is composite `(user_id, id)`, so replaying a synced event is a no-op and a colliding id from one user can never drop another's.
-- **Provider-agnostic media identity** — each title has a deterministic v5 UUID derived from `(provider, externalId)` (e.g. `tmdb` + `movie/603`). Every device derives the same id offline, so events reference titles by that id with no coordination, and switching providers or surviving a TMDB outage needs no remapping.
+- **Provider-agnostic media identity** — each title has a deterministic v5 UUID derived from `(provider, externalId)` (e.g. `tmdb` + `movie/603`). Every device derives the same id offline, so events reference titles with no coordination, and the id is _ours_, not the provider's — a TMDB outage changes nothing because we hold our own copy of the metadata. (Since the id derives from the provider id, the same title on a different provider is a different id; linking those is handled by separate alias records, not by reusing an id.)
 
 ### Two sync channels
 
@@ -138,34 +137,28 @@ Events reference a title only by its media id — media is **never embedded in a
 
 ## Deployment
 
-Marquee deploys as a **Cloudflare Worker with static assets** (not Cloudflare Pages), configured in `wrangler.jsonc` (`nodejs_compat` flag, D1 binding `DB`).
+Marquee deploys as a single **Cloudflare Worker with static assets** (not Cloudflare Pages), configured in `wrangler.jsonc` (`nodejs_compat` flag, D1 binding `DB`). `pnpm deploy` migrates the remote D1 then deploys; `pnpm deploy:preview` does the same for the `preview` environment.
 
 ```sh
-pnpm build
-pnpm exec wrangler deploy
+pnpm deploy           # migrate marquee + wrangler deploy
+pnpm deploy:preview   # migrate marquee-preview + wrangler deploy --env preview
 ```
 
-If deploying via **Cloudflare Workers Builds** (git-connected), Cloudflare auto-detects the pnpm version from the `packageManager` field, runs `pnpm install --frozen-lockfile`, and honors the `allowBuilds` settings in `pnpm-workspace.yaml` (so native build scripts run). Just set the build command to `pnpm run build`.
+The nightly media-refresh cron rides on this same worker — `pnpm build` appends a `scheduled` handler to the built worker (see `scripts/append-cron.mjs`), and `triggers.crons` is set on both environments. No separate worker.
+
+If deploying via **Cloudflare Workers Builds** (git-connected), Cloudflare auto-detects the pnpm version from the `packageManager` field, runs `pnpm install --frozen-lockfile`, and honors the `allowBuilds` settings in `pnpm-workspace.yaml` (so native build scripts run). Set the build command to `pnpm run build`, and run the D1 migration as a separate step (`wrangler d1 migrations apply marquee --remote`).
 
 Set production secrets with:
 
 ```sh
 pnpm exec wrangler secret put TMDB_API_KEY
+pnpm exec wrangler secret put CRON_SECRET     # gates POST /api/cron/refresh (also a manual trigger)
 pnpm exec wrangler secret put RESEND_API_KEY
 pnpm exec wrangler secret put VAPID_PUBLIC_KEY
 pnpm exec wrangler secret put VAPID_PRIVATE_KEY
 ```
 
 Also set `EMAIL_FROM` to a **Resend-verified** sender (e.g. `Marquee <noreply@yourdomain.com>`) — as a plaintext `var` or a secret. Sending fails (Resend 403) from an unverified domain.
-
-### Refresh cron Worker
-
-The nightly media refresh (`src/cron`) is a **separate Worker** sharing the same D1, because `adapter-cloudflare` emits a fetch-only worker with no room for a `scheduled` handler. Deploy it and set its own TMDB secret once:
-
-```sh
-pnpm exec wrangler secret put TMDB_API_KEY -c wrangler.cron.jsonc
-pnpm cron:deploy
-```
 
 ## Learn more
 

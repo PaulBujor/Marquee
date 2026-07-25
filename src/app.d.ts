@@ -9,6 +9,7 @@ declare global {
 	// Merges with the wrangler-generated `Env` — keep these `string` to match it.
 	interface Env {
 		TMDB_API_KEY: string;
+		CRON_SECRET: string;
 		RESEND_API_KEY: string;
 		VAPID_PUBLIC_KEY: string;
 		VAPID_PRIVATE_KEY: string;
