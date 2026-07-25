@@ -4,6 +4,7 @@ import {
 	availableYears,
 	continueWatching,
 	filterAndSortLibrary,
+	filterUpcoming,
 	showProgress,
 	type LibraryItem
 } from './library';
@@ -28,6 +29,7 @@ function item(over: Partial<LibraryItem> = {}): LibraryItem {
 		type: 'movie',
 		title: 'X',
 		year: 2000,
+		releaseDate: null,
 		posterPath: null,
 		genres: [],
 		inProduction: null,
@@ -182,6 +184,57 @@ describe('filterAndSortLibrary', () => {
 		expect(filterAndSortLibrary(same, { ...f, sort: 'added' }).map((i) => i.addedAt)).toEqual([
 			300, 200, 100
 		]);
+	});
+});
+
+describe('filterUpcoming', () => {
+	const today = '2026-07-25';
+
+	it('merges future episodes of watching shows with future releases of want-to-watch movies, date-sorted', () => {
+		const items = [
+			item({
+				mediaId: 'show',
+				type: 'show',
+				status: 'watching',
+				title: 'Show',
+				episodes: [
+					{ season: 1, episode: 1, airDate: '2026-01-01' }, // past → excluded
+					{ season: 2, episode: 5, airDate: '2026-08-09' },
+					{ season: 2, episode: 4, airDate: '2026-07-28' },
+					{ season: 0, episode: 1, airDate: '2026-08-01' } // Special → excluded
+				]
+			}),
+			item({
+				mediaId: 'movie',
+				type: 'movie',
+				status: 'want_to_watch',
+				title: 'Movie',
+				releaseDate: '2026-08-02'
+			})
+		];
+		expect(filterUpcoming(items, today).map((e) => [e.date, e.kind, e.title])).toEqual([
+			['2026-07-28', 'episode', 'Show'],
+			['2026-08-02', 'release', 'Movie'],
+			['2026-08-09', 'episode', 'Show']
+		]);
+	});
+
+	it('excludes non-watching shows and non-want-to-watch movies', () => {
+		const items = [
+			item({
+				mediaId: 's',
+				type: 'show',
+				status: 'want_to_watch', // want-to-watch show → excluded (shows must be watching)
+				episodes: [{ season: 1, episode: 1, airDate: '2999-01-01' }]
+			}),
+			item({
+				mediaId: 'm',
+				type: 'movie',
+				status: 'completed', // completed movie → excluded
+				releaseDate: '2999-01-01'
+			})
+		];
+		expect(filterUpcoming(items, today)).toEqual([]);
 	});
 });
 

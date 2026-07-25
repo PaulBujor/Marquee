@@ -25,6 +25,8 @@ export interface LibraryItem {
 	type: 'movie' | 'show';
 	title: string;
 	year: number | null;
+	/** `YYYY-MM-DD` release date (movies only), or null — feeds the upcoming timeline. */
+	releaseDate: string | null;
 	posterPath: string | null;
 	genres: string[];
 	/** TMDB `in_production` — still-airing signal for completion; null for movies. */
@@ -64,6 +66,64 @@ export function showProgress(item: LibraryItem, today: string = todayIso()): Sho
 		fraction: watched / aired.length,
 		next: nextEpisode(item.episodes, item.watched, today)
 	};
+}
+
+/** A single dated entry on the upcoming timeline — a future episode of a show, or a movie release. */
+export interface UpcomingEntry {
+	/** `YYYY-MM-DD` air/release date, strictly in the future. */
+	date: string;
+	mediaId: string;
+	externalId: string | null;
+	type: 'movie' | 'show';
+	title: string;
+	posterPath: string | null;
+	kind: 'episode' | 'release';
+	/** Set for `kind: 'episode'`. */
+	season?: number;
+	episode?: number;
+}
+
+/**
+ * The upcoming-releases agenda (MRQ-65): future episodes of shows you're **watching**, merged with
+ * release dates of **want-to-watch** movies, sorted ascending by date. Excludes Specials (season 0)
+ * and anything already aired/released (date must be strictly after `today`). Other statuses
+ * (completed / did-not-finish, and want-to-watch shows) don't contribute.
+ */
+export function filterUpcoming(items: LibraryItem[], today: string = todayIso()): UpcomingEntry[] {
+	const out: UpcomingEntry[] = [];
+	for (const item of items) {
+		if (item.type === 'show') {
+			if (item.status !== 'watching') continue;
+			for (const ep of item.episodes) {
+				if (ep.season === 0 || ep.airDate === null || ep.airDate <= today) continue;
+				out.push({
+					date: ep.airDate,
+					mediaId: item.mediaId,
+					externalId: item.externalId,
+					type: 'show',
+					title: item.title,
+					posterPath: item.posterPath,
+					kind: 'episode',
+					season: ep.season,
+					episode: ep.episode
+				});
+			}
+		} else {
+			if (item.status !== 'want_to_watch') continue;
+			if (item.releaseDate === null || item.releaseDate <= today) continue;
+			out.push({
+				date: item.releaseDate,
+				mediaId: item.mediaId,
+				externalId: item.externalId,
+				type: 'movie',
+				title: item.title,
+				posterPath: item.posterPath,
+				kind: 'release'
+			});
+		}
+	}
+	// Lexicographic sort is correct for zero-padded `YYYY-MM-DD`.
+	return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
 /** In-progress shows (status watching, a next episode remaining) — the dashboard row. */
