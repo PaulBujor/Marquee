@@ -65,9 +65,9 @@
 		tracking.load();
 	});
 
-	let detailsOpen = $state(true);
-	// Guards the one-time collapse default below to once per title (a later manual toggle sticks).
-	let detailsSettledFor = $state<string | null>(null);
+	// Details (overview/cast/trailer) start collapsed so the episode list / similar row are close;
+	// the user expands on demand. Reset per title in afterNavigate.
+	let detailsOpen = $state(false);
 	let similarOpen = $state(true);
 	// Click-to-load keeps the YouTube embed (and its CSP surface) off the page until played.
 	let showTrailer = $state(false);
@@ -109,15 +109,6 @@
 		return () => io.disconnect();
 	});
 
-	// Collapse the Details section (overview/cast/trailer) by default while a show is in progress, so
-	// the episode list is one tap away instead of a scroll away (MRQ-52). Runs once per title after
-	// tracking loads; a manual toggle afterwards sticks. Movies and non-watching shows stay expanded.
-	$effect(() => {
-		if (!tracking.ready || detailsSettledFor === mediaId) return;
-		detailsSettledFor = mediaId;
-		detailsOpen = !(tracking.view.tracked && tracking.view.status === 'watching');
-	});
-
 	// Pre-select the season of the next watchable episode once watch state loads (season 1 when
 	// caught up). Runs after the SSR seed / nav reset; `preselectedFor` keeps it to once per title.
 	$effect(() => {
@@ -136,7 +127,7 @@
 		showTrailer = false;
 		titleInView = true;
 		preselectedFor = null;
-		detailsSettledFor = null;
+		detailsOpen = false;
 		selectedSeason = data.season?.seasonNumber ?? null;
 		seasonCache = data.season ? { [data.season.seasonNumber]: data.season } : {};
 		seasonLoading = false;
@@ -398,6 +389,40 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			{/if}
 		</div>
 
+		<!-- Similar titles: TMDB recommendations + similar merged, deduped (MRQ-124). Collapsible,
+		display-only (untracked) — plain posterUrl, no offline blob cache. -->
+		{#if detail.similar.length > 0}
+			<section class="flex flex-col gap-3">
+				<button
+					type="button"
+					onclick={() => (similarOpen = !similarOpen)}
+					aria-expanded={similarOpen}
+					class="flex items-center gap-1.5 self-start text-xs font-bold tracking-widest text-muted-foreground uppercase"
+				>
+					<ChevronDownIcon
+						class="size-3.5 transition-transform duration-150 {similarOpen ? '' : '-rotate-90'}"
+					/>
+					Similar
+				</button>
+				{#if similarOpen}
+					<ul class="no-scrollbar flex gap-3 overflow-x-auto pb-1" transition:slide={{ duration: 200 }}>
+						{#each detail.similar as item (item.tmdbId)}
+							<li class="w-24 shrink-0">
+								<a
+									href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
+									class="block"
+								>
+									<PosterTile type={item.type} posterUrl={posterUrl(item.posterPath)} alt={item.title} />
+									<div class="mt-1.5 truncate text-xs font-medium">{item.title}</div>
+									{#if item.year}<div class="text-[0.7rem] text-muted-foreground">{item.year}</div>{/if}
+								</a>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		{/if}
+
 		<!-- Seasons + episodes (shows only) -->
 		{#if detail.type === 'show' && detail.seasons.length > 0}
 			<section class="flex flex-col gap-3">
@@ -529,40 +554,6 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 					{:else}
 						<p class="py-2 text-sm text-muted-foreground">No episodes listed for this season.</p>
 					{/if}
-				{/if}
-			</section>
-		{/if}
-
-		<!-- Similar titles: TMDB recommendations + similar merged, deduped (MRQ-124). Collapsible,
-		display-only (untracked) — plain posterUrl, no offline blob cache. -->
-		{#if detail.similar.length > 0}
-			<section class="flex flex-col gap-3">
-				<button
-					type="button"
-					onclick={() => (similarOpen = !similarOpen)}
-					aria-expanded={similarOpen}
-					class="flex items-center gap-1.5 self-start text-xs font-bold tracking-widest text-muted-foreground uppercase"
-				>
-					<ChevronDownIcon
-						class="size-3.5 transition-transform duration-150 {similarOpen ? '' : '-rotate-90'}"
-					/>
-					Similar
-				</button>
-				{#if similarOpen}
-					<ul class="no-scrollbar flex gap-3 overflow-x-auto pb-1" transition:slide={{ duration: 200 }}>
-						{#each detail.similar as item (item.tmdbId)}
-							<li class="w-24 shrink-0">
-								<a
-									href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
-									class="block"
-								>
-									<PosterTile type={item.type} posterUrl={posterUrl(item.posterPath)} alt={item.title} />
-									<div class="mt-1.5 truncate text-xs font-medium">{item.title}</div>
-									{#if item.year}<div class="text-[0.7rem] text-muted-foreground">{item.year}</div>{/if}
-								</a>
-							</li>
-						{/each}
-					</ul>
 				{/if}
 			</section>
 		{/if}
