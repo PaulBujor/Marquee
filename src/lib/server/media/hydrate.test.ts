@@ -130,8 +130,18 @@ describe('needsRefresh', () => {
 	it('always refreshes a pre-relational row (refreshedAt 0)', () => {
 		expect(needsRefresh({ ...base, refreshedAt: 0 } as never, T0)).toBe(true);
 	});
-	it('never refreshes a movie once hydrated', () => {
-		expect(needsRefresh({ type: 'movie', refreshedAt: T0 } as never, T0 + 5e9)).toBe(false);
+	it('never refreshes a released movie', () => {
+		const released = { type: 'movie' as const, releaseDate: '2020-01-01', refreshedAt: T0 };
+		expect(needsRefresh(released as never, T0 + 5e9)).toBe(false);
+	});
+	it('refreshes an unreleased movie only past the TTL (MRQ-128)', () => {
+		const future = { type: 'movie' as const, releaseDate: '2030-01-01', refreshedAt: T0 };
+		expect(needsRefresh(future as never, T0 + 1000)).toBe(false);
+		expect(needsRefresh(future as never, T0 + 13 * 3600_000)).toBe(true);
+	});
+	it('treats an undated movie as unreleased (refreshes past the TTL)', () => {
+		const undated = { type: 'movie' as const, releaseDate: null, refreshedAt: T0 };
+		expect(needsRefresh(undated as never, T0 + 13 * 3600_000)).toBe(true);
 	});
 	it('refreshes an airing show only past the TTL', () => {
 		expect(needsRefresh({ ...base, refreshedAt: T0 } as never, T0 + 1000)).toBe(false);

@@ -18,7 +18,7 @@ import type { MediaDetail, SeasonDetail, TmdbClient } from '$lib/server/tmdb';
 type Db = ReturnType<typeof createDb>;
 type TmdbHydrator = Pick<TmdbClient, 'getDetails' | 'getSeason'>;
 
-/** How long a still-airing show's cache is trusted before a re-pull (12h). */
+/** How long an unsettled title's cache (airing show / unreleased movie) is trusted before a re-pull (12h). */
 export const AIRING_TTL_MS = 12 * 60 * 60 * 1000;
 
 /**
@@ -56,16 +56,28 @@ export function parseTmdbExternalId(externalId: string): ParsedTmdbExternalId | 
 }
 
 /**
+ * Whether a movie hasn't released yet, so it should keep refreshing (release date + metadata can
+ * still change). TMDB gives a full date or nothing; a missing/uncertain date is treated as end of
+ * the current year — a concrete horizon to refresh toward (MRQ-128). A movie whose date is in the
+ * past has released and never refreshes again.
+ */
+function movieUnreleased(releaseDate: string | null, now: number): boolean {
+	const today = new Date(now).toISOString().slice(0, 10);
+	const horizon = releaseDate ?? `${new Date(now).getUTCFullYear()}-12-31`;
+	return horizon >= today;
+}
+
+/**
  * Whether a stored row should be re-pulled from TMDB. A `refreshed_at` of 0 marks a row that
  * predates the relational model (migration backfill) — always refresh it once to populate
- * seasons/episodes. Otherwise movies + finished shows never change; only airing shows refresh,
- * and only past the TTL.
+ * seasons/episodes. Otherwise, past the TTL: airing shows refresh, and **unreleased movies** refresh
+ * (MRQ-128); released movies and finished shows never change, so they don't.
  */
 export function needsRefresh(row: Media, now: number): boolean {
 	if (row.refreshedAt === 0) return true;
-	if (row.type !== 'show') return false;
-	const airing = row.inProduction === true || AIRING_STATUSES.has(row.status ?? '');
-	return airing && now - row.refreshedAt > AIRING_TTL_MS;
+	if (now - row.refreshedAt <= AIRING_TTL_MS) return false;
+	if (row.type === 'movie') return movieUnreleased(row.releaseDate, now);
+	return row.inProduction === true || AIRING_STATUSES.has(row.status ?? '');
 }
 
 /** Stable signature of the episode set (coords + air dates) to detect content changes. */
