@@ -169,9 +169,8 @@ export async function refreshMedia(
 	// A transient TMDB miss shouldn't wipe an existing row — keep what we have.
 	if (!detail) return existing;
 
-	// Fetch every season's episodes (incl. Specials) so per-episode air dates persist. A fetch
-	// failure must not be swallowed — otherwise the show persists with zero episodes; rethrow so the
-	// caller keeps the row stale and retries.
+	// Fetch every season's episodes (incl. Specials) for their air dates. Don't swallow a failure —
+	// otherwise the show persists with zero episodes; rethrow so the row stays stale and retries.
 	const seasonDetails: SeasonDetail[] =
 		detail.type === 'show'
 			? await Promise.all(

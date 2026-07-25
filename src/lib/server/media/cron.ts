@@ -19,9 +19,9 @@ export interface RefreshResult {
 }
 
 /**
- * Refresh all provider-backed, in-production shows. Per-show failures are isolated (counted +
- * logged, the sweep continues) so one bad title can't abort the run. `force` bypasses the per-row
- * TTL (for a manual re-hydrate); `now` is injectable for tests.
+ * Refresh all provider-backed, in-production shows. Per-show failures are isolated so one bad title
+ * can't abort the run. `force` bypasses the per-row TTL (for a manual re-hydrate); `now` is
+ * injectable for tests.
  */
 export async function refreshInProductionShows(
 	db: Db,
