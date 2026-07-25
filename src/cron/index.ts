@@ -1,14 +1,13 @@
 /**
- * Standalone Cloudflare Worker for the nightly media-refresh cron (MRQ-39). It shares the app's
- * server library (`src/lib/server/*`) but is deployed separately via `wrangler.cron.jsonc`, because
- * `@sveltejs/adapter-cloudflare` emits a fetch-only worker and rewrites it on every build — there's
- * no slot for a `scheduled` handler in the app worker. Bound to the same D1 (`DB`) as the app.
+ * Standalone Cloudflare Worker for the nightly media-refresh cron. Deployed separately via
+ * `wrangler.cron.jsonc` because `@sveltejs/adapter-cloudflare` emits a fetch-only worker and
+ * rewrites it on every build — there's no slot for a `scheduled` handler in the app worker. Shares
+ * `src/lib/server/*` and binds the same D1 (`DB`) as the app.
  */
 import { createDb } from '$lib/server/db';
 import { createTmdbClient } from '$lib/server/tmdb';
 import { refreshStaleShows } from '$lib/server/media/cron';
 
-/** Bindings this Worker reads — the shared D1 + the TMDB key (set via `wrangler secret put`). */
 interface CronEnv {
 	DB: D1Database;
 	TMDB_API_KEY: string;

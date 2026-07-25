@@ -1,9 +1,8 @@
 /**
- * Nightly refresh sweep (MRQ-39): re-pull every in-production show from TMDB so cached seasons /
- * episodes / air dates stay current without a user opening the title. Runs from the standalone cron
- * Worker (`src/cron/index.ts`). Each show goes through the shared {@link refreshMedia}, which is
- * TTL-aware (a show refreshed recently by a user request is skipped) and bumps `version` only when
- * content changed — so clients pick up exactly the shows that moved on their next media sync.
+ * Nightly refresh sweep: re-pull every in-production show from TMDB so cached seasons/episodes/air
+ * dates stay current without a user opening the title. Each show goes through the shared
+ * {@link refreshMedia}, which skips titles refreshed recently and bumps `version` only when content
+ * changed. Runs from the standalone cron Worker (`src/cron/index.ts`).
  */
 import { and, eq } from 'drizzle-orm';
 import { media } from '$lib/server/db/schema';
@@ -14,9 +13,7 @@ import { refreshMedia } from './hydrate';
 type Db = ReturnType<typeof createDb>;
 
 export interface RefreshSweepResult {
-	/** In-production shows considered. */
 	scanned: number;
-	/** Shows whose refresh completed (fetched or served fresh-from-cache within TTL). */
 	refreshed: number;
 	/** Shows whose content changed (version bumped) this sweep. */
 	changed: number;
