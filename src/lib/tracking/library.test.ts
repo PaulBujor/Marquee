@@ -260,9 +260,18 @@ describe('groupUpcomingByYear', () => {
 			entry('2027-01-01', 'E')
 		];
 		expect(
-			groupUpcomingByYear(entries).map((y) => [y.year, y.days.map(([d, es]) => [d, es.map((e) => e.title)])])
+			groupUpcomingByYear(entries).map((y) => [
+				y.year,
+				y.days.map(([d, es]) => [d, es.map((e) => e.title)])
+			])
 		).toEqual([
-			['2026', [['2026-07-28', ['A', 'B']], ['2026-12-31', ['C']]]],
+			[
+				'2026',
+				[
+					['2026-07-28', ['A', 'B']],
+					['2026-12-31', ['C']]
+				]
+			],
 			['2027', [['2027-01-01', ['D', 'E']]]]
 		]);
 	});
