@@ -4,7 +4,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { flip } from 'svelte/animate';
-	import { slide } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { buttonVariants } from '$lib/components/ui/button';
@@ -317,6 +317,8 @@
 		<!-- Poster grid -->
 		{#if list.length > 0}
 			<div class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5">
+				<!-- flip reflows the survivors; fade eases items in/out when a sync adds/removes titles or
+				a status change moves one out of this list (local transition → no flash on first render). -->
 				{#each list as item (item.mediaId)}
 					<a
 						href={resolve('/title/[type]/[id]', {
@@ -325,6 +327,7 @@
 						})}
 						class="block"
 						animate:flip={{ duration: motionMs }}
+						transition:fade={{ duration: motionMs }}
 					>
 						<PosterTile
 							type={item.type}
