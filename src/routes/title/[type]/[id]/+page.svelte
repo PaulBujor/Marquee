@@ -133,6 +133,29 @@
 		return () => io.disconnect();
 	});
 
+	// Shrink the hero title's font until the full name fits in at most two lines, so a long title
+	// stays in place over the hero instead of wrapping up into the artwork. Re-runs when the title
+	// changes and on viewport resize; floors at 15px (then it may wrap, but that's the rare extreme).
+	const MIN_TITLE_PX = 15;
+	$effect(() => {
+		const el = titleEl;
+		void detail.title; // re-fit on navigation to another title
+		if (!el || typeof window === 'undefined') return;
+		const lineCount = () =>
+			Math.round(el.scrollHeight / parseFloat(getComputedStyle(el).lineHeight));
+		const fit = () => {
+			el.style.fontSize = ''; // back to the class base before measuring
+			let px = parseFloat(getComputedStyle(el).fontSize);
+			while (lineCount() > 2 && px > MIN_TITLE_PX) {
+				px -= 1;
+				el.style.fontSize = `${px}px`;
+			}
+		};
+		fit();
+		window.addEventListener('resize', fit);
+		return () => window.removeEventListener('resize', fit);
+	});
+
 	// Pre-select the season of the next watchable episode once watch state loads (season 1 when
 	// caught up). Runs after the SSR seed / nav reset; `preselectedFor` keeps it to once per title.
 	$effect(() => {
@@ -258,13 +281,12 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 
 	<div
 		class="flex flex-col gap-4 px-5 pb-10 {detail.backdropPath
-			? ''
+			? '-mt-14'
 			: 'pt-[calc(3.5rem+env(safe-area-inset-top))]'}"
 	>
-		<!-- Only the poster overlaps up into the backdrop; the title/badges stay below the hero so a
-		long, multi-line title can't ride up over the artwork (it grows downward from the hero edge). -->
+		<!-- Poster overlaps the bottom of the backdrop; title/badges sit alongside it. -->
 		<div class="flex items-end gap-4">
-			<div class="w-24 shrink-0 {detail.backdropPath ? '-mt-14' : ''}">
+			<div class="w-24 shrink-0">
 				<PosterTile
 					type={detail.type}
 					posterUrl={posterUrl(detail.posterPath)}
@@ -273,9 +295,11 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				/>
 			</div>
 			<div class="flex min-w-0 flex-1 flex-col gap-2 pb-1">
+				<!-- Scaled down to fit ~two lines in place (see the fit effect), so a long title stays
+				put instead of growing up into the hero artwork. -->
 				<h1
 					bind:this={titleEl}
-					class="font-serif text-2xl font-semibold text-balance break-words hyphens-auto"
+					class="font-serif text-2xl leading-tight font-semibold text-balance break-words"
 				>
 					{detail.title}
 				</h1>
