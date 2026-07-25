@@ -7,7 +7,7 @@
 		class: className,
 		children,
 		...restProps
-	}: WithElementRef<HTMLOptionAttributes, HTMLOptionElement> = $props();
+	}: WithElementRef<HTMLOptionAttributes> = $props();
 </script>
 
 <option

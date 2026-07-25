@@ -6,7 +6,7 @@
 		ref = $bindable(null),
 		children,
 		...restProps
-	}: WithElementRef<HTMLOptgroupAttributes, HTMLOptGroupElement> = $props();
+	}: WithElementRef<HTMLOptgroupAttributes> = $props();
 </script>
 
 <optgroup bind:this={ref} data-slot="native-select-opt-group" {...restProps}>
