@@ -258,12 +258,13 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 
 	<div
 		class="flex flex-col gap-4 px-5 pb-10 {detail.backdropPath
-			? '-mt-14'
+			? ''
 			: 'pt-[calc(3.5rem+env(safe-area-inset-top))]'}"
 	>
-		<!-- Poster overlaps the bottom of the backdrop; title/badges sit below the hero -->
+		<!-- Only the poster overlaps up into the backdrop; the title/badges stay below the hero so a
+		long, multi-line title can't ride up over the artwork (it grows downward from the hero edge). -->
 		<div class="flex items-end gap-4">
-			<div class="w-24 shrink-0">
+			<div class="w-24 shrink-0 {detail.backdropPath ? '-mt-14' : ''}">
 				<PosterTile
 					type={detail.type}
 					posterUrl={posterUrl(detail.posterPath)}
@@ -272,7 +273,12 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				/>
 			</div>
 			<div class="flex min-w-0 flex-1 flex-col gap-2 pb-1">
-				<h1 bind:this={titleEl} class="font-serif text-2xl font-semibold">{detail.title}</h1>
+				<h1
+					bind:this={titleEl}
+					class="font-serif text-2xl font-semibold text-balance break-words hyphens-auto"
+				>
+					{detail.title}
+				</h1>
 				<div class="flex flex-wrap items-center gap-2">
 					<MediaBadge>
 						{detail.type === 'movie' ? 'Movie' : 'Show'}{detail.year ? ` · ${detail.year}` : ''}
