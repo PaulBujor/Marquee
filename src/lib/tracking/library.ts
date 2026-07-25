@@ -128,6 +128,36 @@ export function filterUpcoming(items: LibraryItem[], today: string = todayIso())
 	return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
+/** A year on the upcoming timeline: its label and the per-day runs of entries falling in it. */
+export interface UpcomingYear {
+	/** Four-digit year, e.g. `"2026"`. */
+	year: string;
+	/** `[date, entries]` runs within the year, ascending by date. */
+	days: [string, UpcomingEntry[]][];
+}
+
+/**
+ * Group date-sorted upcoming entries into years, each holding its per-day runs (MRQ-131). The flat
+ * agenda only renders day + month, so the timeline needs a year divider to tell which year a release
+ * falls in. Input must be ascending by `date` (as {@link filterUpcoming} returns), so equal dates and
+ * equal years are contiguous — a single linear pass preserves order with no Map.
+ */
+export function groupUpcomingByYear(entries: UpcomingEntry[]): UpcomingYear[] {
+	const years: UpcomingYear[] = [];
+	for (const e of entries) {
+		const year = e.date.slice(0, 4);
+		let group = years[years.length - 1];
+		if (!group || group.year !== year) {
+			group = { year, days: [] };
+			years.push(group);
+		}
+		const lastDay = group.days[group.days.length - 1];
+		if (lastDay && lastDay[0] === e.date) lastDay[1].push(e);
+		else group.days.push([e.date, [e]]);
+	}
+	return years;
+}
+
 /** In-progress shows (status watching, a next episode remaining) — the dashboard row. */
 export function continueWatching(items: LibraryItem[]): LibraryItem[] {
 	return items.filter((i) => {
