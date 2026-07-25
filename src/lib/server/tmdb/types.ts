@@ -69,9 +69,19 @@ export interface TmdbCastMember {
 	order?: number;
 }
 
-/** The appended `credits` object (only `cast` is consumed). */
+/** A crew member from the appended `credits` — `job` (e.g. Director) + `department` (e.g. Directing). */
+export interface TmdbCrewMember {
+	id: number;
+	name: string;
+	job?: string;
+	department?: string;
+	profile_path?: string | null;
+}
+
+/** The appended `credits` object. */
 export interface TmdbCredits {
 	cast?: TmdbCastMember[];
+	crew?: TmdbCrewMember[];
 }
 
 /** A video from the appended `videos` (trailers, teasers, clips…). */
@@ -140,6 +150,8 @@ export interface TmdbTvDetailsResponse {
 	/** One of TMDB's TV statuses: `Returning Series`, `Planned`, `In Production`, `Ended`, `Canceled`, `Pilot`. */
 	status?: string;
 	in_production?: boolean;
+	/** Series creators — the show equivalent of a film's director/writer (per-episode crew isn't fetched). */
+	created_by?: { id: number; name: string }[];
 }
 
 /** A season summary from a `/tv/{id}` response (TMDB includes season 0 = "Specials"). */
@@ -200,6 +212,14 @@ export interface MediaDetail {
 	runtime: number | null;
 	genres: string[];
 	cast: CastMember[];
+	/** The director (movies only), or null when unknown / for shows. */
+	director: string | null;
+	/** Writers (movies) — Writer / Screenplay / Story, deduped. Empty for shows. */
+	writers: string[];
+	/** Producers (Producer / Executive Producer), deduped. */
+	producers: string[];
+	/** Series creators (shows only), from TMDB `created_by`. Empty for movies. */
+	creators: string[];
 	trailer: MediaTrailer | null;
 	/** `YYYY-MM-DD`. Movies only. */
 	releaseDate: string | null;

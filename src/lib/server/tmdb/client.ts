@@ -3,6 +3,7 @@ import type {
 	MediaDetail,
 	MediaSearchResult,
 	SeasonDetail,
+	TmdbCrewMember,
 	TmdbMovieDetailsResponse,
 	TmdbMultiSearchItem,
 	TmdbMultiSearchResponse,
@@ -26,6 +27,21 @@ const CAST_LIMIT = 10;
 
 /** How many "similar" titles the detail page's row shows (recommendations + similar, merged). */
 const SIMILAR_LIMIT = 20;
+
+/** How many names to keep per crew role (writers / producers / creators) — the detail page lists a few. */
+const CREW_LIMIT = 3;
+const WRITER_JOBS = new Set(['Writer', 'Screenplay', 'Story', 'Teleplay']);
+const PRODUCER_JOBS = new Set(['Producer', 'Executive Producer']);
+
+/** Unique crew names whose `job` is in `jobs`, in TMDB order, capped at {@link CREW_LIMIT}. */
+function crewByJob(crew: TmdbCrewMember[], jobs: Set<string>): string[] {
+	const names: string[] = [];
+	for (const c of crew) {
+		if (jobs.has(c.job ?? '') && !names.includes(c.name)) names.push(c.name);
+		if (names.length >= CREW_LIMIT) break;
+	}
+	return names;
+}
 
 /** Thrown when TMDB responds with a non-2xx status, so callers can map it to a clean HTTP error. */
 export class TmdbError extends Error {
@@ -122,6 +138,10 @@ function normalizeDetails(
 		(v) => v.site === 'YouTube' && v.type === 'Trailer'
 	);
 
+	// Crew: movies carry a real director/writer in `credits.crew`; shows keep per-episode crew off
+	// this response, so their nearest equivalent is the top-level `created_by` (series creators).
+	const crew = data.credits?.crew ?? [];
+
 	return {
 		tmdbId: data.id,
 		type,
@@ -142,6 +162,10 @@ function normalizeDetails(
 			character: c.character ?? '',
 			profilePath: c.profile_path ?? null
 		})),
+		director: isMovie ? (crew.find((c) => c.job === 'Director')?.name ?? null) : null,
+		writers: isMovie ? crewByJob(crew, WRITER_JOBS) : [],
+		producers: crewByJob(crew, PRODUCER_JOBS),
+		creators: isMovie ? [] : (tv.created_by ?? []).slice(0, CREW_LIMIT).map((c) => c.name),
 		trailer: trailer ? { key: trailer.key, name: trailer.name } : null,
 		releaseDate: isMovie ? (movie.release_date ?? null) : null,
 		status: isMovie ? null : (tv.status ?? null),

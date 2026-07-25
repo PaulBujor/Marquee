@@ -36,6 +36,16 @@
 	let { data }: { data: PageData } = $props();
 
 	const detail = $derived(data.detail);
+	// The full release/first-air date to spell out in the details section (movie vs show).
+	const releaseDate = $derived(detail.type === 'movie' ? detail.releaseDate : detail.firstAirDate);
+	// Format a `YYYY-MM-DD` as e.g. "16 July 2010" in UTC, so a local timezone can't shift the day.
+	const dateFmt = new Intl.DateTimeFormat(undefined, {
+		day: 'numeric',
+		month: 'long',
+		year: 'numeric',
+		timeZone: 'UTC'
+	});
+	const formatDate = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
 	// Our own media id for the tracking event pipeline (provider-agnostic, MRQ-112).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
 	// Today (YYYY-MM-DD) for the per-episode aired check — an episode is watchable once it's aired.
@@ -407,6 +417,37 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				<div class="flex flex-col gap-4" transition:slide={{ duration: 200 }}>
 					{#if detail.overview}
 						<p class="text-sm leading-relaxed">{detail.overview}</p>
+					{/if}
+
+					{#if releaseDate || detail.director || detail.creators.length || detail.writers.length || detail.producers.length}
+						<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+							{#if releaseDate}
+								<dt class="text-muted-foreground">Released</dt>
+								<dd>{formatDate(releaseDate)}</dd>
+							{/if}
+							{#if detail.director}
+								<dt class="text-muted-foreground">Director</dt>
+								<dd>{detail.director}</dd>
+							{/if}
+							{#if detail.creators.length > 0}
+								<dt class="text-muted-foreground">
+									{detail.creators.length > 1 ? 'Creators' : 'Creator'}
+								</dt>
+								<dd>{detail.creators.join(', ')}</dd>
+							{/if}
+							{#if detail.writers.length > 0}
+								<dt class="text-muted-foreground">
+									{detail.writers.length > 1 ? 'Writers' : 'Writer'}
+								</dt>
+								<dd>{detail.writers.join(', ')}</dd>
+							{/if}
+							{#if detail.producers.length > 0}
+								<dt class="text-muted-foreground">
+									{detail.producers.length > 1 ? 'Producers' : 'Producer'}
+								</dt>
+								<dd>{detail.producers.join(', ')}</dd>
+							{/if}
+						</dl>
 					{/if}
 
 					{#if detail.cast.length > 0}
