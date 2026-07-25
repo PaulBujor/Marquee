@@ -226,6 +226,15 @@
 		goto(origin);
 	}
 
+	function popToOrigin() {
+		// Pop back through the entries the chain pushed — the initial title entry plus one per hop —
+		// so the origin is reached by rewinding history, not by pushing a fresh entry on top. When the
+		// back stack isn't there (e.g. a deep-linked chain URL) fall back to navigating to the origin.
+		const steps = hops + 1;
+		if (steps < history.length) history.go(-steps);
+		else goToOrigin();
+	}
+
 	function goBack() {
 		if (cameFromApp) history.back();
 		else goToOrigin();
@@ -298,9 +307,9 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			<ChevronLeftIcon class="size-4" />
 		</Button>
 		{#if showBackToOrigin}
-			<!-- A few suggestions deep: jump straight back to where the chain started (home / search). -->
+			<!-- A few suggestions deep: rewind straight back to where the chain started (home / search). -->
 			<Button
-				onclick={goToOrigin}
+				onclick={popToOrigin}
 				variant="outline"
 				size="icon"
 				shape="round"
