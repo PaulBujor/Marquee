@@ -61,12 +61,16 @@ describe('withRetry', () => {
 			if (++n < 3) throw Object.assign(new Error('429'), { retryAfterMs: 5000 });
 			return n;
 		});
-		const sleep = vi.fn(noSleep);
+		const slept: number[] = [];
+		const sleep = (ms: number) => {
+			slept.push(ms);
+			return Promise.resolve();
+		};
 		const retryDelay = (err: unknown, computed: number) =>
 			(err as { retryAfterMs?: number }).retryAfterMs ?? computed;
 		await withRetry(fn, { maxAttempts: 5, baseMs: 100, retryDelay }, sleep);
 		// Both retries slept the error-supplied 5000ms, not the 100/200ms exponential backoff.
-		expect(sleep.mock.calls.map((c) => c[0])).toEqual([5000, 5000]);
+		expect(slept).toEqual([5000, 5000]);
 	});
 });
 
