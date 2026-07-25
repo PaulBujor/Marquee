@@ -4,6 +4,8 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { flip } from 'svelte/animate';
+	import { fade, slide } from 'svelte/transition';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
@@ -140,16 +142,10 @@
 		}, 650);
 	}
 
-	// When a caught-up show leaves Continue Watching, fade it out and collapse its width at the
-	// same time (opacity eased a touch faster so it reads as a fade, not just a shrink); the
-	// remaining cards (animate:flip) slide into place concurrently. `t` runs 1→0 on exit.
-	function collapse(node: HTMLElement, { duration = 380 } = {}) {
-		const width = node.offsetWidth;
-		return {
-			duration,
-			css: (t: number) => `opacity:${t * t};width:${t * width}px;overflow:hidden`
-		};
-	}
+	// Honour the OS "reduce motion" setting: durations collapse to 0 (instant, no jank) when set.
+	// This is the app's first reduced-motion guard, so it also covers the pre-existing card motion.
+	const reduced = $derived(prefersReducedMotion.current);
+	const motionMs = $derived(reduced ? 0 : 300);
 </script>
 
 <svelte:head><title>Marquee</title></svelte:head>
@@ -158,14 +154,20 @@
 	<main class="mx-auto w-full max-w-3xl px-5 pt-2 pb-16">
 		<!-- Continue watching — in-progress shows only (movies have no next episode) -->
 		{#if inProgress.length > 0}
-			<section class="mb-6">
+			<!-- Slide the whole section (heading + row) so the rest of the page eases up when the last
+			in-progress show is marked, instead of the block popping out. -->
+			<section class="mb-6" transition:slide={{ duration: motionMs }}>
 				<h2 class="mb-2.5 text-xs font-bold tracking-widest text-muted-foreground uppercase">
 					Continue Watching
 				</h2>
 				<div class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
 					{#each inProgress as item (item.mediaId)}
 						{@const progress = showProgress(item)}
-						<div class="w-28 shrink-0" animate:flip={{ duration: 320 }} transition:collapse>
+						<div
+							class="w-28 shrink-0"
+							animate:flip={{ duration: reduced ? 0 : 320 }}
+							transition:fade={{ duration: motionMs }}
+						>
 							{#if progress?.next}
 								<div class="relative">
 									<a
@@ -304,6 +306,8 @@
 		<!-- Poster grid -->
 		{#if list.length > 0}
 			<div class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5">
+				<!-- flip reflows the survivors; fade eases items in/out when a sync adds/removes titles or
+				a status change moves one out of this list (local transition → no flash on first render). -->
 				{#each list as item (item.mediaId)}
 					<a
 						href={resolve('/title/[type]/[id]', {
@@ -311,6 +315,8 @@
 							id: item.externalId?.split('/')[1] ?? ''
 						})}
 						class="block"
+						animate:flip={{ duration: motionMs }}
+						transition:fade={{ duration: motionMs }}
 					>
 						<PosterTile
 							type={item.type}
