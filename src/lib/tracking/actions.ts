@@ -39,10 +39,12 @@ export function nextFavorite(view: TrackingView): boolean {
 	return !(view.tracked && view.favorite);
 }
 
-/** Minimal season shape these helpers read — a season number and how many episodes it has. */
-export interface SeasonCounts {
-	seasonNumber: number;
-	episodeCount: number;
+/** An episode coordinate with its air date — the input to the watchability helpers below. */
+export interface DatedEpisode {
+	season: number;
+	episode: number;
+	/** `YYYY-MM-DD`, or null. */
+	airDate: string | null;
 }
 
 /**
@@ -62,67 +64,72 @@ export function watchedKey(season: number, episode: number): string {
 	return `${season}:${episode}`;
 }
 
-/** The episode coordinates of a single season, `1..episodeCount`. */
-export function seasonEpisodes(season: SeasonCounts): EpisodeCoord[] {
-	return Array.from({ length: season.episodeCount }, (_, i) => ({
-		season: season.seasonNumber,
-		episode: i + 1
-	}));
+/** Today's date as `YYYY-MM-DD` (UTC). Air dates are date-only, so compared lexicographically. */
+export function todayIso(now: number = Date.now()): string {
+	return new Date(now).toISOString().slice(0, 10);
 }
 
 /**
- * Every episode of a show, in order, **excluding Specials** (season 0 — not part of the
- * main progression). Used to seed a "mark whole series watched" bulk action.
+ * Whether an episode has aired as of `today` (`YYYY-MM-DD`). A **null air date means unannounced /
+ * not yet aired** — so it isn't watchable (and belongs on the upcoming calendar, not the past).
  */
-export function allEpisodes(seasons: SeasonCounts[]): EpisodeCoord[] {
-	return seasons
-		.filter((s) => !isSpecialsSeason(s.seasonNumber))
-		.sort((a, b) => a.seasonNumber - b.seasonNumber)
-		.flatMap(seasonEpisodes);
+export function isAired(ep: { airDate: string | null }, today: string): boolean {
+	return ep.airDate !== null && ep.airDate <= today;
 }
 
-/** Whether an episode has aired, given the show's aired frontier. A null frontier ⇒ no cap. */
-export function isAired(coord: EpisodeCoord, lastAired: EpisodeCoord | null): boolean {
-	if (!lastAired) return true;
-	return (
-		coord.season < lastAired.season ||
-		(coord.season === lastAired.season && coord.episode <= lastAired.episode)
-	);
+/** A show's episodes **excluding Specials** (season 0), sorted by (season, episode). */
+export function mainEpisodes(episodes: DatedEpisode[]): DatedEpisode[] {
+	return episodes
+		.filter((e) => !isSpecialsSeason(e.season))
+		.sort((a, b) => a.season - b.season || a.episode - b.episode);
 }
 
-/** Episodes that have aired — {@link allEpisodes} capped at the aired frontier `lastAired`. */
-export function airedEpisodes(
-	seasons: SeasonCounts[],
-	lastAired: EpisodeCoord | null
-): EpisodeCoord[] {
-	return allEpisodes(seasons).filter((c) => isAired(c, lastAired));
+/** Episodes that have aired as of `today` (excluding Specials), in order. */
+export function airedEpisodes(episodes: DatedEpisode[], today: string): DatedEpisode[] {
+	return mainEpisodes(episodes).filter((e) => isAired(e, today));
 }
 
 /**
  * The next episode to watch: the first aired episode (by season then episode) not in `watched`,
- * skipping Specials. Returns null when every aired episode is watched. `lastAired` caps it to
- * aired episodes so a caught-up show has no "next" (default null = no cap).
+ * skipping Specials. Returns null when every aired episode is watched.
  */
 export function nextEpisode(
-	seasons: SeasonCounts[],
+	episodes: DatedEpisode[],
 	watched: Set<string>,
-	lastAired: EpisodeCoord | null = null
+	today: string
 ): EpisodeCoord | null {
-	for (const coord of airedEpisodes(seasons, lastAired)) {
-		if (!watched.has(watchedKey(coord.season, coord.episode))) return coord;
+	for (const e of airedEpisodes(episodes, today)) {
+		if (!watched.has(watchedKey(e.season, e.episode)))
+			return { season: e.season, episode: e.episode };
 	}
 	return null;
 }
 
 /** Whether every **aired** episode of a season is watched (false when it has no aired episodes). */
 export function isSeasonFullyWatched(
-	season: SeasonCounts,
+	episodes: DatedEpisode[],
+	seasonNumber: number,
 	watched: Set<string>,
-	lastAired: EpisodeCoord | null = null
+	today: string
 ): boolean {
-	const aired = seasonEpisodes(season).filter((c) => isAired(c, lastAired));
+	const aired = episodes.filter((e) => e.season === seasonNumber && isAired(e, today));
 	if (aired.length === 0) return false;
-	return aired.every((c) => watched.has(watchedKey(c.season, c.episode)));
+	return aired.every((e) => watched.has(watchedKey(e.season, e.episode)));
+}
+
+/**
+ * Whether a show may still gain episodes — it's in production, or has announced episodes not yet
+ * aired. Keeps a caught-up-but-unfinished show in `watching` instead of auto-completing it.
+ */
+export function isStillAiring(
+	episodes: DatedEpisode[],
+	inProduction: boolean | null,
+	today: string
+): boolean {
+	if (inProduction) return true;
+	return episodes.some(
+		(e) => !isSpecialsSeason(e.season) && (e.airDate === null || e.airDate > today)
+	);
 }
 
 /**

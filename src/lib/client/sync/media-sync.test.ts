@@ -1,16 +1,14 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { createEvent, mediaId, type MediaRecord } from '$lib/sync/events';
+import { mediaId, type MediaRecord } from '$lib/sync/events';
 import { setActiveUser } from '$lib/client/idb/db';
-import { applyEventToIdb } from '$lib/client/idb/state';
-import { getMedia, putMedia } from '$lib/client/idb/media';
+import { getEpisodes, getMedia, putMedia } from '$lib/client/idb/media';
 import type { MediaSyncRequest } from '$lib/sync/media-protocol';
 import { runMediaSync } from './media-sync';
 
 setActiveUser('media-sync-test');
-const DEVICE = '11111111-1111-1111-1111-111111111111';
 
-function record(externalId: string): MediaRecord {
+function record(externalId: string, over: Partial<MediaRecord> = {}): MediaRecord {
 	return {
 		id: mediaId('tmdb', externalId),
 		provider: 'tmdb',
@@ -23,68 +21,96 @@ function record(externalId: string): MediaRecord {
 		backdropPath: '/b.jpg',
 		overview: '',
 		genres: [],
+		releaseDate: '1999-03-31',
+		status: null,
+		inProduction: null,
+		firstAirDate: null,
+		lastAirDate: null,
+		version: 1,
 		seasons: null,
-		lastAired: null
+		episodes: null,
+		...over
 	};
 }
 
+/** A fetch stub that captures the request body and returns the given media list. */
+function stubFetch(media: MediaRecord[], sent: MediaSyncRequest[]) {
+	return (async (_url: string, init: RequestInit) => {
+		sent.push(JSON.parse(init.body as string) as MediaSyncRequest);
+		return new Response(JSON.stringify({ media }), {
+			status: 200,
+			headers: { 'content-type': 'application/json' }
+		});
+	}) as unknown as typeof fetch;
+}
+
 describe('runMediaSync', () => {
-	it('requests media referenced by tracking but missing locally, and stores what comes back', async () => {
+	it('reports local media versions in `have` and stores what the server returns', async () => {
 		const mid = mediaId('tmdb', 'movie/603');
-		// A tracked title (from an event) with no local media row yet.
-		await applyEventToIdb(createEvent('tracking.added', mid, { status: 'want_to_watch' }, DEVICE));
+		await putMedia(record('movie/603', { version: 1 }));
 
 		const sent: MediaSyncRequest[] = [];
-		const fetchFn = (async (_url: string, init: RequestInit) => {
-			sent.push(JSON.parse(init.body as string) as MediaSyncRequest);
-			return new Response(JSON.stringify({ media: [record('movie/603')] }), {
-				status: 200,
-				headers: { 'content-type': 'application/json' }
-			});
-		}) as unknown as typeof fetch;
+		const result = await runMediaSync(
+			stubFetch([record('movie/603', { version: 2, title: 'updated' })], sent)
+		);
 
-		const result = await runMediaSync(fetchFn);
-
-		expect(sent[0].need).toContain(mid); // asked for the missing media
-		expect(await getMedia(mid)).toMatchObject({ id: mid, title: 'title-movie/603' });
+		expect(sent[0].have).toContainEqual({ id: mid, version: 1 });
+		expect(await getMedia(mid)).toMatchObject({ id: mid, title: 'updated', version: 2 });
 		expect(result.applied).toBe(1);
 	});
 
-	it('re-requests a stale show record missing its aired frontier (lastAired)', async () => {
-		const showId = mediaId('tmdb', 'show/1396');
-		// A locally-known show whose record predates `lastAired` (has seasons, frontier still null).
-		await putMedia({
-			...record('show/1396'),
-			id: showId,
-			type: 'show',
-			seasons: [{ seasonNumber: 1, episodeCount: 7 }],
-			lastAired: null
-		});
+	it('pushes identity refs for locally-known linked media', async () => {
+		await putMedia(record('movie/778'));
 		const sent: MediaSyncRequest[] = [];
-		const fetchFn = (async (_url: string, init: RequestInit) => {
-			sent.push(JSON.parse(init.body as string) as MediaSyncRequest);
-			return new Response(JSON.stringify({ media: [] }), {
-				status: 200,
-				headers: { 'content-type': 'application/json' }
-			});
-		}) as unknown as typeof fetch;
-
-		await runMediaSync(fetchFn);
-		expect(sent[0].need).toContain(showId);
+		await runMediaSync(stubFetch([], sent));
+		expect(sent[0].refs).toContainEqual({ provider: 'tmdb', externalId: 'movie/778' });
 	});
 
-	it('pushes identity refs for locally-known linked media', async () => {
-		await putMedia(record('movie/778')); // a locally-captured title
+	it('fans a returned show record out into the seasons/episodes stores', async () => {
+		const showId = mediaId('tmdb', 'show/1396');
+		const show = record('show/1396', {
+			id: showId,
+			type: 'show',
+			version: 3,
+			seasons: [
+				{
+					seasonNumber: 1,
+					name: 'S1',
+					overview: '',
+					airDate: '2008-01-20',
+					posterPath: null,
+					episodeCount: 2
+				}
+			],
+			episodes: [
+				{
+					season: 1,
+					episode: 1,
+					name: 'Pilot',
+					overview: '',
+					airDate: '2008-01-20',
+					runtime: 58,
+					stillPath: null
+				},
+				{
+					season: 1,
+					episode: 2,
+					name: 'Cat',
+					overview: '',
+					airDate: '2008-01-27',
+					runtime: 48,
+					stillPath: null
+				}
+			]
+		});
 		const sent: MediaSyncRequest[] = [];
-		const fetchFn = (async (_url: string, init: RequestInit) => {
-			sent.push(JSON.parse(init.body as string) as MediaSyncRequest);
-			return new Response(JSON.stringify({ media: [] }), {
-				status: 200,
-				headers: { 'content-type': 'application/json' }
-			});
-		}) as unknown as typeof fetch;
+		await runMediaSync(stubFetch([show], sent));
 
-		await runMediaSync(fetchFn);
-		expect(sent[0].refs).toContainEqual({ provider: 'tmdb', externalId: 'movie/778' });
+		expect(await getMedia(showId)).toMatchObject({ id: showId, type: 'show', version: 3 });
+		const eps = await getEpisodes(showId);
+		expect(eps.map((e) => [e.season, e.episode, e.airDate])).toEqual([
+			[1, 1, '2008-01-20'],
+			[1, 2, '2008-01-27']
+		]);
 	});
 });

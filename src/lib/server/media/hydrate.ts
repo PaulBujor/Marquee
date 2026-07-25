@@ -1,16 +1,33 @@
 /**
- * Server-side media hydration for the media channel. The client sends only identity
- * `(provider, externalId)`; the server derives our media id and fetches the metadata from
- * TMDB itself, so the shared `media` catalog only ever holds authoritative data (a client
- * can't inject a title/poster for a shared `linked` row — see the MRQ-111a spec).
+ * Server-side media hydration for the media channel + the nightly refresh cron. The client sends
+ * only identity `(provider, externalId)`; the server derives our media id and fetches metadata from
+ * TMDB, so the shared catalog only ever holds authoritative data — a client can't inject a
+ * title/poster for a shared `linked` row.
+ *
+ * `refreshMedia` is refresh-aware: on a miss it fully hydrates (details + every season's episodes);
+ * on a hit it re-pulls only when the row is stale (airing shows past a TTL; movies + finished shows
+ * never), reconciles the `seasons`/`episodes` child rows, and bumps `version` only when content
+ * actually changed.
  */
 import { eq } from 'drizzle-orm';
-import { media, type Media } from '$lib/server/db/schema';
-import { mediaId, type MediaProvider, type MediaSeason } from '$lib/sync/events';
+import { episodes, media, seasons, type EpisodeRow, type Media } from '$lib/server/db/schema';
+import { mediaId, type MediaProvider } from '$lib/sync/events';
 import type { createDb } from '$lib/server/db';
-import type { TmdbClient } from '$lib/server/tmdb';
+import type { MediaDetail, SeasonDetail, TmdbClient } from '$lib/server/tmdb';
 
 type Db = ReturnType<typeof createDb>;
+type TmdbHydrator = Pick<TmdbClient, 'getDetails' | 'getSeason'>;
+
+/** How long a still-airing show's cache is trusted before a re-pull (12h). */
+export const AIRING_TTL_MS = 12 * 60 * 60 * 1000;
+
+/** Rows per child-table insert — keeps well under D1's bound-parameter limit for big shows. */
+const INSERT_CHUNK = 50;
+
+// TMDB's own TV statuses (full set: Returning Series / Planned / In Production / Ended / Canceled /
+// Pilot) for a show that may still gain episodes. `in_production` is the primary signal; these catch
+// a show between seasons where `in_production` has flipped false but more is expected.
+const AIRING_STATUSES = new Set(['Returning Series', 'In Production', 'Planned', 'Pilot']);
 
 /** A TMDB external id (`movie/603`) parsed into its media type and numeric id. */
 export interface ParsedTmdbExternalId {
@@ -26,51 +43,174 @@ export function parseTmdbExternalId(externalId: string): ParsedTmdbExternalId | 
 }
 
 /**
- * Ensure a media row exists for `(provider, externalId)` and return it. Cached: if the row is
- * already stored, returns it without touching TMDB. Returns null for an unknown provider, a
- * malformed external id, or a TMDB miss — so a bad reference simply yields no row.
+ * Whether a stored row should be re-pulled from TMDB. A `refreshed_at` of 0 marks a row that
+ * predates the relational model (migration backfill) — always refresh it once to populate
+ * seasons/episodes. Otherwise movies + finished shows never change; only airing shows refresh,
+ * and only past the TTL.
  */
-export async function hydrateMedia(
-	db: Db,
-	tmdb: Pick<TmdbClient, 'getDetails'>,
+export function needsRefresh(row: Media, now: number): boolean {
+	if (row.refreshedAt === 0) return true;
+	if (row.type !== 'show') return false;
+	const airing = row.inProduction === true || AIRING_STATUSES.has(row.status ?? '');
+	return airing && now - row.refreshedAt > AIRING_TTL_MS;
+}
+
+/** Stable signature of the episode set (coords + air dates) to detect content changes. */
+function episodeSignature(
+	rows: { seasonNumber: number; episodeNumber: number; airDate: string | null }[]
+): string {
+	return rows
+		.map((e) => `${e.seasonNumber}:${e.episodeNumber}:${e.airDate ?? ''}`)
+		.sort()
+		.join('|');
+}
+
+/** Map a normalized TMDB detail (+ fetched season details) to the media/seasons/episodes rows. */
+function toRows(
+	id: string,
 	provider: MediaProvider,
-	externalId: string
+	externalId: string,
+	detail: MediaDetail,
+	seasonDetails: SeasonDetail[]
+) {
+	const scalars = {
+		id,
+		provider,
+		externalId,
+		type: detail.type,
+		title: detail.title,
+		year: detail.year,
+		posterPath: detail.posterPath,
+		backdropPath: detail.backdropPath,
+		overview: detail.overview,
+		genres: detail.genres,
+		releaseDate: detail.releaseDate,
+		status: detail.status,
+		inProduction: detail.inProduction,
+		firstAirDate: detail.firstAirDate,
+		lastAirDate: detail.lastAirDate
+	};
+	const seasonRows = detail.seasons.map((s) => ({
+		mediaId: id,
+		seasonNumber: s.seasonNumber,
+		name: s.name,
+		overview: s.overview,
+		airDate: s.airDate,
+		posterPath: s.posterPath,
+		episodeCount: s.episodeCount
+	}));
+	const episodeRows = seasonDetails.flatMap((sd) =>
+		sd.episodes.map((e) => ({
+			mediaId: id,
+			seasonNumber: sd.seasonNumber,
+			episodeNumber: e.episodeNumber,
+			name: e.name,
+			overview: e.overview,
+			airDate: e.airDate,
+			runtime: e.runtime,
+			stillPath: e.stillPath
+		}))
+	);
+	return { scalars, seasonRows, episodeRows };
+}
+
+async function replaceChildren(
+	db: Db,
+	id: string,
+	seasonRows: (typeof seasons.$inferInsert)[],
+	episodeRows: (typeof episodes.$inferInsert)[]
+): Promise<void> {
+	await db.delete(episodes).where(eq(episodes.mediaId, id));
+	await db.delete(seasons).where(eq(seasons.mediaId, id));
+	for (let i = 0; i < seasonRows.length; i += INSERT_CHUNK) {
+		await db.insert(seasons).values(seasonRows.slice(i, i + INSERT_CHUNK));
+	}
+	for (let i = 0; i < episodeRows.length; i += INSERT_CHUNK) {
+		await db.insert(episodes).values(episodeRows.slice(i, i + INSERT_CHUNK));
+	}
+}
+
+/**
+ * Ensure a fresh media row (+ its seasons/episodes) exists for `(provider, externalId)` and return
+ * it. Cached + TTL-aware: an up-to-date row is returned without touching TMDB. Returns null for an
+ * unknown provider / malformed id / first-time TMDB miss (a transient miss on an existing row keeps
+ * the stored data). `now` is injectable for tests.
+ */
+export async function refreshMedia(
+	db: Db,
+	tmdb: TmdbHydrator,
+	provider: MediaProvider,
+	externalId: string,
+	now: number = Date.now()
 ): Promise<Media | null> {
 	if (provider !== 'tmdb') return null;
 	const parsed = parseTmdbExternalId(externalId);
 	if (!parsed) return null;
 
 	const id = mediaId(provider, externalId);
-	const cached = await db.select().from(media).where(eq(media.id, id)).limit(1);
-	if (cached.length > 0) return cached[0];
+	const existingRows = await db.select().from(media).where(eq(media.id, id)).limit(1);
+	const existing = existingRows[0] ?? null;
+	if (existing && !needsRefresh(existing, now)) return existing;
 
 	const detail = await tmdb.getDetails(parsed.type, parsed.tmdbId).catch(() => null);
-	if (!detail) return null;
+	// A transient TMDB miss shouldn't wipe an existing row — keep what we have.
+	if (!detail) return existing;
 
-	const seasons: MediaSeason[] | null =
+	// Fetch every season's episodes (incl. Specials) so per-episode air dates persist.
+	const seasonDetails =
 		detail.type === 'show'
-			? detail.seasons.map((s) => ({ seasonNumber: s.seasonNumber, episodeCount: s.episodeCount }))
-			: null;
+			? (
+					await Promise.all(
+						detail.seasons.map((s) =>
+							tmdb.getSeason(parsed.tmdbId, s.seasonNumber).catch(() => null)
+						)
+					)
+				).filter((s): s is SeasonDetail => s !== null)
+			: [];
 
-	// onConflictDoNothing: a concurrent request may have hydrated the same id first.
-	await db
-		.insert(media)
-		.values({
-			id,
-			provider,
-			externalId,
-			source: 'linked',
-			type: detail.type,
-			title: detail.title,
-			year: detail.year,
-			posterPath: detail.posterPath,
-			backdropPath: detail.backdropPath,
-			overview: detail.overview,
-			genres: detail.genres,
-			seasons,
-			lastAired: detail.lastAired
-		})
-		.onConflictDoNothing();
+	const { scalars, seasonRows, episodeRows } = toRows(
+		id,
+		provider,
+		externalId,
+		detail,
+		seasonDetails
+	);
+
+	if (!existing) {
+		await db
+			.insert(media)
+			.values({ ...scalars, source: 'linked', version: 1, refreshedAt: now })
+			.onConflictDoNothing();
+		if (detail.type === 'show') await replaceChildren(db, id, seasonRows, episodeRows);
+	} else {
+		const oldEpisodes: Pick<EpisodeRow, 'seasonNumber' | 'episodeNumber' | 'airDate'>[] = await db
+			.select({
+				seasonNumber: episodes.seasonNumber,
+				episodeNumber: episodes.episodeNumber,
+				airDate: episodes.airDate
+			})
+			.from(episodes)
+			.where(eq(episodes.mediaId, id));
+		const changed =
+			existing.title !== scalars.title ||
+			existing.status !== scalars.status ||
+			existing.inProduction !== scalars.inProduction ||
+			existing.lastAirDate !== scalars.lastAirDate ||
+			existing.releaseDate !== scalars.releaseDate ||
+			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows);
+		await db
+			.update(media)
+			.set({
+				...scalars,
+				// Preserve the source (a linked row stays linked) and the event↔media LWW clock.
+				source: existing.source,
+				updatedAt: existing.updatedAt,
+				refreshedAt: now,
+				version: changed ? existing.version + 1 : existing.version
+			})
+			.where(eq(media.id, id));
+		if (detail.type === 'show') await replaceChildren(db, id, seasonRows, episodeRows);
+	}
 
 	const stored = await db.select().from(media).where(eq(media.id, id)).limit(1);
 	return stored[0] ?? null;

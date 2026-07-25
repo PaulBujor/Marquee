@@ -14,6 +14,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
 	import { tmdbMediaId, tmdbExternalId, type MediaRecord } from '$lib/sync/events';
+	import { isAired, todayIso } from '$lib/tracking/actions';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
@@ -29,9 +30,12 @@
 	const detail = $derived(data.detail);
 	// Our own media id for the tracking event pipeline (provider-agnostic, MRQ-112).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
+	// Today (YYYY-MM-DD) for the per-episode aired check — an episode is watchable once it's aired.
+	const today = todayIso();
 
 	// Media snapshot cached locally on track (renders lists offline; identity for the media
-	// channel). Built from the TMDB data the page already has.
+	// channel). Built from the TMDB data the page already has — scalars only; `version: 0` marks
+	// it as behind so the media channel pulls the authoritative row (with full seasons/episodes).
 	const mediaRecord = $derived<MediaRecord>({
 		id: mediaId,
 		provider: 'tmdb',
@@ -44,14 +48,14 @@
 		backdropPath: detail.backdropPath,
 		overview: detail.overview,
 		genres: detail.genres,
-		seasons:
-			detail.type === 'show'
-				? detail.seasons.map((s) => ({
-						seasonNumber: s.seasonNumber,
-						episodeCount: s.episodeCount
-					}))
-				: null,
-		lastAired: detail.lastAired
+		releaseDate: detail.releaseDate,
+		status: detail.status,
+		inProduction: detail.inProduction,
+		firstAirDate: detail.firstAirDate,
+		lastAirDate: detail.lastAirDate,
+		version: 0,
+		seasons: null,
+		episodes: null
 	});
 
 	// Reactive local tracking state (IndexedDB-backed); recreated per title, reloaded on sync pulls.
@@ -386,7 +390,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 					{/each}
 				</div>
 
-				{#if tracking.view.tracked && selectedSeasonSummary && !tracking.isSeasonWatched(selectedSeasonSummary)}
+				{#if tracking.view.tracked && selectedSeasonSummary && !tracking.isSeasonWatched(selectedSeasonSummary.seasonNumber)}
 					<Button
 						variant="outline"
 						size="sm"
@@ -405,10 +409,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						onconfirm={() =>
 							selectedSeasonSummary &&
 							tracking
-								.markSeasonWatched({
-									seasonNumber: selectedSeasonSummary.seasonNumber,
-									episodeCount: selectedSeasonSummary.episodeCount
-								})
+								.markSeasonWatched(selectedSeasonSummary.seasonNumber)
 								.then(() => (seasonConfirmOpen = false))}
 					/>
 				{/if}
@@ -445,7 +446,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 												>{ep.runtime} min</span
 											>
 										{/if}
-										{#if tracking.view.tracked && currentSeason && tracking.hasAired(currentSeason.seasonNumber, ep.episodeNumber)}
+										{#if tracking.view.tracked && currentSeason && isAired(ep, today)}
 											{@const watched = tracking.isWatched(
 												currentSeason.seasonNumber,
 												ep.episodeNumber

@@ -4,36 +4,42 @@
  * page and its child controls (`TrackingControls`, the next-episode row, season
  * cards) all read one source of truth and re-render optimistically after each write.
  *
- * Construct one per media id (with the show's seasons, empty for movies); call
- * {@link load} on mount and whenever the id changes. All writes route through
+ * Construct one per media id (with the show's media record); call {@link load} on mount and
+ * whenever the id changes. Episode metadata (with air dates) is read from IndexedDB, populated
+ * by the media channel; watchability is derived from those air dates. All writes route through
  * {@link recordEvent} — local event + optimistic projection — then reload.
  */
 import { SvelteSet } from 'svelte/reactivity';
-import { getEpisodeWatches, getTrackingByMediaId, putMedia, recordEvent } from '$lib/client/idb';
+import {
+	getEpisodeWatches,
+	getEpisodes,
+	getTrackingByMediaId,
+	putMedia,
+	recordEvent
+} from '$lib/client/idb';
 import { sync } from '$lib/client/sync/engine.svelte';
 import type { MediaRecord, TrackingStatus } from '$lib/sync/events';
 import {
 	airedEpisodes,
-	isAired,
 	isSeasonFullyWatched,
 	nextEpisode,
-	seasonEpisodes,
+	todayIso,
 	toTrackingView,
 	statusEventType,
 	nextFavorite,
 	watchedKey,
+	type DatedEpisode,
 	type EpisodeCoord,
-	type SeasonCounts,
 	type TrackingView
 } from './actions';
 import { reconcileStatus } from './reconcile';
 
 export class TrackingState {
 	readonly mediaId: string;
-	/** Season episode counts (empty for movies) — needed to derive completion and "season watched". */
-	readonly seasons: SeasonCounts[];
-	/** The show's aired frontier — caps "next"/progress/bulk-marks to released episodes (null = uncapped). */
-	readonly #lastAired: EpisodeCoord | null;
+	/** Whether TMDB considers the show still in production — feeds completion reconciliation. */
+	readonly #inProduction: boolean | null;
+	/** Per-episode metadata (coords + air dates), loaded from IndexedDB (empty for movies / unsynced). */
+	episodes = $state<DatedEpisode[]>([]);
 	/** Current tracking view (untracked, or status + favorite). */
 	view = $state<TrackingView>({ tracked: false });
 	/** Watched-episode keys (`"season:episode"`). */
@@ -49,16 +55,20 @@ export class TrackingState {
 	constructor(mediaId: string, media: MediaRecord | null = null) {
 		this.mediaId = mediaId;
 		this.#media = media;
-		this.seasons = media?.seasons ?? [];
-		this.#lastAired = media?.lastAired ?? null;
+		this.#inProduction = media?.inProduction ?? null;
 	}
 
-	/** Load tracking + episode-watched state from IndexedDB into the reactive fields. */
+	/** Load tracking + episode metadata + episode-watched state from IndexedDB. */
 	async load(): Promise<void> {
 		this.view = toTrackingView(await getTrackingByMediaId(this.mediaId));
-		const episodes = await getEpisodeWatches(this.mediaId);
+		this.episodes = (await getEpisodes(this.mediaId)).map((e) => ({
+			season: e.season,
+			episode: e.episode,
+			airDate: e.airDate
+		}));
+		const watches = await getEpisodeWatches(this.mediaId);
 		this.watched = new SvelteSet(
-			episodes.filter((e) => e.watched).map((e) => watchedKey(e.season, e.episode))
+			watches.filter((e) => e.watched).map((e) => watchedKey(e.season, e.episode))
 		);
 		this.ready = true;
 	}
@@ -69,18 +79,13 @@ export class TrackingState {
 	}
 
 	/** Whether every aired episode of a season is watched (so "mark season watched" can be hidden). */
-	isSeasonWatched(season: SeasonCounts): boolean {
-		return isSeasonFullyWatched(season, this.watched, this.#lastAired);
+	isSeasonWatched(seasonNumber: number): boolean {
+		return isSeasonFullyWatched(this.episodes, seasonNumber, this.watched, todayIso());
 	}
 
-	/** Whether an episode has aired (so unaired episodes can't be marked). */
-	hasAired(season: number, episode: number): boolean {
-		return isAired({ season, episode }, this.#lastAired);
-	}
-
-	/** The next aired episode to watch, or null when caught up to the aired frontier. */
+	/** The next aired episode to watch, or null when caught up to what's aired. */
 	nextEpisode(): EpisodeCoord | null {
-		return nextEpisode(this.seasons, this.watched, this.#lastAired);
+		return nextEpisode(this.episodes, this.watched, todayIso());
 	}
 
 	async #run(work: () => Promise<void>): Promise<void> {
@@ -128,8 +133,8 @@ export class TrackingState {
 	 */
 	remove(): Promise<void> {
 		return this.#run(async () => {
-			const episodes = await getEpisodeWatches(this.mediaId);
-			for (const e of episodes) {
+			const watches = await getEpisodeWatches(this.mediaId);
+			for (const e of watches) {
 				if (e.watched) {
 					await recordEvent('episode.unwatched', this.mediaId, {
 						season: e.season,
@@ -153,9 +158,15 @@ export class TrackingState {
 	}
 
 	/** Mark every **aired** episode of one season watched (bulk), then reconcile the show's status. */
-	markSeasonWatched(season: SeasonCounts): Promise<void> {
+	markSeasonWatched(seasonNumber: number): Promise<void> {
 		return this.#run(async () => {
-			await this.#seedWatched(seasonEpisodes(season).filter((c) => isAired(c, this.#lastAired)));
+			const today = todayIso();
+			await this.#seedWatched(
+				airedEpisodes(
+					this.episodes.filter((e) => e.season === seasonNumber),
+					today
+				)
+			);
 			await this.#reconcileStatus();
 		});
 	}
@@ -166,7 +177,7 @@ export class TrackingState {
 	 */
 	markSeriesWatched(): Promise<void> {
 		return this.#run(async () => {
-			await this.#seedWatched(airedEpisodes(this.seasons, this.#lastAired));
+			await this.#seedWatched(airedEpisodes(this.episodes, todayIso()));
 			await recordEvent('tracking.status_changed', this.mediaId, { status: 'completed' });
 		});
 	}
@@ -179,6 +190,6 @@ export class TrackingState {
 
 	/** Move the status in line with episode progress (completion sequence) — see {@link reconcileStatus}. */
 	#reconcileStatus(): Promise<void> {
-		return reconcileStatus(this.mediaId, this.seasons, this.#lastAired);
+		return reconcileStatus(this.mediaId, this.episodes, this.#inProduction);
 	}
 }

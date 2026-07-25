@@ -1,5 +1,4 @@
 /** Types for the TMDB client. Only the fields the app consumes are modelled. */
-import type { EpisodeCoord } from '$lib/sync/events';
 
 /** A single row from TMDB `/search/multi` (movies, tv, and people mixed). */
 export interface TmdbMultiSearchItem {
@@ -102,6 +101,7 @@ export interface TmdbTvDetailsResponse {
 	id: number;
 	name?: string;
 	first_air_date?: string;
+	last_air_date?: string;
 	overview?: string;
 	poster_path?: string | null;
 	backdrop_path?: string | null;
@@ -113,14 +113,9 @@ export interface TmdbTvDetailsResponse {
 	images?: TmdbImages;
 	videos?: TmdbVideosResponse;
 	seasons?: TmdbSeasonSummary[];
-	/** The most recently aired episode — the "aired frontier" (null before a show premieres). */
-	last_episode_to_air?: TmdbEpisodeRef | null;
-}
-
-/** TMDB's minimal episode reference (`last_episode_to_air`) — season + episode number. */
-export interface TmdbEpisodeRef {
-	season_number: number;
-	episode_number: number;
+	/** One of TMDB's TV statuses: `Returning Series`, `Planned`, `In Production`, `Ended`, `Canceled`, `Pilot`. */
+	status?: string;
+	in_production?: boolean;
 }
 
 /** A season summary from a `/tv/{id}` response (TMDB includes season 0 = "Specials"). */
@@ -170,32 +165,39 @@ export interface MediaDetail {
 	tmdbId: number;
 	type: 'movie' | 'show';
 	title: string;
-	/** Release / first-air year, or null when TMDB has no date. */
 	year: number | null;
 	overview: string;
 	posterPath: string | null;
 	backdropPath: string | null;
-	/** TMDB vote average (0–10), or null when unrated. */
+	/** TMDB vote average (0–10), or null. */
 	rating: number | null;
 	voteCount: number;
-	/** Runtime in minutes (movie runtime, or first TV episode run time), or null. */
+	/** In minutes (movie runtime, or a show's per-episode run time), or null. */
 	runtime: number | null;
 	genres: string[];
 	cast: CastMember[];
 	trailer: MediaTrailer | null;
-	/** Season summaries for shows (ordered as TMDB returns them); empty for movies. */
+	/** `YYYY-MM-DD`. Movies only. */
+	releaseDate: string | null;
+	/** Shows only. */
+	status: string | null;
+	/** Shows only. */
+	inProduction: boolean | null;
+	/** `YYYY-MM-DD`. Shows only. */
+	firstAirDate: string | null;
+	/** `YYYY-MM-DD`. Shows only. */
+	lastAirDate: string | null;
+	/** Empty for movies. */
 	seasons: Season[];
-	/** Most recently aired episode for a show (the aired frontier); null for movies / not-yet-aired. */
-	lastAired: EpisodeCoord | null;
 }
 
-/** A normalized season summary for the detail page's season selector. */
+/** A normalized season summary for the detail page's season selector + hydration. */
 export interface Season {
 	seasonNumber: number;
 	name: string;
 	episodeCount: number;
-	/** Air year, or null when TMDB has no date. */
-	airYear: number | null;
+	/** `YYYY-MM-DD`, or null. */
+	airDate: string | null;
 	posterPath: string | null;
 	overview: string;
 }
@@ -204,11 +206,11 @@ export interface Season {
 export interface Episode {
 	episodeNumber: number;
 	name: string;
-	/** Raw TMDB air date (`YYYY-MM-DD`), or null. */
+	/** `YYYY-MM-DD`, or null. */
 	airDate: string | null;
 	overview: string;
 	stillPath: string | null;
-	/** Episode runtime in minutes, or null when TMDB has none. */
+	/** In minutes, or null. */
 	runtime: number | null;
 }
 

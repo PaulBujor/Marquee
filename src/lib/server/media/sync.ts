@@ -1,20 +1,29 @@
 /**
  * Core of the media reference channel (`POST /api/media/sync`), extracted from the endpoint so
- * it's testable. Hydrates + returns the media a user's events reference — never trusting a
- * client-claimed id, and never hydrating media the user doesn't actually track (anti-abuse).
+ * it's testable. Hydrates/refreshes + returns the media a user's events reference — never trusting
+ * a client-claimed id, and never touching media the user doesn't actually track (anti-abuse). The
+ * client reports what it `have`s (id + version); the server returns rows it's missing or behind on
+ * (server version > client version).
  */
-import { and, eq, inArray } from 'drizzle-orm';
-import { events, media, type Media } from '$lib/server/db/schema';
+import { eq, inArray } from 'drizzle-orm';
+import { episodes, events, media, seasons, type Media } from '$lib/server/db/schema';
 import { mediaId, type MediaRecord } from '$lib/sync/events';
 import type { MediaSyncRequest, MediaSyncResponse } from '$lib/sync/media-protocol';
 import type { createDb } from '$lib/server/db';
 import type { TmdbClient } from '$lib/server/tmdb';
-import { hydrateMedia } from './hydrate';
+import { refreshMedia } from './hydrate';
 
 type Db = ReturnType<typeof createDb>;
+type SeasonRecord = NonNullable<MediaRecord['seasons']>[number];
+type EpisodeRecord = NonNullable<MediaRecord['episodes']>[number];
 
-/** Project a server media row to the wire/record shape (drops the server-only LWW clock). */
-function toRecord(row: Media): MediaRecord {
+/** Project a media row (+ its child rows) to the wire record (drops the server-only LWW clock). */
+function toRecord(
+	row: Media,
+	seasonRows: SeasonRecord[],
+	episodeRows: EpisodeRecord[]
+): MediaRecord {
+	const isShow = row.type === 'show';
 	return {
 		id: row.id,
 		provider: row.provider,
@@ -27,36 +36,89 @@ function toRecord(row: Media): MediaRecord {
 		backdropPath: row.backdropPath,
 		overview: row.overview,
 		genres: row.genres ?? [],
-		seasons: row.seasons,
-		lastAired: row.lastAired ?? null
+		releaseDate: row.releaseDate ?? null,
+		status: row.status ?? null,
+		inProduction: row.inProduction ?? null,
+		firstAirDate: row.firstAirDate ?? null,
+		lastAirDate: row.lastAirDate ?? null,
+		version: row.version,
+		seasons: isShow ? seasonRows : null,
+		episodes: isShow ? episodeRows : null
 	};
 }
 
 export async function resolveMediaSync(
 	db: Db,
-	tmdb: Pick<TmdbClient, 'getDetails'>,
+	tmdb: Pick<TmdbClient, 'getDetails' | 'getSeason'>,
 	userId: string,
 	req: MediaSyncRequest
 ): Promise<MediaSyncResponse> {
-	// Derive our id for each identity ref (ignore any client-claimed id) and union with `need`.
+	// Identity refs let us hydrate; `have` reports the client's version per id.
 	const refById = new Map(req.refs.map((ref) => [mediaId(ref.provider, ref.externalId), ref]));
-	const candidateIds = [...new Set([...refById.keys(), ...req.need])];
-	if (candidateIds.length === 0) return { media: [] };
+	const haveVersion = new Map(req.have.map((h) => [h.id, h.version]));
 
-	// Anti-abuse: only touch media the user's own (synced) events reference.
+	// The universe the client cares about = every media id the user's own events reference.
+	// Deriving it from the log (not from the request) is the anti-abuse gate: a ref for a title
+	// the user doesn't track is never acted on.
 	const referenced = await db
 		.select({ id: events.entityId })
 		.from(events)
-		.where(and(eq(events.userId, userId), inArray(events.entityId, candidateIds)));
-	const allowed = [...new Set(referenced.map((r) => r.id))];
-	if (allowed.length === 0) return { media: [] };
+		.where(eq(events.userId, userId));
+	const referencedIds = [...new Set(referenced.map((r) => r.id))];
+	if (referencedIds.length === 0) return { media: [] };
 
-	// Hydrate any allowed id we have identity for (cached — TMDB hit only when missing).
-	for (const id of allowed) {
+	// Refresh/hydrate any referenced id we have identity for (TTL-aware; TMDB only when stale).
+	for (const id of referencedIds) {
 		const ref = refById.get(id);
-		if (ref) await hydrateMedia(db, tmdb, ref.provider, ref.externalId);
+		if (ref) await refreshMedia(db, tmdb, ref.provider, ref.externalId);
 	}
 
-	const rows = await db.select().from(media).where(inArray(media.id, allowed));
-	return { media: rows.map(toRecord) };
+	const rows = await db.select().from(media).where(inArray(media.id, referencedIds));
+	const staleForClient = rows.filter((r) => {
+		const clientVersion = haveVersion.get(r.id);
+		return clientVersion === undefined || r.version > clientVersion;
+	});
+	if (staleForClient.length === 0) return { media: [] };
+
+	const staleShowIds = staleForClient.filter((r) => r.type === 'show').map((r) => r.id);
+	const seasonRows = staleShowIds.length
+		? await db.select().from(seasons).where(inArray(seasons.mediaId, staleShowIds))
+		: [];
+	const episodeRows = staleShowIds.length
+		? await db.select().from(episodes).where(inArray(episodes.mediaId, staleShowIds))
+		: [];
+
+	const seasonsByMedia = new Map<string, SeasonRecord[]>();
+	for (const s of seasonRows) {
+		const list = seasonsByMedia.get(s.mediaId) ?? [];
+		list.push({
+			seasonNumber: s.seasonNumber,
+			name: s.name,
+			overview: s.overview,
+			airDate: s.airDate,
+			posterPath: s.posterPath,
+			episodeCount: s.episodeCount
+		});
+		seasonsByMedia.set(s.mediaId, list);
+	}
+	const episodesByMedia = new Map<string, EpisodeRecord[]>();
+	for (const e of episodeRows) {
+		const list = episodesByMedia.get(e.mediaId) ?? [];
+		list.push({
+			season: e.seasonNumber,
+			episode: e.episodeNumber,
+			name: e.name,
+			overview: e.overview,
+			airDate: e.airDate,
+			runtime: e.runtime,
+			stillPath: e.stillPath
+		});
+		episodesByMedia.set(e.mediaId, list);
+	}
+
+	return {
+		media: staleForClient.map((r) =>
+			toRecord(r, seasonsByMedia.get(r.id) ?? [], episodesByMedia.get(r.id) ?? [])
+		)
+	};
 }

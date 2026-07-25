@@ -13,8 +13,7 @@ import {
 	MEDIA_SOURCES,
 	SYNC_EVENT_TYPES,
 	TRACKING_STATUSES,
-	type EventPayload,
-	type MediaSeason
+	type EventPayload
 } from '../../sync/events';
 
 /**
@@ -219,53 +218,93 @@ export const syncState = sqliteTable('sync_state', {
 });
 
 /**
- * Global media catalog cache (not user-scoped) — **reference data, not a projection of
- * the event log**, keyed by our own media id which events reference via `entityId`. Synced
- * on a separate parallel channel (MRQ-111), never through `/api/sync`; scaffolding for now.
- * TMDB remains the real source, this is a display cache so tracked titles render offline.
+ * Global media catalog cache (not user-scoped) — reference data, not a projection of the event
+ * log, keyed by our own media id which events reference via `entityId`. Synced on its own channel,
+ * never through `/api/sync`. TMDB is the real source; this is a display cache so tracked titles
+ * render offline.
  *
- * Identity is **provider-agnostic** (MRQ-112): `id` is ours (a deterministic v5 UUID for
- * provider-sourced titles), and `{provider, externalId}` records where it came from — so a
- * provider switch or outage needs no id remap. `source` distinguishes provider-backed
- * (`linked`) from user-authored (`custom`) rows; `media.linked` aliasing is deferred to the
- * Custom Media epic and slots on top of this without a further identity migration.
+ * Identity is provider-agnostic: `id` is ours (a deterministic v5 UUID for provider-sourced titles;
+ * random for custom), and `{provider, externalId}` records where it came from, so a provider switch
+ * or outage needs no remap. `source` marks provider-backed (`linked`, shareable) vs. user-authored
+ * (`custom`, private) rows. A show's seasons/episodes live in the child tables below.
  */
 export const media = sqliteTable(
 	'media',
 	{
-		// Our own media id — a deterministic v5 UUID for provider-sourced titles (see
-		// `mediaId()`); a random client UUID for custom entries (deferred, Custom Media epic).
 		id: text('id').primaryKey(),
-		// Which catalog the row came from. Default `tmdb` — the only provider today.
 		provider: text('provider', { enum: MEDIA_PROVIDERS }).notNull().default('tmdb'),
-		// The provider's own id, e.g. `movie/603`. Null for purely-custom entries.
+		// e.g. `movie/603`; null for custom entries.
 		externalId: text('external_id'),
-		// `linked` = provider-backed (shareable); `custom` = user-authored (private).
 		source: text('source', { enum: MEDIA_SOURCES }).notNull().default('linked'),
 		type: text('type', { enum: ['movie', 'show'] }).notNull(),
 		title: text('title').notNull(),
 		year: integer('year'),
 		posterPath: text('poster_path'),
-		// Header image (TMDB backdrop) — the media channel pulls poster + backdrop only.
 		backdropPath: text('backdrop_path'),
 		overview: text('overview').notNull().default(''),
-		// Genre names as JSON (`["Action","Sci-Fi"]`) for the lists genre filter.
 		genres: text('genres', { mode: 'json' }).$type<string[]>(),
-		// Most recently aired episode (aired frontier) for shows — caps "next episode"/progress to
-		// aired episodes so a caught-up show leaves Continue Watching and unaired eps aren't markable.
-		lastAired: text('last_aired', { mode: 'json' }).$type<{ season: number; episode: number }>(),
-		// Season episode counts as JSON (`[{seasonNumber, episodeCount}]`) for shows; null for
-		// movies. Powers Continue Watching progress / next-episode without loading full episodes.
-		seasons: text('seasons', { mode: 'json' }).$type<MediaSeason[]>(),
-		// Epoch **ms** (plain integer, not `timestamp`/seconds) — it's an LWW clock
-		// compared against event `clientCreatedAt`, so units must match.
+		// `YYYY-MM-DD`. Movies only.
+		releaseDate: text('release_date'),
+		// TMDB status/production flags + air dates (`YYYY-MM-DD`). Shows only.
+		status: text('status'),
+		inProduction: integer('in_production', { mode: 'boolean' }),
+		firstAirDate: text('first_air_date'),
+		lastAirDate: text('last_air_date'),
+		// Bumped whenever a refresh changes content, so clients can detect a stale copy.
+		version: integer('version').notNull().default(1),
+		// Epoch ms of the last TMDB pull (drives the refresh TTL). SQL default 0 backfills existing
+		// rows as stale; the refresh code always sets it explicitly.
+		refreshedAt: integer('refreshed_at').notNull().default(0),
+		// Epoch ms (not timestamp/seconds) — an LWW clock compared against event `clientCreatedAt`,
+		// so units must match.
 		updatedAt: integer('updated_at')
 			.notNull()
 			.$defaultFn(() => Date.now())
 	},
-	// Natural key for provider-sourced rows. Custom rows carry `external_id = null`; SQLite
-	// treats each NULL as distinct in a UNIQUE index, so multiple custom rows never collide.
+	// SQLite treats each NULL as distinct in a UNIQUE index, so multiple custom rows
+	// (`external_id = null`) never collide.
 	(table) => [uniqueIndex('media_provider_external_idx').on(table.provider, table.externalId)]
+);
+
+/** A show's season. TMDB numbers Specials as season 0. */
+export const seasons = sqliteTable(
+	'seasons',
+	{
+		mediaId: text('media_id')
+			.notNull()
+			.references(() => media.id, { onDelete: 'cascade' }),
+		seasonNumber: integer('season_number').notNull(),
+		name: text('name').notNull().default(''),
+		overview: text('overview').notNull().default(''),
+		// `YYYY-MM-DD`, or null.
+		airDate: text('air_date'),
+		posterPath: text('poster_path'),
+		episodeCount: integer('episode_count').notNull().default(0)
+	},
+	(table) => [primaryKey({ columns: [table.mediaId, table.seasonNumber] })]
+);
+
+/** A show's episode. A null `air_date` means it hasn't aired yet; indexed for calendar range scans. */
+export const episodes = sqliteTable(
+	'episodes',
+	{
+		mediaId: text('media_id')
+			.notNull()
+			.references(() => media.id, { onDelete: 'cascade' }),
+		seasonNumber: integer('season_number').notNull(),
+		episodeNumber: integer('episode_number').notNull(),
+		name: text('name').notNull().default(''),
+		overview: text('overview').notNull().default(''),
+		// `YYYY-MM-DD`, or null.
+		airDate: text('air_date'),
+		runtime: integer('runtime'),
+		stillPath: text('still_path')
+	},
+	(table) => [
+		primaryKey({ columns: [table.mediaId, table.seasonNumber, table.episodeNumber] }),
+		index('episodes_media_idx').on(table.mediaId),
+		index('episodes_air_date_idx').on(table.airDate)
+	]
 );
 
 /**
@@ -328,5 +367,7 @@ export const episodeWatches = sqliteTable(
 export type Event = typeof events.$inferSelect;
 export type SyncState = typeof syncState.$inferSelect;
 export type Media = typeof media.$inferSelect;
+export type SeasonRow = typeof seasons.$inferSelect;
+export type EpisodeRow = typeof episodes.$inferSelect;
 export type Tracking = typeof tracking.$inferSelect;
 export type EpisodeWatch = typeof episodeWatches.$inferSelect;

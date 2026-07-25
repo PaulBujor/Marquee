@@ -71,6 +71,20 @@
       "when": 1784833246765,
       "tag": "0009_media_last_aired",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1784928221734,
+      "tag": "0010_media_relational_add",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1784928246724,
+      "tag": "0011_media_drop_legacy_json",
+      "breakpoints": true
     }
   ]
 }
