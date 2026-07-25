@@ -2,8 +2,8 @@
  * Core of the media reference channel (`POST /api/media/sync`), extracted from the endpoint so
  * it's testable. Hydrates/refreshes + returns the media a user's events reference — never trusting
  * a client-claimed id, and never touching media the user doesn't actually track (anti-abuse). The
- * client reports what it `have`s (id + version); the server returns rows it's **missing or behind
- * on** (server version > client version) — the version-diff staleness signal (MRQ-122).
+ * client reports what it `have`s (id + version); the server returns rows it's missing or behind on
+ * (server version > client version).
  */
 import { eq, inArray } from 'drizzle-orm';
 import { episodes, events, media, seasons, type Media } from '$lib/server/db/schema';
@@ -17,7 +17,7 @@ type Db = ReturnType<typeof createDb>;
 type SeasonRecord = NonNullable<MediaRecord['seasons']>[number];
 type EpisodeRecord = NonNullable<MediaRecord['episodes']>[number];
 
-/** Assemble the wire record for a media row + its child rows (drops the server-only LWW clock). */
+/** Project a media row (+ its child rows) to the wire record (drops the server-only LWW clock). */
 function toRecord(
 	row: Media,
 	seasonRows: SeasonRecord[],
@@ -73,20 +73,19 @@ export async function resolveMediaSync(
 		if (ref) await refreshMedia(db, tmdb, ref.provider, ref.externalId);
 	}
 
-	// Return rows the client is missing (no `have` entry) or behind on (server version higher).
 	const rows = await db.select().from(media).where(inArray(media.id, referencedIds));
-	const changed = rows.filter((r) => {
-		const v = haveVersion.get(r.id);
-		return v === undefined || r.version > v;
+	const staleForClient = rows.filter((r) => {
+		const clientVersion = haveVersion.get(r.id);
+		return clientVersion === undefined || r.version > clientVersion;
 	});
-	if (changed.length === 0) return { media: [] };
+	if (staleForClient.length === 0) return { media: [] };
 
-	const changedShowIds = changed.filter((r) => r.type === 'show').map((r) => r.id);
-	const seasonRows = changedShowIds.length
-		? await db.select().from(seasons).where(inArray(seasons.mediaId, changedShowIds))
+	const staleShowIds = staleForClient.filter((r) => r.type === 'show').map((r) => r.id);
+	const seasonRows = staleShowIds.length
+		? await db.select().from(seasons).where(inArray(seasons.mediaId, staleShowIds))
 		: [];
-	const episodeRows = changedShowIds.length
-		? await db.select().from(episodes).where(inArray(episodes.mediaId, changedShowIds))
+	const episodeRows = staleShowIds.length
+		? await db.select().from(episodes).where(inArray(episodes.mediaId, staleShowIds))
 		: [];
 
 	const seasonsByMedia = new Map<string, SeasonRecord[]>();
@@ -118,7 +117,7 @@ export async function resolveMediaSync(
 	}
 
 	return {
-		media: changed.map((r) =>
+		media: staleForClient.map((r) =>
 			toRecord(r, seasonsByMedia.get(r.id) ?? [], episodesByMedia.get(r.id) ?? [])
 		)
 	};

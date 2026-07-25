@@ -1,7 +1,6 @@
 /**
- * Wire contract for `POST /api/media/sync` — the media reference channel, separate from the
- * events channel (`/api/sync`). The client sends identity only; the server derives our id and
- * hydrates from TMDB (see MRQ-111a). Client-safe (shared by the endpoint and the client engine).
+ * Wire contract for `POST /api/media/sync` — the media reference channel, separate from the events
+ * channel (`/api/sync`). Client-safe (shared by the endpoint and the client engine).
  */
 import { z } from 'zod';
 import { MEDIA_PROVIDERS, type MediaRecord } from './events';
@@ -10,12 +9,10 @@ import { MEDIA_PROVIDERS, type MediaRecord } from './events';
 export const MEDIA_SYNC_MAX = 500;
 
 /**
- * Request body: `refs` are identity hints for media the client has (so the server can hydrate
- * + store them), `have` reports each media id the client references locally with the `version`
- * it holds. The server returns rows the client is **missing OR behind on** (server version >
- * client version) — the version-diff staleness signal (MRQ-122), so a refreshed row propagates
- * without the old "re-pull everything" heuristic. The server only acts on ids the user's own
- * events reference (anti-abuse).
+ * `refs` are identity hints for titles the client has (so the server can hydrate + store them);
+ * `have` reports the `version` the client holds per media id. The server replies with the rows the
+ * client is missing or behind on (server version > client version), and only touches ids the user's
+ * own events reference.
  */
 export const mediaSyncRequestSchema = z.object({
 	refs: z

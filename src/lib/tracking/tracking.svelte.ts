@@ -28,7 +28,7 @@ import {
 	statusEventType,
 	nextFavorite,
 	watchedKey,
-	type EpisodeAir,
+	type DatedEpisode,
 	type EpisodeCoord,
 	type TrackingView
 } from './actions';
@@ -39,7 +39,7 @@ export class TrackingState {
 	/** Whether TMDB considers the show still in production — feeds completion reconciliation. */
 	readonly #inProduction: boolean | null;
 	/** Per-episode metadata (coords + air dates), loaded from IndexedDB (empty for movies / unsynced). */
-	episodes = $state<EpisodeAir[]>([]);
+	episodes = $state<DatedEpisode[]>([]);
 	/** Current tracking view (untracked, or status + favorite). */
 	view = $state<TrackingView>({ tracked: false });
 	/** Watched-episode keys (`"season:episode"`). */

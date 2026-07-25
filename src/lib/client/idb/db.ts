@@ -28,26 +28,21 @@ export interface OutboxEvent extends EventEnvelope {
 	synced: 0 | 1;
 }
 
-/** The scalar part of a media record — everything except the nested season/episode arrays, which
- * live in their own stores (mirroring the server's relational `seasons`/`episodes` tables). */
+/** A media record's scalar fields; its seasons/episodes live in their own stores. */
 export type MediaScalars = Omit<MediaRecord, 'seasons' | 'episodes'>;
 
-/** Cached catalog entry (media scalars); `updatedAt` is the LWW clock (epoch ms). */
+/** `updatedAt` is the LWW clock (epoch ms). */
 export interface ClientMedia extends MediaScalars {
 	updatedAt: number;
 }
 
-/** A cached season row. `id` = `${mediaId}::s{seasonNumber}`; indexed by media for grouped reads. */
+/** `id` = `${mediaId}::s{seasonNumber}`. */
 export interface ClientSeason extends MediaSeason {
 	id: string;
 	mediaId: string;
 }
 
-/**
- * A cached episode row (with its air date). `id` = `${mediaId}::s{S}e{E}`. Indexed by media
- * (per-title reads) and by `airDate` (the upcoming-releases calendar range scan, MRQ-65). An
- * episode with a null `airDate` is simply absent from the `by_airDate` index.
- */
+/** `id` = `${mediaId}::s{S}e{E}`. A null `airDate` is absent from the `by_airDate` index. */
 export interface ClientEpisode extends MediaEpisode {
 	id: string;
 	mediaId: string;
@@ -180,8 +175,6 @@ export function openDb(): Promise<MarqueeDatabase> {
 				}
 				if (!db.objectStoreNames.contains('media'))
 					db.createObjectStore('media', { keyPath: 'id' });
-				// Relational season/episode reference stores (v3) — mirror the server's
-				// seasons/episodes tables; episodes carry air dates for watchability + the calendar.
 				if (!db.objectStoreNames.contains('seasons')) {
 					const seasons = db.createObjectStore('seasons', { keyPath: 'id' });
 					seasons.createIndex('by_media', 'mediaId');
@@ -197,8 +190,7 @@ export function openDb(): Promise<MarqueeDatabase> {
 					const episodeWatches = db.createObjectStore('episodeWatches', { keyPath: 'id' });
 					episodeWatches.createIndex('by_media', 'mediaId');
 				}
-				// `upcoming` (v2) is superseded by the `episodes` store's `by_airDate` index — drop it.
-				// Cast to the untyped DB: `upcoming` is no longer part of the typed schema.
+				// Drop the superseded `upcoming` store (v2); cast because it's no longer typed.
 				const legacy = db as unknown as IDBPDatabase;
 				if (legacy.objectStoreNames.contains('upcoming')) legacy.deleteObjectStore('upcoming');
 				if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });

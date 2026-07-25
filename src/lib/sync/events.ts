@@ -46,52 +46,43 @@ export const SYNC_EVENT_TYPES = [
 ] as const;
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
 
-/**
- * A season's reference metadata (a show's, nested in a {@link MediaRecord}). Air date + counts
- * come from TMDB; not a projection of the event log.
- */
+/** A show's season, nested in a {@link MediaRecord}. */
 export interface MediaSeason {
 	seasonNumber: number;
 	name: string;
 	overview: string;
-	/** Season premiere date (`YYYY-MM-DD`), or null when TMDB has none. */
+	/** `YYYY-MM-DD`, or null. */
 	airDate: string | null;
 	posterPath: string | null;
 	episodeCount: number;
 }
 
 /**
- * A single episode's reference metadata (a show's, nested in a {@link MediaRecord}). `airDate`
- * is the released-status source of truth — an episode counts as aired once `airDate <= today`;
- * **null means unannounced / not yet aired** (so it isn't watchable and feeds the calendar).
+ * A show's episode, nested in a {@link MediaRecord}. A null `airDate` means it hasn't aired yet
+ * (unannounced or future), so it isn't watchable.
  */
 export interface MediaEpisode {
 	season: number;
 	episode: number;
 	name: string;
 	overview: string;
-	/** Air date (`YYYY-MM-DD`), or null when unannounced / not yet scheduled. */
+	/** `YYYY-MM-DD`, or null when not yet scheduled. */
 	airDate: string | null;
 	runtime: number | null;
 	stillPath: string | null;
 }
 
 /**
- * A media reference record — the shared shape of the server `media` row (+ its `seasons`/`episodes`
- * child rows), the client media store, and the media-channel DTO. Media is *reference data*, synced
- * on a separate parallel channel (MRQ-111) — **never** inside `/api/sync`, which carries events
- * only. Events refer to a title by `entityId` (this `id`), never by embedding this. `id` is our
- * provider-agnostic media id ({@link mediaId}); TMDB stays the real source, this is the display
- * cache clients hold for offline rendering.
- *
- * Show-only fields (`status`/`inProduction`/`firstAirDate`/`lastAirDate`/`seasons`/`episodes`) are
- * null for movies; the movie-only `releaseDate` is null for shows. `version` is bumped server-side
- * on each refresh that changes content — the client staleness signal (MRQ-122).
+ * Media reference data — the shared shape of the server `media` row (plus its `seasons`/`episodes`
+ * child rows), the client media cache, and the media-channel payload. Held so tracked titles render
+ * offline; TMDB stays the source. Events reference a title by its `id` and never embed it. `version`
+ * is bumped server-side whenever a refresh changes content, so a client can spot a stale copy
+ * without diffing every field.
  */
 export interface MediaRecord {
 	id: string;
 	provider: MediaProvider;
-	/** The provider's id (e.g. `movie/603`); null for purely-custom media. */
+	/** The provider's own id, e.g. `movie/603`; null for custom media. */
 	externalId: string | null;
 	source: MediaSource;
 	type: 'movie' | 'show';
@@ -101,21 +92,20 @@ export interface MediaRecord {
 	backdropPath: string | null;
 	overview: string;
 	genres: string[];
-	/** Full movie release date (`YYYY-MM-DD`), or null. Movies only. */
+	/** `YYYY-MM-DD`. Movies only. */
 	releaseDate: string | null;
-	/** TMDB series status (e.g. `Returning Series`, `Ended`, `Canceled`); null for movies. */
+	/** TMDB status, e.g. `Returning Series` / `Ended`. Shows only. */
 	status: string | null;
-	/** TMDB `in_production` — still-airing signal for completion/refresh; null for movies. */
+	/** Shows only. */
 	inProduction: boolean | null;
-	/** First air date of the series (`YYYY-MM-DD`); null for movies. */
+	/** `YYYY-MM-DD`. Shows only. */
 	firstAirDate: string | null;
-	/** Last air date of the series so far (`YYYY-MM-DD`); null for movies / not-yet-aired. */
+	/** `YYYY-MM-DD`. Shows only. */
 	lastAirDate: string | null;
-	/** Content version, bumped server-side on each refresh that changes data (staleness signal). */
 	version: number;
-	/** Season metadata for shows; null for movies. */
+	/** Null for movies. */
 	seasons: MediaSeason[] | null;
-	/** Per-episode metadata (with air dates) for shows; null for movies. */
+	/** Null for movies. */
 	episodes: MediaEpisode[] | null;
 }
 

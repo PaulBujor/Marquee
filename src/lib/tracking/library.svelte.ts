@@ -12,7 +12,7 @@ import {
 	getTracking,
 	recordEvent
 } from '$lib/client/idb';
-import { watchedKey, type EpisodeAir } from './actions';
+import { watchedKey, type DatedEpisode } from './actions';
 import { showProgress, type LibraryItem } from './library';
 import { reconcileStatus } from './reconcile';
 import { sync } from '$lib/client/sync/engine.svelte';
@@ -31,7 +31,7 @@ export class LibraryState {
 			const m = byId.get(t.mediaId);
 			const isShow = m?.type === 'show';
 			let watched = new Set<string>();
-			let episodes: EpisodeAir[] = [];
+			let episodes: DatedEpisode[] = [];
 			if (isShow) {
 				const [watches, eps] = await Promise.all([
 					getEpisodeWatches(t.mediaId),

@@ -39,11 +39,11 @@ export function nextFavorite(view: TrackingView): boolean {
 	return !(view.tracked && view.favorite);
 }
 
-/** Minimal episode shape the watchability helpers read — coordinates + air date. */
-export interface EpisodeAir {
+/** An episode coordinate with its air date — the input to the watchability helpers below. */
+export interface DatedEpisode {
 	season: number;
 	episode: number;
-	/** Air date (`YYYY-MM-DD`), or null when unannounced / not yet scheduled. */
+	/** `YYYY-MM-DD`, or null. */
 	airDate: string | null;
 }
 
@@ -78,14 +78,14 @@ export function isAired(ep: { airDate: string | null }, today: string): boolean 
 }
 
 /** A show's episodes **excluding Specials** (season 0), sorted by (season, episode). */
-export function mainEpisodes(episodes: EpisodeAir[]): EpisodeAir[] {
+export function mainEpisodes(episodes: DatedEpisode[]): DatedEpisode[] {
 	return episodes
 		.filter((e) => !isSpecialsSeason(e.season))
 		.sort((a, b) => a.season - b.season || a.episode - b.episode);
 }
 
 /** Episodes that have aired as of `today` (excluding Specials), in order. */
-export function airedEpisodes(episodes: EpisodeAir[], today: string): EpisodeAir[] {
+export function airedEpisodes(episodes: DatedEpisode[], today: string): DatedEpisode[] {
 	return mainEpisodes(episodes).filter((e) => isAired(e, today));
 }
 
@@ -94,7 +94,7 @@ export function airedEpisodes(episodes: EpisodeAir[], today: string): EpisodeAir
  * skipping Specials. Returns null when every aired episode is watched.
  */
 export function nextEpisode(
-	episodes: EpisodeAir[],
+	episodes: DatedEpisode[],
 	watched: Set<string>,
 	today: string
 ): EpisodeCoord | null {
@@ -107,7 +107,7 @@ export function nextEpisode(
 
 /** Whether every **aired** episode of a season is watched (false when it has no aired episodes). */
 export function isSeasonFullyWatched(
-	episodes: EpisodeAir[],
+	episodes: DatedEpisode[],
 	seasonNumber: number,
 	watched: Set<string>,
 	today: string
@@ -118,13 +118,11 @@ export function isSeasonFullyWatched(
 }
 
 /**
- * Whether a show is **still airing** — it's in production, or it has announced episodes not yet
- * aired (a future or unscheduled air date). Keeps a show you're caught up on but that isn't
- * finished in `watching` rather than auto-completing it, and covers the ended-then-revived case
- * (a status/`inProduction` flip on refresh brings it back).
+ * Whether a show may still gain episodes — it's in production, or has announced episodes not yet
+ * aired. Keeps a caught-up-but-unfinished show in `watching` instead of auto-completing it.
  */
 export function isStillAiring(
-	episodes: EpisodeAir[],
+	episodes: DatedEpisode[],
 	inProduction: boolean | null,
 	today: string
 ): boolean {

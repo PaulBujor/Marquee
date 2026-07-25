@@ -11,12 +11,12 @@ import {
 	isStillAiring,
 	reconciledStatus,
 	todayIso,
-	type EpisodeAir
+	type DatedEpisode
 } from './actions';
 
 export async function reconcileStatus(
 	mediaId: string,
-	episodes: EpisodeAir[],
+	episodes: DatedEpisode[],
 	inProduction: boolean | null = null,
 	today: string = todayIso()
 ): Promise<void> {
@@ -40,6 +40,6 @@ export async function reconcileStatus(
 }
 
 /** The air date of a given episode coord in the reference list, or null if unknown. */
-function airDateOf(episodes: EpisodeAir[], season: number, episode: number): string | null {
+function airDateOf(episodes: DatedEpisode[], season: number, episode: number): string | null {
 	return episodes.find((e) => e.season === season && e.episode === episode)?.airDate ?? null;
 }

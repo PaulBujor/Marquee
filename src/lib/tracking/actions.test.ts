@@ -14,18 +14,18 @@ import {
 	todayIso,
 	toTrackingView,
 	watchedKey,
-	type EpisodeAir
+	type DatedEpisode
 } from './actions';
 
 const TODAY = '2026-07-24';
 
 /** Build an episode record. */
-function ep(season: number, episode: number, airDate: string | null): EpisodeAir {
+function ep(season: number, episode: number, airDate: string | null): DatedEpisode {
 	return { season, episode, airDate };
 }
 
 // A show spanning Specials + two seasons, with aired, future, and unannounced episodes.
-const show: EpisodeAir[] = [
+const show: DatedEpisode[] = [
 	ep(0, 1, '2020-01-01'), // Specials — excluded from the main progression
 	ep(1, 1, '2026-01-01'), // aired
 	ep(1, 2, '2026-02-01'), // aired

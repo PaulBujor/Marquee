@@ -24,9 +24,7 @@ export {
 	putMedia,
 	getMedia,
 	getAllMedia,
-	getSeasons,
 	getEpisodes,
-	getEpisodesAiringFrom,
 	getLinkedMediaRefs,
 	getMediaVersions
 } from './media';

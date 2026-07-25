@@ -1,13 +1,13 @@
 /**
  * Server-side media hydration for the media channel + the nightly refresh cron. The client sends
  * only identity `(provider, externalId)`; the server derives our media id and fetches metadata from
- * TMDB itself, so the shared `media` catalog only ever holds authoritative data (a client can't
- * inject a title/poster for a shared `linked` row — see the MRQ-111a spec).
+ * TMDB, so the shared catalog only ever holds authoritative data — a client can't inject a
+ * title/poster for a shared `linked` row.
  *
- * `refreshMedia` is **refresh-aware** (MRQ-37/39): on a miss it does a full hydrate (details + every
- * season's episodes, with air dates); on a hit it re-pulls only when the row is stale (airing shows
- * on a TTL; movies/finished shows never), reconciles the `seasons`/`episodes` child rows, and bumps
- * `version` when content actually changed — the client staleness signal (MRQ-122).
+ * `refreshMedia` is refresh-aware: on a miss it fully hydrates (details + every season's episodes);
+ * on a hit it re-pulls only when the row is stale (airing shows past a TTL; movies + finished shows
+ * never), reconciles the `seasons`/`episodes` child rows, and bumps `version` only when content
+ * actually changed.
  */
 import { eq } from 'drizzle-orm';
 import { episodes, media, seasons, type EpisodeRow, type Media } from '$lib/server/db/schema';
@@ -24,7 +24,9 @@ export const AIRING_TTL_MS = 12 * 60 * 60 * 1000;
 /** Rows per child-table insert — keeps well under D1's bound-parameter limit for big shows. */
 const INSERT_CHUNK = 50;
 
-/** TMDB statuses that mean a show may still gain/adjust episodes (so it refreshes on a TTL). */
+// TMDB's own TV statuses (full set: Returning Series / Planned / In Production / Ended / Canceled /
+// Pilot) for a show that may still gain episodes. `in_production` is the primary signal; these catch
+// a show between seasons where `in_production` has flipped false but more is expected.
 const AIRING_STATUSES = new Set(['Returning Series', 'In Production', 'Planned', 'Pilot']);
 
 /** A TMDB external id (`movie/603`) parsed into its media type and numeric id. */

@@ -113,9 +113,8 @@ export interface TmdbTvDetailsResponse {
 	images?: TmdbImages;
 	videos?: TmdbVideosResponse;
 	seasons?: TmdbSeasonSummary[];
-	/** Production/airing status — e.g. `Returning Series`, `Ended`, `Canceled`, `In Production`. */
+	/** One of TMDB's TV statuses: `Returning Series`, `Planned`, `In Production`, `Ended`, `Canceled`, `Pilot`. */
 	status?: string;
-	/** Whether TMDB considers the show still in production (more episodes expected). */
 	in_production?: boolean;
 }
 
@@ -166,30 +165,29 @@ export interface MediaDetail {
 	tmdbId: number;
 	type: 'movie' | 'show';
 	title: string;
-	/** Release / first-air year, or null when TMDB has no date. */
 	year: number | null;
 	overview: string;
 	posterPath: string | null;
 	backdropPath: string | null;
-	/** TMDB vote average (0–10), or null when unrated. */
+	/** TMDB vote average (0–10), or null. */
 	rating: number | null;
 	voteCount: number;
-	/** Runtime in minutes (movie runtime, or first TV episode run time), or null. */
+	/** In minutes (movie runtime, or a show's per-episode run time), or null. */
 	runtime: number | null;
 	genres: string[];
 	cast: CastMember[];
 	trailer: MediaTrailer | null;
-	/** Full release date (`YYYY-MM-DD`) for a movie; null for shows. */
+	/** `YYYY-MM-DD`. Movies only. */
 	releaseDate: string | null;
-	/** TMDB series status (e.g. `Returning Series`, `Ended`); null for movies. */
+	/** Shows only. */
 	status: string | null;
-	/** TMDB `in_production` — still-airing signal; null for movies. */
+	/** Shows only. */
 	inProduction: boolean | null;
-	/** Series first air date (`YYYY-MM-DD`); null for movies. */
+	/** `YYYY-MM-DD`. Shows only. */
 	firstAirDate: string | null;
-	/** Series last air date so far (`YYYY-MM-DD`); null for movies / not-yet-aired. */
+	/** `YYYY-MM-DD`. Shows only. */
 	lastAirDate: string | null;
-	/** Season summaries for shows (ordered as TMDB returns them); empty for movies. */
+	/** Empty for movies. */
 	seasons: Season[];
 }
 
@@ -198,7 +196,7 @@ export interface Season {
 	seasonNumber: number;
 	name: string;
 	episodeCount: number;
-	/** Season premiere date (`YYYY-MM-DD`), or null when TMDB has none. */
+	/** `YYYY-MM-DD`, or null. */
 	airDate: string | null;
 	posterPath: string | null;
 	overview: string;
@@ -208,11 +206,11 @@ export interface Season {
 export interface Episode {
 	episodeNumber: number;
 	name: string;
-	/** Raw TMDB air date (`YYYY-MM-DD`), or null. */
+	/** `YYYY-MM-DD`, or null. */
 	airDate: string | null;
 	overview: string;
 	stillPath: string | null;
-	/** Episode runtime in minutes, or null when TMDB has none. */
+	/** In minutes, or null. */
 	runtime: number | null;
 }
 

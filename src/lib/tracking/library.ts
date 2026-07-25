@@ -8,7 +8,7 @@ import {
 	nextEpisode,
 	todayIso,
 	watchedKey,
-	type EpisodeAir,
+	type DatedEpisode,
 	type EpisodeCoord
 } from './actions';
 import type { TrackingStatus } from '$lib/sync/events';
@@ -30,7 +30,7 @@ export interface LibraryItem {
 	/** TMDB `in_production` — still-airing signal for completion; null for movies. */
 	inProduction: boolean | null;
 	/** Episode metadata (coords + air dates) — empty for movies / shows not yet synced. */
-	episodes: EpisodeAir[];
+	episodes: DatedEpisode[];
 	watched: Set<string>;
 }
 
