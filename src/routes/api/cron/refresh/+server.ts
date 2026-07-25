@@ -1,6 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import { createTmdbClient } from '$lib/server/tmdb';
 import { refreshStaleMedia } from '$lib/server/media/cron';
+import { purgeExpiredAuth } from '$lib/server/auth/cleanup';
 import type { RequestHandler } from './$types';
 
 /**
@@ -21,5 +22,13 @@ export const POST: RequestHandler = async ({ request, url, locals, platform }) =
 	console.log(
 		`cron: scanned ${result.scanned} unsettled titles — ${result.changed} changed, ${result.failed} failed${force ? ' (forced)' : ''}`
 	);
-	return json(result);
+
+	// Piggyback the auth-hygiene sweep on the same nightly run (MRQ-97): drop expired/consumed
+	// login tokens and expired sessions so those tables don't grow unbounded.
+	const purged = await purgeExpiredAuth(locals.db, Date.now());
+	console.log(
+		`cron: purged ${purged.loginTokens} stale login tokens and ${purged.sessions} expired sessions`
+	);
+
+	return json({ ...result, purged });
 };
