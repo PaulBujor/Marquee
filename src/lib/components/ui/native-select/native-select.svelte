@@ -1,14 +1,15 @@
 <script lang="ts">
-	import { cn, type WithElementRef } from '$lib/utils.js';
+	import { cn } from '$lib/utils.js';
 	import type { HTMLSelectAttributes } from 'svelte/elements';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 
-	type NativeSelectProps = Omit<WithElementRef<HTMLSelectAttributes>, 'size'> & {
+	// No `ref`/`bind:this`: nothing consumes an element ref here, and svelte-check rejects a
+	// `<select bind:this>` typed through WithElementRef. Plain attributes + bind:value is all we need.
+	type NativeSelectProps = Omit<HTMLSelectAttributes, 'size'> & {
 		size?: 'sm' | 'default';
 	};
 
 	let {
-		ref = $bindable(null),
 		value = $bindable(),
 		class: className,
 		size = 'default',
@@ -27,7 +28,6 @@
 >
 	<select
 		bind:value
-		bind:this={ref}
 		data-slot="native-select"
 		data-size={size}
 		class="h-8 w-full min-w-0 appearance-none rounded-lg border border-input bg-transparent py-1 pr-8 pl-2.5 text-sm transition-colors outline-none select-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] data-[size=sm]:py-0.5 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
