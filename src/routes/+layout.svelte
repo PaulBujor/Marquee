@@ -50,7 +50,7 @@
 	});
 
 	// OS chrome matches the app background (not the accent); hex mirror `--background`.
-	const themeColor = $derived(theme.isDark ? '#090a0e' : '#f7f6f3');
+	const themeColor = $derived(theme.isDark ? '#000000' : '#f7f6f3');
 </script>
 
 <svelte:head>
