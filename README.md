@@ -75,13 +75,66 @@ Unit tests run with [Vitest](https://vitest.dev/): `pnpm test`, or `pnpm test:co
 ```
 src/
   lib/
+    sync/          # Shared event model + wire contracts (client- and server-safe)
     server/        # Server-only code — never import from client
       auth/        # Passwordless magic-link: tokens, sessions, request/verify
       db/          # Drizzle schema + migrations (D1)
       email/       # EmailSender — Resend (prod) / Mailpit (dev)
+      media/       # TMDB hydration + the media reference channel (+ refresh cron)
+      sync/        # Server-side event projection
+      tmdb/        # TMDB API client
+    client/
+      idb/         # IndexedDB stores: outbox, projections, media cache
+      sync/        # Sync engine: events + media + image channels
+    tracking/      # Watchlist read models + watchability helpers
     components/    # Shared Svelte components
   routes/          # SvelteKit file-based routing
+  cron/            # Standalone cron Worker (nightly media refresh)
 ```
+
+## Architecture
+
+Marquee is **offline-first**. The client's IndexedDB is a full local replica and the source of truth for your data; the server is a **sync relay + TMDB gateway**, never the sole holder — so the app keeps working (and can export everything) with no network.
+
+### Event-sourced tracking
+
+Every tracking action — add to list, change status, favorite, rate, mark an episode watched — is recorded as an **append-only event** (`tracking.added`, `tracking.status_changed`, `episode.watched`, …), never a direct row update. The event log is the single source of truth; both the client (IndexedDB) and the server (D1) **materialize the same log** into projection tables (`tracking`, `episode_watches`) using identical projection code.
+
+- **Local-first + optimistic** — an action writes its event to a local outbox _and_ applies it to the local projection immediately, so the UI updates with zero latency and works fully offline.
+- **Last-writer-wins merge**, per field, keyed by the event's `clientCreatedAt` (device clock). Event ids are client-minted UUIDs and the `events` primary key is composite `(user_id, id)`, so replaying a synced event is a no-op and a colliding id from one user can never drop another's.
+- **Provider-agnostic media identity** — each title has a deterministic v5 UUID derived from `(provider, externalId)` (e.g. `tmdb` + `movie/603`). Every device derives the same id offline, so events reference titles by that id with no coordination, and switching providers or surviving a TMDB outage needs no remapping.
+
+### Two sync channels
+
+User-action events are tiny; media metadata (posters, seasons, per-episode air dates) is heavy. Bundling them would slow the thing that must feel instant, so they sync on **separate channels**, events first:
+
+| Channel    | Endpoint               | Carries                                                  | Flow                                    |
+| ---------- | ---------------------- | -------------------------------------------------------- | --------------------------------------- |
+| **Events** | `POST /api/sync`       | user-action events                                       | push local outbox + pull after a cursor |
+| **Media**  | `POST /api/media/sync` | reference data (title, images, seasons/episodes + dates) | pull only; server hydrates from TMDB    |
+| **Images** | same-origin proxy      | poster + backdrop bytes                                  | pull, cached as IndexedDB blobs         |
+
+The **sync engine** (`src/lib/client/sync`) runs on app open, foreground, reconnect, and a light interval, in order:
+
+1. **Events** — push everything in the outbox, pull events after the local cursor, apply them through the projection, advance the cursor. This must succeed before the rest.
+2. **Media** — report `have: [{ id, version }]` for local titles; the server returns rows the client is **missing or behind on** and hydrates any it doesn't yet hold from TMDB. Hydration is **server-side**, so shared catalog rows can't be poisoned with client-supplied metadata.
+3. **Images** — fetch missing poster/backdrop bytes through a same-origin proxy, store as blobs keyed by media id.
+
+### How they play together
+
+```
+┌──────────────── client (IndexedDB — source of truth) ─────────────────┐
+│  UI action ─▶ append event ─▶ optimistic projection ─▶ outbox          │
+└────────────────┬─────────────────────────────────────┬────────────────┘
+                 │ 1. events (POST /api/sync)           │ 2. media (POST /api/media/sync)
+                 ▼                                       ▼
+┌──────────────────────── server (Cloudflare Worker + D1) ───────────────┐
+│  events log ─▶ projection (tracking, episode_watches)                  │
+│  media cache ◀─ hydrate / refresh ◀─ TMDB ◀── nightly cron Worker      │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+Events reference a title only by its media id — media is **never embedded in an event**, and the two channels stay decoupled. Media reference rows carry a `version`, bumped server-side whenever a refresh changes content, so clients detect staleness cheaply via the version diff and re-pull only what changed. Refresh is **TTL-aware** (in-production shows re-pull periodically; movies and finished shows don't), and a **nightly cron Worker** sweeps in-production shows so newly-aired episodes surface even when nobody opens the title. Watchability (what's aired, the next episode, whether a show is complete) is derived from the per-episode air dates that model carries.
 
 ## Deployment
 
@@ -104,6 +157,15 @@ pnpm exec wrangler secret put VAPID_PRIVATE_KEY
 ```
 
 Also set `EMAIL_FROM` to a **Resend-verified** sender (e.g. `Marquee <noreply@yourdomain.com>`) — as a plaintext `var` or a secret. Sending fails (Resend 403) from an unverified domain.
+
+### Refresh cron Worker
+
+The nightly media refresh (`src/cron`) is a **separate Worker** sharing the same D1, because `adapter-cloudflare` emits a fetch-only worker with no room for a `scheduled` handler. Deploy it and set its own TMDB secret once:
+
+```sh
+pnpm exec wrangler secret put TMDB_API_KEY -c wrangler.cron.jsonc
+pnpm cron:deploy
+```
 
 ## Learn more
 
