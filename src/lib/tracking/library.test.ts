@@ -30,6 +30,7 @@ function item(over: Partial<LibraryItem> = {}): LibraryItem {
 		title: 'X',
 		year: 2000,
 		releaseDate: null,
+		firstAirDate: null,
 		posterPath: null,
 		genres: [],
 		inProduction: null,
@@ -163,26 +164,37 @@ describe('filterAndSortLibrary', () => {
 		).toEqual(['c']);
 	});
 
-	it('sorts by title, release year, and date added', () => {
-		const all = { tab: 'favorites' as const, type: 'all' as const, year: null, genre: null };
-		// use a tab that includes several: switch to a filter that returns a,b,c — use type all + a status? favorites only has c.
-		const three = [items[0], items[1], items[2]];
-		expect(
-			filterAndSortLibrary(three, { ...all, sort: 'title', tab: 'want_to_watch' }).length
-		).toBe(1); // sanity
+	it('sorts by title, release date, and date added', () => {
 		// Sort directly over a set sharing a tab: give all three the same status.
-		const same = three.map((i) => ({ ...i, status: 'completed' as const }));
+		const same = [items[0], items[1], items[2]].map((i) => ({
+			...i,
+			status: 'completed' as const
+		}));
 		const f = { tab: 'completed' as const, type: 'all' as const, year: null, genre: null };
 		expect(filterAndSortLibrary(same, { ...f, sort: 'title' }).map((i) => i.title)).toEqual([
 			'Alpha',
 			'Mid',
 			'Zed'
 		]);
-		expect(filterAndSortLibrary(same, { ...f, sort: 'year' }).map((i) => i.year)).toEqual([
+		expect(filterAndSortLibrary(same, { ...f, sort: 'date' }).map((i) => i.year)).toEqual([
 			2020, 2015, 2010
 		]);
 		expect(filterAndSortLibrary(same, { ...f, sort: 'added' }).map((i) => i.addedAt)).toEqual([
 			300, 200, 100
+		]);
+	});
+
+	it('sorts by full release date, not just the year (movie releaseDate / show firstAirDate)', () => {
+		const f = { tab: 'want_to_watch' as const, type: 'all' as const, year: null, genre: null };
+		const rows = [
+			item({ mediaId: 'jan', title: 'Jan', year: 2026, releaseDate: '2026-01-10' }),
+			item({ mediaId: 'dec', title: 'Dec', year: 2026, releaseDate: '2026-12-20' }),
+			item({ mediaId: 'show', title: 'Show', type: 'show', year: 2026, firstAirDate: '2026-06-15' })
+		];
+		expect(filterAndSortLibrary(rows, { ...f, sort: 'date' }).map((i) => i.mediaId)).toEqual([
+			'dec',
+			'show',
+			'jan'
 		]);
 	});
 });
