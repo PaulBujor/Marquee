@@ -15,16 +15,19 @@ type Db = ReturnType<typeof createDb>;
 export interface RefreshResult {
 	scanned: number;
 	changed: number;
+	failed: number;
 }
 
 /**
- * Refresh all provider-backed, in-production shows. Per-show failures are isolated (logged, the
- * sweep continues) so one bad title can't abort the run. `now` is injectable for tests.
+ * Refresh all provider-backed, in-production shows. Per-show failures are isolated (counted +
+ * logged, the sweep continues) so one bad title can't abort the run. `force` bypasses the per-row
+ * TTL (for a manual re-hydrate); `now` is injectable for tests.
  */
 export async function refreshInProductionShows(
 	db: Db,
 	tmdb: Pick<TmdbClient, 'getDetails' | 'getSeason'>,
-	now: number = Date.now()
+	now: number = Date.now(),
+	force = false
 ): Promise<RefreshResult> {
 	const rows = await db
 		.select({
@@ -37,15 +40,17 @@ export async function refreshInProductionShows(
 		.where(and(eq(media.type, 'show'), eq(media.inProduction, true)));
 
 	let changed = 0;
+	let failed = 0;
 	for (const row of rows) {
 		if (!row.externalId) continue; // custom (unlinked) shows can't be hydrated from a provider
 		try {
-			const updated = await refreshMedia(db, tmdb, row.provider, row.externalId, now);
+			const updated = await refreshMedia(db, tmdb, row.provider, row.externalId, now, force);
 			if (updated && updated.version > row.version) changed++;
 		} catch (err) {
+			failed++;
 			console.error(`cron: failed to refresh ${row.provider}:${row.externalId}`, err);
 		}
 	}
 
-	return { scanned: rows.length, changed };
+	return { scanned: rows.length, changed, failed };
 }

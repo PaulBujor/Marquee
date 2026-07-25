@@ -12,7 +12,8 @@ export async function isDbReachable(db: Db): Promise<boolean> {
 	try {
 		await db.run(sql`select 1`);
 		return true;
-	} catch {
+	} catch (err) {
+		console.error('healthz: database unreachable', err);
 		return false;
 	}
 }

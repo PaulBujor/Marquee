@@ -8,17 +8,21 @@
 
 	let open = $state(false);
 	let busy = $state(false);
+	let errored = $state(false);
 
 	async function clearLocalData() {
 		busy = true;
+		errored = false;
 		try {
 			// Flush pending local events first so a wipe doesn't drop unsynced edits (best-effort —
 			// offline, there's nothing to push and we proceed anyway).
-			await runSync().catch(() => {});
+			await runSync().catch((err) => console.warn('clear local data: pre-wipe flush failed', err));
 			sync.stop();
 			await wipeLocalData();
 			location.reload(); // re-init on a fresh store → re-pull everything from the server
-		} catch {
+		} catch (err) {
+			console.error('clear local data: wipe failed', err);
+			errored = true;
 			busy = false; // leave the dialog open so the user can retry
 		}
 	}
@@ -46,6 +50,9 @@
 						changes made offline that haven't synced yet will be lost.
 					</AlertDialog.Description>
 				</AlertDialog.Header>
+				{#if errored}
+					<p class="text-sm text-destructive">Couldn't clear local data. Please try again.</p>
+				{/if}
 				<AlertDialog.Footer>
 					<AlertDialog.Cancel type="button" disabled={busy}>Cancel</AlertDialog.Cancel>
 					<!-- Plain button (not AlertDialog.Action) so the dialog stays open while we flush + wipe. -->

@@ -76,6 +76,7 @@
 		untrack(() => (data.season ? { [data.season.seasonNumber]: data.season } : {}))
 	);
 	let seasonLoading = $state(false);
+	let seasonError = $state(false);
 	let preselectedFor = $state<string | null>(null);
 	const currentSeason = $derived(
 		selectedSeason !== null ? (seasonCache[selectedSeason] ?? null) : null
@@ -138,9 +139,23 @@
 		selectedSeason = seasonNumber; // highlight immediately; episodes fill in when fetched
 		if (seasonCache[seasonNumber]) return;
 		seasonLoading = true;
+		seasonError = false;
 		try {
 			const res = await fetch(`/title/${detail.type}/${detail.tmdbId}/season/${seasonNumber}`);
-			if (res.ok) seasonCache[seasonNumber] = await res.json();
+			if (res.ok) {
+				seasonCache[seasonNumber] = await res.json();
+			} else {
+				seasonError = true;
+				console.error(
+					`selectSeason: HTTP ${res.status} for ${detail.type}/${detail.tmdbId} season ${seasonNumber}`
+				);
+			}
+		} catch (err) {
+			seasonError = true;
+			console.error(
+				`selectSeason: failed to load ${detail.type}/${detail.tmdbId} season ${seasonNumber}`,
+				err
+			);
 		} finally {
 			seasonLoading = false;
 		}
@@ -430,6 +445,18 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 							</li>
 						{/each}
 					</ul>
+				{:else if seasonError}
+					<p class="py-2 text-sm text-muted-foreground">
+						Couldn't load this season. <button
+							type="button"
+							class="font-medium text-primary underline"
+							onclick={() => {
+								const s = selectedSeason;
+								selectedSeason = null;
+								if (s !== null) selectSeason(s);
+							}}>Retry</button
+						>
+					</p>
 				{:else if currentSeason}
 					{#if currentSeason.episodes.length > 0}
 						<ul class="flex flex-col">

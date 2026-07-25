@@ -143,14 +143,15 @@ async function replaceChildren(
  * Ensure a fresh media row (+ its seasons/episodes) exists for `(provider, externalId)` and return
  * it. Cached + TTL-aware: an up-to-date row is returned without touching TMDB. Returns null for an
  * unknown provider / malformed id / first-time TMDB miss (a transient miss on an existing row keeps
- * the stored data). `now` is injectable for tests.
+ * the stored data). `force` re-pulls even within the TTL; `now` is injectable for tests.
  */
 export async function refreshMedia(
 	db: Db,
 	tmdb: TmdbHydrator,
 	provider: MediaProvider,
 	externalId: string,
-	now: number = Date.now()
+	now: number = Date.now(),
+	force = false
 ): Promise<Media | null> {
 	if (provider !== 'tmdb') return null;
 	const parsed = parseTmdbExternalId(externalId);
@@ -159,22 +160,33 @@ export async function refreshMedia(
 	const id = mediaId(provider, externalId);
 	const existingRows = await db.select().from(media).where(eq(media.id, id)).limit(1);
 	const existing = existingRows[0] ?? null;
-	if (existing && !needsRefresh(existing, now)) return existing;
+	if (existing && !force && !needsRefresh(existing, now)) return existing;
 
-	const detail = await tmdb.getDetails(parsed.type, parsed.tmdbId).catch(() => null);
+	const detail = await tmdb.getDetails(parsed.type, parsed.tmdbId).catch((err) => {
+		console.error(`refreshMedia: getDetails failed for ${externalId}`, err);
+		return null;
+	});
 	// A transient TMDB miss shouldn't wipe an existing row — keep what we have.
 	if (!detail) return existing;
 
-	// Fetch every season's episodes (incl. Specials) so per-episode air dates persist.
-	const seasonDetails =
+	// Fetch every season's episodes (incl. Specials) so per-episode air dates persist. A fetch
+	// failure must not be swallowed — otherwise the show persists with zero episodes; rethrow so the
+	// caller keeps the row stale and retries.
+	const seasonDetails: SeasonDetail[] =
 		detail.type === 'show'
-			? (
-					await Promise.all(
-						detail.seasons.map((s) =>
-							tmdb.getSeason(parsed.tmdbId, s.seasonNumber).catch(() => null)
-						)
-					)
-				).filter((s): s is SeasonDetail => s !== null)
+			? await Promise.all(
+					detail.seasons.map(async (s) => {
+						try {
+							return await tmdb.getSeason(parsed.tmdbId, s.seasonNumber);
+						} catch (err) {
+							console.error(
+								`refreshMedia: getSeason failed for ${externalId} s${s.seasonNumber}`,
+								err
+							);
+							throw err;
+						}
+					})
+				)
 			: [];
 
 	const { scalars, seasonRows, episodeRows } = toRows(
@@ -184,6 +196,12 @@ export async function refreshMedia(
 		detail,
 		seasonDetails
 	);
+	// A show with seasons but no episodes is anomalous (all seasons genuinely empty is rare).
+	if (detail.type === 'show' && detail.seasons.length > 0 && episodeRows.length === 0) {
+		console.warn(
+			`refreshMedia: ${externalId} hydrated with ${detail.seasons.length} seasons but 0 episodes`
+		);
+	}
 
 	if (!existing) {
 		await db

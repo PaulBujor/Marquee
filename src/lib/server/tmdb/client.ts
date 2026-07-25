@@ -17,7 +17,7 @@ const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
  * TMDB outage fails fast instead of every request retrying into a wall. Retries use short
  * server-side backoff — a metadata fetch shouldn't hold a request open for long.
  */
-const tmdbBreaker = new CircuitBreaker({ maxFailures: 5, cooldownMs: 30_000 });
+const tmdbBreaker = new CircuitBreaker({ maxFailures: 5, cooldownMs: 30_000, name: 'tmdb' });
 const TMDB_RETRY = { maxAttempts: 3, baseMs: 300, maxMs: 3000 };
 
 /** How many cast members the detail page shows (TMDB orders `cast` by billing). */

@@ -57,6 +57,8 @@ export interface CircuitOptions {
 	cooldownMs?: number;
 	/** Clock source (injectable for tests). Default `Date.now`. */
 	now?: () => number;
+	/** Optional label identifying this breaker in diagnostics when it trips open. */
+	name?: string;
 }
 
 type CircuitState = 'closed' | 'open' | 'half-open';
@@ -74,11 +76,13 @@ export class CircuitBreaker {
 	readonly #maxFailures: number;
 	readonly #cooldownMs: number;
 	readonly #now: () => number;
+	readonly #name: string | undefined;
 
 	constructor(opts: CircuitOptions = {}) {
 		this.#maxFailures = opts.maxFailures ?? 5;
 		this.#cooldownMs = opts.cooldownMs ?? 60000;
 		this.#now = opts.now ?? Date.now;
+		this.#name = opts.name;
 	}
 
 	/** Whether a call is allowed now. Transitions open → half-open once the cooldown has elapsed. */
@@ -102,9 +106,12 @@ export class CircuitBreaker {
 	/** Record a failure: trip open once the threshold is reached (or re-open from half-open). */
 	recordFailure(): void {
 		this.#failures++;
-		if (this.#failures >= this.#maxFailures) {
+		if (this.#failures >= this.#maxFailures && this.#state !== 'open') {
 			this.#state = 'open';
 			this.#openedAt = this.#now();
+			console.warn(
+				`circuit breaker${this.#name ? ` [${this.#name}]` : ''} opened after ${this.#failures} consecutive failures`
+			);
 		}
 	}
 
