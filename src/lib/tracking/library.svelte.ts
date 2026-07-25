@@ -53,6 +53,7 @@ export class LibraryState {
 				title: m?.title ?? 'Loading…',
 				year: m?.year ?? null,
 				releaseDate: m?.releaseDate ?? null,
+				firstAirDate: m?.firstAirDate ?? null,
 				posterPath: m?.posterPath ?? null,
 				genres: m?.genres ?? [],
 				inProduction: m?.inProduction ?? null,

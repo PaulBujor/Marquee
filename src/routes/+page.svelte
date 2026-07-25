@@ -60,11 +60,11 @@
 		{ key: 'show', label: 'Shows' }
 	];
 
-	const SORTS: LibrarySort[] = ['added', 'title', 'year'];
+	const SORTS: LibrarySort[] = ['added', 'title', 'date'];
 	const SORT_LABELS: Record<LibrarySort, string> = {
 		added: 'Date added',
 		title: 'Title',
-		year: 'Release year'
+		date: 'Release date'
 	};
 
 	// Selected tab + filters live in the URL (like the search page), so a view is shareable and
@@ -78,7 +78,7 @@
 		return {
 			tab: (TABS.some((x) => x.key === t) ? t : 'want_to_watch') as LibraryTab,
 			typeFilter: (TYPES.some((x) => x.key === ty) ? ty : 'all') as TypeFilter,
-			sort: (SORTS.includes(s as LibrarySort) ? s : 'added') as LibrarySort,
+			sort: (SORTS.includes(s as LibrarySort) ? s : 'date') as LibrarySort,
 			year: y && Number.isFinite(Number(y)) ? Number(y) : null,
 			genre: p.get('genre') || null
 		};
@@ -97,7 +97,7 @@
 		const parts: string[] = [];
 		if (tab !== 'want_to_watch') parts.push(`tab=${tab}`);
 		if (typeFilter !== 'all') parts.push(`type=${typeFilter}`);
-		if (sort !== 'added') parts.push(`sort=${sort}`);
+		if (sort !== 'date') parts.push(`sort=${sort}`);
 		if (year !== null) parts.push(`year=${year}`);
 		if (genre !== null) parts.push(`genre=${encodeURIComponent(genre)}`);
 		const qs = parts.join('&');
@@ -289,7 +289,7 @@
 							<Select.Content>
 								<Select.Item value="added">Date added</Select.Item>
 								<Select.Item value="title">Title</Select.Item>
-								<Select.Item value="year">Release year</Select.Item>
+								<Select.Item value="date">Release date</Select.Item>
 							</Select.Content>
 						</Select.Root>
 					</div>

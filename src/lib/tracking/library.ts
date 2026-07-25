@@ -25,8 +25,10 @@ export interface LibraryItem {
 	type: 'movie' | 'show';
 	title: string;
 	year: number | null;
-	/** `YYYY-MM-DD` release date (movies only), or null — feeds the upcoming timeline. */
+	/** `YYYY-MM-DD` release date (movies only), or null — feeds the upcoming timeline + date sort. */
 	releaseDate: string | null;
+	/** `YYYY-MM-DD` first air date (shows only), or null — the show equivalent for the date sort. */
+	firstAirDate: string | null;
 	posterPath: string | null;
 	genres: string[];
 	/** TMDB `in_production` — still-airing signal for completion; null for movies. */
@@ -37,7 +39,7 @@ export interface LibraryItem {
 }
 
 export type LibraryTab = 'want_to_watch' | 'watching' | 'completed' | 'favorites';
-export type LibrarySort = 'title' | 'year' | 'added';
+export type LibrarySort = 'title' | 'date' | 'added';
 
 export interface LibraryFilters {
 	tab: LibraryTab;
@@ -134,6 +136,18 @@ export function continueWatching(items: LibraryItem[]): LibraryItem[] {
 	});
 }
 
+/**
+ * A sortable release date (`YYYY-MM-DD`): a movie's release date, a show's first air date, else
+ * Jan 1 of the known year, else '' (unknown — sorts last under a newest-first order). Zero-padded,
+ * so a plain string compare orders correctly.
+ */
+function releaseDateKey(item: LibraryItem): string {
+	return (
+		(item.type === 'movie' ? item.releaseDate : item.firstAirDate) ??
+		(item.year !== null ? `${item.year}-01-01` : '')
+	);
+}
+
 /** Apply the tab + type/year/genre filters and the chosen sort. `favorites` spans all statuses. */
 export function filterAndSortLibrary(items: LibraryItem[], f: LibraryFilters): LibraryItem[] {
 	const filtered = items.filter((i) => {
@@ -150,7 +164,8 @@ export function filterAndSortLibrary(items: LibraryItem[], f: LibraryFilters): L
 
 	return filtered.sort((a, b) => {
 		if (f.sort === 'title') return a.title.localeCompare(b.title);
-		if (f.sort === 'year') return (b.year ?? 0) - (a.year ?? 0);
+		// Newest release first; unknown dates ('') sort last.
+		if (f.sort === 'date') return releaseDateKey(b).localeCompare(releaseDateKey(a));
 		return b.addedAt - a.addedAt;
 	});
 }
