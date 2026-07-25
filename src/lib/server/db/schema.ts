@@ -113,6 +113,8 @@ export const emailChangeTokens = sqliteTable(
 		newEmail: text('new_email').notNull(),
 		// SHA-256 hex of the raw 6-digit code.
 		tokenHash: text('token_hash').notNull(),
+		// Requesting client IP, for per-IP email-bomb rate limiting (nullable if unknown).
+		requestIp: text('request_ip'),
 		// Failed verification attempts; the token is invalidated past a cap.
 		attempts: integer('attempts').notNull().default(0),
 		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
@@ -121,7 +123,11 @@ export const emailChangeTokens = sqliteTable(
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [index('email_change_tokens_user_id_idx').on(table.userId)]
+	(table) => [
+		index('email_change_tokens_user_id_idx').on(table.userId),
+		index('email_change_tokens_new_email_idx').on(table.newEmail),
+		index('email_change_tokens_request_ip_idx').on(table.requestIp)
+	]
 );
 
 /**

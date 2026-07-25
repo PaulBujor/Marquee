@@ -85,6 +85,13 @@
       "when": 1784928246724,
       "tag": "0011_media_drop_legacy_json",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1784986667093,
+      "tag": "0012_email_change_request_ip",
+      "breakpoints": true
     }
   ]
 }

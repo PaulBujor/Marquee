@@ -117,6 +117,35 @@ describe('requestEmailChange', () => {
 		expect(kinds.slice(0, 5).every((k) => k === 'sent')).toBe(true);
 		expect(kinds[5]).toBe('rate_limited');
 	});
+
+	it('rate-limits by target address across accounts (email-bomb defense)', async () => {
+		const { sender } = fakeSender();
+		const kinds: string[] = [];
+		// Six *different* users all targeting one victim inbox — the per-user cap never trips, but
+		// the per-target cap must (5 sent, 6th blocked).
+		for (let i = 0; i < 6; i++) {
+			const user = await seedUser(db, `attacker${i}@x.com`);
+			kinds.push((await requestEmailChange({ db, user, newEmail: 'victim@x.com', sender })).kind);
+		}
+		expect(kinds.slice(0, 5).every((k) => k === 'sent')).toBe(true);
+		expect(kinds[5]).toBe('rate_limited');
+	});
+
+	it('rate-limits by requesting IP across accounts and targets', async () => {
+		const { sender } = fakeSender();
+		const kinds: string[] = [];
+		// 21 distinct users + distinct targets from one IP: neither per-user nor per-target trips,
+		// but the per-IP cap (20) does on the 21st.
+		for (let i = 0; i < 21; i++) {
+			const user = await seedUser(db, `u${i}@x.com`);
+			kinds.push(
+				(await requestEmailChange({ db, user, newEmail: `t${i}@x.com`, sender, ip: '9.9.9.9' }))
+					.kind
+			);
+		}
+		expect(kinds.slice(0, 20).every((k) => k === 'sent')).toBe(true);
+		expect(kinds[20]).toBe('rate_limited');
+	});
 });
 
 describe('verifyEmailChange', () => {
