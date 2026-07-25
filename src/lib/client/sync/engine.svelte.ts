@@ -175,15 +175,30 @@ class SyncEngine {
 				return; // events are the base — don't run media/images on top of a failed event sync
 			}
 
-			// Media + image channels — best-effort (events are already synced). Each backs off +
-			// stops on its own breaker; a failure here never flips the visible status. Images ride
-			// after media (they reference the media rows it pulls).
+			// Media channel — also surfaces in the sync indicator (a failing media sync, e.g. a large
+			// library, should be visible, not silent). Same shape as the event channel: a breaker-open
+			// skip or a throw flips the status to error and skips images for this cycle.
 			try {
 				const res = await this.#runChannel(this.#media, () => runMediaSync());
-				if (res && res.applied > 0) changed = true;
+				if (res === null) {
+					this.status = 'error';
+					return;
+				}
+				if (res.applied > 0) changed = true;
 			} catch (err) {
-				console.warn('[sync] media sync failed (will retry later)', err);
+				this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
+				console.error('[sync] media sync failed', this.lastError);
+				reportClientError({
+					message: this.lastError.message,
+					status: this.lastError.status,
+					source: 'media-sync',
+					at: this.lastError.at
+				});
+				this.status = 'error';
+				return;
 			}
+
+			// Image channel — best-effort (blobs for already-known media); never flips the status.
 			try {
 				const res = await this.#runChannel(this.#images, () => runImageSync());
 				if (res && res.stored > 0) changed = true;

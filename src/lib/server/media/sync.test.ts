@@ -127,4 +127,34 @@ describe('resolveMediaSync', () => {
 		const res = await resolveMediaSync(db, client, USER, { refs: [], have: [] });
 		expect(res.media).toEqual([]);
 	});
+
+	it('handles a library larger than D1 allows bound params for (chunks the IN queries)', async () => {
+		// More referenced titles than the 90-id chunk (and than D1's 100-param cap), so the media
+		// `IN (...)` query must be split — otherwise D1 throws "too many SQL variables".
+		const db = createTestDb();
+		await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
+		const N = 205;
+		const refs: { provider: 'tmdb'; externalId: string }[] = [];
+		for (let i = 0; i < N; i++) {
+			const externalId = `movie/${1000 + i}`;
+			await db.insert(events).values({
+				id: `ev${i}`,
+				userId: USER,
+				sequence: i + 1,
+				type: 'tracking.added',
+				entityId: mediaId('tmdb', externalId),
+				payload: { status: 'want_to_watch' },
+				deviceId: 'dev',
+				schemaVersion: 1,
+				clientCreatedAt: 1000 + i,
+				serverReceivedAt: new Date()
+			});
+			refs.push({ provider: 'tmdb', externalId });
+		}
+		const { client } = stub();
+		const res = await resolveMediaSync(db, client, USER, { refs, have: [] });
+		// Every referenced title is hydrated and returned, gathered across all chunks.
+		expect(res.media).toHaveLength(N);
+		expect(new Set(res.media.map((m) => m.id)).size).toBe(N);
+	});
 });

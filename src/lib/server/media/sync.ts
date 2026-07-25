@@ -17,6 +17,19 @@ type Db = ReturnType<typeof createDb>;
 type SeasonRecord = NonNullable<MediaRecord['seasons']>[number];
 type EpisodeRecord = NonNullable<MediaRecord['episodes']>[number];
 
+/**
+ * D1 caps bound parameters at 100 per query, so `IN (...)` id lists are split into chunks well under
+ * it — a user tracking 100+ titles would otherwise overflow the limit ("too many SQL variables").
+ * Matches the events projection's dedup chunking.
+ */
+const ID_CHUNK = 90;
+
+function chunk<T>(items: T[], size: number): T[][] {
+	const out: T[][] = [];
+	for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+	return out;
+}
+
 /** Project a media row (+ its child rows) to the wire record (drops the server-only LWW clock). */
 function toRecord(
 	row: Media,
@@ -80,7 +93,15 @@ export async function resolveMediaSync(
 		}
 	}
 
-	const rows = await db.select().from(media).where(inArray(media.id, referencedIds));
+	// Chunk every `IN (...)` id list under D1's bound-parameter limit (a large tracked library
+	// otherwise overflows it — the media sync 500 this fixes).
+	const rows = (
+		await Promise.all(
+			chunk(referencedIds, ID_CHUNK).map((ids) =>
+				db.select().from(media).where(inArray(media.id, ids))
+			)
+		)
+	).flat();
 	const staleForClient = rows.filter((r) => {
 		const clientVersion = haveVersion.get(r.id);
 		return clientVersion === undefined || r.version > clientVersion;
@@ -88,12 +109,20 @@ export async function resolveMediaSync(
 	if (staleForClient.length === 0) return { media: [] };
 
 	const staleShowIds = staleForClient.filter((r) => r.type === 'show').map((r) => r.id);
-	const seasonRows = staleShowIds.length
-		? await db.select().from(seasons).where(inArray(seasons.mediaId, staleShowIds))
-		: [];
-	const episodeRows = staleShowIds.length
-		? await db.select().from(episodes).where(inArray(episodes.mediaId, staleShowIds))
-		: [];
+	const seasonRows = (
+		await Promise.all(
+			chunk(staleShowIds, ID_CHUNK).map((ids) =>
+				db.select().from(seasons).where(inArray(seasons.mediaId, ids))
+			)
+		)
+	).flat();
+	const episodeRows = (
+		await Promise.all(
+			chunk(staleShowIds, ID_CHUNK).map((ids) =>
+				db.select().from(episodes).where(inArray(episodes.mediaId, ids))
+			)
+		)
+	).flat();
 
 	const seasonsByMedia = new Map<string, SeasonRecord[]>();
 	for (const s of seasonRows) {
