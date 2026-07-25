@@ -4,7 +4,7 @@ import { createTestDb } from '$lib/server/db/test-db';
 import { media } from '$lib/server/db/schema';
 import { mediaId } from '$lib/sync/events';
 import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
-import { refreshInProductionShows } from './cron';
+import { refreshStaleMedia } from './cron';
 
 const T0 = Date.UTC(2026, 6, 24);
 
@@ -72,7 +72,7 @@ function stub() {
 async function seedMedia(
 	db: ReturnType<typeof createTestDb>,
 	externalId: string,
-	over: { type: 'movie' | 'show'; inProduction: boolean | null }
+	over: { type: 'movie' | 'show'; inProduction?: boolean | null; releaseDate?: string | null }
 ) {
 	await db.insert(media).values({
 		id: mediaId('tmdb', externalId),
@@ -81,40 +81,43 @@ async function seedMedia(
 		source: 'linked',
 		type: over.type,
 		title: externalId,
-		inProduction: over.inProduction,
+		inProduction: over.inProduction ?? null,
+		releaseDate: over.releaseDate ?? null,
 		version: 1,
 		refreshedAt: 0
 	});
 }
 
-describe('refreshInProductionShows', () => {
-	it('refreshes only in-production shows (skips movies + finished shows)', async () => {
+describe('refreshStaleMedia', () => {
+	it('refreshes in-production shows + unreleased movies (skips finished shows + released movies)', async () => {
 		const db = createTestDb();
 		await seedMedia(db, 'show/1', { type: 'show', inProduction: true });
-		await seedMedia(db, 'show/2', { type: 'show', inProduction: false });
-		await seedMedia(db, 'movie/3', { type: 'movie', inProduction: null });
+		await seedMedia(db, 'show/2', { type: 'show', inProduction: false }); // finished → skip
+		await seedMedia(db, 'movie/3', { type: 'movie', releaseDate: null }); // undated → unreleased
+		await seedMedia(db, 'movie/4', { type: 'movie', releaseDate: '2027-01-01' }); // future → unreleased
+		await seedMedia(db, 'movie/5', { type: 'movie', releaseDate: '2020-01-01' }); // released → skip
 
 		const { client, detailCalls } = stub();
-		const result = await refreshInProductionShows(db, client, T0);
+		const result = await refreshStaleMedia(db, client, T0);
 
-		expect(result.scanned).toBe(1);
-		expect(detailCalls()).toBe(1); // only show/1 hit TMDB
+		// show/1 + movie/3 + movie/4 are unsettled; show/2 + movie/5 are settled.
+		expect(result.scanned).toBe(3);
+		expect(detailCalls()).toBe(3);
+		expect(result.changed).toBe(3);
 
-		// The refreshed show gained episodes → its version bumped.
-		expect(result.changed).toBe(1);
-		const [row] = await db
+		const [show] = await db
 			.select()
 			.from(media)
 			.where(eq(media.id, mediaId('tmdb', 'show/1')));
-		expect(row.version).toBe(2);
-		expect(row.refreshedAt).toBe(T0);
+		expect(show.refreshedAt).toBe(T0);
 	});
 
-	it('returns zeroes when there are no in-production shows', async () => {
+	it('returns zeroes when nothing is unsettled', async () => {
 		const db = createTestDb();
-		await seedMedia(db, 'movie/9', { type: 'movie', inProduction: null });
+		await seedMedia(db, 'show/8', { type: 'show', inProduction: false });
+		await seedMedia(db, 'movie/9', { type: 'movie', releaseDate: '2020-01-01' });
 		const { client } = stub();
-		expect(await refreshInProductionShows(db, client, T0)).toEqual({
+		expect(await refreshStaleMedia(db, client, T0)).toEqual({
 			scanned: 0,
 			changed: 0,
 			failed: 0

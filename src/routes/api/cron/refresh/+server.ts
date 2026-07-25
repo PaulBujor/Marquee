@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { createTmdbClient } from '$lib/server/tmdb';
-import { refreshInProductionShows } from '$lib/server/media/cron';
+import { refreshStaleMedia } from '$lib/server/media/cron';
 import type { RequestHandler } from './$types';
 
 /**
@@ -17,14 +17,9 @@ export const POST: RequestHandler = async ({ request, url, locals, platform }) =
 
 	// `?force=1` bypasses the per-row TTL — a manual re-hydrate (also useful for diagnostics).
 	const force = url.searchParams.get('force') === '1';
-	const result = await refreshInProductionShows(
-		locals.db,
-		createTmdbClient(apiKey),
-		Date.now(),
-		force
-	);
+	const result = await refreshStaleMedia(locals.db, createTmdbClient(apiKey), Date.now(), force);
 	console.log(
-		`cron: scanned ${result.scanned} in-production shows — ${result.changed} changed, ${result.failed} failed${force ? ' (forced)' : ''}`
+		`cron: scanned ${result.scanned} unsettled titles — ${result.changed} changed, ${result.failed} failed${force ? ' (forced)' : ''}`
 	);
 	return json(result);
 };
