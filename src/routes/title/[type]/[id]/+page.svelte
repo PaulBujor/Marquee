@@ -437,8 +437,12 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						{#each detail.similar as item (item.tmdbId)}
 							{@const st = similarState[tmdbMediaId(item.type, item.tmdbId)]}
 							<li class="w-24 shrink-0">
+								<!-- Replace history on each hop so a suggestion → suggestion → … chain never piles up
+								entries: Back (and the header chevron) always returns to where you entered the chain
+								(home or the originating search), from any depth, instead of one title at a time. -->
 								<a
 									href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
+									data-sveltekit-replacestate
 									class="block"
 								>
 									<PosterTile
