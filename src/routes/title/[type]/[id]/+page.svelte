@@ -65,7 +65,9 @@
 	});
 
 	// Reactive local tracking state (IndexedDB-backed); recreated per title, reloaded on sync pulls.
-	const tracking = $derived(new TrackingState(mediaId, mediaRecord));
+	// Season summaries (count + air date) let a bulk "mark watched" enumerate episodes immediately,
+	// before the media channel syncs per-episode air dates (MRQ-130).
+	const tracking = $derived(new TrackingState(mediaId, mediaRecord, detail.seasons));
 	$effect(() => {
 		void sync.revision;
 		tracking.load();

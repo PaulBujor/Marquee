@@ -20,7 +20,7 @@ import {
 import { sync } from '$lib/client/sync/engine.svelte';
 import type { MediaRecord, TrackingStatus } from '$lib/sync/events';
 import {
-	airedEpisodes,
+	episodesToMark,
 	isSeasonFullyWatched,
 	nextEpisode,
 	todayIso,
@@ -30,6 +30,7 @@ import {
 	watchedKey,
 	type DatedEpisode,
 	type EpisodeCoord,
+	type SeasonSummary,
 	type TrackingView
 } from './actions';
 import { reconcileStatus } from './reconcile';
@@ -51,11 +52,18 @@ export class TrackingState {
 
 	/** The title's media snapshot (from the detail page's TMDB data), cached locally on track. */
 	readonly #media: MediaRecord | null;
+	/**
+	 * Season summaries (count + air date) the detail page holds up-front. They let a bulk "mark
+	 * watched" enumerate episodes immediately — before the media channel syncs per-episode air dates
+	 * — so a fresh add can be marked watched without the unmark/re-mark dance (MRQ-130).
+	 */
+	readonly #seasons: SeasonSummary[];
 
-	constructor(mediaId: string, media: MediaRecord | null = null) {
+	constructor(mediaId: string, media: MediaRecord | null = null, seasons: SeasonSummary[] = []) {
 		this.mediaId = mediaId;
 		this.#media = media;
 		this.#inProduction = media?.inProduction ?? null;
+		this.#seasons = seasons;
 	}
 
 	/** Load tracking + episode metadata + episode-watched state from IndexedDB. */
@@ -148,9 +156,13 @@ export class TrackingState {
 		});
 	}
 
-	/** Toggle a single episode's watched state, then reconcile the show's status. */
+	/**
+	 * Toggle a single episode's watched state, then reconcile the show's status. Marking an episode
+	 * on an **untracked** title implicitly adds it as `watching` first (mirrors favoriting).
+	 */
 	setEpisodeWatched(season: number, episode: number, watchedNow: boolean): Promise<void> {
 		return this.#run(async () => {
+			if (watchedNow) await this.#ensureTracked('watching');
 			await recordEvent(watchedNow ? 'episode.watched' : 'episode.unwatched', this.mediaId, {
 				season,
 				episode
@@ -162,13 +174,8 @@ export class TrackingState {
 	/** Mark every **aired** episode of one season watched (bulk), then reconcile the show's status. */
 	markSeasonWatched(seasonNumber: number): Promise<void> {
 		return this.#run(async () => {
-			const today = todayIso();
-			await this.#seedWatched(
-				airedEpisodes(
-					this.episodes.filter((e) => e.season === seasonNumber),
-					today
-				)
-			);
+			await this.#ensureTracked('watching');
+			await this.#seedWatched(this.#markable(seasonNumber));
 			await this.#reconcileStatus();
 		});
 	}
@@ -176,12 +183,30 @@ export class TrackingState {
 	/**
 	 * Mark the whole series watched: every **aired** episode watched, and the status set to
 	 * completed. Bulk — one `episode.watched` per episode (the sync push cap bounds delivery).
+	 * Enumerated from the season summaries, so it works the instant a title is added (MRQ-130).
 	 */
 	markSeriesWatched(): Promise<void> {
 		return this.#run(async () => {
-			await this.#seedWatched(airedEpisodes(this.episodes, todayIso()));
-			await recordEvent('tracking.status_changed', this.mediaId, { status: 'completed' });
+			await this.#seedWatched(this.#markable());
+			// `added` on an untracked title (asserts the row), else `status_changed`.
+			await recordEvent(statusEventType(this.view), this.mediaId, { status: 'completed' });
 		});
+	}
+
+	/** The episode coords to seed for a bulk mark, from the season summaries + any per-episode data. */
+	#markable(seasonNumber?: number): EpisodeCoord[] {
+		return episodesToMark(
+			this.#seasons,
+			this.episodes,
+			this.#inProduction,
+			todayIso(),
+			seasonNumber
+		);
+	}
+
+	/** Add the title as `status` if it isn't tracked yet, so a watch on an untracked title lands it. */
+	async #ensureTracked(status: TrackingStatus): Promise<void> {
+		if (!this.view.tracked) await recordEvent('tracking.added', this.mediaId, { status });
 	}
 
 	async #seedWatched(episodes: EpisodeCoord[]): Promise<void> {
