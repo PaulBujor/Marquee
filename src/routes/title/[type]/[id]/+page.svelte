@@ -13,7 +13,12 @@
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
-	import { tmdbMediaId, tmdbExternalId, type MediaRecord, type TrackingStatus } from '$lib/sync/events';
+	import {
+		tmdbMediaId,
+		tmdbExternalId,
+		type MediaRecord,
+		type TrackingStatus
+	} from '$lib/sync/events';
 	import { isAired, todayIso } from '$lib/tracking/actions';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
 	import { getTracking } from '$lib/client/idb';
@@ -425,7 +430,10 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 					Similar
 				</button>
 				{#if similarOpen}
-					<ul class="no-scrollbar flex gap-3 overflow-x-auto pb-1" transition:slide={{ duration: 200 }}>
+					<ul
+						class="no-scrollbar flex gap-3 overflow-x-auto pb-1"
+						transition:slide={{ duration: 200 }}
+					>
 						{#each detail.similar as item (item.tmdbId)}
 							{@const st = similarState[tmdbMediaId(item.type, item.tmdbId)]}
 							<li class="w-24 shrink-0">
@@ -441,7 +449,9 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 									/>
 									<div class="mt-1.5 truncate text-xs font-medium">{item.title}</div>
 									{#if st}
-										<MediaBadge variant="status" class="mt-0.5">{STATUS_LABEL[st.status]}</MediaBadge>
+										<MediaBadge variant="status" class="mt-0.5"
+											>{STATUS_LABEL[st.status]}</MediaBadge
+										>
 									{:else if item.year}
 										<div class="text-[0.7rem] text-muted-foreground">{item.year}</div>
 									{/if}

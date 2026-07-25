@@ -320,8 +320,22 @@ describe('createTmdbClient.getDetails', () => {
 		});
 		const detail = await createTmdbClient('key').getDetails('movie', 27205);
 		expect(detail.similar).toEqual([
-			{ tmdbId: 100, type: 'movie', title: 'Rec One', year: 2011, posterPath: '/r1.jpg', overview: '' },
-			{ tmdbId: 200, type: 'movie', title: 'Sim Two', year: 2013, posterPath: '/s2.jpg', overview: '' }
+			{
+				tmdbId: 100,
+				type: 'movie',
+				title: 'Rec One',
+				year: 2011,
+				posterPath: '/r1.jpg',
+				overview: ''
+			},
+			{
+				tmdbId: 200,
+				type: 'movie',
+				title: 'Sim Two',
+				year: 2013,
+				posterPath: '/s2.jpg',
+				overview: ''
+			}
 		]);
 	});
 
