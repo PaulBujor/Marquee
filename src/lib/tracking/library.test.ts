@@ -131,6 +131,7 @@ describe('filterAndSortLibrary', () => {
 				type: 'all',
 				year: null,
 				genre: null,
+				release: 'all',
 				sort: 'title'
 			}).map((i) => i.mediaId)
 		).toEqual(['a']);
@@ -140,6 +141,7 @@ describe('filterAndSortLibrary', () => {
 				type: 'all',
 				year: null,
 				genre: null,
+				release: 'all',
 				sort: 'title'
 			}).map((i) => i.mediaId)
 		).toEqual(['c']);
@@ -152,6 +154,7 @@ describe('filterAndSortLibrary', () => {
 				type: 'movie',
 				year: null,
 				genre: null,
+				release: 'all',
 				sort: 'title'
 			}).map((i) => i.mediaId)
 		).toEqual(['b']);
@@ -161,6 +164,7 @@ describe('filterAndSortLibrary', () => {
 				type: 'all',
 				year: 2015,
 				genre: 'Drama',
+				release: 'all',
 				sort: 'title'
 			}).map((i) => i.mediaId)
 		).toEqual(['c']);
@@ -172,7 +176,13 @@ describe('filterAndSortLibrary', () => {
 			...i,
 			status: 'completed' as const
 		}));
-		const f = { tab: 'completed' as const, type: 'all' as const, year: null, genre: null };
+		const f = {
+			tab: 'completed' as const,
+			type: 'all' as const,
+			year: null,
+			genre: null,
+			release: 'all' as const
+		};
 		expect(filterAndSortLibrary(same, { ...f, sort: 'title' }).map((i) => i.title)).toEqual([
 			'Alpha',
 			'Mid',
@@ -187,7 +197,13 @@ describe('filterAndSortLibrary', () => {
 	});
 
 	it('sorts by full release date, not just the year (movie releaseDate / show firstAirDate)', () => {
-		const f = { tab: 'want_to_watch' as const, type: 'all' as const, year: null, genre: null };
+		const f = {
+			tab: 'want_to_watch' as const,
+			type: 'all' as const,
+			year: null,
+			genre: null,
+			release: 'all' as const
+		};
 		const rows = [
 			item({ mediaId: 'jan', title: 'Jan', year: 2026, releaseDate: '2026-01-10' }),
 			item({ mediaId: 'dec', title: 'Dec', year: 2026, releaseDate: '2026-12-20' }),
@@ -198,6 +214,52 @@ describe('filterAndSortLibrary', () => {
 			'show',
 			'jan'
 		]);
+	});
+
+	it('sorts an undated title as furthest-future and a year-only title as end of year (date sort)', () => {
+		const today = '2026-07-25';
+		const f = {
+			tab: 'want_to_watch' as const,
+			type: 'all' as const,
+			year: null,
+			genre: null,
+			release: 'all' as const,
+			sort: 'date' as const
+		};
+		const rows = [
+			item({ mediaId: 'exact', title: 'Exact', year: 2026, releaseDate: '2026-03-01' }),
+			item({ mediaId: 'yearonly', title: 'YearOnly', year: 2026, releaseDate: null }), // → 2026-12-31
+			item({ mediaId: 'undated', title: 'Undated', year: null, releaseDate: null }) // → furthest future
+		];
+		// Newest-first: undated (furthest future) → year-only (end of 2026) → the exact March date.
+		expect(filterAndSortLibrary(rows, f, today).map((i) => i.mediaId)).toEqual([
+			'undated',
+			'yearonly',
+			'exact'
+		]);
+	});
+
+	it('filters by release status, counting undated / current-year-only titles as upcoming', () => {
+		const today = '2026-07-25';
+		const base = {
+			tab: 'want_to_watch' as const,
+			type: 'all' as const,
+			year: null,
+			genre: null,
+			sort: 'title' as const
+		};
+		const rows = [
+			item({ mediaId: 'past', title: 'Past', releaseDate: '2020-01-01' }),
+			item({ mediaId: 'future', title: 'Future', releaseDate: '2027-01-01' }),
+			item({ mediaId: 'thisyear', title: 'ThisYear', year: 2026, releaseDate: null }), // → 2026-12-31
+			item({ mediaId: 'undated', title: 'Undated', year: null, releaseDate: null })
+		];
+		expect(
+			filterAndSortLibrary(rows, { ...base, release: 'released' }, today).map((i) => i.mediaId)
+		).toEqual(['past']);
+		expect(
+			filterAndSortLibrary(rows, { ...base, release: 'upcoming' }, today).map((i) => i.mediaId)
+		).toEqual(['future', 'thisyear', 'undated']);
 	});
 });
 

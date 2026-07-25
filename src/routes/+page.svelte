@@ -25,7 +25,8 @@
 		showProgress,
 		type LibraryItem,
 		type LibrarySort,
-		type LibraryTab
+		type LibraryTab,
+		type ReleaseFilter
 	} from '$lib/tracking/library';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import type { PageData } from './$types';
@@ -67,6 +68,13 @@
 		date: 'Release date'
 	};
 
+	const RELEASES: ReleaseFilter[] = ['all', 'released', 'upcoming'];
+	const RELEASE_LABELS: Record<ReleaseFilter, string> = {
+		all: 'All',
+		released: 'Released',
+		upcoming: 'Upcoming'
+	};
+
 	// Selected tab + filters live in the URL (like the search page), so a view is shareable and
 	// survives reload / back-forward. Defaults are omitted from the query to keep it clean.
 	function readState() {
@@ -75,12 +83,14 @@
 		const ty = p.get('type');
 		const s = p.get('sort');
 		const y = p.get('year');
+		const r = p.get('release');
 		return {
 			tab: (TABS.some((x) => x.key === t) ? t : 'want_to_watch') as LibraryTab,
 			typeFilter: (TYPES.some((x) => x.key === ty) ? ty : 'all') as TypeFilter,
 			sort: (SORTS.includes(s as LibrarySort) ? s : 'date') as LibrarySort,
 			year: y && Number.isFinite(Number(y)) ? Number(y) : null,
-			genre: p.get('genre') || null
+			genre: p.get('genre') || null,
+			release: (RELEASES.includes(r as ReleaseFilter) ? r : 'all') as ReleaseFilter
 		};
 	}
 
@@ -90,6 +100,7 @@
 	let year = $state<number | null>(initial.year);
 	let genre = $state<string | null>(initial.genre);
 	let sort = $state<LibrarySort>(initial.sort);
+	let release = $state<ReleaseFilter>(initial.release);
 
 	// Mirror state → URL. Skips when already in sync (so seeding / back-forward don't loop). Built
 	// as a plain string (tab/type/sort are enum-safe; genre is encoded) — no URLSearchParams.
@@ -100,6 +111,7 @@
 		if (sort !== 'date') parts.push(`sort=${sort}`);
 		if (year !== null) parts.push(`year=${year}`);
 		if (genre !== null) parts.push(`genre=${encodeURIComponent(genre)}`);
+		if (release !== 'all') parts.push(`release=${release}`);
 		const qs = parts.join('&');
 		const target = qs ? `/?${qs}` : '/';
 		if (page.url.pathname === '/' && target !== `${page.url.pathname}${page.url.search}`) {
@@ -117,6 +129,7 @@
 			sort = s.sort;
 			year = s.year;
 			genre = s.genre;
+			release = s.release;
 		}
 	});
 
@@ -124,19 +137,20 @@
 	const years = $derived(availableYears(library.items));
 	const genres = $derived(availableGenres(library.items));
 	const list = $derived(
-		filterAndSortLibrary(library.items, { tab, type: typeFilter, year, genre, sort })
+		filterAndSortLibrary(library.items, { tab, type: typeFilter, year, genre, release, sort })
 	);
 	// Type is surfaced as its own always-visible control; the popover badges when a year/genre
 	// narrowing is active (sort is a preference, not a narrowing, so it doesn't count).
-	const advancedActive = $derived(year !== null || genre !== null);
+	const advancedActive = $derived(year !== null || genre !== null || release !== 'all');
 
 	const filtersActive = $derived(
-		typeFilter !== 'all' || year !== null || genre !== null || sort !== 'date'
+		typeFilter !== 'all' || year !== null || genre !== null || release !== 'all' || sort !== 'date'
 	);
 	function clearFilters() {
 		typeFilter = 'all';
 		year = null;
 		genre = null;
+		release = 'all';
 		sort = 'date';
 	}
 
@@ -297,6 +311,18 @@
 						>
 							{#each SORTS as s (s)}
 								<NativeSelect.Option value={s}>{SORT_LABELS[s]}</NativeSelect.Option>
+							{/each}
+						</NativeSelect.Root>
+					</div>
+					<div class="flex flex-col gap-1 text-sm">
+						<span class="text-xs font-medium text-muted-foreground">Release</span>
+						<NativeSelect.Root
+							class="w-full"
+							value={release}
+							onchange={(e) => (release = e.currentTarget.value as ReleaseFilter)}
+						>
+							{#each RELEASES as r (r)}
+								<NativeSelect.Option value={r}>{RELEASE_LABELS[r]}</NativeSelect.Option>
 							{/each}
 						</NativeSelect.Root>
 					</div>

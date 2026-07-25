@@ -40,12 +40,15 @@ export interface LibraryItem {
 
 export type LibraryTab = 'want_to_watch' | 'watching' | 'completed' | 'favorites';
 export type LibrarySort = 'title' | 'date' | 'added';
+/** Release-status filter: everything, only already-released, or only not-yet-released titles. */
+export type ReleaseFilter = 'all' | 'released' | 'upcoming';
 
 export interface LibraryFilters {
 	tab: LibraryTab;
 	type: 'all' | 'movie' | 'show';
 	year: number | null;
 	genre: string | null;
+	release: ReleaseFilter;
 	sort: LibrarySort;
 }
 
@@ -166,20 +169,33 @@ export function continueWatching(items: LibraryItem[]): LibraryItem[] {
 	});
 }
 
+/** Sorts after every real date — an unknown release is treated as furthest in the future. */
+const FAR_FUTURE_KEY = '9999-12-31';
+
 /**
- * A sortable release date (`YYYY-MM-DD`): a movie's release date, a show's first air date, else
- * Jan 1 of the known year, else '' (unknown — sorts last under a newest-first order). Zero-padded,
- * so a plain string compare orders correctly.
+ * A sortable release date (`YYYY-MM-DD`): a movie's release date, a show's first air date; else, when
+ * only the year is known, its **end** (Dec 31, since the exact date is unconfirmed and later); else
+ * {@link FAR_FUTURE_KEY} — an unknown release is furthest in the future, not the earliest. Zero-padded,
+ * so a plain string compare orders correctly, and comparable to `todayIso()` to tell released apart.
  */
 function releaseDateKey(item: LibraryItem): string {
-	return (
-		(item.type === 'movie' ? item.releaseDate : item.firstAirDate) ??
-		(item.year !== null ? `${item.year}-01-01` : '')
-	);
+	const exact = item.type === 'movie' ? item.releaseDate : item.firstAirDate;
+	if (exact) return exact;
+	if (item.year !== null) return `${item.year}-12-31`;
+	return FAR_FUTURE_KEY;
 }
 
-/** Apply the tab + type/year/genre filters and the chosen sort. `favorites` spans all statuses. */
-export function filterAndSortLibrary(items: LibraryItem[], f: LibraryFilters): LibraryItem[] {
+/** Whether a title has already been released/aired as of `today` (its best-known date is in the past). */
+function isReleased(item: LibraryItem, today: string): boolean {
+	return releaseDateKey(item) <= today;
+}
+
+/** Apply the tab + type/year/genre/release filters and the chosen sort. `favorites` spans all statuses. */
+export function filterAndSortLibrary(
+	items: LibraryItem[],
+	f: LibraryFilters,
+	today: string = todayIso()
+): LibraryItem[] {
 	const filtered = items.filter((i) => {
 		if (f.tab === 'favorites') {
 			if (!i.favorite) return false;
@@ -189,12 +205,14 @@ export function filterAndSortLibrary(items: LibraryItem[], f: LibraryFilters): L
 		if (f.type !== 'all' && i.type !== f.type) return false;
 		if (f.year !== null && i.year !== f.year) return false;
 		if (f.genre !== null && !i.genres.includes(f.genre)) return false;
+		if (f.release === 'released' && !isReleased(i, today)) return false;
+		if (f.release === 'upcoming' && isReleased(i, today)) return false;
 		return true;
 	});
 
 	return filtered.sort((a, b) => {
 		if (f.sort === 'title') return a.title.localeCompare(b.title);
-		// Newest release first; unknown dates ('') sort last.
+		// Newest release first; unknown/undated releases sort to the top as furthest-future.
 		if (f.sort === 'date') return releaseDateKey(b).localeCompare(releaseDateKey(a));
 		return b.addedAt - a.addedAt;
 	});
