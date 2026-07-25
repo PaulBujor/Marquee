@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { fade } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import { Button } from '$lib/components/ui/button';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
 	import type { EpisodeCoord } from '$lib/tracking/actions';
@@ -21,6 +22,9 @@
 	let checking = $state(false);
 	const shown = $derived(frozen ?? next);
 	const name = $derived(shown ? episodeName?.(shown.season, shown.episode) : undefined);
+	// Slide the row in/out (0ms under reduce-motion) so it doesn't pop when the last aired episode
+	// is marked (row leaves) or unwatched (row returns).
+	const slideMs = $derived(prefersReducedMotion.current ? 0 : 250);
 
 	async function markNext() {
 		if (!next || checking) return;
@@ -36,7 +40,10 @@
 </script>
 
 {#if shown}
-	<div class="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary/40 p-3">
+	<div
+		class="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary/40 p-3"
+		transition:slide={{ duration: slideMs }}
+	>
 		<span
 			class="flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors {checking
 				? 'border-primary bg-primary text-primary-foreground'

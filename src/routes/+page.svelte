@@ -4,6 +4,8 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { flip } from 'svelte/animate';
+	import { slide } from 'svelte/transition';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
@@ -150,6 +152,11 @@
 			css: (t: number) => `opacity:${t * t};width:${t * width}px;overflow:hidden`
 		};
 	}
+
+	// Honour the OS "reduce motion" setting: durations collapse to 0 (instant, no jank) when set.
+	// This is the app's first reduced-motion guard, so it also covers the pre-existing card motion.
+	const reduced = $derived(prefersReducedMotion.current);
+	const motionMs = $derived(reduced ? 0 : 300);
 </script>
 
 <svelte:head><title>Marquee</title></svelte:head>
@@ -158,14 +165,20 @@
 	<main class="mx-auto w-full max-w-3xl px-5 pt-2 pb-16">
 		<!-- Continue watching — in-progress shows only (movies have no next episode) -->
 		{#if inProgress.length > 0}
-			<section class="mb-6">
+			<!-- Slide the whole section (heading + row) so the rest of the page eases up when the last
+			in-progress show is marked, instead of the block popping out. -->
+			<section class="mb-6" transition:slide={{ duration: motionMs }}>
 				<h2 class="mb-2.5 text-xs font-bold tracking-widest text-muted-foreground uppercase">
 					Continue Watching
 				</h2>
 				<div class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
 					{#each inProgress as item (item.mediaId)}
 						{@const progress = showProgress(item)}
-						<div class="w-28 shrink-0" animate:flip={{ duration: 320 }} transition:collapse>
+						<div
+							class="w-28 shrink-0"
+							animate:flip={{ duration: reduced ? 0 : 320 }}
+							transition:collapse={{ duration: reduced ? 0 : 380 }}
+						>
 							{#if progress?.next}
 								<div class="relative">
 									<a
@@ -311,6 +324,7 @@
 							id: item.externalId?.split('/')[1] ?? ''
 						})}
 						class="block"
+						animate:flip={{ duration: motionMs }}
 					>
 						<PosterTile
 							type={item.type}
