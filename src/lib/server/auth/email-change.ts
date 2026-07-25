@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNull, sql, type SQL } from 'drizzle-orm';
 import type { createDb } from '$lib/server/db';
 import { emailChangeTokens, users, type User } from '$lib/server/db/schema';
 import type { EmailSender } from '$lib/server/email';
@@ -13,9 +13,16 @@ export const EMAIL_CHANGE_TTL_MINUTES = 10;
 const EMAIL_CHANGE_TTL_MS = EMAIL_CHANGE_TTL_MINUTES * 60 * 1000;
 /** Failed code entries before the change token is invalidated (online brute-force cap). */
 const MAX_ATTEMPTS = 5;
-/** Cap change requests per user within the window, to limit email-bombing a third party. */
+/**
+ * Rate-limit change requests within an hour to limit email-bombing a third party (a code is emailed
+ * to the *target* before it's confirmed). Three angles, mirroring `isRateLimited` in `./index`:
+ * per requesting user, per **target address** (so multiple accounts can't hammer one inbox), and
+ * per requesting IP.
+ */
 const RATE_WINDOW_MS = 60 * 60 * 1000;
-const MAX_REQUESTS_PER_WINDOW = 5;
+const MAX_REQUESTS_PER_USER = 5;
+const MAX_REQUESTS_PER_EMAIL = 5;
+const MAX_REQUESTS_PER_IP = 20;
 
 export type EmailChangeRequestResult =
 	| { kind: 'sent' }
@@ -50,15 +57,25 @@ export async function requestEmailChange(opts: {
 	).at(0);
 	if (taken) return { kind: 'taken' };
 
-	// Rate-limit before issuing: count recent requests for this user.
+	// Rate-limit before issuing: count recent requests per user, per target address, and per IP.
 	const since = new Date(Date.now() - RATE_WINDOW_MS);
-	const [{ n }] = await opts.db
-		.select({ n: count() })
-		.from(emailChangeTokens)
-		.where(
-			and(eq(emailChangeTokens.userId, opts.user.id), gte(emailChangeTokens.createdAt, since))
-		);
-	if (n >= MAX_REQUESTS_PER_WINDOW) return { kind: 'rate_limited' };
+	const countSince = async (where: SQL): Promise<number> => {
+		const [{ n }] = await opts.db
+			.select({ n: count() })
+			.from(emailChangeTokens)
+			.where(and(where, gte(emailChangeTokens.createdAt, since)));
+		return n;
+	};
+
+	if ((await countSince(eq(emailChangeTokens.userId, opts.user.id))) >= MAX_REQUESTS_PER_USER)
+		return { kind: 'rate_limited' };
+	if ((await countSince(eq(emailChangeTokens.newEmail, newEmail))) >= MAX_REQUESTS_PER_EMAIL)
+		return { kind: 'rate_limited' };
+	if (
+		opts.ip &&
+		(await countSince(eq(emailChangeTokens.requestIp, opts.ip))) >= MAX_REQUESTS_PER_IP
+	)
+		return { kind: 'rate_limited' };
 
 	// Keep at most one live code per user.
 	await opts.db
@@ -71,6 +88,7 @@ export async function requestEmailChange(opts: {
 		userId: opts.user.id,
 		newEmail,
 		tokenHash: await hashToken(code),
+		requestIp: opts.ip ?? null,
 		expiresAt: new Date(Date.now() + EMAIL_CHANGE_TTL_MS)
 	});
 	await opts.sender.send({
