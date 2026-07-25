@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
+	import SyncIndicator from '$lib/components/sync-indicator.svelte';
 	import CalendarDaysIcon from '@lucide/svelte/icons/calendar-days';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
@@ -16,6 +17,7 @@ gradient. Aligned to the dashboard's max-w-2xl content column; clears the iOS st
 	>
 		<a href={resolve('/')} class="font-serif text-xl font-semibold">Marquee</a>
 		<div class="flex items-center gap-2">
+			<SyncIndicator />
 			<Button
 				href={resolve('/timeline')}
 				variant="outline"
