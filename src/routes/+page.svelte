@@ -142,17 +142,6 @@
 		}, 650);
 	}
 
-	// When a caught-up show leaves Continue Watching, fade it out and collapse its width at the
-	// same time (opacity eased a touch faster so it reads as a fade, not just a shrink); the
-	// remaining cards (animate:flip) slide into place concurrently. `t` runs 1→0 on exit.
-	function collapse(node: HTMLElement, { duration = 380 } = {}) {
-		const width = node.offsetWidth;
-		return {
-			duration,
-			css: (t: number) => `opacity:${t * t};width:${t * width}px;overflow:hidden`
-		};
-	}
-
 	// Honour the OS "reduce motion" setting: durations collapse to 0 (instant, no jank) when set.
 	// This is the app's first reduced-motion guard, so it also covers the pre-existing card motion.
 	const reduced = $derived(prefersReducedMotion.current);
@@ -177,7 +166,7 @@
 						<div
 							class="w-28 shrink-0"
 							animate:flip={{ duration: reduced ? 0 : 320 }}
-							transition:collapse={{ duration: reduced ? 0 : 380 }}
+							transition:fade={{ duration: motionMs }}
 						>
 							{#if progress?.next}
 								<div class="relative">
