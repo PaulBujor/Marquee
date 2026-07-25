@@ -87,11 +87,8 @@
 		);
 	}
 
-	// Details (overview/cast/trailer) start collapsed so the episode list / similar row are close;
-	// the user expands on demand. Reset per title in afterNavigate.
-	let detailsOpen = $state(false);
+	let detailsOpen = $state(true);
 	let similarOpen = $state(true);
-	// Click-to-load keeps the YouTube embed (and its CSP surface) off the page until played.
 	let showTrailer = $state(false);
 
 	// Seasons switch client-side (fetched from our JSON endpoint + cached); server seeds the first.
@@ -149,7 +146,7 @@
 		showTrailer = false;
 		titleInView = true;
 		preselectedFor = null;
-		detailsOpen = false;
+		detailsOpen = true;
 		selectedSeason = data.season?.seasonNumber ?? null;
 		seasonCache = data.season ? { [data.season.seasonNumber]: data.season } : {};
 		seasonLoading = false;
