@@ -66,6 +66,8 @@
 	});
 
 	let detailsOpen = $state(true);
+	// Guards the one-time collapse default below to once per title (a later manual toggle sticks).
+	let detailsSettledFor = $state<string | null>(null);
 	// Click-to-load keeps the YouTube embed (and its CSP surface) off the page until played.
 	let showTrailer = $state(false);
 
@@ -106,6 +108,15 @@
 		return () => io.disconnect();
 	});
 
+	// Collapse the Details section (overview/cast/trailer) by default while a show is in progress, so
+	// the episode list is one tap away instead of a scroll away (MRQ-52). Runs once per title after
+	// tracking loads; a manual toggle afterwards sticks. Movies and non-watching shows stay expanded.
+	$effect(() => {
+		if (!tracking.ready || detailsSettledFor === mediaId) return;
+		detailsSettledFor = mediaId;
+		detailsOpen = !(tracking.view.tracked && tracking.view.status === 'watching');
+	});
+
 	// Pre-select the season of the next watchable episode once watch state loads (season 1 when
 	// caught up). Runs after the SSR seed / nav reset; `preselectedFor` keeps it to once per title.
 	$effect(() => {
@@ -124,6 +135,7 @@
 		showTrailer = false;
 		titleInView = true;
 		preselectedFor = null;
+		detailsSettledFor = null;
 		selectedSeason = data.season?.seasonNumber ?? null;
 		seasonCache = data.season ? { [data.season.seasonNumber]: data.season } : {};
 		seasonLoading = false;
