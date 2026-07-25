@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Popover from '$lib/components/ui/popover';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import CloudOffIcon from '@lucide/svelte/icons/cloud-off';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
@@ -37,20 +37,17 @@
 
 {#if indicator}
 	{@const Icon = indicator.icon}
-	<!-- openOnHover → hover shows it on desktop; on touch, hover is ignored and a tap opens it (closes
-	on tap-outside / Escape). aria-label carries the state for screen readers without opening. -->
-	<Popover.Root>
-		<Popover.Trigger
-			openOnHover
-			openDelay={150}
-			closeDelay={150}
-			aria-label={indicator.label}
-			class="flex size-9 shrink-0 items-center justify-center rounded-full {indicator.tone}"
-		>
-			<Icon class="size-4 {indicator.spin ? 'animate-spin' : ''}" />
-		</Popover.Trigger>
-		<Popover.Content align="end" class="w-auto max-w-64 p-2.5 text-xs leading-snug font-medium">
-			{indicator.label}
-		</Popover.Content>
-	</Popover.Root>
+	<!-- Hover/focus tooltip (touch is a known browser gap — expected to be handled natively in time).
+	aria-label carries the state for screen readers regardless. -->
+	<Tooltip.Provider delayDuration={200}>
+		<Tooltip.Root>
+			<Tooltip.Trigger
+				aria-label={indicator.label}
+				class="flex size-9 shrink-0 items-center justify-center rounded-full {indicator.tone}"
+			>
+				<Icon class="size-4 {indicator.spin ? 'animate-spin' : ''}" />
+			</Tooltip.Trigger>
+			<Tooltip.Content>{indicator.label}</Tooltip.Content>
+		</Tooltip.Root>
+	</Tooltip.Provider>
 {/if}
