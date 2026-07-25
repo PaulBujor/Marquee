@@ -1,25 +1,61 @@
 import { error, json } from '@sveltejs/kit';
 import { createTmdbClient } from '$lib/server/tmdb';
 import { refreshStaleMedia } from '$lib/server/media/cron';
+import { purgeExpiredAuth } from '$lib/server/auth/cleanup';
+import type { createDb } from '$lib/server/db';
 import type { RequestHandler } from './$types';
 
+type Db = ReturnType<typeof createDb>;
+
+/** Re-hydrate stale in-production media from TMDB. Self-contained: catches its own failures so a
+ * TMDB outage (or missing key) can't prevent the other maintenance jobs from running. */
+async function refreshMedia(db: Db, apiKey: string | undefined, force: boolean) {
+	if (!apiKey) return { ok: false as const, error: 'TMDB is not configured.' };
+	try {
+		const result = await refreshStaleMedia(db, createTmdbClient(apiKey), Date.now(), force);
+		console.log(
+			`cron: scanned ${result.scanned} unsettled titles — ${result.changed} changed, ${result.failed} failed${force ? ' (forced)' : ''}`
+		);
+		return { ok: true as const, ...result };
+	} catch (err) {
+		console.error('cron: media refresh failed', err);
+		return { ok: false as const, error: 'media refresh failed' };
+	}
+}
+
+/** Drop expired/consumed login tokens and expired sessions so those tables don't grow unbounded.
+ * Self-contained: catches its own failures so it can't trip the other jobs. */
+async function purgeAuth(db: Db) {
+	try {
+		const purged = await purgeExpiredAuth(db, Date.now());
+		console.log(
+			`cron: purged ${purged.loginTokens} stale login tokens and ${purged.sessions} expired sessions`
+		);
+		return { ok: true as const, ...purged };
+	} catch (err) {
+		console.error('cron: auth purge failed', err);
+		return { ok: false as const, error: 'auth purge failed' };
+	}
+}
+
 /**
- * The nightly media-refresh sweep. The cron `scheduled` handler self-`fetch`es this route (see
+ * The nightly maintenance sweep. The cron `scheduled` handler self-`fetch`es this route (see
  * scripts/append-cron.mjs); it's HTTP-reachable and gated by `CRON_SECRET`, so it also doubles as a
- * manual trigger — `POST` it with an `x-cron-key: <CRON_SECRET>` header to force a refresh.
+ * manual trigger — `POST` it with an `x-cron-key: <CRON_SECRET>` header to run it on demand.
+ *
+ * It runs independent jobs (media refresh, auth-token/session purge); each isolates its own errors so
+ * one failing never prevents the others, and the combined result is returned for diagnostics.
  */
 export const POST: RequestHandler = async ({ request, url, locals, platform }) => {
 	const secret = platform?.env.CRON_SECRET;
 	if (!secret || request.headers.get('x-cron-key') !== secret) error(401, 'Unauthorized');
 	if (!locals.db) error(503, 'Service unavailable');
-	const apiKey = platform?.env.TMDB_API_KEY;
-	if (!apiKey) error(503, 'TMDB is not configured.');
 
 	// `?force=1` bypasses the per-row TTL — a manual re-hydrate (also useful for diagnostics).
 	const force = url.searchParams.get('force') === '1';
-	const result = await refreshStaleMedia(locals.db, createTmdbClient(apiKey), Date.now(), force);
-	console.log(
-		`cron: scanned ${result.scanned} unsettled titles — ${result.changed} changed, ${result.failed} failed${force ? ' (forced)' : ''}`
-	);
-	return json(result);
+
+	const media = await refreshMedia(locals.db, platform?.env.TMDB_API_KEY, force);
+	const auth = await purgeAuth(locals.db);
+
+	return json({ media, auth });
 };
