@@ -23,3 +23,37 @@ export async function putMediaImages(id: string, images: MediaImageBlobs): Promi
 		updatedAt: Date.now()
 	});
 }
+
+/**
+ * Bound the image cache (MRQ-46): drop blobs for media outside `keepIds` (untracked / removed
+ * titles), then, if the survivors still exceed `maxEntries`, evict the least-recently-updated (LRU)
+ * — a backstop against unbounded growth (tighter storage quotas on iOS make this matter). Returns
+ * how many entries were deleted.
+ */
+export async function pruneMediaImages(keepIds: Set<string>, maxEntries = 500): Promise<number> {
+	const db = await openDb();
+	const tx = db.transaction('mediaImages', 'readwrite');
+	const store = tx.store;
+	let deleted = 0;
+	const survivors: { id: string; updatedAt: number }[] = [];
+
+	for (let cursor = await store.openCursor(); cursor; cursor = await cursor.continue()) {
+		if (keepIds.has(cursor.value.id)) {
+			survivors.push({ id: cursor.value.id, updatedAt: cursor.value.updatedAt });
+		} else {
+			await cursor.delete();
+			deleted++;
+		}
+	}
+
+	if (survivors.length > maxEntries) {
+		survivors.sort((a, b) => a.updatedAt - b.updatedAt); // oldest first
+		for (const s of survivors.slice(0, survivors.length - maxEntries)) {
+			await store.delete(s.id);
+			deleted++;
+		}
+	}
+
+	await tx.done;
+	return deleted;
+}
