@@ -16,6 +16,7 @@ import { runSync, SyncError, toSyncErrorInfo, type SyncErrorInfo } from './sync'
 import { runMediaSync } from './media-sync';
 import { runImageSync } from './image-sync';
 import { CircuitBreaker, withRetry, type RetryOptions } from '$lib/resilience';
+import { getLastSyncAt, setLastSyncAt } from '$lib/client/idb';
 import { reportClientError } from '$lib/client/report-error';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
@@ -49,6 +50,8 @@ class SyncEngine {
 	lastError = $state<SyncErrorInfo | null>(null);
 	/** Bumped each time a sync pulls+applies remote data, so open views can re-read local state. */
 	revision = $state(0);
+	/** Epoch ms of the last successful event sync (persisted), or null — shown in settings. */
+	lastSyncAt = $state<number | null>(null);
 
 	#running = false;
 	#rerun = false;
@@ -67,6 +70,7 @@ class SyncEngine {
 		this.#started = true;
 
 		this.online = navigator.onLine;
+		void getLastSyncAt().then((at) => (this.lastSyncAt = at));
 		const onVisible = () => {
 			if (document.visibilityState === 'visible') this.requestSync();
 		};
@@ -188,6 +192,9 @@ class SyncEngine {
 					return;
 				}
 				this.lastError = null;
+				const syncedAt = Date.now();
+				this.lastSyncAt = syncedAt;
+				void setLastSyncAt(syncedAt);
 				if (res.pulled > 0) changed = true;
 			} catch (err) {
 				this.lastError = toSyncErrorInfo(err, this.#events.failures, Date.now());

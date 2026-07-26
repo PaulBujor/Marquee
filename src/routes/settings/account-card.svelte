@@ -5,6 +5,8 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Card from '$lib/components/ui/card';
 	import * as InputOTP from '$lib/components/ui/input-otp';
+	import OfflineAction from '$lib/components/offline-action.svelte';
+	import { sync } from '$lib/client/sync/engine.svelte';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import type { ActionData, PageData } from './$types';
 
@@ -28,6 +30,9 @@
 	const currentEmail = $derived(step === 'done' ? pendingEmail : user.email);
 	// Client-side mirror of the server's CODE_REGEX check (the server stays authoritative).
 	const codeValid = $derived(/^\d{6}$/.test(code));
+	// Changing email needs the server (it emails a code); offline, gate it with an explanation.
+	const online = $derived(sync.online);
+	const OFFLINE_EMAIL_MSG = 'You need an internet connection to change your email.';
 
 	const track = () => {
 		submitting = true;
@@ -107,7 +112,10 @@
 				{#if codeError}
 					<p class="text-sm text-destructive">{codeError}</p>
 				{/if}
-				<Button type="submit" disabled={submitting || !codeValid}>
+				{#if !online}
+					<p class="text-sm text-muted-foreground">{OFFLINE_EMAIL_MSG}</p>
+				{/if}
+				<Button type="submit" disabled={submitting || !codeValid || !online}>
 					{submitting ? 'Confirming…' : 'Confirm new email'}
 				</Button>
 			</form>
@@ -126,18 +134,31 @@
 					placeholder="new@example.com"
 					autocomplete="email"
 					required
+					disabled={submitting || !online}
 					value={pendingEmail}
 				/>
 				{#if message}
 					<p class="text-sm text-destructive">{message}</p>
 				{/if}
-				<Button type="submit" disabled={submitting} class="self-start">
-					{submitting ? 'Sending…' : 'Send confirmation code'}
-				</Button>
+				{#if online}
+					<Button type="submit" disabled={submitting} class="self-start">
+						{submitting ? 'Sending…' : 'Send confirmation code'}
+					</Button>
+				{:else}
+					<OfflineAction message={OFFLINE_EMAIL_MSG} class="self-start">
+						Send confirmation code
+					</OfflineAction>
+				{/if}
 			</form>
 		{/if}
 	</Card.Content>
-	<Card.Footer class="border-t pt-4">
+	<Card.Footer class="flex-col items-start gap-2 border-t pt-4">
+		{#if !online}
+			<!-- Logging back in needs a magic link/code by email, which we can't send offline. -->
+			<p class="text-sm text-muted-foreground">
+				You're offline — you won't be able to log back in until you have an internet connection.
+			</p>
+		{/if}
 		<!-- Sign out submits the existing root `?/logout` action (redirects to /login). -->
 		<form method="POST" action="/?/logout" use:enhance={trackLogout}>
 			<Button
