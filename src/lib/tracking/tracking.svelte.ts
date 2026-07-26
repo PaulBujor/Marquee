@@ -136,6 +136,17 @@ export class TrackingState {
 	}
 
 	/**
+	 * Set the user's own 1–5 rating (`null` clears it). Rating an untracked title implicitly adds it
+	 * as `want_to_watch` first, mirroring favorite — you can only rate something on your list.
+	 */
+	setRating(rating: number | null): Promise<void> {
+		return this.#run(async () => {
+			await this.#ensureTracked('want_to_watch');
+			await recordEvent('tracking.rated', this.mediaId, { rating });
+		});
+	}
+
+	/**
 	 * Remove the title from all lists (tombstone). Removing a series also **clears its episode
 	 * watches** — an unwatch per watched episode, so a later re-add starts with a clean history.
 	 * Event-sourced and rebuild-safe: the unwatches live in the log and (being newer) win LWW, so

@@ -4,6 +4,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import MediaBadge from './media-badge.svelte';
+	import RatingStars from './rating-stars.svelte';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import HeartIcon from '@lucide/svelte/icons/heart';
@@ -24,6 +25,7 @@
 	const view = $derived(tracking.view);
 	const done = $derived(view.tracked && view.status === 'completed');
 	const favorite = $derived(view.tracked && view.favorite);
+	const rating = $derived(view.tracked ? view.rating : null);
 	// Status is conveyed by the buttons (add / mark watched / watched). Only "didn't finish" —
 	// which the buttons can't express — gets an explicit label below them.
 	const didNotFinish = $derived(view.tracked && view.status === 'did_not_finish');
@@ -94,6 +96,18 @@
 			</Button>
 		{/if}
 	</div>
+	{#if view.tracked}
+		<!-- The user's own 1–5 rating, distinct from the TMDB score above the controls. -->
+		<div class="flex items-center gap-2">
+			<span class="text-xs font-medium text-muted-foreground">Your rating</span>
+			<RatingStars
+				value={rating}
+				onRate={(r) => tracking.setRating(r)}
+				disabled={tracking.busy}
+				size="sm"
+			/>
+		</div>
+	{/if}
 	{#if didNotFinish}
 		<MediaBadge variant="status" class="self-start">Didn't finish</MediaBadge>
 	{/if}
