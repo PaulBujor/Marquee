@@ -178,18 +178,24 @@
 				</li>
 			{/each}
 		</ul>
-	{:else if data.failed}
-		<p
-			data-spec-ref="search-degraded-offline-banner"
-			class="rounded-[10px] bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
-		>
-			Search is unavailable right now. Please try again shortly.
-		</p>
-	{:else if data.q && data.results.length === 0}
-		<p class="px-1 py-6 text-center text-sm text-muted-foreground">
-			No movies or shows found for “{data.q}”.
-		</p>
-	{:else if data.results.length > 0}
+	{:else}
+		{#if data.degraded && data.q}
+			<!-- TMDB unreachable: results come from the shared library we already hold. The offline
+			(no-network) state + local-only search land with the universal-load refactor. -->
+			<p
+				data-spec-ref="search-degraded-offline-banner"
+				class="rounded-[10px] bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
+			>
+				TMDB is unreachable — showing results from the shared library only.
+			</p>
+		{/if}
+		{#if data.q && data.results.length === 0}
+			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
+				No movies or shows found for “{data.q}”.
+			</p>
+		{/if}
+	{/if}
+	{#if !searching && data.results.length > 0}
 		<ul class="flex flex-col gap-1">
 			{#each data.results as item (item.type + item.tmdbId)}
 				{@const id = tmdbMediaId(item.type, item.tmdbId)}
