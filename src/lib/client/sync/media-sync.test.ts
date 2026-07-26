@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { mediaId, type MediaRecord } from '$lib/sync/events';
 import { setActiveUser } from '$lib/client/idb/db';
 import { getEpisodes, getMedia, putMedia } from '$lib/client/idb/media';
-import type { MediaSyncRequest } from '$lib/sync/media-protocol';
-import { runMediaSync } from './media-sync';
+import type { MediaSyncRequest, MediaSyncResponse } from '$lib/sync/media-protocol';
+import { MAX_DRAIN_ITERATIONS, runMediaSync } from './media-sync';
 
 setActiveUser('media-sync-test');
 
@@ -38,6 +38,20 @@ function stubFetch(media: MediaRecord[], sent: MediaSyncRequest[]) {
 	return (async (_url: string, init: RequestInit) => {
 		sent.push(JSON.parse(init.body as string) as MediaSyncRequest);
 		return new Response(JSON.stringify({ media }), {
+			status: 200,
+			headers: { 'content-type': 'application/json' }
+		});
+	}) as unknown as typeof fetch;
+}
+
+/** A fetch stub that returns a queued sequence of responses (defaulting to the last one). */
+function stubResponses(responses: MediaSyncResponse[], sent: MediaSyncRequest[]) {
+	let i = 0;
+	return (async (_url: string, init: RequestInit) => {
+		sent.push(JSON.parse(init.body as string) as MediaSyncRequest);
+		const body = responses[Math.min(i, responses.length - 1)];
+		i++;
+		return new Response(JSON.stringify(body), {
 			status: 200,
 			headers: { 'content-type': 'application/json' }
 		});
@@ -112,5 +126,27 @@ describe('runMediaSync', () => {
 			[1, 1, '2008-01-20'],
 			[1, 2, '2008-01-27']
 		]);
+	});
+
+	it('loops until the server stops flagging `pending`, accumulating applied', async () => {
+		const sent: MediaSyncRequest[] = [];
+		const result = await runMediaSync(
+			stubResponses(
+				[
+					{ media: [record('movie/1')], pending: true },
+					{ media: [record('movie/2')], pending: true },
+					{ media: [record('movie/3')], pending: false }
+				],
+				sent
+			)
+		);
+		expect(sent).toHaveLength(3); // drained across three passes
+		expect(result.applied).toBe(3);
+	});
+
+	it('bounds the drain loop when the server never clears `pending`', async () => {
+		const sent: MediaSyncRequest[] = [];
+		await runMediaSync(stubResponses([{ media: [], pending: true }], sent));
+		expect(sent).toHaveLength(MAX_DRAIN_ITERATIONS); // capped, not infinite
 	});
 });

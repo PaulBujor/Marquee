@@ -32,4 +32,10 @@ export type MediaSyncRequest = z.infer<typeof mediaSyncRequestSchema>;
 
 export interface MediaSyncResponse {
 	media: MediaRecord[];
+	/**
+	 * True when more referenced titles still need hydration/refresh than the server processed this
+	 * request (it caps per-request TMDB work to stay under the Worker CPU limit). The client should
+	 * sync again to drain the backlog; absent/false means everything is caught up.
+	 */
+	pending?: boolean;
 }
