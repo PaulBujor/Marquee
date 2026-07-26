@@ -90,6 +90,17 @@ class SyncEngine {
 			() => window.removeEventListener('focus', onFocus)
 		);
 
+		// The service worker's Background Sync handler wakes us to sync when connectivity returns.
+		if ('serviceWorker' in navigator) {
+			const onSwMessage = (e: MessageEvent) => {
+				if (e.data?.type === 'SYNC') this.requestSync();
+			};
+			navigator.serviceWorker.addEventListener('message', onSwMessage);
+			this.#teardown.push(() =>
+				navigator.serviceWorker.removeEventListener('message', onSwMessage)
+			);
+		}
+
 		this.#interval = setInterval(() => this.requestSync(), INTERVAL_MS);
 		this.requestSync();
 	}
@@ -133,10 +144,28 @@ class SyncEngine {
 		}
 	}
 
+	/**
+	 * Ask the service worker to flush our outbox when connectivity returns — even if the tab is later
+	 * closed (Chromium/Android Background Sync). Best-effort and idempotent (same tag coalesces);
+	 * unsupported browsers (iOS/Firefox) just reject, and the online/foreground triggers cover them.
+	 */
+	#registerBackgroundSync(): void {
+		if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+		navigator.serviceWorker.ready
+			.then((reg) => {
+				const withSync = reg as ServiceWorkerRegistration & {
+					sync?: { register(tag: string): Promise<void> };
+				};
+				return withSync.sync?.register('marquee-sync');
+			})
+			.catch(() => {});
+	}
+
 	async #sync(): Promise<void> {
 		if (typeof navigator !== 'undefined' && !navigator.onLine) {
 			this.online = false;
 			this.status = 'offline';
+			this.#registerBackgroundSync(); // flush on reconnect, even if the tab closes first
 			return;
 		}
 		if (this.#running) {

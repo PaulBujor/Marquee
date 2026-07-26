@@ -5,10 +5,31 @@
 	import { wipeLocalData } from '$lib/client/idb';
 	import { runSync } from '$lib/client/sync/sync';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { estimateStorage } from '$lib/client/storage';
 
 	let open = $state(false);
 	let busy = $state(false);
 	let errored = $state(false);
+
+	// Rough on-device usage, shown so the user can see the offline copy's footprint.
+	let usage = $state<string | null>(null);
+	$effect(() => {
+		estimateStorage().then((e) => {
+			if (e && e.usage > 0) usage = formatBytes(e.usage);
+		});
+	});
+
+	function formatBytes(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		const units = ['KB', 'MB', 'GB'];
+		let value = bytes / 1024;
+		let unit = 0;
+		while (value >= 1024 && unit < units.length - 1) {
+			value /= 1024;
+			unit++;
+		}
+		return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+	}
 
 	async function clearLocalData() {
 		busy = true;
@@ -36,7 +57,10 @@
 			something looks out of date.
 		</Card.Description>
 	</Card.Header>
-	<Card.Content>
+	<Card.Content class="flex flex-col gap-3">
+		{#if usage}
+			<p class="text-sm text-muted-foreground">Using about {usage} on this device.</p>
+		{/if}
 		<AlertDialog.Root bind:open>
 			<AlertDialog.Trigger class={buttonVariants({ variant: 'outline' })}>
 				Clear local data

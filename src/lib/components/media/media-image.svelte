@@ -5,6 +5,8 @@
 	import { getMediaImages } from '$lib/client/idb/images';
 	import { posterUrl, POSTER_SIZE, type TmdbImageSize } from '$lib/media';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { cn } from '$lib/utils.js';
+	import ImageOff from '@lucide/svelte/icons/image-off';
 
 	interface Props {
 		id: string;
@@ -24,8 +26,19 @@
 	}: Props = $props();
 
 	let objectUrl = $state<string | null>(null);
+	let failed = $state(false);
 	const networkUrl = $derived(posterUrl(path, size));
 	const src = $derived(objectUrl ?? networkUrl);
+
+	// Reset the failed flag when the target changes so a new id/path (or a blob arriving on sync) gets
+	// a fresh chance to load rather than staying stuck on the placeholder.
+	$effect(() => {
+		void id;
+		void path;
+		void kind;
+		void objectUrl;
+		failed = false;
+	});
 
 	$effect(() => {
 		void sync.revision; // re-check for a freshly-cached blob after a sync
@@ -51,6 +64,18 @@
 	});
 </script>
 
-{#if src}
-	<img {src} {alt} class={className} decoding="async" loading="lazy" />
+{#if src && !failed}
+	<img
+		{src}
+		{alt}
+		class={className}
+		onerror={() => (failed = true)}
+		decoding="async"
+		loading="lazy"
+	/>
+{:else}
+	<!-- No blob and no (reachable) network image — a graceful placeholder instead of a broken img. -->
+	<div class={cn(className, 'flex items-center justify-center bg-secondary')} aria-hidden="true">
+		<ImageOff class="size-8 text-muted-foreground/40" />
+	</div>
 {/if}
