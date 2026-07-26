@@ -11,7 +11,7 @@
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
-	import { getTracking, putMedia, recordEvent } from '$lib/client/idb';
+	import { getTracking, putMedia, recordEvent, searchLocalMedia } from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
 	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
@@ -77,6 +77,22 @@
 	// Guards the loading flag against overlapping commits — only the latest clears it.
 	let commitSeq = 0;
 
+	const online = $derived(sync.online);
+	// Offline: the server load can't run, so search the local IndexedDB catalog (the user's own
+	// titles) reactively as they type. Online results still come from `data` (TMDB / shared library).
+	let offlineResults = $state<SearchLikeMedia[]>([]);
+	$effect(() => {
+		const q = query;
+		if (sync.online) return;
+		searchLocalMedia(q).then((r) => (offlineResults = r));
+	});
+	// The active result set + the query/mode that drive the list and the degraded/offline banner.
+	const results = $derived<SearchLikeMedia[]>(online ? data.results : offlineResults);
+	const activeQuery = $derived(online ? data.q : query.trim());
+	const networkMode = $derived<'up' | 'down' | 'offline'>(
+		!online ? 'offline' : data.degraded ? 'down' : 'up'
+	);
+
 	// Re-sync the input when the URL changes outside of typing (back/forward, direct load) so a
 	// restored `?q=` shows up in the box. Skip our own `goto` navigations (nav.type === 'goto').
 	// Also track whether we can pop history for the back button (mirrors the Settings page).
@@ -102,6 +118,12 @@
 
 	async function commit() {
 		const q = query.trim();
+		// Offline we don't navigate (the server load would fail) — the reactive effect already
+		// refreshed `offlineResults` from the local catalog.
+		if (!online) {
+			searching = false;
+			return;
+		}
 		const seq = ++commitSeq;
 		// Only show the skeleton for an actual search — clearing shouldn't flash a loading state.
 		searching = q.length > 0;
@@ -111,6 +133,7 @@
 
 	function onInput() {
 		clearTimeout(debounce);
+		if (!online) return; // offline results come from the reactive local-search effect
 		debounce = setTimeout(commit, DEBOUNCE_MS);
 	}
 
@@ -179,25 +202,26 @@
 			{/each}
 		</ul>
 	{:else}
-		{#if data.degraded && data.q}
-			<!-- TMDB unreachable: results come from the shared library we already hold. The offline
-			(no-network) state + local-only search land with the universal-load refactor. -->
+		{#if networkMode !== 'up' && activeQuery}
+			<!-- Degraded/offline banner: TMDB unreachable → shared library; offline → your own titles. -->
 			<p
 				data-spec-ref="search-degraded-offline-banner"
 				class="rounded-[10px] bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
 			>
-				TMDB is unreachable — showing results from the shared library only.
+				{networkMode === 'offline'
+					? "You're offline — showing titles from your own list only."
+					: 'TMDB is unreachable — showing results from the shared library only.'}
 			</p>
 		{/if}
-		{#if data.q && data.results.length === 0}
+		{#if activeQuery && results.length === 0}
 			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
-				No movies or shows found for “{data.q}”.
+				No movies or shows found for “{activeQuery}”.
 			</p>
 		{/if}
 	{/if}
-	{#if !searching && data.results.length > 0}
+	{#if !searching && results.length > 0}
 		<ul class="flex flex-col gap-1">
-			{#each data.results as item (item.type + item.tmdbId)}
+			{#each results as item (item.type + item.tmdbId)}
 				{@const id = tmdbMediaId(item.type, item.tmdbId)}
 				<li class="flex items-center gap-1">
 					<a

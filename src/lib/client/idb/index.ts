@@ -24,6 +24,7 @@ export {
 	putMedia,
 	getMedia,
 	getAllMedia,
+	searchLocalMedia,
 	getEpisodes,
 	getLinkedMediaRefs,
 	getMediaVersions
