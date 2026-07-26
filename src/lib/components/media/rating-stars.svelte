@@ -2,10 +2,10 @@
 	import StarIcon from '@lucide/svelte/icons/star';
 	import { cn } from '$lib/utils.js';
 
-	// The user's own 1–5 rating control. Deliberately distinct from the single purple TMDB `/10`
-	// star on the detail page: a five-star row in amber. Interactive when `onRate` is given (tap a
-	// star to set it, tap the active star to clear); read-only otherwise, for list overlays. The
-	// interactive buttons carry generous padding so each star is a comfortable touch target.
+	// The user's own 1–5 rating control, styled with the app's primary accent. It reads as a distinct
+	// five-star scale (vs. the single TMDB `/10` star in the meta row): five discrete stars, labelled
+	// "Your rating", and no number. Interactive when `onRate` is given (tap a star to set it, tap the
+	// active star to clear); read-only otherwise, for list overlays.
 	interface Props {
 		/** Current rating 1–5, or null when unrated. */
 		value: number | null;
@@ -22,7 +22,7 @@
 	let hover = $state<number | null>(null);
 	// Paint the hovered star (interactive preview) if any, otherwise the committed value.
 	const shown = $derived(hover ?? value ?? 0);
-	const starSize = $derived(size === 'sm' ? 'size-4' : 'size-6');
+	const starSize = $derived(size === 'sm' ? 'size-4' : 'size-5');
 
 	function choose(n: number) {
 		if (disabled || !onRate) return;
@@ -31,17 +31,20 @@
 </script>
 
 <div
-	class={cn('flex items-center', readonly ? 'gap-0.5' : '-mx-1', className)}
+	class={cn('flex items-center', readonly ? 'gap-0.5' : '-mx-1.5', className)}
 	role={readonly ? undefined : 'group'}
 	aria-label={readonly ? undefined : 'Your rating'}
 	onmouseleave={() => (hover = null)}
 >
 	{#each [1, 2, 3, 4, 5] as n (n)}
 		{@const filled = n <= shown}
+		{@const glyph = cn(
+			starSize,
+			'transition-colors',
+			filled ? 'fill-primary text-primary' : 'text-muted-foreground/25'
+		)}
 		{#if readonly}
-			<StarIcon
-				class={cn(starSize, filled ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/40')}
-			/>
+			<StarIcon class={glyph} />
 		{:else}
 			<button
 				type="button"
@@ -53,14 +56,9 @@
 				aria-label={value === n ? `Clear rating` : `Rate ${n} star${n === 1 ? '' : 's'}`}
 				aria-pressed={value !== null && n <= value}
 				title={value === n ? 'Clear rating' : `${n} / 5`}
-				class="rounded-full p-2 transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+				class="rounded-full p-1.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
 			>
-				<StarIcon
-					class={cn(
-						starSize,
-						filled ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/40'
-					)}
-				/>
+				<StarIcon class={glyph} />
 			</button>
 		{/if}
 	{/each}

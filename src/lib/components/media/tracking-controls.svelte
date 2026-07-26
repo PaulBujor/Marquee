@@ -105,22 +105,27 @@
 		{/if}
 	</div>
 	{#if canRate}
-		<!-- The user's own 1–5 rating, distinct from the TMDB score above the controls. Shown only
-		once the title's been watched (see canRate). Tap the active star or "Clear" to remove it. -->
-		<div class="flex items-center gap-1">
-			<span class="mr-1 text-xs font-medium text-muted-foreground">Your rating</span>
-			<RatingStars value={rating} onRate={(r) => tracking.setRating(r)} disabled={tracking.busy} />
-			{#if rating !== null}
-				<Button
-					variant="ghost"
-					size="sm"
-					class="h-auto px-2 py-1 text-xs text-muted-foreground"
-					onclick={() => tracking.setRating(null)}
+		<!-- The user's own 1–5 rating (primary accent), distinct from the TMDB /10 score in the meta
+		row. Shown only once the title's been watched (see canRate). Tap the active star or "Clear". -->
+		<div class="mt-1 flex flex-col gap-1">
+			<span class="text-xs font-medium text-muted-foreground">Your rating</span>
+			<div class="flex items-center gap-2">
+				<RatingStars
+					value={rating}
+					onRate={(r) => tracking.setRating(r)}
 					disabled={tracking.busy}
-				>
-					Clear
-				</Button>
-			{/if}
+				/>
+				{#if rating !== null}
+					<button
+						type="button"
+						onclick={() => tracking.setRating(null)}
+						disabled={tracking.busy}
+						class="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+					>
+						Clear
+					</button>
+				{/if}
+			</div>
 		</div>
 	{/if}
 	{#if didNotFinish}
