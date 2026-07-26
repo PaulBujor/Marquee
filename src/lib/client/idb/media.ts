@@ -2,7 +2,7 @@
  * `media` store accessors. A {@link MediaRecord} is stored split across three stores mirroring the
  * server: scalar fields in `media`, and (for shows) the nested arrays in `seasons`/`episodes`.
  */
-import { openDb, type ClientEpisode, type ClientMedia } from './db';
+import { openDb, type ClientEpisode, type ClientMedia, type ClientSeason } from './db';
 import type { MediaProvider, MediaRecord } from '$lib/sync/events';
 import type { SearchLikeMedia } from '$lib/tracking/media-record';
 
@@ -76,6 +76,11 @@ export async function searchLocalMedia(query: string, limit = 20): Promise<Searc
 		});
 	}
 	return matches.sort((a, b) => a.title.localeCompare(b.title)).slice(0, limit);
+}
+
+/** A title's cached seasons — the source for the season selector when rendering offline. */
+export async function getSeasons(mediaId: string): Promise<ClientSeason[]> {
+	return (await openDb()).getAllFromIndex('seasons', 'by_media', mediaId);
 }
 
 /** A title's cached episodes — the source for watchability + progress. */
