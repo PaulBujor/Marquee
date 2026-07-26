@@ -3,14 +3,16 @@
 	import { cn } from '$lib/utils.js';
 
 	// The user's own 1–5 rating control. Deliberately distinct from the single purple TMDB `/10`
-	// star on the detail page: a five-star row in amber. Interactive when `onRate` is given
-	// (click a star to set it, click the active star to clear); read-only otherwise, for list overlays.
+	// star on the detail page: a five-star row in amber. Interactive when `onRate` is given (tap a
+	// star to set it, tap the active star to clear); read-only otherwise, for list overlays. The
+	// interactive buttons carry generous padding so each star is a comfortable touch target.
 	interface Props {
 		/** Current rating 1–5, or null when unrated. */
 		value: number | null;
-		/** Set the rating (clicking the active star clears it → null). Omit to render read-only. */
+		/** Set the rating (tapping the active star clears it → null). Omit to render read-only. */
 		onRate?: (rating: number | null) => void;
 		disabled?: boolean;
+		/** Star glyph size. Read-only overlays use `sm`; the interactive control uses `md`. */
 		size?: 'sm' | 'md';
 		class?: string;
 	}
@@ -20,16 +22,16 @@
 	let hover = $state<number | null>(null);
 	// Paint the hovered star (interactive preview) if any, otherwise the committed value.
 	const shown = $derived(hover ?? value ?? 0);
-	const starSize = $derived(size === 'sm' ? 'size-3.5' : 'size-5');
+	const starSize = $derived(size === 'sm' ? 'size-4' : 'size-6');
 
 	function choose(n: number) {
 		if (disabled || !onRate) return;
-		onRate(value === n ? null : n); // click the active star to clear
+		onRate(value === n ? null : n); // tap the active star to clear
 	}
 </script>
 
 <div
-	class={cn('flex items-center gap-0.5', className)}
+	class={cn('flex items-center', readonly ? 'gap-0.5' : '-mx-1', className)}
 	role={readonly ? undefined : 'group'}
 	aria-label={readonly ? undefined : 'Your rating'}
 	onmouseleave={() => (hover = null)}
@@ -51,7 +53,7 @@
 				aria-label={value === n ? `Clear rating` : `Rate ${n} star${n === 1 ? '' : 's'}`}
 				aria-pressed={value !== null && n <= value}
 				title={value === n ? 'Clear rating' : `${n} / 5`}
-				class="rounded-sm transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+				class="rounded-full p-2 transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
 			>
 				<StarIcon
 					class={cn(

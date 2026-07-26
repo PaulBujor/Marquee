@@ -26,6 +26,14 @@
 	const done = $derived(view.tracked && view.status === 'completed');
 	const favorite = $derived(view.tracked && view.favorite);
 	const rating = $derived(view.tracked ? view.rating : null);
+	// You can only rate something you've actually watched: never a "want to watch". A movie is
+	// rateable once finished (completed / didn't finish); a series also while you're watching it.
+	const canRate = $derived(
+		view.tracked &&
+			(type === 'show'
+				? view.status !== 'want_to_watch'
+				: view.status === 'completed' || view.status === 'did_not_finish')
+	);
 	// Status is conveyed by the buttons (add / mark watched / watched). Only "didn't finish" —
 	// which the buttons can't express — gets an explicit label below them.
 	const didNotFinish = $derived(view.tracked && view.status === 'did_not_finish');
@@ -96,16 +104,23 @@
 			</Button>
 		{/if}
 	</div>
-	{#if view.tracked}
-		<!-- The user's own 1–5 rating, distinct from the TMDB score above the controls. -->
-		<div class="flex items-center gap-2">
-			<span class="text-xs font-medium text-muted-foreground">Your rating</span>
-			<RatingStars
-				value={rating}
-				onRate={(r) => tracking.setRating(r)}
-				disabled={tracking.busy}
-				size="sm"
-			/>
+	{#if canRate}
+		<!-- The user's own 1–5 rating, distinct from the TMDB score above the controls. Shown only
+		once the title's been watched (see canRate). Tap the active star or "Clear" to remove it. -->
+		<div class="flex items-center gap-1">
+			<span class="mr-1 text-xs font-medium text-muted-foreground">Your rating</span>
+			<RatingStars value={rating} onRate={(r) => tracking.setRating(r)} disabled={tracking.busy} />
+			{#if rating !== null}
+				<Button
+					variant="ghost"
+					size="sm"
+					class="h-auto px-2 py-1 text-xs text-muted-foreground"
+					onclick={() => tracking.setRating(null)}
+					disabled={tracking.busy}
+				>
+					Clear
+				</Button>
+			{/if}
 		</div>
 	{/if}
 	{#if didNotFinish}

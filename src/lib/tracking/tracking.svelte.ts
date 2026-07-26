@@ -136,14 +136,11 @@ export class TrackingState {
 	}
 
 	/**
-	 * Set the user's own 1–5 rating (`null` clears it). Rating an untracked title implicitly adds it
-	 * as `want_to_watch` first, mirroring favorite — you can only rate something on your list.
+	 * Set the user's own 1–5 rating (`null` clears it). Only offered once a title's been watched
+	 * (see the controls' `canRate`), so it's always already tracked — no implicit add here.
 	 */
 	setRating(rating: number | null): Promise<void> {
-		return this.#run(async () => {
-			await this.#ensureTracked('want_to_watch');
-			await recordEvent('tracking.rated', this.mediaId, { rating });
-		});
+		return this.#run(() => recordEvent('tracking.rated', this.mediaId, { rating }));
 	}
 
 	/**
