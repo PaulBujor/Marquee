@@ -30,3 +30,12 @@ export async function getCursor(): Promise<number> {
 export async function setCursor(cursor: number): Promise<void> {
 	await setMeta('cursor', cursor);
 }
+
+/** Epoch ms of the last successful event sync, or null if never synced on this device. */
+export async function getLastSyncAt(): Promise<number | null> {
+	return (await getMeta('lastSyncAt')) ?? null;
+}
+
+export async function setLastSyncAt(at: number): Promise<void> {
+	await setMeta('lastSyncAt', at);
+}

@@ -30,7 +30,7 @@ export {
 	getLinkedMediaRefs,
 	getMediaVersions
 } from './media';
-export { getDeviceId, getCursor, setCursor } from './meta';
+export { getDeviceId, getCursor, setCursor, getLastSyncAt, setLastSyncAt } from './meta';
 
 /**
  * Record a local tracking change: stamp it as an event, enqueue it for sync, and

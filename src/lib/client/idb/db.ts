@@ -88,6 +88,8 @@ export interface MediaImages {
 export interface MetaValues {
 	deviceId: string;
 	cursor: number;
+	/** Epoch ms of the last successful event sync — shown in settings, drives "last synced". */
+	lastSyncAt: number;
 }
 export type MetaKey = keyof MetaValues;
 /** A single `meta` row — a known key paired with its typed value. */

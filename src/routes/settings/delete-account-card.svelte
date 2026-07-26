@@ -4,6 +4,8 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Card from '$lib/components/ui/card';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import OfflineAction from '$lib/components/offline-action.svelte';
+	import { sync } from '$lib/client/sync/engine.svelte';
 	import type { ActionData } from './$types';
 
 	let { userEmail, form }: { userEmail: string; form: ActionData } = $props();
@@ -11,6 +13,9 @@
 	let submitting = $state(false);
 	let deleteOpen = $state(false);
 	let confirmEmail = $state('');
+
+	// Deleting the account hits the server; offline, gate the trigger with an explanation.
+	const online = $derived(sync.online);
 
 	const deleteError = $derived(form && 'deleteError' in form ? form.deleteError : null);
 
@@ -36,9 +41,18 @@
 		inside the form (not AlertDialog.Action, which auto-closes) so a server validation error
 		keeps the dialog open. -->
 		<AlertDialog.Root bind:open={deleteOpen}>
-			<AlertDialog.Trigger class={buttonVariants({ variant: 'destructive' })}>
-				Delete account
-			</AlertDialog.Trigger>
+			{#if online}
+				<AlertDialog.Trigger class={buttonVariants({ variant: 'destructive' })}>
+					Delete account
+				</AlertDialog.Trigger>
+			{:else}
+				<OfflineAction
+					variant="destructive"
+					message="You can't delete your account without an internet connection."
+				>
+					Delete account
+				</OfflineAction>
+			{/if}
 			<AlertDialog.Content>
 				<AlertDialog.Header>
 					<AlertDialog.Title>Delete your account?</AlertDialog.Title>
