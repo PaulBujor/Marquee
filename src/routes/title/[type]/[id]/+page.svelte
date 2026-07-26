@@ -1,17 +1,68 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { untrack } from 'svelte';
+	import { goto, invalidate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
 	import ErrorState from '$lib/components/error-state.svelte';
 	import DetailSkeleton from './detail-skeleton.svelte';
 	import TitleDetail from './title-detail.svelte';
+	import { sync } from '$lib/client/sync/engine.svelte';
+	import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import type { PageData } from './$types';
 
-	// Thin loader: stream the title in (skeleton while it resolves), then render the detail — or a
-	// friendly not-found / offline-unavailable / error state. The rich page lives in TitleDetail so
-	// its many derivations always see a non-null `detail`.
+	// Offline-first orchestrator: render the cached copy immediately, then upgrade to the streamed
+	// network detail when it lands (in place — one persistent TitleDetail, so the view doesn't reset).
+	// The rich page lives in TitleDetail; here we just pick base vs. enriched and the surrounding state.
 	let { data }: { data: PageData } = $props();
+
+	// Seed from the initial `data` (untracked — the effect below re-syncs on every later navigation).
+	let detail = $state<MediaDetail | null>(untrack(() => data.base?.detail ?? null));
+	let seasonData = $state<SeasonDetail | null>(untrack(() => data.base?.season ?? null));
+	// How the network-only sections (cast, trailer, similar) should render.
+	let enrichState = $state<'loading' | 'enriched' | 'offline'>('loading');
+	let pageState = $state<'content' | 'skeleton' | 'notfound' | 'unavailable'>(
+		untrack(() => (data.base ? 'content' : 'skeleton'))
+	);
+
+	// Resolve the streamed enrichment for the current navigation; reset to the cached base first.
+	$effect(() => {
+		const { base, enriched } = data;
+		detail = base?.detail ?? null;
+		seasonData = base?.season ?? null;
+		enrichState = 'loading';
+		pageState = base ? 'content' : 'skeleton';
+
+		let cancelled = false;
+		enriched.then((e) => {
+			if (cancelled) return;
+			if (e.status === 'ok') {
+				detail = e.detail;
+				seasonData = e.season;
+				enrichState = 'enriched';
+				pageState = 'content';
+			} else if (e.status === 'notfound') {
+				// A real miss with no cached copy is a 404; if we have a cached copy, keep showing it.
+				if (base) enrichState = 'offline';
+				else pageState = 'notfound';
+			} else {
+				// Offline / upstream error — keep the cached copy with offline placeholders, or, with
+				// nothing cached, say so.
+				if (base) enrichState = 'offline';
+				else pageState = 'unavailable';
+			}
+		});
+		return () => (cancelled = true);
+	});
+
+	// Auto-refresh: when connectivity returns while we're still on the cached copy, re-enrich in place.
+	let wasOnline = sync.online;
+	$effect(() => {
+		const online = sync.online;
+		if (online && !wasOnline && untrack(() => enrichState) !== 'enriched')
+			void invalidate('app:title');
+		wasOnline = online;
+	});
 
 	function goBack() {
 		if (history.length > 1) history.back();
@@ -38,27 +89,19 @@
 	</header>
 {/snippet}
 
-{#await data.content}
-	{@render backHeader()}
-	<DetailSkeleton />
-{:then result}
-	{#if result.status === 'ok'}
-		{#key result.detail.tmdbId}
-			<TitleDetail detail={result.detail} season={result.season} offline={result.offline} />
-		{/key}
-	{:else}
-		{@render backHeader()}
-		<main class="mx-auto w-full max-w-2xl px-5 pt-[calc(4.5rem+env(safe-area-inset-top))]">
-			<ErrorState
-				message={result.status === 'notfound'
-					? "We couldn't find this title."
-					: "This title isn't available offline yet."}
-			/>
-		</main>
-	{/if}
-{:catch}
+{#if pageState === 'content' && detail}
+	<TitleDetail {detail} season={seasonData} {enrichState} />
+{:else if pageState === 'notfound'}
 	{@render backHeader()}
 	<main class="mx-auto w-full max-w-2xl px-5 pt-[calc(4.5rem+env(safe-area-inset-top))]">
-		<ErrorState message="Could not load this title." retry={() => location.reload()} />
+		<ErrorState message="We couldn't find this title." />
 	</main>
-{/await}
+{:else if pageState === 'unavailable'}
+	{@render backHeader()}
+	<main class="mx-auto w-full max-w-2xl px-5 pt-[calc(4.5rem+env(safe-area-inset-top))]">
+		<ErrorState message="This title isn't available offline yet." />
+	</main>
+{:else}
+	{@render backHeader()}
+	<DetailSkeleton />
+{/if}

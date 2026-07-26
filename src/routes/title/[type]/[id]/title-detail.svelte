@@ -35,13 +35,20 @@
 	import StarIcon from '@lucide/svelte/icons/star';
 	import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 
-	// Rendered from the universal load's resolved data: `detail` is always present (TMDB online, or a
-	// degraded copy rebuilt from IndexedDB when `offline`), `season` is the initially-selected season.
+	// `detail` is always present — the cached IndexedDB copy first, upgraded in place to the full
+	// network copy. `enrichState` says how to render the network-only sections (cast, trailer,
+	// similar): a skeleton while the enrichment loads, the real thing once `enriched`, or an offline
+	// placeholder when we're stuck on the cached copy.
 	let {
 		detail,
 		season,
-		offline
-	}: { detail: MediaDetail; season: SeasonDetail | null; offline: boolean } = $props();
+		enrichState
+	}: {
+		detail: MediaDetail;
+		season: SeasonDetail | null;
+		enrichState: 'loading' | 'enriched' | 'offline';
+	} = $props();
+	const offline = $derived(enrichState === 'offline');
 
 	// The full release/first-air date to spell out in the details section (movie vs show).
 	const releaseDate = $derived(detail.type === 'movie' ? detail.releaseDate : detail.firstAirDate);
@@ -476,7 +483,20 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						</dl>
 					{/if}
 
-					{#if offline}
+					{#if enrichState === 'loading'}
+						<!-- Cast + trailer skeletons while the network detail streams in over the cached copy. -->
+						<div class="flex flex-col gap-4">
+							<ul class="no-scrollbar flex gap-3.5 overflow-x-auto pb-1">
+								{#each [0, 1, 2, 3, 4, 5] as i (i)}
+									<li class="flex w-16 shrink-0 flex-col items-center gap-1.5">
+										<Skeleton class="size-14 rounded-full" />
+										<Skeleton class="h-3 w-12" />
+									</li>
+								{/each}
+							</ul>
+							<Skeleton class="aspect-video w-full rounded-[14px]" />
+						</div>
+					{:else if offline}
 						<!-- Cast, trailer, and similar come from TMDB and aren't cached for offline. -->
 						<OfflineState
 							message="Cast, the trailer, and similar titles aren't available offline."
@@ -570,8 +590,18 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 
 		<!-- Similar titles: TMDB recommendations + similar merged, deduped (MRQ-124). Collapsible.
 		Posters use plain posterUrl (network, no offline blob); a status badge + favorite heart are
-		overlaid from local tracking when we already track the title. -->
-		{#if detail.similar.length > 0}
+		overlaid from local tracking when we already track the title. A skeleton row shows while the
+		enrichment streams in; offline (nothing cached for similar), it's simply omitted. -->
+		{#if enrichState === 'loading'}
+			<section class="flex flex-col gap-3">
+				<div class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Similar</div>
+				<div class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
+					{#each [0, 1, 2, 3, 4] as i (i)}
+						<div class="w-24 shrink-0"><Skeleton class="aspect-[2/3] w-full rounded-[14px]" /></div>
+					{/each}
+				</div>
+			</section>
+		{:else if detail.similar.length > 0}
 			<section class="flex flex-col gap-3">
 				<button
 					type="button"
