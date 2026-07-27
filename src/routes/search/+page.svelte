@@ -3,9 +3,9 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import PageHeader from '$lib/components/page-header.svelte';
+	import BackButton from '$lib/components/back-button.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
@@ -15,7 +15,6 @@
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
 	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
-	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { PageData } from './$types';
 
@@ -118,17 +117,9 @@
 
 	// Re-sync the input when the URL changes outside of typing (back/forward, direct load) so a
 	// restored `?q=` shows up in the box. Skip our own `goto` navigations (nav.type === 'goto').
-	// Also track whether we can pop history for the back button (mirrors the Settings page).
-	let cameFromApp = $state(false);
 	afterNavigate((nav) => {
-		cameFromApp = nav.from != null;
 		if (nav.type === 'popstate' || nav.type === 'enter') query = data.q;
 	});
-
-	function goBack() {
-		if (cameFromApp) history.back();
-		else goto(resolve('/'));
-	}
 
 	function pushQuery(q: string) {
 		const path = resolve('/search');
@@ -176,16 +167,7 @@
 
 <PageHeader>
 	<div class="flex items-center gap-3">
-		<Button
-			onclick={goBack}
-			variant="outline"
-			size="icon"
-			shape="round"
-			class="shrink-0 text-muted-foreground"
-			aria-label="Go back"
-		>
-			<ChevronLeftIcon class="size-4" />
-		</Button>
+		<BackButton />
 		<!-- The search field sits where a page title would; back button + input share one row + size. -->
 		<div class="relative flex-1">
 			<Input
