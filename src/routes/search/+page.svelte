@@ -40,8 +40,10 @@
 		writing.add(id);
 		try {
 			// Cache the media locally (offline render + identity for the media channel to hydrate),
-			// then record the add — mirrors TrackingState.add()'s pipeline.
-			await putMedia(mediaRecordFromSearch(item));
+			// then record the add — mirrors TrackingState.add()'s pipeline. `$state.snapshot` unwraps
+			// the record from any Svelte proxy (offline results are `$state`) so IndexedDB's structured
+			// clone doesn't throw "Proxy object could not be cloned".
+			await putMedia($state.snapshot(mediaRecordFromSearch(item)));
 			await recordEvent('tracking.added', id, { status: 'want_to_watch' });
 			sync.requestSync();
 			await refreshTracked();
