@@ -27,8 +27,9 @@
 			void initOfflineStorage(); // once per boot: request persistence + prune the image cache
 		}
 		// Complete a logout that was started offline — now if we're already online, else on reconnect.
-		void flushPendingLogout();
-		window.addEventListener('online', () => void flushPendingLogout());
+		// Pass the currently-authenticated user so a stale queued logout can't sign out a newer session.
+		void flushPendingLogout(untrack(() => data.user?.id ?? null));
+		window.addEventListener('online', () => void flushPendingLogout(data.user?.id ?? null));
 	}
 
 	// Ask the browser to keep our IndexedDB from being evicted, and bound the image blob cache to the

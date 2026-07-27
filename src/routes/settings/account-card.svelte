@@ -68,7 +68,7 @@
 		if (!online) {
 			cancel();
 			loggingOut = true;
-			void signOutOffline();
+			void signOutOffline(user.id);
 			return;
 		}
 		loggingOut = true;
