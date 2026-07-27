@@ -1,8 +1,10 @@
 # Local development secrets (copy to .dev.vars and fill in real values)
 TMDB_API_KEY=your_tmdb_api_key
 RESEND_API_KEY=your_resend_api_key
+# Web Push VAPID keys — generate once with `npx @pushforge/builder vapid`.
+# Public key: base64url (the browser applicationServerKey). Private key: a JWK JSON string.
 VAPID_PUBLIC_KEY=your_vapid_public_key
-VAPID_PRIVATE_KEY=your_vapid_private_key
+VAPID_PRIVATE_KEY={"kty":"EC","crv":"P-256","x":"...","y":"...","d":"..."}
 
 # Local email via Mailpit (docker compose up -d). Presence of SMTP_HOST selects the
 # SMTP transport over Resend. Use 127.0.0.1, not "localhost" — workerd's DNS

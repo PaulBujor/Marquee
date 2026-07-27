@@ -158,6 +158,10 @@ pnpm exec wrangler secret put VAPID_PUBLIC_KEY
 pnpm exec wrangler secret put VAPID_PRIVATE_KEY
 ```
 
+Generate the VAPID key pair once with `npx @pushforge/builder vapid`: it prints the **public key**
+(base64url — the browser's `applicationServerKey`, set as `VAPID_PUBLIC_KEY`) and the **private key**
+as a JWK JSON string (set as `VAPID_PRIVATE_KEY`, quoted as a single line).
+
 Also set `EMAIL_FROM` to a **Resend-verified** sender (e.g. `Marquee <noreply@yourdomain.com>`) — as a plaintext `var` or a secret. Sending fails (Resend 403) from an unverified domain.
 
 ## Learn more

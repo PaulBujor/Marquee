@@ -383,3 +383,47 @@ export type SeasonRow = typeof seasons.$inferSelect;
 export type EpisodeRow = typeof episodes.$inferSelect;
 export type Tracking = typeof tracking.$inferSelect;
 export type EpisodeWatch = typeof episodeWatches.$inferSelect;
+
+/* ------------------------------------------------------------------ *
+ * Web Push — notification subscriptions.
+ * ------------------------------------------------------------------ */
+
+/**
+ * A Web Push subscription — one row per browser/device that has granted
+ * notification permission. `endpoint` (the push service URL) is the natural
+ * unique key; `p256dh`/`auth` are the client's encryption keys, and `timezone`
+ * (auto-detected on the device, IANA string) lets the daily digest fire at 9AM
+ * *local* to the user. A row is deleted when the user turns notifications off or
+ * when the push service reports it gone (404/410) on send.
+ */
+export const pushSubscriptions = sqliteTable(
+	'push_subscriptions',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		// The push service URL the encrypted payload is POSTed to. Unique across users.
+		endpoint: text('endpoint').notNull().unique(),
+		// Client public key (base64url, 65-byte P-256 point) and auth secret (base64url, 16 bytes).
+		p256dh: text('p256dh').notNull(),
+		auth: text('auth').notNull(),
+		// The device that created the subscription (minted client-side, see idb `meta`).
+		deviceId: text('device_id').notNull(),
+		// Optional human label for the settings device list (e.g. "Chrome on Windows").
+		deviceLabel: text('device_label'),
+		// IANA timezone (e.g. `Europe/Madrid`), auto-detected client-side; null → treated as UTC.
+		timezone: text('timezone'),
+		createdAt: integer('created_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		lastUsedAt: integer('last_used_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [index('push_subscriptions_user_id_idx').on(table.userId)]
+);
+
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
