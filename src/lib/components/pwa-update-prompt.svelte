@@ -1,13 +1,26 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
+	import { toast } from 'svelte-sonner';
 
 	// Surface a waiting (freshly deployed) worker; swap only on user accept.
 	let waiting = $state<ServiceWorker | null>(null);
-	// Set when the user accepts; the button stays in its loading state until the reload lands.
-	let applying = $state(false);
+
+	const TOAST_ID = 'pwa-update';
+
+	// Dismissible toast; re-surfaces on the next foreground update check while a worker still waits.
+	function showUpdateToast() {
+		toast('A new version of Marquee is available.', {
+			id: TOAST_ID,
+			duration: Infinity,
+			action: { label: 'Reload', onClick: reload }
+		});
+	}
+
+	// Fire the toast once a worker is waiting.
+	$effect(() => {
+		if (waiting) showUpdateToast();
+	});
 
 	onMount(() => {
 		if (!browser || !('serviceWorker' in navigator)) return;
@@ -41,9 +54,12 @@
 			if (reg) track(reg);
 		});
 
-		// Re-check for a deploy when the app returns to the foreground.
+		// Re-check for a deploy when the app returns to the foreground; re-surface the toast if a
+		// worker is still waiting (the user may have dismissed it earlier).
 		const onVisible = () => {
-			if (document.visibilityState === 'visible') registration?.update();
+			if (document.visibilityState !== 'visible') return;
+			registration?.update();
+			if (waiting) showUpdateToast();
 		};
 		document.addEventListener('visibilitychange', onVisible);
 
@@ -53,20 +69,11 @@
 		};
 	});
 
-	function reload() {
-		applying = true;
+	function reload(event: MouseEvent) {
+		// Keep the toast (Sonner would otherwise dismiss it on action click) and swap it to a
+		// loading state until `controllerchange` reloads the page.
+		event.preventDefault();
+		toast.loading('Reloading…', { id: TOAST_ID, duration: Infinity });
 		waiting?.postMessage({ type: 'SKIP_WAITING' });
 	}
 </script>
-
-{#if waiting}
-	<Card.Root
-		role="status"
-		class="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md flex-row items-center gap-3 px-4 py-3 shadow-lg sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2"
-	>
-		<span class="flex-1 text-sm">A new version of Marquee is available.</span>
-		<Button size="sm" onclick={reload} disabled={applying}>
-			{applying ? 'Reloading…' : 'Reload'}
-		</Button>
-	</Card.Root>
-{/if}
