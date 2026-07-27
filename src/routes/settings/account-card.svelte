@@ -7,6 +7,7 @@
 	import * as InputOTP from '$lib/components/ui/input-otp';
 	import OfflineAction from '$lib/components/offline-action.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { signOutOffline } from '$lib/client/logout';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import type { ActionData, PageData } from './$types';
 
@@ -60,7 +61,16 @@
 	};
 
 	// Logout redirects to /login; hold the button in a loading state until that navigation lands.
-	const trackLogout = () => {
+	// Offline the server action can't run (it clears the httpOnly cookie + invalidates the session),
+	// so it would fail to an error page — instead cancel the network submit and sign out locally, and
+	// the real server logout is flushed on reconnect (see `signOutOffline`).
+	const trackLogout = ({ cancel }: { cancel: () => void }) => {
+		if (!online) {
+			cancel();
+			loggingOut = true;
+			void signOutOffline(user.id);
+			return;
+		}
 		loggingOut = true;
 		return async ({ update }: { update: () => Promise<void> }) => {
 			await update();

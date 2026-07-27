@@ -169,6 +169,7 @@ describe('refreshMedia', () => {
 			source: 'linked',
 			type: 'movie',
 			title: 'The Matrix',
+			titleNormalized: 'the matrix', // JS-folded for the degraded search (MRQ-141)
 			backdropPath: '/backdrop.jpg',
 			releaseDate: '1999-03-31',
 			version: 1,

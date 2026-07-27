@@ -104,6 +104,9 @@ function toRows(
 		externalId,
 		type: detail.type,
 		title: detail.title,
+		// Fold with JS `toLowerCase()` so the degraded search matches the offline client's folding
+		// (full Unicode), not SQLite's ASCII-only `LIKE` (MRQ-141).
+		titleNormalized: detail.title.toLowerCase(),
 		year: detail.year,
 		posterPath: detail.posterPath,
 		backdropPath: detail.backdropPath,

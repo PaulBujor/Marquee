@@ -31,7 +31,10 @@ export async function searchLinkedMedia(
 ): Promise<MediaSearchResult[]> {
 	const q = query.trim();
 	if (!q) return [];
-	const pattern = `%${escapeLike(q)}%`;
+	// Fold the query with JS `toLowerCase()` and match the pre-folded `title_normalized` column, so
+	// this agrees with the offline client's full-Unicode folding rather than SQLite `LIKE`'s ASCII-only
+	// case-insensitivity (MRQ-141). Both operands are already lowercased, so LIKE is a plain substring.
+	const pattern = `%${escapeLike(q.toLowerCase())}%`;
 	const rows = await db
 		.select({
 			externalId: media.externalId,
@@ -45,8 +48,7 @@ export async function searchLinkedMedia(
 			and(
 				eq(media.source, 'linked'),
 				eq(media.provider, 'tmdb'),
-				// SQLite LIKE is case-insensitive for ASCII by default.
-				sql`${media.title} LIKE ${pattern} ESCAPE '\\'`
+				sql`${media.titleNormalized} LIKE ${pattern} ESCAPE '\\'`
 			)
 		)
 		.orderBy(desc(media.updatedAt))
