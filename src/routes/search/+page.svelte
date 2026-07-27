@@ -81,10 +81,21 @@
 	// Offline: the server load can't run, so search the local IndexedDB catalog (the user's own
 	// titles) reactively as they type. Online results still come from `data` (TMDB / shared library).
 	let offlineResults = $state<SearchLikeMedia[]>([]);
+	let offlineSeq = 0;
+	let offlineDebounce: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		const q = query;
-		if (sync.online) return;
-		searchLocalMedia(q).then((r) => (offlineResults = r));
+		if (sync.online) {
+			clearTimeout(offlineDebounce);
+			return;
+		}
+		clearTimeout(offlineDebounce);
+		offlineDebounce = setTimeout(() => {
+			const seq = ++offlineSeq;
+			searchLocalMedia(q).then((r) => {
+				if (seq === offlineSeq) offlineResults = r;
+			});
+		}, DEBOUNCE_MS);
 	});
 	// The active result set + the query/mode that drive the list and the degraded/offline banner.
 	const results = $derived<SearchLikeMedia[]>(online ? data.results : offlineResults);
@@ -119,11 +130,8 @@
 	async function commit() {
 		const q = query.trim();
 		// Offline we don't navigate (the server load would fail) — the reactive effect already
-		// refreshed `offlineResults` from the local catalog.
-		if (!online) {
-			searching = false;
-			return;
-		}
+		// debounced + refreshed `offlineResults` from the local catalog.
+		if (!online) return;
 		const seq = ++commitSeq;
 		// Only show the skeleton for an actual search — clearing shouldn't flash a loading state.
 		searching = q.length > 0;
