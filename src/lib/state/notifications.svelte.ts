@@ -123,7 +123,7 @@ class NotificationsState {
 
 	/**
 	 * Turn notifications off on this device: unsubscribe locally so the push endpoint is invalidated
-	 * immediately. The server row is reaped on the next send (410 → prune, MRQ-92), or removed
+	 * immediately. The server row is reaped on the next send (410 → prune), or removed
 	 * explicitly from the settings device list.
 	 */
 	async disable(): Promise<void> {
