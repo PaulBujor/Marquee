@@ -7,6 +7,7 @@
 	import DetailSkeleton from './detail-skeleton.svelte';
 	import TitleDetail from './title-detail.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { buildOfflineDetail } from '$lib/client/media/offline-detail';
 	import { posterUrl } from '$lib/media';
 	import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 	import type { PageData } from './$types';
@@ -34,26 +35,41 @@
 		pageState = base ? 'content' : 'skeleton';
 
 		let cancelled = false;
+		let enrichFailed = false;
+
+		// Hard online reload: the server load runs where it can't read IndexedDB, so `base` is null and
+		// we'd sit on the skeleton until the network enrichment lands — even for a fully-cached title.
+		// Rebuild the cached copy client-side and show it as soon as it's ready, unless the enrichment
+		// already delivered the full page (MRQ-142). (Offline cold boots have no SSR, so `base` is
+		// already built there and this is a no-op.)
+		if (!base && browser && (data.type === 'movie' || data.type === 'show')) {
+			buildOfflineDetail(data.type, data.id, data.season).then((built) => {
+				if (cancelled || !built || pageState === 'content') return;
+				detail = built.detail;
+				seasonData = built.season;
+				pageState = 'content';
+				if (enrichFailed) enrichState = 'offline';
+			});
+		}
+
 		enriched.then(async (e) => {
 			if (cancelled) return;
 			if (e.status === 'ok') {
-				// First visit (no cached copy → still on the skeleton): wait for the hero image to
-				// decode before revealing the content, so it doesn't paint into a blank hero for a
-				// frame (MRQ-145). Cached titles are already showing content — upgrade in place.
-				if (!base) await preloadHero(e.detail);
+				// Nothing shown yet (still the skeleton): wait for the hero image to decode before
+				// revealing the content, so it doesn't paint into a blank hero for a frame (MRQ-145).
+				// A cached copy (from `base` or the client rebuild above) is already up — upgrade in place.
+				if (pageState === 'skeleton') await preloadHero(e.detail);
 				if (cancelled) return;
 				detail = e.detail;
 				seasonData = e.season;
 				enrichState = 'enriched';
 				pageState = 'content';
-			} else if (e.status === 'notfound') {
-				// A real miss with no cached copy is a 404; if we have a cached copy, keep showing it.
-				if (base) enrichState = 'offline';
-				else pageState = 'notfound';
 			} else {
-				// Offline / upstream error — keep the cached copy with offline placeholders, or, with
-				// nothing cached, say so.
-				if (base) enrichState = 'offline';
+				// Enrichment failed. If a cached copy is (or becomes) shown, keep it with offline
+				// placeholders; otherwise surface the terminal error.
+				enrichFailed = true;
+				if (pageState === 'content') enrichState = 'offline';
+				else if (e.status === 'notfound') pageState = 'notfound';
 				else pageState = 'unavailable';
 			}
 		});

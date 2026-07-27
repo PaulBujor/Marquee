@@ -30,17 +30,41 @@ describe('pruneMediaImages', () => {
 		expect(await getMediaImages('keep-2')).toBeDefined();
 	});
 
-	it('evicts the least-recently-updated survivors past the cap', async () => {
+	it('evicts the least-recently-updated survivors past the cap under storage pressure', async () => {
 		await putRaw('old', 10);
 		await putRaw('mid', 20);
 		await putRaw('new', 30);
 
-		const deleted = await pruneMediaImages(new Set(['old', 'mid', 'new']), 2);
+		const deleted = await pruneMediaImages(new Set(['old', 'mid', 'new']), 2, async () => 0.95);
 
 		expect(deleted).toBe(1);
 		expect(await getMediaImages('old')).toBeUndefined(); // oldest evicted
 		expect(await getMediaImages('mid')).toBeDefined();
 		expect(await getMediaImages('new')).toBeDefined();
+	});
+
+	it('keeps tracked survivors past the cap when storage is not under pressure', async () => {
+		await putRaw('old', 10);
+		await putRaw('mid', 20);
+		await putRaw('new', 30);
+
+		const deleted = await pruneMediaImages(new Set(['old', 'mid', 'new']), 2, async () => 0.1);
+
+		expect(deleted).toBe(0); // re-fetchable images, plenty of space — don't evict tracked titles
+		expect(await getMediaImages('old')).toBeDefined();
+		expect(await getMediaImages('mid')).toBeDefined();
+		expect(await getMediaImages('new')).toBeDefined();
+	});
+
+	it('enforces the cap as a backstop when storage usage is unknown', async () => {
+		await putRaw('old', 10);
+		await putRaw('mid', 20);
+		await putRaw('new', 30);
+
+		const deleted = await pruneMediaImages(new Set(['old', 'mid', 'new']), 2, async () => null);
+
+		expect(deleted).toBe(1);
+		expect(await getMediaImages('old')).toBeUndefined();
 	});
 
 	it('keeps everything when nothing is orphaned and the cap isn’t exceeded', async () => {

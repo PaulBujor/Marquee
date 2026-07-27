@@ -24,13 +24,39 @@ export async function putMediaImages(id: string, images: MediaImageBlobs): Promi
 	});
 }
 
+/** Evict the tracked (survivor) LRU tail only once storage usage passes this fraction of quota. */
+const STORAGE_PRESSURE = 0.8;
+
 /**
- * Bound the image cache (MRQ-46): drop blobs for media outside `keepIds` (untracked / removed
- * titles), then, if the survivors still exceed `maxEntries`, evict the least-recently-updated (LRU)
- * — a backstop against unbounded growth (tighter storage quotas on iOS make this matter). Returns
- * how many entries were deleted.
+ * Report current persistent-storage usage as a fraction of quota (0–1), or `null` when the browser
+ * can't tell us (no `navigator.storage.estimate`). Used to decide whether the image cache needs
+ * trimming below its soft cap.
  */
-export async function pruneMediaImages(keepIds: Set<string>, maxEntries = 500): Promise<number> {
+async function estimateStorageUsage(): Promise<number | null> {
+	try {
+		if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return null;
+		const { usage, quota } = await navigator.storage.estimate();
+		if (!quota || usage == null) return null;
+		return usage / quota;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Bound the image cache (MRQ-46): always drop blobs for media outside `keepIds` (untracked / removed
+ * titles). The still-tracked survivors are the working set we *want* available offline, so they're
+ * only trimmed to `maxEntries` (least-recently-updated first) when the device is actually under
+ * storage pressure — otherwise a user tracking more than the cap would lose posters they still track
+ * for no reason, since the images are re-fetchable when online (MRQ-144). When the browser can't
+ * report usage, we fall back to enforcing the cap (a conservative backstop). Returns how many
+ * entries were deleted. `usage` is injectable for testing.
+ */
+export async function pruneMediaImages(
+	keepIds: Set<string>,
+	maxEntries = 500,
+	usage: () => Promise<number | null> = estimateStorageUsage
+): Promise<number> {
 	const db = await openDb();
 	const tx = db.transaction('mediaImages', 'readwrite');
 	const store = tx.store;
@@ -47,10 +73,14 @@ export async function pruneMediaImages(keepIds: Set<string>, maxEntries = 500): 
 	}
 
 	if (survivors.length > maxEntries) {
-		survivors.sort((a, b) => a.updatedAt - b.updatedAt); // oldest first
-		for (const s of survivors.slice(0, survivors.length - maxEntries)) {
-			await store.delete(s.id);
-			deleted++;
+		const fraction = await usage();
+		// Keep every tracked title unless storage is genuinely tight (or unknowable — then enforce).
+		if (fraction === null || fraction >= STORAGE_PRESSURE) {
+			survivors.sort((a, b) => a.updatedAt - b.updatedAt); // oldest first
+			for (const s of survivors.slice(0, survivors.length - maxEntries)) {
+				await store.delete(s.id);
+				deleted++;
+			}
 		}
 	}
 

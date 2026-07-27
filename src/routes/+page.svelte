@@ -28,6 +28,7 @@
 		type LibraryTab,
 		type ReleaseFilter
 	} from '$lib/tracking/library';
+	import { canRate } from '$lib/tracking/actions';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import type { PageData } from './$types';
 
@@ -399,7 +400,7 @@
 							mediaId={item.mediaId}
 							posterPath={item.posterPath}
 							isFavorite={item.favorite}
-							rating={item.rating}
+							rating={canRate(item.type, item.status) ? item.rating : null}
 							alt={item.title}
 						/>
 						<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>
