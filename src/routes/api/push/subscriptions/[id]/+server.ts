@@ -3,7 +3,7 @@ import { deleteSubscription } from '$lib/server/push/subscriptions';
 import type { RequestHandler } from './$types';
 
 /**
- * Remove one of the caller's push subscriptions so notifications stop reaching that device (MRQ-94).
+ * Remove one of the caller's push subscriptions so notifications stop reaching that device.
  * Scoped to the signed-in user, so a caller can only delete their own rows.
  */
 export const DELETE: RequestHandler = async ({ params, locals }) => {
