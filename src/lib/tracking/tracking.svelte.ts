@@ -118,6 +118,7 @@ export class TrackingState {
 
 	/** Add the title to the watchlist as "want to watch". */
 	add(): Promise<void> {
+		notifications.promptContextually();
 		return this.#run(() =>
 			recordEvent('tracking.added', this.mediaId, { status: 'want_to_watch' })
 		);
@@ -125,9 +126,7 @@ export class TrackingState {
 
 	/** Set the status — an add on an untracked title, otherwise a status change. */
 	setStatus(status: TrackingStatus): Promise<void> {
-		// First time a title becomes "watching" is the moment notifications are most relevant — offer
-		// the one-time contextual opt-in (guarded; no-ops if already asked/granted/unsupported).
-		if (status === 'watching') notifications.promptContextually();
+		notifications.promptContextually();
 		return this.#run(() =>
 			statusEventType(this.view) === 'tracking.added'
 				? recordEvent('tracking.added', this.mediaId, { status })
@@ -137,6 +136,7 @@ export class TrackingState {
 
 	/** Toggle favorite (favoriting an untracked title implicitly adds it). */
 	toggleFavorite(): Promise<void> {
+		notifications.promptContextually();
 		return this.#run(() =>
 			recordEvent('tracking.favorite_toggled', this.mediaId, { favorite: nextFavorite(this.view) })
 		);
@@ -222,10 +222,8 @@ export class TrackingState {
 	/** Add the title as `status` if it isn't tracked yet, so a watch on an untracked title lands it. */
 	async #ensureTracked(status: TrackingStatus): Promise<void> {
 		if (!this.view.tracked) {
+			notifications.promptContextually();
 			await recordEvent('tracking.added', this.mediaId, { status });
-			// Marking an episode/season on an untracked title implicitly starts "watching" — same
-			// contextual moment to offer notifications.
-			if (status === 'watching') notifications.promptContextually();
 		}
 	}
 

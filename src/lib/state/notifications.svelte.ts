@@ -54,7 +54,8 @@ class NotificationsState {
 		}
 	}
 
-	/** Show the one-time contextual opt-in when a title first becomes "watching" (fire-and-forget). */
+	/** Show the one-time contextual opt-in when the user first starts tracking a title
+	 * (fire-and-forget; gated so it no-ops once asked/granted/subscribed or where unsupported). */
 	promptContextually(): void {
 		if (!this.supported || this.#asked || this.permission !== 'default' || this.subscribed) return;
 		this.contextualPrompt = true;
