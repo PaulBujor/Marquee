@@ -6,7 +6,9 @@
 	import InstallPrompt from '$lib/components/install-prompt.svelte';
 	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
 	import { theme } from '$lib/state/theme.svelte.js';
-	import { setActiveUser } from '$lib/client/idb';
+	import { getTracking, setActiveUser } from '$lib/client/idb';
+	import { pruneMediaImages } from '$lib/client/idb/images';
+	import { requestPersistentStorage } from '$lib/client/storage';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import type { LayoutData } from './$types';
 
@@ -18,7 +20,18 @@
 	// one-shot read of the initial user; the effect below handles any later change.
 	if (typeof window !== 'undefined') {
 		const initialUser = untrack(() => data.user);
-		if (initialUser) setActiveUser(initialUser.id);
+		if (initialUser) {
+			setActiveUser(initialUser.id);
+			void initOfflineStorage(); // once per boot: request persistence + prune the image cache
+		}
+	}
+
+	// Ask the browser to keep our IndexedDB from being evicted, and bound the image blob cache to the
+	// titles we still track (untracked/removed titles' posters are dropped). Best-effort; all guarded.
+	async function initOfflineStorage() {
+		await requestPersistentStorage();
+		const tracked = await getTracking();
+		await pruneMediaImages(new Set(tracked.map((t) => t.mediaId)));
 	}
 
 	// Drive background event sync while signed in; tear down (and detach the store) on logout.
@@ -31,6 +44,19 @@
 		setActiveUser(data.user.id);
 		sync.start();
 		return () => sync.stop();
+	});
+
+	// When the account changes (logout or switching users), drop the previous user's cached page
+	// shells so they can't be served offline to the next session on a shared device — the service
+	// worker owns the `pages-*` cache and clears it on this message. Seeded from the initial user so a
+	// normal signed-in boot doesn't wipe the shell it just cached.
+	let cachedForUser = untrack(() => data.user?.id ?? null);
+	$effect(() => {
+		const uid = data.user?.id ?? null;
+		if (uid !== cachedForUser) {
+			navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PAGES' });
+			cachedForUser = uid;
+		}
 	});
 
 	$effect(() => {
