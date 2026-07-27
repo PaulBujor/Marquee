@@ -80,3 +80,12 @@ export function renderWaitlistEmail(): string {
 		<p style="${MUTED}">If you didn't sign up, you can safely ignore this email.</p>`
 	);
 }
+
+export function renderAccountDeletedEmail(): string {
+	return layout(
+		'Your account has been deleted',
+		`<p>Your Marquee account and everything associated with it have been permanently deleted. This can't be undone.</p>
+		<p>Thanks for having used Marquee — you're welcome back any time by signing up again.</p>
+		<p style="${MUTED}">If you didn't request this, please contact us right away.</p>`
+	);
+}

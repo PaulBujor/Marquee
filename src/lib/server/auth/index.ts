@@ -1,6 +1,18 @@
 import { and, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { createDb } from '$lib/server/db';
-import { emailChangeTokens, loginTokens, sessions, users, type User } from '$lib/server/db/schema';
+import {
+	emailChangeTokens,
+	episodeWatches,
+	events,
+	loginTokens,
+	notificationLog,
+	pushSubscriptions,
+	sessions,
+	syncState,
+	tracking,
+	users,
+	type User
+} from '$lib/server/db/schema';
 import type { EmailSender } from '$lib/server/email';
 import {
 	renderCodeEmail,
@@ -280,11 +292,24 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
  * this holds regardless of whether the connection enforces foreign keys:
  * sessions + email-change tokens by user id, login tokens by email (no FK).
  */
+/**
+ * Permanently delete a user and everything they own — sessions, sign-in and email-change tokens,
+ * the event log and sync cursor, the tracking + episode-watch projections, push subscriptions, and
+ * the notification ledger — as one atomic D1 batch. The shared TMDB media cache (`media`/`seasons`/
+ * `episodes`) is not user-scoped and is intentionally left intact. Delete children before the
+ * `users` row so nothing is orphaned even where D1 doesn't enforce the cascade.
+ */
 export async function deleteAccount(db: Db, user: User): Promise<void> {
 	await db.batch([
 		db.delete(emailChangeTokens).where(eq(emailChangeTokens.userId, user.id)),
 		db.delete(sessions).where(eq(sessions.userId, user.id)),
 		db.delete(loginTokens).where(eq(loginTokens.email, user.email)),
+		db.delete(events).where(eq(events.userId, user.id)),
+		db.delete(syncState).where(eq(syncState.userId, user.id)),
+		db.delete(tracking).where(eq(tracking.userId, user.id)),
+		db.delete(episodeWatches).where(eq(episodeWatches.userId, user.id)),
+		db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, user.id)),
+		db.delete(notificationLog).where(eq(notificationLog.userId, user.id)),
 		db.delete(users).where(eq(users.id, user.id))
 	]);
 }

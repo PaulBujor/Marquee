@@ -6,6 +6,9 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import OfflineAction from '$lib/components/offline-action.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { wipeLocalData } from '$lib/client/idb';
+	import { notifications } from '$lib/state/notifications.svelte.js';
+	import type { ActionResult } from '@sveltejs/kit';
 	import type { ActionData } from './$types';
 
 	let { userEmail, form }: { userEmail: string; form: ActionData } = $props();
@@ -21,7 +24,14 @@
 
 	const trackDelete = () => {
 		submitting = true;
-		return async ({ update }: { update: () => Promise<void> }) => {
+		return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+			// A redirect means the server deleted the account: wipe this device's local replica and
+			// tear down its push subscription before the redirect navigates (the active user — and so
+			// the database to delete — is still this account at this point).
+			if (result.type === 'redirect') {
+				await notifications.disable();
+				await wipeLocalData();
+			}
 			await update();
 			submitting = false;
 		};

@@ -8,6 +8,7 @@ import {
 } from '$lib/server/auth';
 import { codeField } from '$lib/validation';
 import { createEmailSender } from '$lib/server/email';
+import { renderAccountDeletedEmail } from '$lib/server/email/templates';
 import type { Actions } from './$types';
 
 const SERVICE_UNAVAILABLE = 'Service unavailable.';
@@ -102,7 +103,7 @@ export const actions: Actions = {
 	},
 
 	// Permanently delete the account. Requires typing the current email to confirm.
-	deleteAccount: async ({ request, locals, cookies }) => {
+	deleteAccount: async ({ request, locals, platform, cookies }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
 
@@ -112,8 +113,30 @@ export const actions: Actions = {
 			return fail(400, { deleteError: 'That email does not match this account.' });
 		}
 
+		const email = locals.user.email;
 		await deleteAccount(locals.db, locals.user);
 		deleteSessionCookie(cookies);
+
+		// Confirm the deletion by email — best-effort, so a mail failure can't undo (or fail) a
+		// deletion that's already committed. Fire-and-forget via the request's ExecutionContext so it
+		// doesn't delay the redirect. Only when the transport is configured (`platform` present).
+		if (platform) {
+			try {
+				const sender = createEmailSender(platform.env);
+				platform.ctx.waitUntil(
+					sender
+						.send({
+							to: email,
+							subject: 'Your Marquee account has been deleted',
+							html: renderAccountDeletedEmail()
+						})
+						.catch((err) => console.error('account-deletion email failed:', err))
+				);
+			} catch (err) {
+				console.error('account-deletion email setup failed:', err);
+			}
+		}
+
 		redirect(303, '/login');
 	}
 };
