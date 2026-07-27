@@ -34,6 +34,7 @@ import {
 	type TrackingView
 } from './actions';
 import { reconcileStatus } from './reconcile';
+import { notifications } from '$lib/state/notifications.svelte';
 
 export class TrackingState {
 	readonly mediaId: string;
@@ -124,6 +125,9 @@ export class TrackingState {
 
 	/** Set the status — an add on an untracked title, otherwise a status change. */
 	setStatus(status: TrackingStatus): Promise<void> {
+		// First time a title becomes "watching" is the moment notifications are most relevant — offer
+		// the one-time contextual opt-in (guarded; no-ops if already asked/granted/unsupported).
+		if (status === 'watching') notifications.promptContextually();
 		return this.#run(() =>
 			statusEventType(this.view) === 'tracking.added'
 				? recordEvent('tracking.added', this.mediaId, { status })
@@ -217,7 +221,12 @@ export class TrackingState {
 
 	/** Add the title as `status` if it isn't tracked yet, so a watch on an untracked title lands it. */
 	async #ensureTracked(status: TrackingStatus): Promise<void> {
-		if (!this.view.tracked) await recordEvent('tracking.added', this.mediaId, { status });
+		if (!this.view.tracked) {
+			await recordEvent('tracking.added', this.mediaId, { status });
+			// Marking an episode/season on an untracked title implicitly starts "watching" — same
+			// contextual moment to offer notifications.
+			if (status === 'watching') notifications.promptContextually();
+		}
 	}
 
 	async #seedWatched(episodes: EpisodeCoord[]): Promise<void> {
