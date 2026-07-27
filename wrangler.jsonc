@@ -19,9 +19,9 @@
 		}
 	],
 	"triggers": {
-		// Hourly: the maintenance jobs are gated to one UTC hour in the route, while the push digest
-		// runs every hour and sends at 9AM in each user's local timezone.
-		"crons": ["0 * * * *"]
+		// Two schedules (append-cron.mjs routes each to its own endpoint): the hourly notifications
+		// digest (so 9AM lands in every timezone) and the daily maintenance sweep at 06:00 UTC.
+		"crons": ["0 * * * *", "0 6 * * *"]
 	},
 	"observability": {
 		"enabled": true,
@@ -50,8 +50,8 @@
 				}
 			],
 			"triggers": {
-				// Hourly (see prod triggers above) — gated maintenance + 9AM-local push digest.
-				"crons": ["0 * * * *"]
+				// Two schedules (see prod triggers above): hourly notifications + daily 06:00 maintenance.
+				"crons": ["0 * * * *", "0 6 * * *"]
 			},
 			"observability": {
 				"enabled": true,
