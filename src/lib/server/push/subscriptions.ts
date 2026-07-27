@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { pushSubscriptions } from '$lib/server/db/schema';
 import type { createDb } from '$lib/server/db';
@@ -64,6 +64,35 @@ export async function upsertSubscription(
 				lastUsedAt: now
 			}
 		});
+}
+
+/** A subscription as shown in the settings device list (timestamps as epoch ms for the client). */
+export interface SubscriptionListItem {
+	id: string;
+	deviceLabel: string | null;
+	endpoint: string;
+	createdAt: number;
+	lastUsedAt: number;
+}
+
+/** List a user's own subscriptions, most-recently-used first (for the settings device list). */
+export async function listSubscriptions(db: Db, userId: string): Promise<SubscriptionListItem[]> {
+	const rows = await db
+		.select({
+			id: pushSubscriptions.id,
+			deviceLabel: pushSubscriptions.deviceLabel,
+			endpoint: pushSubscriptions.endpoint,
+			createdAt: pushSubscriptions.createdAt,
+			lastUsedAt: pushSubscriptions.lastUsedAt
+		})
+		.from(pushSubscriptions)
+		.where(eq(pushSubscriptions.userId, userId))
+		.orderBy(desc(pushSubscriptions.lastUsedAt));
+	return rows.map((r) => ({
+		...r,
+		createdAt: r.createdAt.getTime(),
+		lastUsedAt: r.lastUsedAt.getTime()
+	}));
 }
 
 /**

@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createTestDb } from '$lib/server/db/test-db';
 import { pushSubscriptions, users } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
-import { deleteSubscription, pushSubscribeSchema, upsertSubscription } from './subscriptions';
+import {
+	deleteSubscription,
+	listSubscriptions,
+	pushSubscribeSchema,
+	upsertSubscription
+} from './subscriptions';
 
 type Db = ReturnType<typeof createTestDb>;
 
@@ -86,5 +91,28 @@ describe('deleteSubscription', () => {
 		expect(
 			await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.id, row.id))
 		).toHaveLength(1);
+	});
+});
+
+describe('listSubscriptions', () => {
+	it('returns only the caller’s rows, newest-used first, with epoch-ms timestamps', async () => {
+		await upsertSubscription(
+			db,
+			USER,
+			input({ endpoint: 'https://push.example/old', deviceLabel: 'Old' }),
+			new Date('2026-07-01T00:00:00Z')
+		);
+		await upsertSubscription(
+			db,
+			USER,
+			input({ endpoint: 'https://push.example/new', deviceLabel: 'New' }),
+			new Date('2026-07-20T00:00:00Z')
+		);
+		await upsertSubscription(db, OTHER, input({ endpoint: 'https://push.example/other' }));
+
+		const list = await listSubscriptions(db, USER);
+		expect(list.map((s) => s.deviceLabel)).toEqual(['New', 'Old']);
+		expect(list[0].endpoint).toBe('https://push.example/new');
+		expect(typeof list[0].lastUsedAt).toBe('number');
 	});
 });

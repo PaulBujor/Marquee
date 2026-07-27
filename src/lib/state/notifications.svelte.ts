@@ -22,6 +22,8 @@ class NotificationsState {
 	permission = $state<NotificationPermission>(this.supported ? Notification.permission : 'denied');
 	/** Whether this device currently holds a push subscription (from `getSubscription()`). */
 	subscribed = $state(false);
+	/** This device's current push endpoint, to mark it in the settings device list. */
+	endpoint = $state<string | null>(null);
 	busy = $state(false);
 	error = $state<string | null>(null);
 	/** The transient contextual opt-in banner (shown once, on a first "watching"). */
@@ -48,9 +50,12 @@ class NotificationsState {
 		this.permission = Notification.permission;
 		try {
 			const reg = await navigator.serviceWorker.ready;
-			this.subscribed = (await reg.pushManager.getSubscription()) !== null;
+			const subscription = await reg.pushManager.getSubscription();
+			this.subscribed = subscription !== null;
+			this.endpoint = subscription?.endpoint ?? null;
 		} catch {
 			this.subscribed = false;
+			this.endpoint = null;
 		}
 	}
 
@@ -94,6 +99,7 @@ class NotificationsState {
 			});
 			await this.#register(subscription);
 			this.subscribed = true;
+			this.endpoint = subscription.endpoint;
 			return true;
 		} catch (err) {
 			console.error('notifications: enable failed', err);
@@ -136,6 +142,7 @@ class NotificationsState {
 			const subscription = await reg.pushManager.getSubscription();
 			if (subscription) await subscription.unsubscribe();
 			this.subscribed = false;
+			this.endpoint = null;
 		} catch (err) {
 			console.error('notifications: disable failed', err);
 			this.error = 'Could not turn off notifications.';
