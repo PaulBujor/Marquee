@@ -91,7 +91,7 @@
 		<div
 			class="absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/55 px-1.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm"
 		>
-			<Star class="size-3 fill-primary text-primary" />
+			<Star class="size-3 fill-amber-400 text-amber-400" />
 			{rating}
 		</div>
 	{/if}

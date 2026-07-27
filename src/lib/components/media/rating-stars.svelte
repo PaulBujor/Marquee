@@ -2,10 +2,10 @@
 	import StarIcon from '@lucide/svelte/icons/star';
 	import { cn } from '$lib/utils.js';
 
-	// The user's own 1–5 rating control, styled with the app's primary accent. It reads as a distinct
-	// five-star scale (vs. the single TMDB `/10` star in the meta row): five discrete stars, labelled
-	// "Your rating", and no number. Interactive when `onRate` is given (tap a star to set it, tap the
-	// active star to clear); read-only otherwise, for list overlays.
+	// The user's own 1–5 rating control, in amber so it reads as distinct from the single TMDB `/10`
+	// star in the meta row (which uses the primary accent). Five discrete stars, labelled "Your
+	// rating", no number. Interactive when `onRate` is given (tap a star to set it, tap the active
+	// star to clear); read-only otherwise, for list overlays.
 	interface Props {
 		/** Current rating 1–5, or null when unrated. */
 		value: number | null;
@@ -41,7 +41,7 @@
 		{@const glyph = cn(
 			starSize,
 			'transition-colors',
-			filled ? 'fill-primary text-primary' : 'text-muted-foreground/25'
+			filled ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/25'
 		)}
 		{#if readonly}
 			<StarIcon class={glyph} />

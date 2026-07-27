@@ -109,7 +109,7 @@
 		row. Shown only once the title's been watched (see canRate). Tap the active star or "Clear". -->
 		<div class="mt-1 flex flex-col gap-1">
 			<span class="text-xs font-medium text-muted-foreground">Your rating</span>
-			<div class="flex items-center gap-2">
+			<div class="flex items-center gap-1">
 				<RatingStars
 					value={rating}
 					onRate={(r) => tracking.setRating(r)}
@@ -120,7 +120,7 @@
 						type="button"
 						onclick={() => tracking.setRating(null)}
 						disabled={tracking.busy}
-						class="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+						class="rounded-full px-3 py-1.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
 					>
 						Clear
 					</button>
