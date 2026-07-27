@@ -34,7 +34,7 @@ import {
 	type TrackingView
 } from './actions';
 import { reconcileStatus } from './reconcile';
-import { notifications } from '$lib/state/notifications.svelte';
+import { notifications } from '$lib/state/notifications.svelte.js';
 
 export class TrackingState {
 	readonly mediaId: string;
