@@ -143,6 +143,16 @@
 	);
 	let seasonConfirmOpen = $state(false);
 
+	// Enrichment upgrades the page in place (no navigation): when a fresher `season` prop arrives —
+	// e.g. the offline-seeded episode list replaced by the enriched network copy — fold it into the
+	// cache so the open season upgrades too. afterNavigate covers the navigation case; this covers the
+	// streamed in-place swap. Keyed by season number, so it never disturbs the user's own selection.
+	$effect(() => {
+		if (!season) return;
+		const s = season;
+		seasonCache[s.seasonNumber] = s;
+	});
+
 	// Episode title from the cached season data, if that season has been fetched.
 	function episodeName(season: number, episode: number): string | undefined {
 		return seasonCache[season]?.episodes.find((e) => e.episodeNumber === episode)?.name;

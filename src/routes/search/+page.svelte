@@ -97,6 +97,16 @@
 			});
 		}, DEBOUNCE_MS);
 	});
+	// When connectivity returns, commit whatever was typed offline: offline typing never reaches the
+	// URL (onInput bails), so without this the list would snap back to the stale `?q=` results and the
+	// user's offline query would be lost until they edited the box.
+	let wasOnline = sync.online;
+	$effect(() => {
+		const nowOnline = sync.online;
+		if (nowOnline && !wasOnline && untrack(() => query.trim()) !== untrack(() => data.q))
+			void commit();
+		wasOnline = nowOnline;
+	});
 	// The active result set + the query/mode that drive the list and the degraded/offline banner.
 	const results = $derived<SearchLikeMedia[]>(online ? data.results : offlineResults);
 	const activeQuery = $derived(online ? data.q : query.trim());
@@ -135,8 +145,13 @@
 		const seq = ++commitSeq;
 		// Only show the skeleton for an actual search — clearing shouldn't flash a loading state.
 		searching = q.length > 0;
-		await pushQuery(q);
-		if (seq === commitSeq) searching = false;
+		try {
+			await pushQuery(q);
+		} finally {
+			// Always clear the skeleton, even if the navigation rejects (e.g. connectivity drops
+			// mid-commit) — otherwise the loading state would stick on screen.
+			if (seq === commitSeq) searching = false;
+		}
 	}
 
 	function onInput() {
