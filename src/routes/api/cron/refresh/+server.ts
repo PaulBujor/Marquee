@@ -39,12 +39,12 @@ async function purgeAuth(db: Db) {
 }
 
 /**
- * The nightly maintenance sweep. The cron `scheduled` handler self-`fetch`es this route (see
- * scripts/append-cron.mjs); it's HTTP-reachable and gated by `CRON_SECRET`, so it also doubles as a
- * manual trigger — `POST` it with an `x-cron-key: <CRON_SECRET>` header to run it on demand.
- *
- * It runs independent jobs (media refresh, auth-token/session purge); each isolates its own errors so
- * one failing never prevents the others, and the combined result is returned for diagnostics.
+ * The daily maintenance sweep (media refresh + auth-token/session purge). The cron `scheduled`
+ * handler self-`fetch`es this route for the `0 6 * * *` trigger (see scripts/append-cron.mjs); it's
+ * HTTP-reachable and gated by `CRON_SECRET`, so it also doubles as a manual trigger — `POST` it with
+ * an `x-cron-key: <CRON_SECRET>` header to run it on demand. The notifications digest is on its own
+ * hourly schedule (see `/api/cron/notify`). Each job isolates its own errors so one failing never
+ * prevents the others.
  */
 export const POST: RequestHandler = async ({ request, url, locals, platform }) => {
 	const secret = platform?.env.CRON_SECRET;

@@ -427,3 +427,26 @@ export const pushSubscriptions = sqliteTable(
 );
 
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+
+/**
+ * Ledger of notifications already sent, so the daily digest is exactly-once per
+ * release per user (across retries, a forced run, and missed days). `id` is a
+ * deterministic key — `${userId}::${mediaId}::s{S}e{E}` for an episode,
+ * `${userId}::${mediaId}::release` for a movie. Also the data foundation for the
+ * future in-app notification inbox / badging.
+ */
+export const notificationLog = sqliteTable(
+	'notification_log',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		sentAt: integer('sent_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [index('notification_log_user_id_idx').on(table.userId)]
+);
+
+export type NotificationLogRow = typeof notificationLog.$inferSelect;

@@ -19,7 +19,9 @@
 		}
 	],
 	"triggers": {
-		"crons": ["0 6 * * *"]
+		// Two schedules (append-cron.mjs routes each to its own endpoint): the hourly notifications
+		// digest (so 9AM lands in every timezone) and the daily maintenance sweep at 06:00 UTC.
+		"crons": ["0 * * * *", "0 6 * * *"]
 	},
 	"observability": {
 		"enabled": true,
@@ -48,7 +50,8 @@
 				}
 			],
 			"triggers": {
-				"crons": ["0 6 * * *"]
+				// Two schedules (see prod triggers above): hourly notifications + daily 06:00 maintenance.
+				"crons": ["0 * * * *", "0 6 * * *"]
 			},
 			"observability": {
 				"enabled": true,
