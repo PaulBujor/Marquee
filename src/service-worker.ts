@@ -53,6 +53,63 @@ self.addEventListener('sync', ((event: SyncEvent) => {
 	if (event.tag === SYNC_TAG) event.waitUntil(flushOfflineWrites());
 }) as EventListener);
 
+/** Payload the server sends with a Web Push (see `src/lib/server/push`). */
+interface PushPayload {
+	title: string;
+	body: string;
+	/** In-app path to deep-link to on click. */
+	url?: string;
+	/** Collapse key — a later notification with the same tag replaces an earlier one. */
+	tag?: string;
+}
+
+// Web Push: show the notification, then wake a background sync so the app's local data is
+// fresh by the time the user opens it — this also covers iOS, which has no Background Sync API.
+self.addEventListener('push', (event) => {
+	event.waitUntil(handlePush(event));
+});
+
+// Deep-link a notification tap to its target, focusing an already-open tab when there is one.
+self.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const url = (event.notification.data as { url?: string } | null)?.url ?? '/';
+	event.waitUntil(openOrFocus(url));
+});
+
+async function handlePush(event: PushEvent): Promise<void> {
+	let payload: PushPayload | undefined;
+	try {
+		payload = event.data?.json() as PushPayload | undefined;
+	} catch {
+		payload = undefined;
+	}
+	const title = payload?.title || 'Marquee';
+	await self.registration.showNotification(title, {
+		body: payload?.body ?? '',
+		icon: '/icons/icon-192.png',
+		badge: '/icons/favicon-48.png',
+		tag: payload?.tag,
+		data: { url: payload?.url ?? '/' }
+	});
+	// Best-effort refresh; never let a sync failure suppress the notification (already shown above).
+	await flushOfflineWrites().catch(() => {});
+}
+
+/** Focus an open tab (handing it the target path) or open a new window at the URL. */
+async function openOrFocus(url: string): Promise<void> {
+	const target = new URL(url, self.location.origin);
+	const path = target.pathname + target.search;
+	const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+	// `type: 'window'` guarantees WindowClients (focus()), which the Client[] return type doesn't reflect.
+	const client = clients[0] as WindowClient | undefined;
+	if (client) {
+		client.postMessage({ type: 'NOTIFICATION_NAVIGATE', url: path });
+		await client.focus();
+		return;
+	}
+	await self.clients.openWindow(target.href);
+}
+
 /**
  * Drain queued offline events. Prefer an open tab (it holds the active user + reactive state, so its
  * views update); when the app is fully closed, push the outbox directly via the same `runSync` round
