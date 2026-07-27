@@ -29,7 +29,7 @@ export class PushForgeSender implements PushSender {
 
 		const res = await fetch(endpoint, { method: 'POST', headers, body });
 		// Push services return 404/410 once a subscription is expired/unsubscribed — the caller
-		// deletes those rows so future sweeps stop targeting them (MRQ-92).
+		// deletes those rows so future sweeps stop targeting them.
 		return { ok: res.ok, status: res.status, gone: res.status === 404 || res.status === 410 };
 	}
 }
