@@ -1,16 +1,14 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { browser } from '$app/environment';
-	import { goto, invalidate } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import { Button } from '$lib/components/ui/button';
+	import { invalidate } from '$app/navigation';
 	import ErrorState from '$lib/components/error-state.svelte';
+	import BackButton from '$lib/components/back-button.svelte';
 	import DetailSkeleton from './detail-skeleton.svelte';
 	import TitleDetail from './title-detail.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { posterUrl } from '$lib/media';
 	import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
-	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import type { PageData } from './$types';
 
 	// Offline-first orchestrator: render the cached copy immediately, then upgrade to the streamed
@@ -71,11 +69,6 @@
 		wasOnline = online;
 	});
 
-	function goBack() {
-		if (history.length > 1) history.back();
-		else goto(resolve('/'));
-	}
-
 	// Decode the hero image (backdrop, else poster) before we swap the skeleton for the content, so
 	// the first painted frame already has artwork instead of a blank hero (MRQ-145). Bounded by a
 	// short timeout so a slow or broken image can never strand the user on the skeleton.
@@ -97,16 +90,7 @@
 		<div
 			class="mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
 		>
-			<Button
-				onclick={goBack}
-				variant="outline"
-				size="icon"
-				shape="round"
-				class="shrink-0 text-muted-foreground"
-				aria-label="Go back"
-			>
-				<ChevronLeftIcon class="size-4" />
-			</Button>
+			<BackButton />
 		</div>
 	</header>
 {/snippet}

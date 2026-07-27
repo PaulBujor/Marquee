@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Button, buttonVariants } from '$lib/components/ui/button';
+	import { buttonVariants } from '$lib/components/ui/button';
 	import PageHeader from '$lib/components/page-header.svelte';
+	import BackButton from '$lib/components/back-button.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { LibraryState } from '$lib/tracking/library.svelte';
 	import { filterUpcoming, groupUpcomingByYear } from '$lib/tracking/library';
 	import { sync } from '$lib/client/sync/engine.svelte';
-	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -39,16 +39,7 @@
 
 <PageHeader>
 	<div class="flex items-center gap-3">
-		<Button
-			href={resolve('/')}
-			variant="outline"
-			size="icon"
-			shape="round"
-			class="shrink-0 text-muted-foreground"
-			aria-label="Back to home"
-		>
-			<ChevronLeftIcon class="size-4" />
-		</Button>
+		<BackButton label="Back to home" />
 		<h1 class="text-lg font-semibold">Upcoming</h1>
 	</div>
 </PageHeader>
