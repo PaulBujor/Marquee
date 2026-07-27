@@ -5,11 +5,12 @@ import type { EmailSender } from '$lib/server/email';
 import { renderEmailChangeCode } from '$lib/server/email/templates';
 import { EMAIL_REGEX, normalizeEmail } from './validation';
 import { generateCode, hashToken } from './tokens';
+import { EMAIL_CHANGE_TTL_MINUTES } from '$lib/email-change';
 
 type Db = ReturnType<typeof createDb>;
 
-/** A change code lives as long as a sign-in code — short, since it's typed straight back in-app. */
-export const EMAIL_CHANGE_TTL_MINUTES = 10;
+// Re-exported so `$lib/server/auth` keeps exposing it; the value lives in the client-safe module.
+export { EMAIL_CHANGE_TTL_MINUTES };
 const EMAIL_CHANGE_TTL_MS = EMAIL_CHANGE_TTL_MINUTES * 60 * 1000;
 /** Failed code entries before the change token is invalidated (online brute-force cap). */
 const MAX_ATTEMPTS = 5;
