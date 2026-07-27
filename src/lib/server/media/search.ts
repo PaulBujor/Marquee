@@ -8,7 +8,7 @@
  * and this is a rare fallback path, so a scan is acceptable; an FTS5 table would be the upgrade if it
  * ever gets hot.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { media } from '$lib/server/db/schema';
 import type { createDb } from '$lib/server/db';
 import type { MediaSearchResult } from '$lib/server/tmdb';
@@ -49,6 +49,7 @@ export async function searchLinkedMedia(
 				sql`${media.title} LIKE ${pattern} ESCAPE '\\'`
 			)
 		)
+		.orderBy(desc(media.updatedAt))
 		.limit(limit);
 
 	return rows

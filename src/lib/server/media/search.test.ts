@@ -76,4 +76,33 @@ describe('searchLinkedMedia', () => {
 		await seed(db);
 		expect(await searchLinkedMedia(db, '   ')).toEqual([]);
 	});
+
+	it('returns results ordered by most recently updated first', async () => {
+		const db = await createTestDb();
+		// Seed two matching rows with different updatedAt timestamps.
+		await db.insert(media).values([
+			{
+				id: 'old',
+				provider: 'tmdb',
+				externalId: 'movie/100',
+				source: 'linked',
+				type: 'movie',
+				title: 'Alpha',
+				year: 2000,
+				updatedAt: 1000
+			},
+			{
+				id: 'new',
+				provider: 'tmdb',
+				externalId: 'movie/200',
+				source: 'linked',
+				type: 'movie',
+				title: 'Alpha Returns',
+				year: 2010,
+				updatedAt: 5000
+			}
+		]);
+		const results = await searchLinkedMedia(db, 'alpha');
+		expect(results.map((r) => r.tmdbId)).toEqual([200, 100]);
+	});
 });
