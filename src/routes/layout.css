@@ -144,4 +144,19 @@
 	body {
 		@apply bg-background text-foreground;
 	}
+
+	/* Kill the mobile double-tap-to-zoom gesture (and the legacy ~300ms click delay) on buttons and
+	   inputs, so a quick double-tap registers as taps rather than zooming the page. `manipulation`
+	   still allows scrolling and pinch-zoom, so page zoom stays available (we don't disable it via the
+	   viewport). `touch-action` isn't inherited, so this targets the interactive elements directly —
+	   `[data-slot='button']` also covers our `Button`'s anchor (link) variant, and native `button`
+	   catches the bits-ui controls (toggle, tabs, select/dropdown triggers) which render as buttons. */
+	button,
+	input,
+	textarea,
+	select,
+	[role='button'],
+	[data-slot='button'] {
+		touch-action: manipulation;
+	}
 }
