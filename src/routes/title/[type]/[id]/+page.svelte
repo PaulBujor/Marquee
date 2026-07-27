@@ -42,7 +42,7 @@
 		// Rebuild the cached copy client-side and show it as soon as it's ready, unless the enrichment
 		// already delivered the full page (MRQ-142). (Offline cold boots have no SSR, so `base` is
 		// already built there and this is a no-op.)
-		if (!base && browser) {
+		if (!base && browser && (data.type === 'movie' || data.type === 'show')) {
 			buildOfflineDetail(data.type, data.id, data.season).then((built) => {
 				if (cancelled || !built || pageState === 'content') return;
 				detail = built.detail;
