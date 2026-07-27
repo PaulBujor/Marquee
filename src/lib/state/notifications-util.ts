@@ -1,8 +1,9 @@
 /** Pure helpers for the notifications rune — split out so they're unit-testable (the `.svelte.ts`
  * rune module can't be imported under the plain-node vitest config). */
 
-/** Decode a base64url VAPID public key into the `applicationServerKey` bytes `subscribe()` wants. */
-export function urlBase64ToUint8Array(base64Url: string): Uint8Array {
+/** Decode a base64url VAPID public key into the `applicationServerKey` bytes `subscribe()` wants.
+ * Returns `Uint8Array<ArrayBuffer>` (not the wider `ArrayBufferLike`) so it satisfies `BufferSource`. */
+export function urlBase64ToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
 	const padding = '='.repeat((4 - (base64Url.length % 4)) % 4);
 	const base64 = (base64Url + padding).replaceAll('-', '+').replaceAll('_', '/');
 	const raw = atob(base64);
