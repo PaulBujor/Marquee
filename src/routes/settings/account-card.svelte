@@ -98,8 +98,8 @@
 					bind:value={code}
 					autocomplete="one-time-code"
 					inputmode="numeric"
-					disabled={submitting}
-					onComplete={() => codeValid && codeForm?.requestSubmit()}
+					disabled={submitting || !online}
+					onComplete={() => online && codeValid && codeForm?.requestSubmit()}
 				>
 					{#snippet children({ cells })}
 						<InputOTP.Group>
@@ -148,6 +148,8 @@
 					<OfflineAction message={OFFLINE_EMAIL_MSG} class="self-start">
 						Send confirmation code
 					</OfflineAction>
+					<!-- Inline note as well as the tooltip: touch (the PWA's primary surface) gives no hover. -->
+					<p class="text-sm text-muted-foreground">{OFFLINE_EMAIL_MSG}</p>
 				{/if}
 			</form>
 		{/if}

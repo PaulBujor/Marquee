@@ -87,8 +87,9 @@
 						This removes the offline copy stored on this device and re-syncs everything from the
 						server. Your tracked titles and progress are safe — they're kept on the server too.
 						<strong class="text-foreground">
-							Any changes made since the last sync ({lastSyncedLabel}) that haven't reached the
-							server yet will be permanently discarded.</strong
+							{online
+								? "We'll upload any unsynced changes first — anything that still can't reach the server will be discarded."
+								: `Any changes made since the last sync (${lastSyncedLabel}) that haven't reached the server yet will be permanently discarded.`}</strong
 						>
 					</AlertDialog.Description>
 				</AlertDialog.Header>

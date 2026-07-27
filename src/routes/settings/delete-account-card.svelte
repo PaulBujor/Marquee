@@ -52,6 +52,10 @@
 				>
 					Delete account
 				</OfflineAction>
+				<!-- Inline note as well as the tooltip: touch (the PWA's primary surface) gives no hover. -->
+				<p class="mt-2 text-sm text-muted-foreground">
+					You'll need an internet connection to delete your account.
+				</p>
 			{/if}
 			<AlertDialog.Content>
 				<AlertDialog.Header>
@@ -83,7 +87,7 @@
 						<Button
 							type="submit"
 							variant="destructive"
-							disabled={submitting || confirmEmail.trim().toLowerCase() !== userEmail}
+							disabled={submitting || !online || confirmEmail.trim().toLowerCase() !== userEmail}
 						>
 							{submitting ? 'Deleting…' : 'Delete account'}
 						</Button>

@@ -55,6 +55,10 @@
 		const uid = data.user?.id ?? null;
 		if (uid !== cachedForUser) {
 			navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PAGES' });
+			// Drop the previous user's "last synced" timestamp on the actual account change (not on
+			// every sync teardown, which invalidateAll() would trigger) so it can't briefly show for
+			// the next account; start() reloads the new user's value.
+			sync.lastSyncAt = null;
 			cachedForUser = uid;
 		}
 	});
