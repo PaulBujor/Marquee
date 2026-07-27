@@ -1,4 +1,4 @@
-import { buildPushHTTPRequest } from '@pushforge/builder';
+import { buildPushHTTPRequest, type PushMessage } from '@pushforge/builder';
 import type { PushPayload, PushResult, PushSender, PushTarget } from './index';
 
 /**
@@ -19,7 +19,12 @@ export class PushForgeSender implements PushSender {
 		const { endpoint, headers, body } = await buildPushHTTPRequest({
 			privateJWK: this.privateJWK,
 			subscription: target,
-			message: { payload, adminContact: this.adminContact }
+			// PushPayload is JSON-serialisable, but a fixed-shape interface can't structurally satisfy
+			// the library's `Jsonifiable` index-signature constraint — cast at the boundary.
+			message: {
+				payload: payload as unknown as PushMessage['payload'],
+				adminContact: this.adminContact
+			}
 		});
 
 		const res = await fetch(endpoint, { method: 'POST', headers, body });
