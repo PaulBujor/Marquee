@@ -45,6 +45,21 @@ export async function buildOfflineDetail(
 	tmdbId: number,
 	seasonParam?: string | null
 ): Promise<OfflineTitle | null> {
+	try {
+		return await assembleOfflineDetail(type, tmdbId, seasonParam);
+	} catch {
+		// Store not ready (e.g. the active user isn't scoped yet on an early load) or a read failed —
+		// no offline base; the page renders its skeleton and enriches from the network instead. Never
+		// throw from here: it runs inside the page `load`, and a throw would 500 the whole page.
+		return null;
+	}
+}
+
+async function assembleOfflineDetail(
+	type: 'movie' | 'show',
+	tmdbId: number,
+	seasonParam?: string | null
+): Promise<OfflineTitle | null> {
 	const id = tmdbMediaId(type, tmdbId);
 	const m = await getMedia(id);
 	if (!m) return null;
