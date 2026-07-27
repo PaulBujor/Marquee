@@ -8,7 +8,12 @@
 // sees the entering navigation, so its back button wrongly fell back to home. Reading this shared
 // state instead makes the decision independent of when a control happens to mount.
 
-import { initialNavState, recordNavigation, entryOrigin, type NavHistoryState } from './navigation-util';
+import {
+	initialNavState,
+	recordNavigation,
+	entryOrigin,
+	type NavHistoryState
+} from './navigation-util';
 
 class NavigationState {
 	#history = $state<NavHistoryState>(initialNavState);
