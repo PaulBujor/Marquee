@@ -1,28 +1,14 @@
 <script lang="ts">
 	import { notifications } from '$lib/state/notifications.svelte.js';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import BellIcon from '@lucide/svelte/icons/bell';
-	import XIcon from '@lucide/svelte/icons/x';
-</script>
+	import { promptToast } from '$lib/state/prompt-toast.svelte.js';
 
-{#if notifications.contextualPrompt}
-	<Card.Root
-		class="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-md flex-row items-center gap-3 px-4 py-3 shadow-lg sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2"
-	>
-		<BellIcon class="size-5 shrink-0 text-muted-foreground" />
-		<span class="flex-1 text-sm">Get notified when new episodes and releases arrive.</span>
-		<Button size="sm" onclick={() => notifications.enable()} disabled={notifications.busy}>
-			{notifications.busy ? 'Enabling…' : 'Enable'}
-		</Button>
-		<Button
-			variant="ghost"
-			size="icon-sm"
-			class="-mr-1 shrink-0"
-			aria-label="Not now"
-			onclick={() => notifications.dismissContextual()}
-		>
-			<XIcon class="size-4" />
-		</Button>
-	</Card.Root>
-{/if}
+	// One-time contextual opt-in, shown as a Sonner toast (shares the surface with the install/update
+	// prompts). enable() clears contextualPrompt, so the toast auto-dismisses — no busy label needed.
+	promptToast({
+		id: 'notify-optin',
+		when: () => notifications.contextualPrompt,
+		message: () => 'Get notified when new episodes and releases arrive.',
+		action: () => ({ label: 'Enable', onClick: () => notifications.enable() }),
+		onDismiss: () => notifications.dismissContextual()
+	});
+</script>

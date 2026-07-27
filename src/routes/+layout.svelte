@@ -6,6 +6,7 @@
 	import InstallPrompt from '$lib/components/install-prompt.svelte';
 	import NotificationPrompt from '$lib/components/notification-prompt.svelte';
 	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
+	import { Toaster } from '$lib/components/ui/sonner';
 	import { goto } from '$app/navigation';
 	import { theme } from '$lib/state/theme.svelte.js';
 	import { getTracking, setActiveUser } from '$lib/client/idb';
@@ -176,6 +177,7 @@ back navigation, keeping the movie/show page's immersive layout uncluttered. -->
 	<AppHeader />
 {/if}
 {@render children()}
+<Toaster />
 <InstallPrompt />
 <NotificationPrompt />
 <PwaUpdatePrompt />
