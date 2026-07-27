@@ -101,7 +101,10 @@ export class TrackingState {
 		try {
 			// Cache the media locally so this device renders lists offline and has identity to
 			// push on the media channel (idempotent; the snapshot comes from the detail page).
-			if (this.#media) await putMedia(this.#media);
+			// `$state.snapshot` unwraps the record from its Svelte reactive proxy — the detail page's
+			// `mediaRecord` derives from `$state` fields, and IndexedDB's structured clone throws on a
+			// proxy ("Proxy object could not be cloned").
+			if (this.#media) await putMedia($state.snapshot(this.#media));
 			await work();
 			await this.load();
 			sync.requestSync(); // nudge a push so the change reaches the server promptly
