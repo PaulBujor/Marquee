@@ -19,6 +19,18 @@
 		});
 	});
 
+	// "Last synced" is shown at all times so it's clear how current the offline copy is — and how much
+	// a "clear local data" would discard when there are unsynced offline changes.
+	const online = $derived(sync.online);
+	const lastSyncAt = $derived(sync.lastSyncAt);
+	const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
+		dateStyle: 'medium',
+		timeStyle: 'short'
+	});
+	const lastSyncedLabel = $derived(
+		lastSyncAt ? dateTimeFmt.format(new Date(lastSyncAt)) : 'not yet synced'
+	);
+
 	function formatBytes(bytes: number): string {
 		if (bytes < 1024) return `${bytes} B`;
 		const units = ['KB', 'MB', 'GB'];
@@ -58,9 +70,12 @@
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="flex flex-col gap-3">
-		{#if usage}
-			<p class="text-sm text-muted-foreground">Using about {usage} on this device.</p>
-		{/if}
+		<p class="text-sm text-muted-foreground">
+			Last synced {lastSyncedLabel}{usage ? ` · using about ${usage}` : ''}.
+			{#if !online}<span class="text-foreground">
+					You're offline — changes will sync when you reconnect.</span
+				>{/if}
+		</p>
 		<AlertDialog.Root bind:open>
 			<AlertDialog.Trigger class={buttonVariants({ variant: 'outline' })}>
 				Clear local data
@@ -70,10 +85,19 @@
 					<AlertDialog.Title>Clear local data on this device?</AlertDialog.Title>
 					<AlertDialog.Description>
 						This removes the offline copy stored on this device and re-syncs everything from the
-						server. Your tracked titles and progress are safe — they're kept on the server too. Any
-						changes made offline that haven't synced yet will be lost.
+						server. Your tracked titles and progress are safe — they're kept on the server too.
+						<strong class="text-foreground">
+							{online
+								? "We'll upload any unsynced changes first — anything that still can't reach the server will be discarded."
+								: `Any changes made since the last sync (${lastSyncedLabel}) that haven't reached the server yet will be permanently discarded.`}</strong
+						>
 					</AlertDialog.Description>
 				</AlertDialog.Header>
+				{#if !online}
+					<p class="text-sm text-destructive">
+						You're offline, so unsynced changes can't be saved first — they'll be lost.
+					</p>
+				{/if}
 				{#if errored}
 					<p class="text-sm text-destructive">Couldn't clear local data. Please try again.</p>
 				{/if}

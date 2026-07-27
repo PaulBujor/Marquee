@@ -43,6 +43,21 @@
 	// Client-side mirror of the server's code check (the server stays authoritative).
 	const codeValid = $derived(/^\d{6}$/.test(code));
 
+	// The login shell can be opened offline (it's cached), but signing in needs the server — track
+	// connectivity locally here (the sync engine only runs once signed in).
+	let online = $state(true);
+	$effect(() => {
+		online = navigator.onLine;
+		const on = () => (online = true);
+		const off = () => (online = false);
+		window.addEventListener('online', on);
+		window.addEventListener('offline', off);
+		return () => {
+			window.removeEventListener('online', on);
+			window.removeEventListener('offline', off);
+		};
+	});
+
 	const track = () => {
 		submitting = true;
 		return async ({ update }: { update: () => Promise<void> }) => {
@@ -194,7 +209,12 @@
 					{:else if !form && data.linkError}
 						<p class="text-sm text-destructive">{data.linkError}</p>
 					{/if}
-					<Button type="submit" disabled={submitting}>
+					{#if !online}
+						<p class="text-sm text-muted-foreground">
+							You're offline — you'll need an internet connection to sign in.
+						</p>
+					{/if}
+					<Button type="submit" disabled={submitting || !online}>
 						{submitting ? 'Sending…' : `Send sign-in ${sendNoun}`}
 					</Button>
 				</form>
