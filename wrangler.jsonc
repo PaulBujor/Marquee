@@ -19,7 +19,9 @@
 		}
 	],
 	"triggers": {
-		"crons": ["0 6 * * *"]
+		// Hourly: the maintenance jobs are gated to one UTC hour in the route, while the push digest
+		// runs every hour and sends at 9AM in each user's local timezone.
+		"crons": ["0 * * * *"]
 	},
 	"observability": {
 		"enabled": true,
@@ -48,7 +50,8 @@
 				}
 			],
 			"triggers": {
-				"crons": ["0 6 * * *"]
+				// Hourly (see prod triggers above) — gated maintenance + 9AM-local push digest.
+				"crons": ["0 * * * *"]
 			},
 			"observability": {
 				"enabled": true,
