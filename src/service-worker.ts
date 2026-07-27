@@ -8,14 +8,15 @@ import { runSync } from '$lib/client/sync/sync';
 import { setActiveUser } from '$lib/client/idb';
 
 const CACHE = `cache-${version}`;
+// Navigations (authed SSR HTML) live in their own cache so it can be cleared on logout without
+// dropping the precached build assets — keeps one user's cached shells off the next user's account.
+const PAGES = `pages-${version}`;
 // The app build + everything in static/ (icons, splash, manifest, offline.html).
 const ASSETS = [...build, ...files];
 const BUILD = new Set(build);
 const OFFLINE_URL = '/offline.html';
 /** Background Sync tag: flush queued offline writes when connectivity returns (MRQ-44). */
 const SYNC_TAG = 'marquee-sync';
-/** Per-user IndexedDB name prefix (mirrors `setActiveUser`), used to find stores to flush. */
-const DB_PREFIX = 'marquee-';
 
 self.addEventListener('install', (event) => {
 	// No skipWaiting: the worker waits for the update prompt so hashed chunks
@@ -27,16 +28,18 @@ self.addEventListener('activate', (event) => {
 	event.waitUntil(
 		caches.keys().then(async (keys) => {
 			for (const key of keys) {
-				if (key !== CACHE) await caches.delete(key);
+				if (key !== CACHE && key !== PAGES) await caches.delete(key);
 			}
 			await self.clients.claim();
 		})
 	);
 });
 
-// Posted by the update prompt when the user accepts the new version.
+// Posted by the update prompt when the user accepts the new version; and by the app on logout /
+// account switch to drop the previous user's cached navigation shells.
 self.addEventListener('message', (event) => {
 	if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+	if (event.data?.type === 'CLEAR_PAGES') event.waitUntil(caches.delete(PAGES));
 });
 
 // Background Sync (Chromium/Android): fires when connectivity returns, even if the app was closed —
@@ -52,8 +55,13 @@ self.addEventListener('sync', ((event: SyncEvent) => {
 
 /**
  * Drain queued offline events. Prefer an open tab (it holds the active user + reactive state, so its
- * views update); when the app is fully closed, push each per-user store's outbox directly via the
- * same `runSync` round trip — the server dedupes by event id, so a later foreground sync is safe.
+ * views update); when the app is fully closed, push the outbox directly via the same `runSync` round
+ * trip — the server dedupes by event id, so a later foreground sync is safe.
+ *
+ * Crucially, the no-tab path flushes **only the store of the user the session cookie authenticates
+ * as** (asked of the server), never every local store. On a shared device, blindly syncing each
+ * `marquee-<id>` DB under the ambient cookie would write one account's queued events into another's
+ * account (the server attributes them to the cookie's user) — silent cross-account corruption.
  */
 async function flushOfflineWrites(): Promise<void> {
 	const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -61,17 +69,22 @@ async function flushOfflineWrites(): Promise<void> {
 		for (const client of clients) client.postMessage({ type: 'SYNC' });
 		return;
 	}
-	// No open tab. `databases()` is Chromium-only — same platforms as Background Sync — so this is safe.
-	if (!('databases' in indexedDB)) return;
-	for (const { name } of await indexedDB.databases()) {
-		if (!name?.startsWith(DB_PREFIX)) continue;
-		setActiveUser(name.slice(DB_PREFIX.length));
-		try {
-			await runSync();
-		} catch (err) {
-			// Best-effort: a failure just leaves events queued for the next trigger.
-			console.warn('[sw] background sync flush failed', err);
-		}
+	// No open tab: confirm who the cookie belongs to before touching any store. If we can't (offline
+	// or signed out), flush nothing and let the next foreground sync handle it.
+	let userId: string | null = null;
+	try {
+		const res = await fetch('/api/whoami');
+		if (res.ok) userId = ((await res.json()) as { userId: string }).userId;
+	} catch {
+		return;
+	}
+	if (!userId) return;
+	setActiveUser(userId);
+	try {
+		await runSync();
+	} catch (err) {
+		// Best-effort: a failure just leaves events queued for the next trigger.
+		console.warn('[sw] background sync flush failed', err);
 	}
 }
 
@@ -104,14 +117,16 @@ async function handleNavigate(request: Request): Promise<Response> {
 	const key = pageCacheKey(new URL(request.url));
 	try {
 		const response = await fetch(request);
-		// Only cache real, same-origin 200s (not login redirects / errors).
-		if (response.ok && response.type === 'basic') {
-			const cache = await caches.open(CACHE);
+		// Only cache real, same-origin 200s. Skip redirects (`redirected`): an auth-gated load that
+		// 303s to /login resolves to a 200 basic response, and caching that under the requested path
+		// would serve the login page offline in place of the real shell.
+		if (response.ok && response.type === 'basic' && !response.redirected) {
+			const cache = await caches.open(PAGES);
 			await cache.put(key, response.clone());
 		}
 		return response;
 	} catch {
-		return (await caches.match(key)) ?? offlineResponse();
+		return (await caches.open(PAGES)).match(key).then((c) => c ?? offlineResponse());
 	}
 }
 

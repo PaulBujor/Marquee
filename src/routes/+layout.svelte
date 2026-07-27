@@ -46,6 +46,19 @@
 		return () => sync.stop();
 	});
 
+	// When the account changes (logout or switching users), drop the previous user's cached page
+	// shells so they can't be served offline to the next session on a shared device — the service
+	// worker owns the `pages-*` cache and clears it on this message. Seeded from the initial user so a
+	// normal signed-in boot doesn't wipe the shell it just cached.
+	let cachedForUser = untrack(() => data.user?.id ?? null);
+	$effect(() => {
+		const uid = data.user?.id ?? null;
+		if (uid !== cachedForUser) {
+			navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PAGES' });
+			cachedForUser = uid;
+		}
+	});
+
 	$effect(() => {
 		document.documentElement.classList.toggle('dark', theme.isDark);
 	});
