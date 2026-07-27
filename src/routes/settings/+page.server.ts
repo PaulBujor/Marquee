@@ -1,23 +1,19 @@
-import { error, fail, redirect } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import {
 	deleteAccount,
 	deleteSessionCookie,
-	EMAIL_CHANGE_TTL_MINUTES,
 	normalizeEmail,
 	requestEmailChange,
 	verifyEmailChange
 } from '$lib/server/auth';
 import { codeField } from '$lib/validation';
 import { createEmailSender } from '$lib/server/email';
-import type { Actions, PageServerLoad } from './$types';
+import type { Actions } from './$types';
 
 const SERVICE_UNAVAILABLE = 'Service unavailable.';
 
-export const load: PageServerLoad = async ({ locals }) => {
-	if (!locals.db) error(503, SERVICE_UNAVAILABLE);
-	if (!locals.user) redirect(303, '/login');
-	return { user: locals.user, codeTtlMinutes: EMAIL_CHANGE_TTL_MINUTES };
-};
+// The page load is universal (`+page.ts`) so settings works offline — only the actions below need
+// the server (and the UI gates them offline).
 
 /** Map a change-code verification failure to a message shown on the code step. */
 function verifyErrorMessage(reason: 'invalid' | 'expired' | 'too_many_attempts' | 'taken'): string {

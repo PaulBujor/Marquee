@@ -107,27 +107,37 @@ function pageCacheKey(url: URL): Request {
 }
 
 /**
- * Network-first for navigations, but keep the last good copy so the app **boots offline**. The
- * shell then renders from IndexedDB (dashboard, timeline, and — via the title page's IDB fallback —
- * tracked titles). This deliberately caches authed SSR HTML: it's the user's own shell on their own
- * device (their data already lives in IndexedDB), the copy is versioned with the build (wiped on
- * update), and the client re-renders + re-syncs on reconnect, so a stale embedded value self-heals.
+ * Cache-first (stale-while-revalidate) for navigations, so the app **boots instantly** — offline or
+ * on a slow network — instead of waiting on a server round-trip every launch. Serve the last cached
+ * shell immediately, then revalidate in the background. The shell renders from IndexedDB (dashboard,
+ * timeline, and — via the title page's IDB fallback — tracked titles) and re-syncs, so a stale
+ * cached copy self-heals; only the *first* visit to a path (nothing cached yet) waits on the
+ * network. This deliberately caches authed SSR HTML: it's the user's own shell on their own device,
+ * versioned with the build (wiped on update) and cleared on logout (CLEAR_PAGES).
  */
-async function handleNavigate(request: Request): Promise<Response> {
+async function handleNavigate(request: Request, event: FetchEvent): Promise<Response> {
 	const key = pageCacheKey(new URL(request.url));
-	try {
-		const response = await fetch(request);
-		// Only cache real, same-origin 200s. Skip redirects (`redirected`): an auth-gated load that
-		// 303s to /login resolves to a 200 basic response, and caching that under the requested path
-		// would serve the login page offline in place of the real shell.
-		if (response.ok && response.type === 'basic' && !response.redirected) {
-			const cache = await caches.open(PAGES);
-			await cache.put(key, response.clone());
-		}
-		return response;
-	} catch {
-		return (await caches.open(PAGES)).match(key).then((c) => c ?? offlineResponse());
+	const cache = await caches.open(PAGES);
+	const cached = await cache.match(key);
+
+	const revalidate = fetch(request)
+		.then(async (response) => {
+			// Only cache real, same-origin 200s. Skip redirects (`redirected`): an auth-gated load that
+			// 303s to /login resolves to a 200 basic response, and caching that under the requested path
+			// would serve the login page in place of the real shell.
+			if (response.ok && response.type === 'basic' && !response.redirected) {
+				await cache.put(key, response.clone());
+			}
+			return response;
+		})
+		.catch(() => null);
+
+	if (cached) {
+		event.waitUntil(revalidate); // refresh the cache for next time without blocking this response
+		return cached;
 	}
+	// First visit to this path — nothing cached yet; wait on the network, else the offline page.
+	return (await revalidate) ?? offlineResponse();
 }
 
 self.addEventListener('fetch', (event) => {
@@ -142,10 +152,10 @@ self.addEventListener('fetch', (event) => {
 		return;
 	}
 
-	// Navigations: network-first, caching the last good copy so the app boots offline
-	// (see handleNavigate), then any cached copy, then the offline page.
+	// Navigations: cache-first (stale-while-revalidate) so the app boots instantly, then the
+	// offline page on a first-visit miss (see handleNavigate).
 	if (request.mode === 'navigate') {
-		event.respondWith(handleNavigate(request));
+		event.respondWith(handleNavigate(request, event));
 		return;
 	}
 
