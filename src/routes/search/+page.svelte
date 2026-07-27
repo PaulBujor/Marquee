@@ -82,19 +82,32 @@
 	// Offline: the server load can't run, so search the local IndexedDB catalog (the user's own
 	// titles) reactively as they type. Online results still come from `data` (TMDB / shared library).
 	let offlineResults = $state<SearchLikeMedia[]>([]);
+	let offlineSearching = $state(false);
 	let offlineSeq = 0;
 	let offlineDebounce: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
-		const q = query;
+		const q = query.trim();
 		if (sync.online) {
 			clearTimeout(offlineDebounce);
+			offlineSearching = false;
 			return;
 		}
 		clearTimeout(offlineDebounce);
+		if (!q) {
+			offlineResults = [];
+			offlineSearching = false;
+			return;
+		}
+		// Show the skeleton while the debounced local search runs, so we don't flash "no results"
+		// before it has actually looked (mirrors the online path's `searching`).
+		offlineSearching = true;
 		offlineDebounce = setTimeout(() => {
 			const seq = ++offlineSeq;
 			searchLocalMedia(q).then((r) => {
-				if (seq === offlineSeq) offlineResults = r;
+				if (seq === offlineSeq) {
+					offlineResults = r;
+					offlineSearching = false;
+				}
 			});
 		}, DEBOUNCE_MS);
 	});
@@ -110,6 +123,8 @@
 	});
 	// The active result set + the query/mode that drive the list and the degraded/offline banner.
 	const results = $derived<SearchLikeMedia[]>(online ? data.results : offlineResults);
+	// Loading = the online commit is in flight, or the offline local search is still running.
+	const loading = $derived(searching || offlineSearching);
 	const activeQuery = $derived(online ? data.q : query.trim());
 	const networkMode = $derived<'up' | 'down' | 'offline'>(
 		!online ? 'offline' : data.degraded ? 'down' : 'up'
@@ -196,7 +211,7 @@
 </PageHeader>
 
 <main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-16">
-	{#if searching}
+	{#if loading}
 		<ul class="flex flex-col gap-3">
 			{#each [0, 1, 2, 3] as i (i)}
 				<li class="flex items-center gap-3">
@@ -226,7 +241,7 @@
 			</p>
 		{/if}
 	{/if}
-	{#if !searching && results.length > 0}
+	{#if !loading && results.length > 0}
 		<ul class="flex flex-col gap-1">
 			{#each results as item (item.type + item.tmdbId)}
 				{@const id = tmdbMediaId(item.type, item.tmdbId)}

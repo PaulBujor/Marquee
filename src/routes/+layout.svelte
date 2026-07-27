@@ -8,6 +8,7 @@
 	import { theme } from '$lib/state/theme.svelte.js';
 	import { getTracking, setActiveUser } from '$lib/client/idb';
 	import { library } from '$lib/tracking/library.svelte';
+	import { flushPendingLogout } from '$lib/client/logout';
 	import { pruneMediaImages } from '$lib/client/idb/images';
 	import { requestPersistentStorage } from '$lib/client/storage';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
@@ -25,6 +26,9 @@
 			setActiveUser(initialUser.id);
 			void initOfflineStorage(); // once per boot: request persistence + prune the image cache
 		}
+		// Complete a logout that was started offline — now if we're already online, else on reconnect.
+		void flushPendingLogout();
+		window.addEventListener('online', () => void flushPendingLogout());
 	}
 
 	// Ask the browser to keep our IndexedDB from being evicted, and bound the image blob cache to the
