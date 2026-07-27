@@ -1,6 +1,7 @@
 <script lang="ts">
 	import './layout.css';
 	import { untrack } from 'svelte';
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import AppHeader from '$lib/components/app-header.svelte';
 	import InstallPrompt from '$lib/components/install-prompt.svelte';
@@ -15,9 +16,14 @@
 	import { pruneMediaImages } from '$lib/client/idb/images';
 	import { requestPersistentStorage } from '$lib/client/storage';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
+	import { navigation } from '$lib/state/navigation.svelte.js';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
+
+	// Track in-app navigation once, here in the persistent root layout, so the shared back-navigation
+	// state reliably sees every navigation regardless of when a per-page back control mounts.
+	afterNavigate((nav) => navigation.record(nav.from?.url));
 
 	// Scope the local store to the signed-in user *before* any tracking UI opens it (the layout
 	// script runs before child pages mount). Per-user database (`marquee-<id>`) — a wrong-account
