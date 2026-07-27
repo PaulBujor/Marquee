@@ -41,6 +41,19 @@ export function nextFavorite(view: TrackingView): boolean {
 	return !(view.tracked && view.favorite);
 }
 
+/**
+ * Whether a title in the given status is rateable — you can only rate something you've actually
+ * watched, never a "want to watch". A movie is rateable once finished (completed / didn't finish);
+ * a series also while you're watching it. Drives both the detail-page rating control and whether a
+ * stored rating is surfaced elsewhere (e.g. the poster badge) — the rating itself is kept on the row
+ * either way, so it returns if the title moves back to a rateable status (MRQ-143).
+ */
+export function canRate(type: 'movie' | 'show', status: TrackingStatus): boolean {
+	return type === 'show'
+		? status !== 'want_to_watch'
+		: status === 'completed' || status === 'did_not_finish';
+}
+
 /** An episode coordinate with its air date — the input to the watchability helpers below. */
 export interface DatedEpisode {
 	season: number;

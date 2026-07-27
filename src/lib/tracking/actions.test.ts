@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	airedEpisodes,
+	canRate,
 	episodesToMark,
 	isAired,
 	isSeasonFullyWatched,
@@ -287,5 +288,24 @@ describe('episodesToMark', () => {
 			{ seasonNumber: 2, episodeCount: 2, airDate: null } // unknown
 		];
 		expect(episodesToMark(seasons, [], false, TODAY)).toEqual([]);
+	});
+});
+
+describe('canRate', () => {
+	it('never rates a want-to-watch title', () => {
+		expect(canRate('movie', 'want_to_watch')).toBe(false);
+		expect(canRate('show', 'want_to_watch')).toBe(false);
+	});
+
+	it('rates a movie only once finished (completed / did not finish)', () => {
+		expect(canRate('movie', 'completed')).toBe(true);
+		expect(canRate('movie', 'did_not_finish')).toBe(true);
+		expect(canRate('movie', 'watching')).toBe(false);
+	});
+
+	it('rates a show while watching it, as well as once finished', () => {
+		expect(canRate('show', 'watching')).toBe(true);
+		expect(canRate('show', 'completed')).toBe(true);
+		expect(canRate('show', 'did_not_finish')).toBe(true);
 	});
 });

@@ -5,6 +5,7 @@
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import MediaBadge from './media-badge.svelte';
 	import RatingStars from './rating-stars.svelte';
+	import { canRate as canRateStatus } from '$lib/tracking/actions';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import HeartIcon from '@lucide/svelte/icons/heart';
@@ -26,14 +27,9 @@
 	const done = $derived(view.tracked && view.status === 'completed');
 	const favorite = $derived(view.tracked && view.favorite);
 	const rating = $derived(view.tracked ? view.rating : null);
-	// You can only rate something you've actually watched: never a "want to watch". A movie is
-	// rateable once finished (completed / didn't finish); a series also while you're watching it.
-	const canRate = $derived(
-		view.tracked &&
-			(type === 'show'
-				? view.status !== 'want_to_watch'
-				: view.status === 'completed' || view.status === 'did_not_finish')
-	);
+	// You can only rate something you've actually watched: never a "want to watch". Shared with the
+	// poster badge so both surfaces agree on when a rating is meaningful (see `canRate`).
+	const canRate = $derived(view.tracked && canRateStatus(type, view.status));
 	// Status is conveyed by the buttons (add / mark watched / watched). Only "didn't finish" —
 	// which the buttons can't express — gets an explicit label below them.
 	const didNotFinish = $derived(view.tracked && view.status === 'did_not_finish');
