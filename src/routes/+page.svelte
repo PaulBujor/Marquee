@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -15,7 +15,7 @@
 	import * as NativeSelect from '$lib/components/ui/native-select';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import SlidersIcon from '@lucide/svelte/icons/sliders-horizontal';
-	import { LibraryState } from '$lib/tracking/library.svelte';
+	import { library } from '$lib/tracking/library.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import {
 		availableGenres,
@@ -33,11 +33,19 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// The home library reads local IndexedDB (works offline); reloads whenever a sync pulls.
-	const library = new LibraryState();
+	// The home library reads local IndexedDB (works offline); reloads whenever a sync pulls. It's a
+	// module singleton, so navigating back from a detail page finds it already populated (MRQ-147).
 	$effect(() => {
 		void sync.revision;
 		library.load();
+	});
+
+	// Suppress the poster intro transition on the first render after (re)mount — otherwise returning
+	// to the dashboard fades the whole grid up from transparent, reading as a blank flash even though
+	// the data is already there (MRQ-147). Real add/remove/status changes still animate.
+	let mounted = $state(false);
+	onMount(() => {
+		mounted = true;
 	});
 
 	type TypeFilter = 'all' | 'movie' | 'show';
@@ -200,6 +208,9 @@
 	// This is the app's first reduced-motion guard, so it also covers the pre-existing card motion.
 	const reduced = $derived(prefersReducedMotion.current);
 	const motionMs = $derived(reduced ? 0 : 300);
+	// Intro (enter) duration: 0 until mounted so the grid doesn't fade up on a back-nav remount, then
+	// the normal duration so real adds/removals animate. Outros always use `motionMs`.
+	const introMs = $derived(mounted ? motionMs : 0);
 </script>
 
 <svelte:head><title>Marquee</title></svelte:head>
@@ -210,7 +221,7 @@
 		{#if inProgress.length > 0}
 			<!-- Slide the whole section (heading + row) so the rest of the page eases up when the last
 			in-progress show is marked, instead of the block popping out. -->
-			<section class="mb-6" transition:slide={{ duration: motionMs }}>
+			<section class="mb-6" transition:slide={{ duration: introMs }}>
 				<h2 class="mb-2.5 text-xs font-bold tracking-widest text-muted-foreground uppercase">
 					Continue Watching
 				</h2>
@@ -220,7 +231,7 @@
 						<div
 							class="w-28 shrink-0"
 							animate:flip={{ duration: reduced ? 0 : 320 }}
-							transition:fade={{ duration: motionMs }}
+							transition:fade={{ duration: introMs }}
 						>
 							{#if progress?.next}
 								<div class="relative">
@@ -381,7 +392,7 @@
 						})}
 						class="block"
 						animate:flip={{ duration: motionMs }}
-						transition:fade={{ duration: motionMs }}
+						transition:fade={{ duration: introMs }}
 					>
 						<PosterTile
 							type={item.type}

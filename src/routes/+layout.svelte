@@ -7,6 +7,7 @@
 	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
 	import { theme } from '$lib/state/theme.svelte.js';
 	import { getTracking, setActiveUser } from '$lib/client/idb';
+	import { library } from '$lib/tracking/library.svelte';
 	import { pruneMediaImages } from '$lib/client/idb/images';
 	import { requestPersistentStorage } from '$lib/client/storage';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
@@ -39,6 +40,7 @@
 		if (!data.user) {
 			sync.stop();
 			setActiveUser(null);
+			library.reset(); // don't keep the prior user's dashboard in memory once signed out
 			return;
 		}
 		setActiveUser(data.user.id);
@@ -55,6 +57,8 @@
 		const uid = data.user?.id ?? null;
 		if (uid !== cachedForUser) {
 			navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PAGES' });
+			library.reset(); // the previous user's titles must not carry into the new session
+
 			// Drop the previous user's "last synced" timestamp on the actual account change (not on
 			// every sync teardown, which invalidateAll() would trigger) so it can't briefly show for
 			// the next account; start() reloads the new user's value.

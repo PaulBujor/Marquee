@@ -90,10 +90,17 @@
 		episodes: null
 	});
 
-	// Reactive local tracking state (IndexedDB-backed); recreated per title, reloaded on sync pulls.
+	// Reactive local tracking state (IndexedDB-backed); reloaded on sync pulls. Recreated **only when
+	// the media id changes** — not on the in-place base→enriched upgrade (which changes `detail`, and
+	// thus `mediaRecord`). A fresh instance would reset `view`/`ready`/`watched` and re-trickle the
+	// watch-status not-watched → watching → watched as it reloaded, reflowing the action row (MRQ-146).
+	// `untrack` keeps the record/seasons reads from making this recompute on every enrichment.
 	// Season summaries (count + air date) let a bulk "mark watched" enumerate episodes immediately,
 	// before the media channel syncs per-episode air dates (MRQ-130).
-	const tracking = $derived(new TrackingState(mediaId, mediaRecord, detail.seasons));
+	const tracking = $derived.by(() => {
+		const id = mediaId;
+		return untrack(() => new TrackingState(id, mediaRecord, detail.seasons));
+	});
 	$effect(() => {
 		void sync.revision;
 		tracking.load();
@@ -434,12 +441,22 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 		</div>
 
 		<!-- Watch-tracking controls, above the description. Shows get an extra "next episode" row
-		     when tracked; the action row adapts (movie → mark watched; show → mark series watched). -->
+		     when tracked; the action row adapts (movie → mark watched; show → mark series watched).
+		     Held behind a fixed-height placeholder until the tracking read resolves, so the row paints
+		     once in its final state instead of stepping through intermediate ones and reflowing
+		     everything below it (MRQ-146). -->
 		<div class="flex flex-col gap-2">
-			{#if detail.type === 'show' && tracking.view.tracked}
-				<NextEpisodeRow {tracking} {episodeName} />
+			{#if !tracking.ready}
+				<div class="flex items-center gap-2" aria-hidden="true">
+					<Skeleton class="h-9 w-44 rounded-full" />
+					<Skeleton class="size-9 rounded-full" />
+				</div>
+			{:else}
+				{#if detail.type === 'show' && tracking.view.tracked}
+					<NextEpisodeRow {tracking} {episodeName} />
+				{/if}
+				<TrackingControls {tracking} type={detail.type} />
 			{/if}
-			<TrackingControls {tracking} type={detail.type} />
 		</div>
 
 		<!-- Collapsible details: overview, cast, trailer -->
