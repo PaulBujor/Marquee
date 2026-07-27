@@ -142,14 +142,12 @@ describe('sendNewReleaseDigest', () => {
 			externalId: 'movie/438631',
 			releaseDate: '2026-07-26'
 		});
-		await db
-			.insert(tracking)
-			.values({
-				id: `${USER}::media-movie-1`,
-				userId: USER,
-				mediaId: 'media-movie-1',
-				status: 'want_to_watch'
-			});
+		await db.insert(tracking).values({
+			id: `${USER}::media-movie-1`,
+			userId: USER,
+			mediaId: 'media-movie-1',
+			status: 'want_to_watch'
+		});
 		const { sender, calls } = fakeSender();
 
 		const result = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
