@@ -26,6 +26,7 @@
 	import { getTracking, getEpisodes } from '$lib/client/idb';
 	import { offlineSeason } from '$lib/client/media/offline-detail';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
+	import { navigation } from '$lib/state/navigation.svelte.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
@@ -218,9 +219,9 @@
 	// where the chain started (home, or the search that began it).
 	const originParam = $derived(page.url.searchParams.get('from'));
 	const hops = $derived(Math.max(0, Number(page.url.searchParams.get('hops')) || 0));
-	// The origin to return to: the carried param, else where this title was entered from, else home.
-	let enteredFrom = $state('/');
-	const origin = $derived(originParam ?? enteredFrom);
+	// The origin to return to: the carried `?from` param, else where this title was entered from (home
+	// or a search, tracked in the shared navigation state), else home.
+	const origin = $derived(originParam ?? navigation.entryOrigin);
 	// Offer the jump-to-origin control once the chain is a few hops deep.
 	const showBackToOrigin = $derived(hops >= 3);
 
@@ -230,17 +231,10 @@
 		return `${path}?from=${encodeURIComponent(origin)}&hops=${hops + 1}`;
 	}
 
-	// Back = pop one hop of history when we came from within the app, else jump to the origin.
-	let cameFromApp = $state(false);
-	afterNavigate((nav) => {
-		cameFromApp = nav.from != null;
-		// On a fresh entry (no `?from` yet, i.e. not a hop) remember where we arrived from, so it
-		// becomes the chain origin — but only home or a search, never another title.
-		if (!originParam) {
-			const f = nav.from?.url;
-			enteredFrom =
-				f && (f.pathname === '/' || f.pathname === '/search') ? `${f.pathname}${f.search}` : '/';
-		}
+	// Reset the per-title view state whenever the media changes — a title → title hop via a "Similar"
+	// link reuses this component. The entering navigation's origin lives in the shared `navigation`
+	// state (fed by the root layout), so it no longer needs to be captured here.
+	afterNavigate(() => {
 		showTrailer = false;
 		titleInView = true;
 		preselectedFor = null;
@@ -267,7 +261,7 @@
 	}
 
 	function goBack() {
-		if (cameFromApp) history.back();
+		if (navigation.canGoBack) history.back();
 		else goToOrigin();
 	}
 
