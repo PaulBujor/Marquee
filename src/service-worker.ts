@@ -63,7 +63,7 @@ interface PushPayload {
 	tag?: string;
 }
 
-// Web Push (MRQ-59): show the notification, then wake a background sync so the app's local data is
+// Web Push: show the notification, then wake a background sync so the app's local data is
 // fresh by the time the user opens it — this also covers iOS, which has no Background Sync API.
 self.addEventListener('push', (event) => {
 	event.waitUntil(handlePush(event));
