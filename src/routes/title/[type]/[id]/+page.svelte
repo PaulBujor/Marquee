@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { browser } from '$app/environment';
 	import { goto, invalidate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
@@ -7,6 +8,7 @@
 	import DetailSkeleton from './detail-skeleton.svelte';
 	import TitleDetail from './title-detail.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { posterUrl } from '$lib/media';
 	import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import type { PageData } from './$types';
@@ -34,9 +36,14 @@
 		pageState = base ? 'content' : 'skeleton';
 
 		let cancelled = false;
-		enriched.then((e) => {
+		enriched.then(async (e) => {
 			if (cancelled) return;
 			if (e.status === 'ok') {
+				// First visit (no cached copy → still on the skeleton): wait for the hero image to
+				// decode before revealing the content, so it doesn't paint into a blank hero for a
+				// frame (MRQ-145). Cached titles are already showing content — upgrade in place.
+				if (!base) await preloadHero(e.detail);
+				if (cancelled) return;
 				detail = e.detail;
 				seasonData = e.season;
 				enrichState = 'enriched';
@@ -67,6 +74,21 @@
 	function goBack() {
 		if (history.length > 1) history.back();
 		else goto(resolve('/'));
+	}
+
+	// Decode the hero image (backdrop, else poster) before we swap the skeleton for the content, so
+	// the first painted frame already has artwork instead of a blank hero (MRQ-145). Bounded by a
+	// short timeout so a slow or broken image can never strand the user on the skeleton.
+	function preloadHero(d: MediaDetail): Promise<void> {
+		if (!browser) return Promise.resolve();
+		const url = d.backdropPath ? posterUrl(d.backdropPath, 'w780') : posterUrl(d.posterPath);
+		if (!url) return Promise.resolve();
+		const img = new Image();
+		img.src = url;
+		return Promise.race([
+			img.decode().catch(() => {}),
+			new Promise<void>((resolve) => setTimeout(resolve, 1500))
+		]).then(() => {});
 	}
 </script>
 

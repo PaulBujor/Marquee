@@ -30,6 +30,13 @@
 	const networkUrl = $derived(posterUrl(path, size));
 	const src = $derived(objectUrl ?? networkUrl);
 
+	// Non-reactive bookkeeping for the blob currently shown: its identity (`id:kind:updatedAt`) and
+	// the object URL made from it. A sync re-check compares against this so an unchanged blob keeps
+	// its existing URL instead of getting a brand-new one — recreating the URL makes the browser
+	// reload the <img>, which is the visible "pop" on every event/sync (MRQ-140).
+	let loadedKey: string | null = null;
+	let loadedUrl: string | null = null;
+
 	// Reset the failed flag when the target changes so a new id/path (or a blob arriving on sync) gets
 	// a fresh chance to load rather than staying stuck on the placeholder.
 	$effect(() => {
@@ -41,26 +48,40 @@
 	});
 
 	$effect(() => {
-		void sync.revision; // re-check for a freshly-cached blob after a sync
 		const currentId = id;
 		const currentKind = kind;
-		let created: string | null = null;
-		let cancelled = false;
+		void sync.revision; // re-check for a freshly-cached blob after a sync
+		const targetPrefix = `${currentId}:${currentKind}:`;
 
+		// Target changed: the cached URL belongs to the previous title — drop it now so we fall back
+		// to the network URL for the new one instead of briefly showing the old poster.
+		if (loadedKey && !loadedKey.startsWith(targetPrefix)) {
+			if (loadedUrl) URL.revokeObjectURL(loadedUrl);
+			loadedUrl = loadedKey = null;
+			objectUrl = null;
+		}
+
+		let cancelled = false;
 		getMediaImages(currentId).then((images) => {
 			if (cancelled) return;
 			const blob = currentKind === 'poster' ? images?.poster : images?.backdrop;
-			if (blob) {
-				created = URL.createObjectURL(blob);
-				objectUrl = created;
-			}
+			const key = blob ? `${targetPrefix}${images!.updatedAt}` : null;
+			if (key === loadedKey) return; // same blob already shown — keep the URL, no reload/pop
+			if (loadedUrl) URL.revokeObjectURL(loadedUrl);
+			loadedUrl = blob ? URL.createObjectURL(blob) : null;
+			loadedKey = key;
+			objectUrl = loadedUrl;
 		});
 
 		return () => {
 			cancelled = true;
-			if (created) URL.revokeObjectURL(created);
-			objectUrl = null;
 		};
+	});
+
+	// Revoke the last object URL when the component is destroyed (id-change revocation is handled
+	// above; this covers plain unmount).
+	$effect(() => () => {
+		if (loadedUrl) URL.revokeObjectURL(loadedUrl);
 	});
 </script>
 

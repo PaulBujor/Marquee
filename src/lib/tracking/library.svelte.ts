@@ -65,6 +65,12 @@ export class LibraryState {
 		this.ready = true;
 	}
 
+	/** Drop the loaded library (logout / account switch), so the next user never sees the prior one. */
+	reset(): void {
+		this.items = [];
+		this.ready = false;
+	}
+
 	/** Mark a show's next episode watched from the dashboard, reconciling status + nudging sync. */
 	async markNext(item: LibraryItem): Promise<void> {
 		const progress = showProgress(item);
@@ -84,3 +90,11 @@ export class LibraryState {
 		}
 	}
 }
+
+/**
+ * App-wide home-library singleton (mirrors the `sync` engine). Held at module scope so it survives
+ * client-side navigation — returning to the dashboard from a detail page finds the grid already
+ * populated instead of remounting an empty `LibraryState` and flashing blank for a frame while the
+ * IndexedDB read resolves (MRQ-147). Reset on logout / account switch so it can't leak across users.
+ */
+export const library = new LibraryState();
