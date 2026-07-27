@@ -34,6 +34,7 @@ import {
 	type TrackingView
 } from './actions';
 import { reconcileStatus } from './reconcile';
+import { notifications } from '$lib/state/notifications.svelte.js';
 
 export class TrackingState {
 	readonly mediaId: string;
@@ -117,6 +118,7 @@ export class TrackingState {
 
 	/** Add the title to the watchlist as "want to watch". */
 	add(): Promise<void> {
+		notifications.promptContextually();
 		return this.#run(() =>
 			recordEvent('tracking.added', this.mediaId, { status: 'want_to_watch' })
 		);
@@ -124,6 +126,7 @@ export class TrackingState {
 
 	/** Set the status — an add on an untracked title, otherwise a status change. */
 	setStatus(status: TrackingStatus): Promise<void> {
+		notifications.promptContextually();
 		return this.#run(() =>
 			statusEventType(this.view) === 'tracking.added'
 				? recordEvent('tracking.added', this.mediaId, { status })
@@ -133,6 +136,7 @@ export class TrackingState {
 
 	/** Toggle favorite (favoriting an untracked title implicitly adds it). */
 	toggleFavorite(): Promise<void> {
+		notifications.promptContextually();
 		return this.#run(() =>
 			recordEvent('tracking.favorite_toggled', this.mediaId, { favorite: nextFavorite(this.view) })
 		);
@@ -217,7 +221,10 @@ export class TrackingState {
 
 	/** Add the title as `status` if it isn't tracked yet, so a watch on an untracked title lands it. */
 	async #ensureTracked(status: TrackingStatus): Promise<void> {
-		if (!this.view.tracked) await recordEvent('tracking.added', this.mediaId, { status });
+		if (!this.view.tracked) {
+			notifications.promptContextually();
+			await recordEvent('tracking.added', this.mediaId, { status });
+		}
 	}
 
 	async #seedWatched(episodes: EpisodeCoord[]): Promise<void> {

@@ -4,8 +4,10 @@
 	import { page } from '$app/state';
 	import AppHeader from '$lib/components/app-header.svelte';
 	import InstallPrompt from '$lib/components/install-prompt.svelte';
+	import NotificationPrompt from '$lib/components/notification-prompt.svelte';
 	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
 	import { Toaster } from '$lib/components/ui/sonner';
+	import { goto } from '$app/navigation';
 	import { theme } from '$lib/state/theme.svelte.js';
 	import { getTracking, setActiveUser } from '$lib/client/idb';
 	import { library } from '$lib/tracking/library.svelte';
@@ -71,6 +73,19 @@
 			sync.lastSyncAt = null;
 			cachedForUser = uid;
 		}
+	});
+
+	// A notification tap deep-links here: the service worker focuses this tab and posts the target
+	// path (see `notificationclick` in the service worker), which we navigate to client-side.
+	$effect(() => {
+		if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+		const onMessage = (e: MessageEvent) => {
+			if (e.data?.type === 'NOTIFICATION_NAVIGATE' && typeof e.data.url === 'string') {
+				void goto(e.data.url);
+			}
+		};
+		navigator.serviceWorker.addEventListener('message', onMessage);
+		return () => navigator.serviceWorker.removeEventListener('message', onMessage);
 	});
 
 	$effect(() => {
@@ -164,4 +179,5 @@ back navigation, keeping the movie/show page's immersive layout uncluttered. -->
 {@render children()}
 <Toaster />
 <InstallPrompt />
+<NotificationPrompt />
 <PwaUpdatePrompt />
