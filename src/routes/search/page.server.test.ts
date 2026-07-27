@@ -6,7 +6,7 @@ type LoadFn = typeof load;
 type LoadEvent = Parameters<LoadFn>[0];
 
 /** The load's data shape (its inferred type is widened to `void | Data` by PageServerLoad). */
-type SearchData = { q: string; results: unknown[]; failed: boolean };
+type SearchData = { q: string; results: unknown[]; degraded: boolean };
 
 /** Build a minimal event the load actually reads (locals.user, platform.env, url). */
 function makeEvent(opts: {
@@ -53,7 +53,7 @@ describe('search load', () => {
 		const fetchSpy = vi.fn();
 		vi.stubGlobal('fetch', fetchSpy);
 		const result = await load(makeEvent({ q: '' }));
-		expect(result).toEqual({ q: '', results: [], failed: false });
+		expect(result).toEqual({ q: '', results: [], degraded: false });
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
@@ -87,7 +87,7 @@ describe('search load', () => {
 		);
 		const result = (await load(makeEvent({ q: 'inception' }))) as unknown as SearchData;
 		expect(result.q).toBe('inception');
-		expect(result.failed).toBe(false);
+		expect(result.degraded).toBe(false);
 		expect(result.results).toEqual([
 			{
 				tmdbId: 27205,
@@ -100,9 +100,10 @@ describe('search load', () => {
 		]);
 	});
 
-	it('soft-fails (failed:true) when TMDB errors', async () => {
+	it('degrades (degraded:true) when TMDB errors; no shared-library results without a db', async () => {
 		vi.stubGlobal('fetch', tmdbResponse({}, 500));
+		// makeEvent supplies no `locals.db`, so the shared-library fallback is skipped → empty results.
 		const result = await load(makeEvent({ q: 'inception' }));
-		expect(result).toEqual({ q: 'inception', results: [], failed: true });
+		expect(result).toEqual({ q: 'inception', results: [], degraded: true });
 	});
 });

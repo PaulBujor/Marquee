@@ -4,6 +4,7 @@
  */
 import { openDb, type ClientEpisode, type ClientMedia } from './db';
 import type { MediaProvider, MediaRecord } from '$lib/sync/events';
+import type { SearchLikeMedia } from '$lib/tracking/media-record';
 
 function seasonKey(mediaId: string, seasonNumber: number): string {
 	return `${mediaId}::s${seasonNumber}`;
@@ -49,6 +50,32 @@ export async function getMedia(id: string): Promise<ClientMedia | undefined> {
 
 export async function getAllMedia(): Promise<ClientMedia[]> {
 	return (await openDb()).getAll('media');
+}
+
+/**
+ * Offline search over the locally-cached catalog — the user's own titles only (MRQ-90). Scoped to
+ * provider-backed `linked` rows with a known external id (so each result can open its detail page),
+ * a case-insensitive title substring, mapped to the same shape as a TMDB search result.
+ */
+export async function searchLocalMedia(query: string, limit = 20): Promise<SearchLikeMedia[]> {
+	const q = query.trim().toLowerCase();
+	if (!q) return [];
+	const matches: SearchLikeMedia[] = [];
+	for (const m of await getAllMedia()) {
+		if (m.source !== 'linked' || m.externalId === null) continue;
+		if (!m.title.toLowerCase().includes(q)) continue;
+		const tmdbId = Number(m.externalId.split('/')[1]);
+		if (!Number.isInteger(tmdbId) || tmdbId <= 0) continue;
+		matches.push({
+			tmdbId,
+			type: m.type,
+			title: m.title,
+			year: m.year,
+			posterPath: m.posterPath,
+			overview: m.overview
+		});
+	}
+	return matches.sort((a, b) => a.title.localeCompare(b.title)).slice(0, limit);
 }
 
 /** A title's cached episodes — the source for watchability + progress. */
