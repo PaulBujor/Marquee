@@ -4,6 +4,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import MediaBadge from './media-badge.svelte';
+	import RatingStars from './rating-stars.svelte';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import HeartIcon from '@lucide/svelte/icons/heart';
@@ -24,6 +25,15 @@
 	const view = $derived(tracking.view);
 	const done = $derived(view.tracked && view.status === 'completed');
 	const favorite = $derived(view.tracked && view.favorite);
+	const rating = $derived(view.tracked ? view.rating : null);
+	// You can only rate something you've actually watched: never a "want to watch". A movie is
+	// rateable once finished (completed / didn't finish); a series also while you're watching it.
+	const canRate = $derived(
+		view.tracked &&
+			(type === 'show'
+				? view.status !== 'want_to_watch'
+				: view.status === 'completed' || view.status === 'did_not_finish')
+	);
 	// Status is conveyed by the buttons (add / mark watched / watched). Only "didn't finish" —
 	// which the buttons can't express — gets an explicit label below them.
 	const didNotFinish = $derived(view.tracked && view.status === 'did_not_finish');
@@ -94,6 +104,30 @@
 			</Button>
 		{/if}
 	</div>
+	{#if canRate}
+		<!-- The user's own 1–5 rating (primary accent), distinct from the TMDB /10 score in the meta
+		row. Shown only once the title's been watched (see canRate). Tap the active star or "Clear". -->
+		<div class="mt-1 flex flex-col gap-1">
+			<span class="text-xs font-medium text-muted-foreground">Your rating</span>
+			<div class="flex items-center gap-1">
+				<RatingStars
+					value={rating}
+					onRate={(r) => tracking.setRating(r)}
+					disabled={tracking.busy}
+				/>
+				{#if rating !== null}
+					<button
+						type="button"
+						onclick={() => tracking.setRating(null)}
+						disabled={tracking.busy}
+						class="rounded-full px-3 py-1.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
+					>
+						Clear
+					</button>
+				{/if}
+			</div>
+		</div>
+	{/if}
 	{#if didNotFinish}
 		<MediaBadge variant="status" class="self-start">Didn't finish</MediaBadge>
 	{/if}

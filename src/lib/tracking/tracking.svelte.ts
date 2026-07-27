@@ -136,6 +136,14 @@ export class TrackingState {
 	}
 
 	/**
+	 * Set the user's own 1–5 rating (`null` clears it). Only offered once a title's been watched
+	 * (see the controls' `canRate`), so it's always already tracked — no implicit add here.
+	 */
+	setRating(rating: number | null): Promise<void> {
+		return this.#run(() => recordEvent('tracking.rated', this.mediaId, { rating }));
+	}
+
+	/**
 	 * Remove the title from all lists (tombstone). Removing a series also **clears its episode
 	 * watches** — an unwatch per watched episode, so a later re-add starts with a clean history.
 	 * Event-sourced and rebuild-safe: the unwatches live in the log and (being newer) win LWW, so

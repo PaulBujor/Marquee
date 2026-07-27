@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
-	import { Film, Tv, Heart, FileQuestion } from '@lucide/svelte';
+	import { Film, Tv, Heart, Star, FileQuestion } from '@lucide/svelte';
 	import MediaImage from './media-image.svelte';
 
 	interface Props {
 		type?: 'movie' | 'show';
 		isCustom?: boolean;
 		isFavorite?: boolean;
+		/** The user's own 1–5 rating; renders a small badge when set. */
+		rating?: number | null;
 		gradientFrom?: string;
 		gradientTo?: string;
 		/** Poster image URL; when set it renders behind the overlays, gradient is the fallback. */
@@ -23,6 +25,7 @@
 		type = 'movie',
 		isCustom = false,
 		isFavorite = false,
+		rating = null,
 		gradientFrom,
 		gradientTo,
 		posterUrl,
@@ -81,6 +84,15 @@
 	{#if isFavorite}
 		<div class="absolute top-1.5 right-1.5">
 			<Heart class="size-4 fill-primary text-primary" />
+		</div>
+	{/if}
+
+	{#if rating != null}
+		<div
+			class="absolute bottom-1.5 left-1.5 flex items-center gap-0.5 rounded-full bg-black/55 px-1.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm"
+		>
+			<Star class="size-3 fill-amber-400 text-amber-400" />
+			{rating}
 		</div>
 	{/if}
 

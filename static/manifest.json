@@ -37,5 +37,21 @@
 			"type": "image/png",
 			"purpose": "maskable"
 		}
+	],
+	"shortcuts": [
+		{
+			"name": "Search",
+			"short_name": "Search",
+			"description": "Find a movie or show to track",
+			"url": "/search",
+			"icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+		},
+		{
+			"name": "Upcoming",
+			"short_name": "Upcoming",
+			"description": "Your upcoming releases timeline",
+			"url": "/timeline",
+			"icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+		}
 	]
 }

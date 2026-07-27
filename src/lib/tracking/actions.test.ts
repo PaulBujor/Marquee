@@ -42,16 +42,32 @@ describe('toTrackingView', () => {
 	});
 
 	it('treats a removed (tombstoned) row as untracked', () => {
-		expect(toTrackingView({ status: 'completed', favorite: true, removed: true })).toEqual({
+		expect(
+			toTrackingView({ status: 'completed', favorite: true, rating: 5, removed: true })
+		).toEqual({
 			tracked: false
 		});
 	});
 
-	it('exposes status and favorite for a live row', () => {
-		expect(toTrackingView({ status: 'watching', favorite: true, removed: false })).toEqual({
+	it('exposes status, favorite, and rating for a live row', () => {
+		expect(
+			toTrackingView({ status: 'watching', favorite: true, rating: 4, removed: false })
+		).toEqual({
 			tracked: true,
 			status: 'watching',
-			favorite: true
+			favorite: true,
+			rating: 4
+		});
+	});
+
+	it('carries a null rating through as unrated', () => {
+		expect(
+			toTrackingView({ status: 'want_to_watch', favorite: false, rating: null, removed: false })
+		).toEqual({
+			tracked: true,
+			status: 'want_to_watch',
+			favorite: false,
+			rating: null
 		});
 	});
 });
@@ -62,9 +78,9 @@ describe('statusEventType', () => {
 	});
 
 	it('changes status when the title is already tracked', () => {
-		expect(statusEventType({ tracked: true, status: 'want_to_watch', favorite: false })).toBe(
-			'tracking.status_changed'
-		);
+		expect(
+			statusEventType({ tracked: true, status: 'want_to_watch', favorite: false, rating: null })
+		).toBe('tracking.status_changed');
 	});
 });
 
@@ -74,11 +90,15 @@ describe('nextFavorite', () => {
 	});
 
 	it('toggles off when already favorited', () => {
-		expect(nextFavorite({ tracked: true, status: 'watching', favorite: true })).toBe(false);
+		expect(nextFavorite({ tracked: true, status: 'watching', favorite: true, rating: null })).toBe(
+			false
+		);
 	});
 
 	it('toggles on when tracked but not favorited', () => {
-		expect(nextFavorite({ tracked: true, status: 'watching', favorite: false })).toBe(true);
+		expect(nextFavorite({ tracked: true, status: 'watching', favorite: false, rating: null })).toBe(
+			true
+		);
 	});
 });
 

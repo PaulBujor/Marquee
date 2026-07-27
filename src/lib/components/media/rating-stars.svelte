@@ -1,0 +1,65 @@
+<script lang="ts">
+	import StarIcon from '@lucide/svelte/icons/star';
+	import { cn } from '$lib/utils.js';
+
+	// The user's own 1–5 rating control, in amber so it reads as distinct from the single TMDB `/10`
+	// star in the meta row (which uses the primary accent). Five discrete stars, labelled "Your
+	// rating", no number. Interactive when `onRate` is given (tap a star to set it, tap the active
+	// star to clear); read-only otherwise, for list overlays.
+	interface Props {
+		/** Current rating 1–5, or null when unrated. */
+		value: number | null;
+		/** Set the rating (tapping the active star clears it → null). Omit to render read-only. */
+		onRate?: (rating: number | null) => void;
+		disabled?: boolean;
+		/** Star glyph size. Read-only overlays use `sm`; the interactive control uses `md`. */
+		size?: 'sm' | 'md';
+		class?: string;
+	}
+	let { value, onRate, disabled = false, size = 'md', class: className }: Props = $props();
+
+	const readonly = $derived(onRate === undefined);
+	let hover = $state<number | null>(null);
+	// Paint the hovered star (interactive preview) if any, otherwise the committed value.
+	const shown = $derived(hover ?? value ?? 0);
+	const starSize = $derived(size === 'sm' ? 'size-4' : 'size-5');
+
+	function choose(n: number) {
+		if (disabled || !onRate) return;
+		onRate(value === n ? null : n); // tap the active star to clear
+	}
+</script>
+
+<div
+	class={cn('flex items-center', readonly ? 'gap-0.5' : '-mx-1.5', className)}
+	role={readonly ? undefined : 'group'}
+	aria-label={readonly ? undefined : 'Your rating'}
+	onmouseleave={() => (hover = null)}
+>
+	{#each [1, 2, 3, 4, 5] as n (n)}
+		{@const filled = n <= shown}
+		{@const glyph = cn(
+			starSize,
+			'transition-colors',
+			filled ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/25'
+		)}
+		{#if readonly}
+			<StarIcon class={glyph} />
+		{:else}
+			<button
+				type="button"
+				{disabled}
+				onclick={() => choose(n)}
+				onmouseenter={() => (hover = n)}
+				onfocus={() => (hover = n)}
+				onblur={() => (hover = null)}
+				aria-label={value === n ? `Clear rating` : `Rate ${n} star${n === 1 ? '' : 's'}`}
+				aria-pressed={value !== null && n <= value}
+				title={value === n ? 'Clear rating' : `${n} / 5`}
+				class="rounded-full p-1.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+			>
+				<StarIcon class={glyph} />
+			</button>
+		{/if}
+	{/each}
+</div>

@@ -11,19 +11,21 @@ export type { EpisodeCoord };
 
 /** The user-facing tracking state of a title, derived from its local tracking row. */
 export type TrackingView =
-	{ tracked: false } | { tracked: true; status: TrackingStatus; favorite: boolean };
+	| { tracked: false }
+	| { tracked: true; status: TrackingStatus; favorite: boolean; rating: number | null };
 
 /** Minimal shape of a local tracking row this module reads (see `ClientTracking`). */
 interface TrackingRow {
 	status: TrackingStatus;
 	favorite: boolean;
+	rating: number | null;
 	removed: boolean;
 }
 
 /** Collapse a local tracking row (or its absence) into a view. A removed row reads as untracked. */
 export function toTrackingView(row: TrackingRow | undefined): TrackingView {
 	if (!row || row.removed) return { tracked: false };
-	return { tracked: true, status: row.status, favorite: row.favorite };
+	return { tracked: true, status: row.status, favorite: row.favorite, rating: row.rating };
 }
 
 /**

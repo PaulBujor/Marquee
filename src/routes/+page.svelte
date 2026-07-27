@@ -388,6 +388,7 @@
 							mediaId={item.mediaId}
 							posterPath={item.posterPath}
 							isFavorite={item.favorite}
+							rating={item.rating}
 							alt={item.title}
 						/>
 						<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>
