@@ -433,7 +433,7 @@ export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
  * release per user (across retries, a forced run, and missed days). `id` is a
  * deterministic key — `${userId}::${mediaId}::s{S}e{E}` for an episode,
  * `${userId}::${mediaId}::release` for a movie. Also the data foundation for the
- * future in-app notification inbox / badging (MRQ-101).
+ * future in-app notification inbox / badging.
  */
 export const notificationLog = sqliteTable(
 	'notification_log',
