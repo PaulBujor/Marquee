@@ -41,6 +41,8 @@
 	{/each}
 	<div
 		class="absolute inset-0 transition-opacity duration-300"
-		style="opacity:{show ? 1 : 0}; background:linear-gradient(to bottom, var(--color-background) 0%, color-mix(in oklab, var(--color-background) 70%, transparent) 55%, color-mix(in oklab, var(--color-background) 32%, transparent) 78%, transparent 100%);"
+		style="opacity:{show
+			? 1
+			: 0}; background:linear-gradient(to bottom, var(--color-background) 0%, color-mix(in oklab, var(--color-background) 70%, transparent) 55%, color-mix(in oklab, var(--color-background) 32%, transparent) 78%, transparent 100%);"
 	></div>
 </div>
