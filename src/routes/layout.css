@@ -17,24 +17,25 @@
  * Design tokens. Colors are oklch(Lightness Chroma Hue) and drive the whole app
  * via the `@theme inline` map below (Tailwind utilities like `bg-primary`,
  * `text-muted-foreground`, etc.). To re-theme:
- *   - Brand / accent = `--primary` (currently a violet, hue 293). Change it
- *     in BOTH `:root` and `.dark`, and `--ring` which mirrors it.
+ *   - Brand / accent = `--primary` (a muted teal-blue, hue 224). It pairs with
+ *     black `--primary-foreground` (contrast ~6.67:1). Change it in BOTH `:root`
+ *     and `.dark`, and `--ring` which mirrors it.
  *   - Fonts: `--font-sans` (Public Sans) / `--font-serif` (Fraunces, used for
  *     headings) in `@theme inline`.
  * Transactional emails can't use these variables (email clients strip CSS vars),
- * so their colors are inlined literally in `src/lib/server/auth` — keep the
- * brand hex there in sync with `--primary` (oklch(0.606 0.219 292.717) = #8b5cf6).
+ * so their colors are inlined literally in `src/lib/server/email/templates.ts` —
+ * keep the brand hex there in sync with `--primary` (oklch(0.651 0.09 224.2) = #4a9bb8).
  */
 :root {
 	--radius: 1.5rem;
-	--background: oklch(0.973 0.004 80);
+	--background: oklch(0.97 0 0);
 	--foreground: oklch(0.155 0.015 60);
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.155 0.015 60);
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.155 0.015 60);
-	--primary: oklch(0.606 0.219 292.717);
-	--primary-foreground: oklch(1 0 0);
+	--primary: oklch(0.651 0.09 224.2);
+	--primary-foreground: oklch(0 0 0);
 	--secondary: oklch(0.955 0.005 80);
 	--secondary-foreground: oklch(0.155 0.015 60);
 	--muted: oklch(0.955 0.005 80);
@@ -44,7 +45,7 @@
 	--destructive: oklch(0.577 0.245 27.325);
 	--border: oklch(0.915 0.006 80);
 	--input: oklch(0.915 0.006 80);
-	--ring: oklch(0.606 0.219 292.717);
+	--ring: oklch(0.651 0.09 224.2);
 	--chart-1: oklch(0.646 0.222 41.116);
 	--chart-2: oklch(0.6 0.118 184.704);
 	--chart-3: oklch(0.398 0.07 227.392);
@@ -67,8 +68,8 @@
 	--card-foreground: oklch(0.935 0.008 80);
 	--popover: oklch(0.185 0.008 270);
 	--popover-foreground: oklch(0.935 0.008 80);
-	--primary: oklch(0.606 0.219 292.717);
-	--primary-foreground: oklch(1 0 0);
+	--primary: oklch(0.651 0.09 224.2);
+	--primary-foreground: oklch(0 0 0);
 	--secondary: oklch(0.22 0.008 270);
 	--secondary-foreground: oklch(0.935 0.008 80);
 	--muted: oklch(0.22 0.008 270);
@@ -78,7 +79,7 @@
 	--destructive: oklch(0.704 0.191 22.216);
 	--border: oklch(0.26 0.008 270);
 	--input: oklch(0.26 0.008 270);
-	--ring: oklch(0.606 0.219 292.717);
+	--ring: oklch(0.651 0.09 224.2);
 	--chart-1: oklch(0.488 0.243 264.376);
 	--chart-2: oklch(0.696 0.17 162.48);
 	--chart-3: oklch(0.769 0.188 70.08);

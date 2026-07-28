@@ -4,7 +4,7 @@
  * one place. Inline styles because email clients ignore <style>/external CSS.
  */
 
-const BRAND = '#8b5cf6';
+const BRAND = '#4a9bb8';
 const SERIF = "'Fraunces', ui-serif, Georgia, serif";
 const MUTED = 'color: #666; font-size: 13px;';
 const IGNORE_REQUEST = "If you didn't request this, you can safely ignore this email.";
@@ -46,7 +46,7 @@ export function renderMagicLinkAndCodeEmail(
 		'Sign in to Marquee',
 		`<p>Click the button below to sign in. This link expires in ${linkTtlMinutes} minutes and can be used once.</p>
 		<p style="margin: 24px 0;">
-			<a href="${url}" style="background: ${BRAND}; color: #ffffff; padding: 12px 20px; border-radius: 10px; text-decoration: none; display: inline-block; font-size: 14px; font-weight: 500;">Sign in to Marquee</a>
+			<a href="${url}" style="background: ${BRAND}; color: #000000; padding: 12px 20px; border-radius: 10px; text-decoration: none; display: inline-block; font-size: 14px; font-weight: 500;">Sign in to Marquee</a>
 		</p>
 		<p style="${MUTED} word-break: break-all;">Or paste this link into your browser:<br />${url}</p>
 		<p style="margin: 24px 0 8px;">Prefer to type a code? Enter this in Marquee — it expires in ${codeTtlMinutes} minutes.</p>
