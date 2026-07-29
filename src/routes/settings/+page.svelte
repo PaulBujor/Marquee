@@ -5,6 +5,7 @@
 	import AppearanceCard from './appearance-card.svelte';
 	import NotificationsCard from './notifications-card.svelte';
 	import DataCacheCard from './data-cache-card.svelte';
+	import CreditsCard from './credits-card.svelte';
 	import DeleteAccountCard from './delete-account-card.svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -27,5 +28,6 @@
 	<AppearanceCard />
 	<NotificationsCard />
 	<DataCacheCard />
+	<CreditsCard />
 	<DeleteAccountCard userEmail={data.user.email} {form} />
 </main>
