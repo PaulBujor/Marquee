@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -172,10 +172,31 @@
 	let visibleCount = $state(PAGE_SIZE);
 	const visible = $derived(list.slice(0, visibleCount));
 	const hasMore = $derived(visibleCount < list.length);
+
+	// Reset to the first page only on a *genuine* view change — not on the initial mount or the
+	// back/forward re-seed. The guard (skip when the key is unchanged) lets a restored snapshot's
+	// visibleCount survive a remount; the popstate re-seed writes the same filter values back, and
+	// Svelte skips equal assignments, so it never trips this.
+	const viewKey = $derived(`${tab}|${typeFilter}|${year}|${genre}|${release}|${sort}`);
+	let lastViewKey = untrack(() => viewKey);
 	$effect(() => {
-		void [tab, typeFilter, year, genre, release, sort];
-		visibleCount = PAGE_SIZE;
+		if (viewKey !== lastViewKey) {
+			lastViewKey = viewKey;
+			visibleCount = PAGE_SIZE;
+		}
 	});
+
+	// Preserve pagination depth + scroll across navigation. Opening a title unmounts this route, so
+	// without a snapshot Back would reinitialize visibleCount to PAGE_SIZE and lose scroll (MRQ-156).
+	// The `library` singleton is already populated on Back, so restoring visibleCount renders the full
+	// grid synchronously; we scroll after a tick so the page is tall enough to reach the saved offset.
+	export const snapshot = {
+		capture: () => ({ visibleCount, scrollY: window.scrollY }),
+		restore: (v: { visibleCount: number; scrollY: number }) => {
+			visibleCount = v.visibleCount;
+			void tick().then(() => window.scrollTo(0, v.scrollY));
+		}
+	};
 
 	let loadMoreSentinel = $state<HTMLElement | null>(null);
 	$effect(() => {
