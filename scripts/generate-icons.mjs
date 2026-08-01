@@ -11,7 +11,11 @@
  *                                  16px, where the plated art would shrink the
  *                                  mark to nothing.
  *   maskable.png                   opaque, padded to Android's safe zone.
- *                                  Light only — Android has no dark variant.
+ *
+ * `maskable-dark.png` sits alongside them and is deliberately NOT read: the Web
+ * App Manifest has no colour-scheme selector for icons, and Android 13+ themed
+ * icons want a `monochrome` silhouette rather than a dark colourway. It's kept
+ * for whenever a surface can use it — wire it up here if one appears.
  *
  * Output: static/ (favicons, PWA icons, apple-touch icon, splash screens)
  *
@@ -22,7 +26,8 @@
  * `media="(prefers-color-scheme: …)"` on the link) and the iOS splash (separate
  * `apple-touch-startup-image` links) — both wired up in `+layout.svelte`. The
  * home-screen and maskable icons have no per-scheme variant on either platform,
- * so they use the light colourway whatever the theme.
+ * so they use the light colourway whatever the theme — a white plate reads on
+ * any wallpaper.
  */
 import { mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
