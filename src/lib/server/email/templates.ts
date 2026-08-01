@@ -4,9 +4,11 @@
  * one place. Inline styles because email clients ignore <style>/external CSS.
  */
 
-const BRAND = '#8b5cf6';
+// Mail renders on the client's own white background, so these mirror the LIGHT
+// design tokens in src/routes/layout.css — keep them in sync.
+const BRAND = '#0f766e'; // --primary
 const SERIF = "'Fraunces', ui-serif, Georgia, serif";
-const MUTED = 'color: #666; font-size: 13px;';
+const MUTED = 'color: #5c6470; font-size: 13px;'; // --muted-foreground
 const IGNORE_REQUEST = "If you didn't request this, you can safely ignore this email.";
 
 /** Shared shell: doctype + base typography + a serif heading. */
@@ -19,7 +21,7 @@ function layout(heading: string, body: string): string {
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet" />
 	</head>
-	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
+	<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #0b0d0f;">
 		<h2 style="margin: 0 0 16px; font-family: ${SERIF}; font-weight: 600;">${heading}</h2>
 		${body}
 	</body>

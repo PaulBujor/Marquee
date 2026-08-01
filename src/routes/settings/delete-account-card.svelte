@@ -38,7 +38,7 @@
 	};
 </script>
 
-<Card.Root class="border-destructive/50">
+<Card.Root class="ring-destructive/40">
 	<Card.Header>
 		<Card.Title>Delete account</Card.Title>
 		<Card.Description>

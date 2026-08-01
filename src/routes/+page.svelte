@@ -277,11 +277,11 @@
 										onclick={() => markNextSoon(item)}
 										disabled={library.busy || marking.has(item.mediaId)}
 										aria-label={`Mark S${progress.next.season} E${progress.next.episode} of ${item.title} watched`}
-										class="absolute right-1.5 bottom-1.5 flex size-9 items-center justify-center rounded-full text-white transition-colors {marking.has(
+										class="absolute right-1.5 bottom-1.5 flex size-9 items-center justify-center rounded-full transition-colors {marking.has(
 											item.mediaId
 										)
-											? 'bg-primary'
-											: 'bg-black/60'}"
+											? 'bg-primary text-primary-foreground'
+											: 'bg-black/60 text-white'}"
 									>
 										{#if !marking.has(item.mediaId)}
 											<ProgressRing progress={progress.fraction} size={34} class="absolute" />

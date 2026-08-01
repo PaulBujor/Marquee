@@ -111,13 +111,41 @@
 	});
 
 	// OS chrome matches the app background (not the accent); hex mirror `--background`.
-	const themeColor = $derived(theme.isDark ? '#000000' : '#f7f6f3');
+	const themeColor = $derived(theme.isDark ? '#000000' : '#ffffff');
 </script>
 
 <svelte:head>
+	<!-- The .ico carries no colour-scheme variant, so it stays the unqualified
+	fallback; the PNGs below swap the mark between the light and dark teal. -->
 	<link rel="icon" href="/favicon.ico" sizes="any" />
-	<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
-	<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
+	<link
+		rel="icon"
+		type="image/png"
+		sizes="32x32"
+		media="(prefers-color-scheme: light)"
+		href="/icons/favicon-32.png"
+	/>
+	<link
+		rel="icon"
+		type="image/png"
+		sizes="16x16"
+		media="(prefers-color-scheme: light)"
+		href="/icons/favicon-16.png"
+	/>
+	<link
+		rel="icon"
+		type="image/png"
+		sizes="32x32"
+		media="(prefers-color-scheme: dark)"
+		href="/icons/favicon-32-dark.png"
+	/>
+	<link
+		rel="icon"
+		type="image/png"
+		sizes="16x16"
+		media="(prefers-color-scheme: dark)"
+		href="/icons/favicon-16-dark.png"
+	/>
 	<!-- iOS home-screen icon; without it Safari probes /apple-touch-icon(-precomposed).png and 404s. -->
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="manifest" href="/manifest.json" />
