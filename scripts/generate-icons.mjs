@@ -1,29 +1,23 @@
 /**
  * Generate all app icons + iOS splash screens from the source logo set.
  *
- * Sources (all square, `dev-assets/`, 2048x2048 — larger is fine, everything
- * downscales). The mark comes in two colourways, light and dark, and in two
- * framings:
+ * Four sources (all square, `dev-assets/`, 2048x2048 — larger is fine,
+ * everything downscales): one mark, in two framings x two colourways.
  *
- *   maskable.png                   opaque, padded to Android's safe zone. The
- *                                  PWA icon, declared `any maskable` — one pair
- *                                  of files covers both purposes. Being opaque
- *                                  to the edges, it renders as a square wherever
- *                                  `any` goes unmasked (Chrome desktop install,
- *                                  Windows taskbar); everywhere that masks it
- *                                  crops to the safe zone.
- *   logo.png / logo-dark.png       plated mark, transparent squircle corners.
- *                                  The apple-touch icon and the splash mark —
- *                                  iOS applies its own squircle, so the tighter
- *                                  framing is right there.
- *   favicon.png / favicon-dark.png full-bleed mark, no plate. Stays legible at
- *                                  16px, where the plated art would shrink the
- *                                  mark to nothing.
+ *   maskable.png / maskable-dark.png   Opaque, padded to Android's safe zone.
+ *     Everything icon-shaped: the PWA icons, the apple-touch icon, and the
+ *     splash mark. Declared `any maskable` in the manifest — one pair of files
+ *     covers both purposes. Being opaque to the edges it renders as a square
+ *     wherever `any` goes unmasked (Chrome desktop install, Windows taskbar);
+ *     everywhere that masks it crops to the safe zone.
  *
- * `maskable-dark.png` sits alongside them and is deliberately NOT read: the Web
- * App Manifest has no colour-scheme selector for icons, and Android 13+ themed
- * icons want a `monochrome` silhouette rather than a dark colourway. It's kept
- * for whenever a surface can use it — wire it up here if one appears.
+ *   favicon.png / favicon-dark.png     Full-bleed mark, no plate. Stays legible
+ *     at 16px, where the padded art would shrink the mark to nothing.
+ *
+ * `logo.png` / `logo-dark.png` — the plated mark with transparent squircle
+ * corners — are kept in `dev-assets/` but deliberately NOT read: the squircle
+ * fought every surface that applies its own rounding. Nothing consumes them;
+ * wire them back up here if a surface wants the plated framing.
  *
  * Output: static/ (favicons, PWA icons, apple-touch icon, splash screens)
  *
@@ -48,20 +42,19 @@ const ICONS = join(STATIC, 'icons');
 const SPLASH = join(STATIC, 'splash');
 
 const SOURCES = {
-	logo: 'logo.png',
-	logoDark: 'logo-dark.png',
 	maskable: 'maskable.png',
+	maskableDark: 'maskable-dark.png',
 	favicon: 'favicon.png',
 	faviconDark: 'favicon-dark.png'
 };
 
-// The app's two backgrounds, from `--background` in src/routes/layout.css.
-// PLATE is separate on purpose: it's the logo artwork's own plate colour, a
-// property of the art rather than of the app, and it backs the opaque
-// apple-touch icon so iOS's corner rounding can't leave slivers around the
-// squircle. Conflating the two is what left the old splashes seaming.
+// The app's two backgrounds, from `--background` in src/routes/layout.css. They
+// match the source plates, which is what makes each splash plate dissolve into
+// its own background; the old #090a0e/#f7f6f3 pair is what left them seaming.
 const BG = '#000000';
 const LIGHT_BG = '#ffffff';
+// The artwork's own plate colour — a property of the art, not of the app. Only
+// reached if a source ever ships with alpha; the maskable pair is opaque.
 const PLATE = '#ffffff';
 
 // Exact device resolutions (px) + home-screen icon size (pt). Portrait values;
@@ -116,8 +109,7 @@ await writeFile(
 	await pngToIco([16, 32, 48].map((s) => join(ICONS, `favicon-${s}.png`)))
 );
 
-// 3. PWA icons — one pair serving both `any` and `maskable` (see manifest.json),
-//    from the full-bleed source, just resized
+// 3. PWA icons — one pair serving both `any` and `maskable` (see manifest.json)
 for (const s of [192, 512]) {
 	await sharp(src.maskable)
 		.resize(s, s)
@@ -126,7 +118,7 @@ for (const s of [192, 512]) {
 }
 
 // 4. Apple touch icon — 180, opaque (iOS blackens alpha), iOS rounds it
-await sharp(src.logo)
+await sharp(src.maskable)
 	.resize(180, 180)
 	.flatten({ background: PLATE })
 	.png()
@@ -140,8 +132,8 @@ for (const d of DEVICES) {
 		['landscape', d.h, d.w]
 	]) {
 		for (const [scheme, input, bg] of [
-			['dark', src.logoDark, BG],
-			['light', src.logo, LIGHT_BG]
+			['dark', src.maskableDark, BG],
+			['light', src.maskable, LIGHT_BG]
 		]) {
 			const mark = await square(input, d.iconPt * d.dpr);
 			await sharp({ create: { width: W, height: H, channels: 4, background: bg } })
