@@ -204,6 +204,17 @@ export class TrackingState {
 		});
 	}
 
+	/** Whether there's enough local data for {@link markSeasonWatched} to seed that season fully. */
+	readyToMarkSeason(seasonNumber: number): boolean {
+		return hasSufficientEpisodeData(
+			this.#seasons,
+			this.episodes,
+			this.#inProduction,
+			todayIso(),
+			seasonNumber
+		);
+	}
+
 	/**
 	 * Mark the whole series watched: every **aired** episode watched, then the status reconciled from
 	 * actual progress (see {@link readyToMarkSeries}). Bulk — one `episode.watched` per episode (the

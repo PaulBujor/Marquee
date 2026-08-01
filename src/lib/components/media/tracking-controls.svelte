@@ -25,13 +25,17 @@
 	let markSeriesOpen = $state(false);
 
 	const view = $derived(tracking.view);
-	// A show's "done" reads real episode-watch state, not the raw `status` field, which can be stuck
-	// at `completed` with episodes unmarked (see `markSeriesWatched`). Movies have no episode log, so
-	// `status` stays authoritative there.
+	// For a show, trust `status === 'completed'` unless local episode data actively contradicts it —
+	// it can be stuck `completed` with episodes unmarked (see `markSeriesWatched`), but it's just as
+	// often correct with the episode data simply not synced to this device yet (`tracking.episodes`
+	// empty), in which case there's nothing to contradict it with. Movies have no episode log at all,
+	// so `status` stays authoritative there unconditionally.
 	const done = $derived(
 		view.tracked &&
 			(type === 'show'
-				? isSeriesFullyWatched(tracking.episodes, tracking.watched, todayIso())
+				? view.status === 'completed' &&
+					(tracking.episodes.length === 0 ||
+						isSeriesFullyWatched(tracking.episodes, tracking.watched, todayIso()))
 				: view.status === 'completed')
 	);
 	const favorite = $derived(view.tracked && view.favorite);

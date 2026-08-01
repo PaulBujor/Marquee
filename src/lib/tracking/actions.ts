@@ -191,10 +191,13 @@ export function isSeriesFullyWatched(
 
 /**
  * Whether `episodesToMark` has enough local data to enumerate every aired episode accurately.
- * Mirrors its own per-season resolution: a season with no per-episode dates is only resolvable by
- * `episodeCount` once the show is known **finished** (`inProduction === false`); still in production
- * (`true`, or unknown), an aired season with no per-episode rows can't be enumerated. No seasons at
+ * Mirrors its own per-season resolution: a season is only resolvable once its per-episode dates
+ * are **fully** synced (`seasonDated.length >= episodeCount` — a partial per-episode sync can't be
+ * trusted any more than none at all), or, absent that, once the show is known **finished**
+ * (`inProduction === false`), where `episodeCount` itself resolves it. Still in production (`true`,
+ * or unknown), an aired season without full per-episode coverage can't be enumerated. No seasons at
  * all (summaries not loaded) is never ready — an aired-but-unseen season can't be ruled out.
+ * `seasonFilter` scopes the check to one season (readiness for "mark season watched").
  */
 export function hasSufficientEpisodeData(
 	seasons: SeasonSummary[],
@@ -212,7 +215,7 @@ export function hasSufficientEpisodeData(
 	for (const s of seasonsToCheck) {
 		if (s.airDate === null || s.airDate > today) continue;
 		const seasonDated = dated.filter((e) => e.season === s.seasonNumber);
-		if (seasonDated.length > 0) continue;
+		if (seasonDated.length >= s.episodeCount) continue;
 		if (inProduction !== true) continue;
 		return false;
 	}
