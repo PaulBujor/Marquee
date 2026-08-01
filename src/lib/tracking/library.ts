@@ -22,6 +22,8 @@ export interface LibraryItem {
 	favorite: boolean;
 	rating: number | null;
 	addedAt: number;
+	/** Epoch ms this was (last) watched, or null when nothing has been — see `watchedAt`. */
+	watchedAt: number | null;
 	type: 'movie' | 'show';
 	title: string;
 	year: number | null;
@@ -39,7 +41,7 @@ export interface LibraryItem {
 }
 
 export type LibraryTab = 'want_to_watch' | 'watching' | 'completed' | 'favorites';
-export type LibrarySort = 'title' | 'date' | 'added';
+export type LibrarySort = 'title' | 'date' | 'added' | 'watched';
 /** Release-status filter: everything, only already-released, or only not-yet-released titles. */
 export type ReleaseFilter = 'all' | 'released' | 'upcoming';
 
@@ -214,6 +216,13 @@ export function filterAndSortLibrary(
 		if (f.sort === 'title') return a.title.localeCompare(b.title);
 		// Newest release first; unknown/undated releases sort to the top as furthest-future.
 		if (f.sort === 'date') return releaseDateKey(b).localeCompare(releaseDateKey(a));
+		// Most recently watched first, with never-watched titles last rather than jumbled in — the
+		// sort spans every tab, so most lists hold some titles that carry no watch date at all.
+		if (f.sort === 'watched') {
+			if (a.watchedAt === null) return b.watchedAt === null ? 0 : 1;
+			if (b.watchedAt === null) return -1;
+			return b.watchedAt - a.watchedAt;
+		}
 		return b.addedAt - a.addedAt;
 	});
 }

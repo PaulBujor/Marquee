@@ -5,7 +5,14 @@
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import MediaBadge from './media-badge.svelte';
 	import RatingStars from './rating-stars.svelte';
-	import { canRate as canRateStatus, isSeriesFullyWatched, todayIso } from '$lib/tracking/actions';
+	import {
+		canRate as canRateStatus,
+		isSeriesFullyWatched,
+		todayIso,
+		watchedAt as watchedAtFor,
+		watchedAtLabel
+	} from '$lib/tracking/actions';
+	import { formatExactDateTime, formatRelativeDay } from '$lib/date';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import HeartIcon from '@lucide/svelte/icons/heart';
@@ -46,6 +53,20 @@
 	// Status is conveyed by the buttons (add / mark watched / watched). Only "didn't finish" —
 	// which the buttons can't express — gets an explicit label below them.
 	const didNotFinish = $derived(view.tracked && view.status === 'did_not_finish');
+
+	// When this was watched, read off the clocks the projections already keep (see `watchedAt`).
+	// Null for anything unwatched, so the line is simply absent until there's a date to show.
+	const watchedInput = $derived(
+		view.tracked
+			? {
+					type,
+					status: view.status,
+					statusUpdatedAt: tracking.statusUpdatedAt,
+					lastEpisodeWatchedAt: tracking.lastEpisodeWatchedAt()
+				}
+			: null
+	);
+	const watchedAt = $derived(watchedInput ? watchedAtFor(watchedInput) : null);
 
 	// A show you're caught up on (every aired episode watched) — no "next" remaining. Being up to
 	// date reads as "watched": you shouldn't be prompted to mark the whole series (which would also
@@ -155,6 +176,12 @@
 	{/if}
 	{#if didNotFinish}
 		<MediaBadge variant="status" class="self-start">Didn't finish</MediaBadge>
+	{/if}
+	{#if watchedInput && watchedAt !== null}
+		<span class="text-xs text-muted-foreground" title={formatExactDateTime(watchedAt)}>
+			{watchedAtLabel(watchedInput)}
+			{formatRelativeDay(watchedAt)}
+		</span>
 	{/if}
 </div>
 

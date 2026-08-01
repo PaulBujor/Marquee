@@ -28,6 +28,7 @@ function item(over: Partial<LibraryItem> = {}): LibraryItem {
 		favorite: false,
 		rating: null,
 		addedAt: 0,
+		watchedAt: null,
 		type: 'movie',
 		title: 'X',
 		year: 2000,
@@ -193,6 +194,29 @@ describe('filterAndSortLibrary', () => {
 		]);
 		expect(filterAndSortLibrary(same, { ...f, sort: 'added' }).map((i) => i.addedAt)).toEqual([
 			300, 200, 100
+		]);
+	});
+
+	it('sorts by watched date, newest first, with never-watched titles last', () => {
+		const f = {
+			tab: 'completed' as const,
+			type: 'all' as const,
+			year: null,
+			genre: null,
+			release: 'all' as const,
+			sort: 'watched' as const
+		};
+		const rows = [
+			item({ mediaId: 'never', status: 'completed', watchedAt: null }),
+			item({ mediaId: 'old', status: 'completed', watchedAt: 1_000 }),
+			item({ mediaId: 'recent', status: 'completed', watchedAt: 9_000 }),
+			item({ mediaId: 'never-too', status: 'completed', watchedAt: null })
+		];
+		expect(filterAndSortLibrary(rows, f).map((i) => i.mediaId)).toEqual([
+			'recent',
+			'old',
+			'never',
+			'never-too'
 		]);
 	});
 

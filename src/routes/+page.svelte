@@ -70,11 +70,12 @@
 		{ key: 'show', label: 'Shows' }
 	];
 
-	const SORTS: LibrarySort[] = ['added', 'title', 'date'];
+	const SORTS: LibrarySort[] = ['added', 'title', 'date', 'watched'];
 	const SORT_LABELS: Record<LibrarySort, string> = {
 		added: 'Date added',
 		title: 'Title',
-		date: 'Release date'
+		date: 'Release date',
+		watched: 'Watched date'
 	};
 
 	const RELEASES: ReleaseFilter[] = ['all', 'released', 'upcoming'];
