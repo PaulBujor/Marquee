@@ -9,6 +9,18 @@ export async function enqueueEvent(event: EventEnvelope): Promise<void> {
 }
 
 /**
+ * Add many events at once, in a single transaction. An import seeds thousands of events, which
+ * through {@link enqueueEvent} would mean thousands of separate transactions.
+ */
+export async function enqueueEvents(events: EventEnvelope[]): Promise<void> {
+	if (events.length === 0) return;
+	const db = await openDb();
+	const transaction = db.transaction('events', 'readwrite');
+	await Promise.all(events.map((event) => transaction.store.put({ ...event, synced: 0 })));
+	await transaction.done;
+}
+
+/**
  * Events not yet acknowledged by the server, oldest first. Pass `limit` to page the
  * outbox — the sync engine (MRQ-43) must keep a push at or under `SYNC_MAX_PUSH`, so
  * a large offline backlog is drained across several round trips rather than one

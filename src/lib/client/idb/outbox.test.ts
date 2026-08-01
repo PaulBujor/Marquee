@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { createEvent } from '$lib/sync/events';
 import { setActiveUser } from './db';
-import { enqueueEvent, getUnsynced, markSynced } from './outbox';
+import { enqueueEvent, enqueueEvents, getUnsynced, markSynced } from './outbox';
 
 setActiveUser('test-user'); // the store is namespaced per user; scope it before opening
 
@@ -41,5 +41,20 @@ describe('outbox', () => {
 		await markSynced([e.id]);
 		const unsynced = await getUnsynced();
 		expect(unsynced.some((x) => x.id === e.id)).toBe(false);
+	});
+
+	it('enqueues a batch of events in one call', async () => {
+		const batch = [4000, 4001, 4002].map((clock) =>
+			createEvent('tracking.added', `movie:${clock}`, { status: 'watching' }, DEVICE, clock)
+		);
+		await enqueueEvents(batch);
+
+		const unsynced = await getUnsynced();
+		const mine = unsynced.filter((e) => batch.some((b) => b.id === e.id));
+		expect(mine.map((e) => e.clientCreatedAt)).toEqual([4000, 4001, 4002]);
+	});
+
+	it('accepts an empty batch without opening a transaction', async () => {
+		await expect(enqueueEvents([])).resolves.toBeUndefined();
 	});
 });
