@@ -5,12 +5,20 @@
  * downscales). The mark comes in two colourways, light and dark, and in two
  * framings:
  *
+ *   maskable.png                   opaque, padded to Android's safe zone. The
+ *                                  PWA icon, declared `any maskable` — one pair
+ *                                  of files covers both purposes. Being opaque
+ *                                  to the edges, it renders as a square wherever
+ *                                  `any` goes unmasked (Chrome desktop install,
+ *                                  Windows taskbar); everywhere that masks it
+ *                                  crops to the safe zone.
  *   logo.png / logo-dark.png       plated mark, transparent squircle corners.
- *                                  The home-screen icon, and the splash mark.
+ *                                  The apple-touch icon and the splash mark —
+ *                                  iOS applies its own squircle, so the tighter
+ *                                  framing is right there.
  *   favicon.png / favicon-dark.png full-bleed mark, no plate. Stays legible at
  *                                  16px, where the plated art would shrink the
  *                                  mark to nothing.
- *   maskable.png                   opaque, padded to Android's safe zone.
  *
  * `maskable-dark.png` sits alongside them and is deliberately NOT read: the Web
  * App Manifest has no colour-scheme selector for icons, and Android 13+ themed
@@ -25,9 +33,8 @@
  * Only two surfaces can switch colourway: the favicon (browsers honour
  * `media="(prefers-color-scheme: …)"` on the link) and the iOS splash (separate
  * `apple-touch-startup-image` links) — both wired up in `+layout.svelte`. The
- * home-screen and maskable icons have no per-scheme variant on either platform,
- * so they use the light colourway whatever the theme — a white plate reads on
- * any wallpaper.
+ * home-screen icons have no per-scheme variant on either platform, so they use
+ * the light colourway whatever the theme — a white plate reads on any wallpaper.
  */
 import { mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -109,30 +116,23 @@ await writeFile(
 	await pngToIco([16, 32, 48].map((s) => join(ICONS, `favicon-${s}.png`)))
 );
 
-// 3. PWA "any" icons — the designed squircle as-is (transparent corners)
+// 3. PWA icons — one pair serving both `any` and `maskable` (see manifest.json),
+//    from the full-bleed source, just resized
 for (const s of [192, 512]) {
-	await sharp(src.logo)
+	await sharp(src.maskable)
 		.resize(s, s)
 		.png()
 		.toFile(join(ICONS, `icon-${s}.png`));
 }
 
-// 4. PWA maskable icons — from the dedicated full-bleed source, just resized
-for (const s of [192, 512]) {
-	await sharp(src.maskable)
-		.resize(s, s)
-		.png()
-		.toFile(join(ICONS, `icon-${s}-maskable.png`));
-}
-
-// 5. Apple touch icon — 180, opaque (iOS blackens alpha), iOS rounds it
+// 4. Apple touch icon — 180, opaque (iOS blackens alpha), iOS rounds it
 await sharp(src.logo)
 	.resize(180, 180)
 	.flatten({ background: PLATE })
 	.png()
 	.toFile(join(STATIC, 'apple-touch-icon.png'));
 
-// 6. iOS splash screens — the matching colourway centred on the app bg, so the
+// 5. iOS splash screens — the matching colourway centred on the app bg, so the
 //    plate dissolves into the background and the mark floats
 for (const d of DEVICES) {
 	for (const [orientation, W, H] of [
