@@ -138,3 +138,13 @@ export async function getEpisodeWatches(mediaId: string): Promise<ClientEpisodeW
 	const db = await openDb();
 	return db.getAllFromIndex('episodeWatches', 'by_media', mediaId);
 }
+
+/**
+ * Every episode-watch row across all shows, in one read. Includes `watched: false` rows (the LWW
+ * tombstones a later unwatch leaves behind) — callers filter as they need. Used by the export,
+ * which would otherwise need a per-title index scan.
+ */
+export async function getAllEpisodeWatches(): Promise<ClientEpisodeWatch[]> {
+	const db = await openDb();
+	return db.getAll('episodeWatches');
+}
