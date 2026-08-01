@@ -64,6 +64,60 @@ function watch(
 	};
 }
 
+describe('buildExport watched dates', () => {
+	it("exports a movie's completion clock, which is when it was watched", () => {
+		const completedAt = Date.UTC(2026, 5, 20, 18, 0, 0);
+		const doc = buildExport({
+			tracking: [
+				tracking({ mediaId: INCEPTION, status: 'completed', statusUpdatedAt: completedAt })
+			],
+			media: [media({ id: INCEPTION, type: 'movie', title: 'Inception' })],
+			watches: [],
+			exportedAt: EXPORTED_AT
+		});
+
+		expect(doc.titles[0].statusChangedAt).toBe(new Date(completedAt).toISOString());
+	});
+
+	it('keeps the completion clock distinct from the date added', () => {
+		const doc = buildExport({
+			tracking: [
+				tracking({
+					mediaId: INCEPTION,
+					status: 'completed',
+					addedAt: Date.UTC(2026, 0, 5),
+					statusUpdatedAt: Date.UTC(2026, 5, 20)
+				})
+			],
+			media: [media({ id: INCEPTION })],
+			watches: [],
+			exportedAt: EXPORTED_AT
+		});
+
+		expect(doc.titles[0].addedAt).toBe(new Date(Date.UTC(2026, 0, 5)).toISOString());
+		expect(doc.titles[0].statusChangedAt).toBe(new Date(Date.UTC(2026, 5, 20)).toISOString());
+	});
+
+	it('exports when each episode was marked watched', () => {
+		const first = Date.UTC(2026, 1, 1);
+		const second = Date.UTC(2026, 1, 8);
+		const doc = buildExport({
+			tracking: [tracking({ mediaId: SEVERANCE, status: 'watching' })],
+			media: [media({ id: SEVERANCE, type: 'show', title: 'Severance' })],
+			watches: [
+				{ ...watch(SEVERANCE, 1, 1), updatedAt: first },
+				{ ...watch(SEVERANCE, 1, 2), updatedAt: second }
+			],
+			exportedAt: EXPORTED_AT
+		});
+
+		expect(doc.titles[0].watchedEpisodes).toEqual([
+			{ season: 1, episode: 1, watchedAt: new Date(first).toISOString() },
+			{ season: 1, episode: 2, watchedAt: new Date(second).toISOString() }
+		]);
+	});
+});
+
 describe('buildExport', () => {
 	it('stamps the format discriminator, schema version and export instant', () => {
 		const doc = buildExport({ tracking: [], media: [], watches: [], exportedAt: EXPORTED_AT });
@@ -103,6 +157,7 @@ describe('buildExport', () => {
 				favorite: true,
 				rating: 5,
 				addedAt: new Date(ADDED_AT).toISOString(),
+				statusChangedAt: new Date(ADDED_AT).toISOString(),
 				watchedEpisodes: []
 			}
 		]);
@@ -121,9 +176,9 @@ describe('buildExport', () => {
 			exportedAt: EXPORTED_AT
 		});
 
-		expect(doc.titles[0].watchedEpisodes).toEqual([
-			{ season: 1, episode: 1 },
-			{ season: 1, episode: 3 }
+		expect(doc.titles[0].watchedEpisodes.map((e) => [e.season, e.episode])).toEqual([
+			[1, 1],
+			[1, 3]
 		]);
 	});
 
@@ -140,11 +195,11 @@ describe('buildExport', () => {
 			exportedAt: EXPORTED_AT
 		});
 
-		expect(doc.titles[0].watchedEpisodes).toEqual([
-			{ season: 0, episode: 1 },
-			{ season: 1, episode: 2 },
-			{ season: 1, episode: 10 },
-			{ season: 2, episode: 1 }
+		expect(doc.titles[0].watchedEpisodes.map((e) => [e.season, e.episode])).toEqual([
+			[0, 1],
+			[1, 2],
+			[1, 10],
+			[2, 1]
 		]);
 	});
 
@@ -166,7 +221,7 @@ describe('buildExport', () => {
 			year: null,
 			status: 'watching',
 			rating: 4,
-			watchedEpisodes: [{ season: 1, episode: 1 }]
+			watchedEpisodes: [{ season: 1, episode: 1, watchedAt: new Date(ADDED_AT).toISOString() }]
 		});
 	});
 

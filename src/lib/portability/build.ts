@@ -44,7 +44,12 @@ export function buildExport(input: ExportInput): MarqueeExport {
 		// `watched: false` rows are retained locally as last-write-wins tombstones, not history.
 		if (!w.watched) continue;
 		const list = watchedByMedia.get(w.mediaId);
-		const episode = { season: w.season, episode: w.episode };
+		// The row's LWW clock is the clock of the `episode.watched` event — i.e. when it was marked.
+		const episode = {
+			season: w.season,
+			episode: w.episode,
+			watchedAt: new Date(w.updatedAt).toISOString()
+		};
 		if (list) list.push(episode);
 		else watchedByMedia.set(w.mediaId, [episode]);
 	}
@@ -62,6 +67,7 @@ export function buildExport(input: ExportInput): MarqueeExport {
 			favorite: t.favorite,
 			rating: t.rating,
 			addedAt: new Date(t.addedAt).toISOString(),
+			statusChangedAt: new Date(t.statusUpdatedAt).toISOString(),
 			watchedEpisodes: (watchedByMedia.get(t.mediaId) ?? []).sort(compareEpisodes)
 		};
 	});

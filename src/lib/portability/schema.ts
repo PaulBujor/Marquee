@@ -24,6 +24,8 @@ export const EXPORT_FILENAME_PREFIX = 'marquee-export';
 export interface ExportedEpisode {
 	season: number;
 	episode: number;
+	/** ISO 8601 — when the user marked it watched. */
+	watchedAt: string;
 }
 
 /**
@@ -33,11 +35,17 @@ export interface ExportedEpisode {
  * behind it (a title added offline before the media channel pulled it), and dropping those on
  * export would lose the user's data. Such an entry keeps its `mediaId` and nothing else.
  *
- * Two fields carry weight beyond display. `externalId` is the portable identity anchor —
+ * Several fields carry weight beyond display. `externalId` is the portable identity anchor —
  * `mediaId` is a deterministic UUIDv5 of `(provider, externalId)`, so an importer re-derives the
- * id rather than trusting ours. And `addedAt` is the round-trip clock: import stamps its events
- * with it, which both restores the original "date added" and lets last-write-wins merge an old
- * export into a newer account without clobbering it.
+ * id rather than trusting ours.
+ *
+ * The rest are **clocks**, and they're why the document isn't just a snapshot. Import replays
+ * events stamped with them, so a restored account keeps its real dates instead of looking like
+ * everything happened the day it was imported — and last-write-wins can merge an old export into
+ * a newer account without clobbering it. `addedAt` restores when a title joined the library;
+ * `statusChangedAt` is when it reached its current status, which for a completed title is *when
+ * it was watched*; and each episode carries its own `watchedAt`. Together they're what the
+ * watched-date UI reads back out.
  */
 export interface ExportedTitle {
 	mediaId: string;
@@ -51,8 +59,13 @@ export interface ExportedTitle {
 	favorite: boolean;
 	/** User rating 1–5; null = unrated. */
 	rating: number | null;
-	/** ISO 8601. */
+	/** ISO 8601 — when the title joined the library. */
 	addedAt: string;
+	/**
+	 * ISO 8601 — when the title last changed status. For a `completed` title that's when it was
+	 * watched; for a show it's the fallback when no per-episode dates exist.
+	 */
+	statusChangedAt: string;
 	/** Empty for movies, and for shows with nothing watched. */
 	watchedEpisodes: ExportedEpisode[];
 }

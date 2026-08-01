@@ -27,8 +27,8 @@
 	<Card.Header>
 		<Card.Title>Your data</Card.Title>
 		<Card.Description>
-			Download everything you track — your titles, ratings, favourites and episode progress — as a
-			JSON file that's yours to keep.
+			Download everything you track — your titles, ratings, favourites, episode progress and the
+			dates you watched them — as a JSON file that's yours to keep.
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="flex flex-col gap-3">
