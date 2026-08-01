@@ -106,6 +106,13 @@
 		void sync.revision;
 		tracking.load();
 	});
+	// The base→enriched upgrade above is untracked on `tracking`'s identity (MRQ-146), but its season
+	// summaries still need to reach the *existing* instance — otherwise a title opened from a stale
+	// cached copy (empty/partial local `seasons`) would seed `markSeriesWatched` from that stale
+	// snapshot for the rest of the page's life, even after the network detail lands. Keep it live.
+	$effect(() => {
+		tracking.updateSeasons(detail.seasons);
+	});
 
 	// Tracking status + favorite of the *similar* titles, for the badge + heart on each card — we
 	// already hold this offline, keyed by our derived media id. Reloaded on sync pulls / navigation.

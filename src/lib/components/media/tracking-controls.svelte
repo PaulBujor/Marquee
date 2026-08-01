@@ -5,11 +5,12 @@
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import MediaBadge from './media-badge.svelte';
 	import RatingStars from './rating-stars.svelte';
-	import { canRate as canRateStatus } from '$lib/tracking/actions';
+	import { canRate as canRateStatus, isSeriesFullyWatched, todayIso } from '$lib/tracking/actions';
 	import type { TrackingState } from '$lib/tracking/tracking.svelte';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import HeartIcon from '@lucide/svelte/icons/heart';
 	import PlusIcon from '@lucide/svelte/icons/plus';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import XIcon from '@lucide/svelte/icons/x';
 
 	// Shared tracking action row for the detail page. For a show, "mark watched" marks the whole
@@ -24,7 +25,18 @@
 	let markSeriesOpen = $state(false);
 
 	const view = $derived(tracking.view);
-	const done = $derived(view.tracked && view.status === 'completed');
+	// A show's "done" reads the real per-episode watch state, not the raw `status` field — a status
+	// stuck at `completed` with unmarked episodes (e.g. a bulk mark that under-seeded, see
+	// `markSeriesWatched`) must not present as done, or the only recovery affordance (re-running the
+	// bulk mark) becomes unreachable: the button would show "Watched" and just step status back and
+	// forth without ever re-seeding. Movies have no episode log to check against, so `status` stays
+	// authoritative there.
+	const done = $derived(
+		view.tracked &&
+			(type === 'show'
+				? isSeriesFullyWatched(tracking.episodes, tracking.watched, todayIso())
+				: view.status === 'completed')
+	);
 	const favorite = $derived(view.tracked && view.favorite);
 	const rating = $derived(view.tracked ? view.rating : null);
 	// You can only rate something you've actually watched: never a "want to watch". Shared with the
@@ -41,6 +53,12 @@
 		type === 'show' && view.tracked && tracking.watched.size > 0 && tracking.nextEpisode() === null
 	);
 	const watchedState = $derived(done || (caughtUp && view.tracked && view.status === 'watching'));
+	// Whether a bulk "mark series watched" right now would under-seed (an in-production season we
+	// can't yet enumerate — see `TrackingState.readyToMarkSeries`). Only gates the not-yet-watched
+	// state; stepping back from "Watched" touches no episode data, so it's never blocked.
+	const seriesNotReady = $derived(
+		type === 'show' && !watchedState && !tracking.readyToMarkSeries()
+	);
 
 	function markWatched() {
 		if (watchedState) {
@@ -72,9 +90,20 @@
 			<!-- List-membership actions as one segmented control: the primary status action and
 			removing from the list. Favorite is a separate, unrelated toggle. -->
 			<ButtonGroup>
-				<Button variant="outline" onclick={markWatched} disabled={tracking.busy} class="gap-1.5">
-					<CheckIcon class="size-4 {watchedState ? 'text-primary' : ''}" />
-					{watchedState ? 'Watched' : type === 'show' ? 'Mark series watched' : 'Mark watched'}
+				<Button
+					variant="outline"
+					onclick={markWatched}
+					disabled={tracking.busy || seriesNotReady}
+					aria-busy={seriesNotReady}
+					class="gap-1.5"
+				>
+					{#if seriesNotReady}
+						<RefreshCwIcon class="size-4 animate-spin" />
+						Loading episodes…
+					{:else}
+						<CheckIcon class="size-4 {watchedState ? 'text-primary' : ''}" />
+						{watchedState ? 'Watched' : type === 'show' ? 'Mark series watched' : 'Mark watched'}
+					{/if}
 				</Button>
 				<Button
 					variant="outline"

@@ -178,6 +178,50 @@ export function isSeasonFullyWatched(
 	return aired.every((e) => watched.has(watchedKey(e.season, e.episode)));
 }
 
+/** Whether every **aired** episode across all seasons is watched (false when nothing has aired). */
+export function isSeriesFullyWatched(
+	episodes: DatedEpisode[],
+	watched: Set<string>,
+	today: string
+): boolean {
+	const aired = airedEpisodes(episodes, today);
+	if (aired.length === 0) return false;
+	return aired.every((e) => watched.has(watchedKey(e.season, e.episode)));
+}
+
+/**
+ * Whether `episodesToMark` has enough local data to enumerate every aired episode accurately —
+ * the readiness gate for the bulk "mark watched" controls (MRQ-130's other half: preventing a
+ * false-`completed` write, not just seeding what's available). Mirrors `episodesToMark`'s own
+ * per-season resolution: a season with no per-episode dates is only resolvable by its `episodeCount`
+ * once the show is known **finished** (`inProduction === false`); while still in production
+ * (`true`, or unknown), an aired season with no per-episode rows can't be enumerated and blocks
+ * readiness. A season that hasn't aired yet needs no data. No seasons at all (summaries not loaded)
+ * is never ready — we can't rule out an aired-but-unseen season.
+ */
+export function hasSufficientEpisodeData(
+	seasons: SeasonSummary[],
+	dated: DatedEpisode[],
+	inProduction: boolean | null,
+	today: string,
+	seasonFilter?: number
+): boolean {
+	const relevant = seasons.filter(
+		(s) =>
+			!isSpecialsSeason(s.seasonNumber) &&
+			(seasonFilter === undefined || s.seasonNumber === seasonFilter)
+	);
+	if (relevant.length === 0) return false;
+	for (const s of relevant) {
+		if (s.airDate === null || s.airDate > today) continue; // hasn't aired — nothing to resolve
+		const seasonDated = dated.filter((e) => e.season === s.seasonNumber);
+		if (seasonDated.length > 0) continue; // per-episode dates present — resolvable
+		if (inProduction !== true) continue; // finished/unknown — count fallback resolves it
+		return false; // aired season, still in production, no per-episode data yet
+	}
+	return true;
+}
+
 /**
  * Whether a show may still gain episodes — it's in production, or has announced episodes not yet
  * aired. Keeps a caught-up-but-unfinished show in `watching` instead of auto-completing it.
