@@ -178,6 +178,50 @@ export function isSeasonFullyWatched(
 	return aired.every((e) => watched.has(watchedKey(e.season, e.episode)));
 }
 
+/** Whether every **aired** episode across all seasons is watched (false when nothing has aired). */
+export function isSeriesFullyWatched(
+	episodes: DatedEpisode[],
+	watched: Set<string>,
+	today: string
+): boolean {
+	const aired = airedEpisodes(episodes, today);
+	if (aired.length === 0) return false;
+	return aired.every((e) => watched.has(watchedKey(e.season, e.episode)));
+}
+
+/**
+ * Whether `episodesToMark` has enough local data to enumerate every aired episode accurately.
+ * Mirrors its own per-season resolution: a season is only resolvable once its per-episode dates
+ * are **fully** synced (`seasonDated.length >= episodeCount` — a partial per-episode sync can't be
+ * trusted any more than none at all), or, absent that, once the show is known **finished**
+ * (`inProduction === false`), where `episodeCount` itself resolves it. Still in production (`true`,
+ * or unknown), an aired season without full per-episode coverage can't be enumerated. No seasons at
+ * all (summaries not loaded) is never ready — an aired-but-unseen season can't be ruled out.
+ * `seasonFilter` scopes the check to one season (readiness for "mark season watched").
+ */
+export function hasSufficientEpisodeData(
+	seasons: SeasonSummary[],
+	dated: DatedEpisode[],
+	inProduction: boolean | null,
+	today: string,
+	seasonFilter?: number
+): boolean {
+	const seasonsToCheck = seasons.filter(
+		(s) =>
+			!isSpecialsSeason(s.seasonNumber) &&
+			(seasonFilter === undefined || s.seasonNumber === seasonFilter)
+	);
+	if (seasonsToCheck.length === 0) return false;
+	for (const s of seasonsToCheck) {
+		if (s.airDate === null || s.airDate > today) continue;
+		const seasonDated = dated.filter((e) => e.season === s.seasonNumber);
+		if (seasonDated.length >= s.episodeCount) continue;
+		if (inProduction !== true) continue;
+		return false;
+	}
+	return true;
+}
+
 /**
  * Whether a show may still gain episodes — it's in production, or has announced episodes not yet
  * aired. Keeps a caught-up-but-unfinished show in `watching` instead of auto-completing it.

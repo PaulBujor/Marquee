@@ -21,6 +21,7 @@ import { sync } from '$lib/client/sync/engine.svelte';
 import type { MediaRecord, TrackingStatus } from '$lib/sync/events';
 import {
 	episodesToMark,
+	hasSufficientEpisodeData,
 	isSeasonFullyWatched,
 	nextEpisode,
 	todayIso,
@@ -56,14 +57,22 @@ export class TrackingState {
 	/**
 	 * Season summaries (count + air date) the detail page holds up-front. They let a bulk "mark
 	 * watched" enumerate episodes immediately — before the media channel syncs per-episode air dates
-	 * — so a fresh add can be marked watched without the unmark/re-mark dance (MRQ-130).
+	 * — so a fresh add can be marked watched without the unmark/re-mark dance (MRQ-130). `$state`,
+	 * not constructor-frozen: `title-detail.svelte` recreates this instance only when the media id
+	 * changes, not when `detail` upgrades from a cached copy to the enriched one (MRQ-146), so this
+	 * needs its own update path — see `updateSeasons`.
 	 */
-	readonly #seasons: SeasonSummary[];
+	#seasons = $state<SeasonSummary[]>([]);
 
 	constructor(mediaId: string, media: MediaRecord | null = null, seasons: SeasonSummary[] = []) {
 		this.mediaId = mediaId;
 		this.#media = media;
 		this.#inProduction = media?.inProduction ?? null;
+		this.#seasons = seasons;
+	}
+
+	/** Refresh the season summaries — call whenever the page's `detail.seasons` changes. */
+	updateSeasons(seasons: SeasonSummary[]): void {
 		this.#seasons = seasons;
 	}
 
@@ -195,17 +204,38 @@ export class TrackingState {
 		});
 	}
 
+	/** Whether there's enough local data for {@link markSeasonWatched} to seed that season fully. */
+	readyToMarkSeason(seasonNumber: number): boolean {
+		return hasSufficientEpisodeData(
+			this.#seasons,
+			this.episodes,
+			this.#inProduction,
+			todayIso(),
+			seasonNumber
+		);
+	}
+
 	/**
-	 * Mark the whole series watched: every **aired** episode watched, and the status set to
-	 * completed. Bulk — one `episode.watched` per episode (the sync push cap bounds delivery).
-	 * Enumerated from the season summaries, so it works the instant a title is added (MRQ-130).
+	 * Mark the whole series watched: every **aired** episode watched, then the status reconciled from
+	 * actual progress (see {@link readyToMarkSeries}). Bulk — one `episode.watched` per episode (the
+	 * sync push cap bounds delivery). Enumerated from the season summaries, so it works the instant a
+	 * title is added (MRQ-130).
 	 */
 	markSeriesWatched(): Promise<void> {
 		return this.#run(async () => {
+			await this.#ensureTracked('watching');
 			await this.#seedWatched(this.#markable());
-			// `added` on an untracked title (asserts the row), else `status_changed`.
-			await recordEvent(statusEventType(this.view), this.mediaId, { status: 'completed' });
+			await this.#reconcileStatus();
 		});
+	}
+
+	/**
+	 * Whether there's enough local season/episode data for {@link markSeriesWatched} to seed every
+	 * aired episode without under-seeding an in-production season it can't yet enumerate. Reactive:
+	 * tracks `#seasons` (via {@link updateSeasons}) and `episodes` (reloaded on sync pulls).
+	 */
+	readyToMarkSeries(): boolean {
+		return hasSufficientEpisodeData(this.#seasons, this.episodes, this.#inProduction, todayIso());
 	}
 
 	/** The episode coords to seed for a bulk mark, from the season summaries + any per-episode data. */

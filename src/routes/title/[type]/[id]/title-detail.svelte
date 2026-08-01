@@ -33,6 +33,7 @@
 	import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import PlayIcon from '@lucide/svelte/icons/play';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import StarIcon from '@lucide/svelte/icons/star';
 	import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 
@@ -106,6 +107,11 @@
 		void sync.revision;
 		tracking.load();
 	});
+	// Keeps season summaries live despite `tracking`'s frozen identity above (MRQ-146) — otherwise a
+	// title opened from a stale local cache never picks up newly-synced season data.
+	$effect(() => {
+		tracking.updateSeasons(detail.seasons);
+	});
 
 	// Tracking status + favorite of the *similar* titles, for the badge + heart on each card — we
 	// already hold this offline, keyed by our derived media id. Reloaded on sync pulls / navigation.
@@ -148,6 +154,12 @@
 		selectedSeason !== null
 			? (detail.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
 			: null
+	);
+	// Whether a bulk mark of the selected season right now would under-seed — see
+	// `TrackingState.readyToMarkSeason`.
+	const seasonNotReady = $derived(
+		selectedSeasonSummary !== null &&
+			!tracking.readyToMarkSeason(selectedSeasonSummary.seasonNumber)
 	);
 	let seasonConfirmOpen = $state(false);
 
@@ -690,9 +702,15 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						size="sm"
 						class="self-start"
 						onclick={() => (seasonConfirmOpen = true)}
-						disabled={tracking.busy}
+						disabled={tracking.busy || seasonNotReady}
+						aria-busy={seasonNotReady}
 					>
-						Mark {selectedSeasonSummary.name} watched
+						{#if seasonNotReady}
+							<RefreshCwIcon class="size-4 animate-spin" />
+							Loading episodes…
+						{:else}
+							Mark {selectedSeasonSummary.name} watched
+						{/if}
 					</Button>
 					<ConfirmDialog
 						bind:open={seasonConfirmOpen}

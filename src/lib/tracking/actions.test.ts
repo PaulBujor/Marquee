@@ -3,8 +3,10 @@ import {
 	airedEpisodes,
 	canRate,
 	episodesToMark,
+	hasSufficientEpisodeData,
 	isAired,
 	isSeasonFullyWatched,
+	isSeriesFullyWatched,
 	isSpecialsSeason,
 	isStillAiring,
 	mainEpisodes,
@@ -179,6 +181,20 @@ describe('isSeasonFullyWatched', () => {
 	});
 });
 
+describe('isSeriesFullyWatched', () => {
+	it('is true when every aired episode across all seasons is watched (unaired ignored)', () => {
+		expect(isSeriesFullyWatched(show, new Set(['1:1', '1:2', '2:1']), TODAY)).toBe(true);
+	});
+
+	it('is false when any aired episode, in any season, is missing', () => {
+		expect(isSeriesFullyWatched(show, new Set(['1:1', '1:2']), TODAY)).toBe(false);
+	});
+
+	it('is false when nothing has aired yet', () => {
+		expect(isSeriesFullyWatched([], new Set(), TODAY)).toBe(false);
+	});
+});
+
 describe('isStillAiring', () => {
 	it('is true while in production', () => {
 		expect(isStillAiring(show, true, TODAY)).toBe(true);
@@ -288,6 +304,96 @@ describe('episodesToMark', () => {
 			{ seasonNumber: 2, episodeCount: 2, airDate: null } // unknown
 		];
 		expect(episodesToMark(seasons, [], false, TODAY)).toEqual([]);
+	});
+});
+
+describe('hasSufficientEpisodeData', () => {
+	const TODAY = '2026-07-24';
+
+	it('is ready for a finished show even with no per-episode data (count fallback resolves it)', () => {
+		const finished: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 8, airDate: '2020-01-01' }];
+		expect(hasSufficientEpisodeData(finished, [], false, TODAY)).toBe(true);
+	});
+
+	it('is not ready for an in-production show whose aired season has no per-episode data', () => {
+		const airing: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 8, airDate: '2026-06-01' }];
+		expect(hasSufficientEpisodeData(airing, [], true, TODAY)).toBe(false);
+	});
+
+	it('is ready once per-episode data fully covers that season, even in production', () => {
+		const airing: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 2, airDate: '2026-06-01' }];
+		const dated: DatedEpisode[] = [ep(1, 1, '2026-06-01'), ep(1, 2, '2026-06-08')];
+		expect(hasSufficientEpisodeData(airing, dated, true, TODAY)).toBe(true);
+	});
+
+	it('is not ready when per-episode data only partially covers an aired season', () => {
+		const airing: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 8, airDate: '2026-06-01' }];
+		const dated: DatedEpisode[] = [ep(1, 1, '2026-06-01')]; // 1 of 8 episodes known
+		expect(hasSufficientEpisodeData(airing, dated, true, TODAY)).toBe(false);
+	});
+
+	it('is ready when the season has not aired yet, regardless of production status or data', () => {
+		const future: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 8, airDate: '2999-01-01' }];
+		expect(hasSufficientEpisodeData(future, [], true, TODAY)).toBe(true);
+	});
+
+	it('is not ready when no season summaries have loaded at all', () => {
+		expect(hasSufficientEpisodeData([], [], null, TODAY)).toBe(false);
+	});
+
+	it('skips Specials — an unresolved Specials season never blocks readiness', () => {
+		const seasons: SeasonSummary[] = [
+			{ seasonNumber: 0, episodeCount: 3, airDate: '2019-01-01' }, // Specials, in-production, no data
+			{ seasonNumber: 1, episodeCount: 2, airDate: '2020-01-01' } // finished, resolves by count
+		];
+		expect(hasSufficientEpisodeData(seasons, [], false, TODAY)).toBe(true);
+	});
+
+	it('respects seasonFilter, ignoring other unresolved seasons', () => {
+		// `inProduction` is show-level (not per-season), so season 1 only resolves here via its own
+		// dated rows — season 2 has none and stays unresolved.
+		const seasons: SeasonSummary[] = [
+			{ seasonNumber: 1, episodeCount: 2, airDate: '2020-01-01' },
+			{ seasonNumber: 2, episodeCount: 8, airDate: '2026-06-01' } // in production, unresolved
+		];
+		const dated: DatedEpisode[] = [ep(1, 1, '2020-01-01'), ep(1, 2, '2020-02-01')];
+		expect(hasSufficientEpisodeData(seasons, dated, true, TODAY, 1)).toBe(true);
+		expect(hasSufficientEpisodeData(seasons, dated, true, TODAY, 2)).toBe(false);
+	});
+});
+
+// markSeriesWatched (tracking.svelte.ts) composes exactly these two calls.
+describe('episodesToMark + reconciledStatus composition never forces completed on a partial seed', () => {
+	const TODAY = '2026-07-24';
+
+	it('a zero seed (in-production show, no per-episode data yet) does not force completed', () => {
+		const airing: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 8, airDate: '2026-06-01' }];
+		const seeded = episodesToMark(airing, [], true, TODAY);
+		expect(seeded).toEqual([]);
+		expect(reconciledStatus('watching', seeded.length, 8, true)).not.toBe('completed');
+	});
+
+	it('a partial seed (one season resolved via dated rows, one unresolved) does not force completed', () => {
+		// `inProduction` is show-level, so season 1 only resolves here via its own dated rows —
+		// season 2 has none and stays unresolved.
+		const seasons: SeasonSummary[] = [
+			{ seasonNumber: 1, episodeCount: 2, airDate: '2020-01-01' },
+			{ seasonNumber: 2, episodeCount: 8, airDate: '2026-06-01' } // in production, unresolved
+		];
+		const dated: DatedEpisode[] = [ep(1, 1, '2020-01-01'), ep(1, 2, '2020-02-01')];
+		const seeded = episodesToMark(seasons, dated, true, TODAY);
+		expect(seeded).toHaveLength(2); // only season 1 resolved
+		expect(reconciledStatus('watching', seeded.length, 10, true)).not.toBe('completed');
+	});
+
+	it('a full seed (finished show, everything resolved) does complete', () => {
+		const finished: SeasonSummary[] = [
+			{ seasonNumber: 1, episodeCount: 2, airDate: '2020-01-01' },
+			{ seasonNumber: 2, episodeCount: 4, airDate: '2021-01-01' }
+		];
+		const seeded = episodesToMark(finished, [], false, TODAY);
+		expect(seeded).toHaveLength(6);
+		expect(reconciledStatus('watching', seeded.length, 6, false)).toBe('completed');
 	});
 });
 
