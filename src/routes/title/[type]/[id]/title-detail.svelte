@@ -106,10 +106,8 @@
 		void sync.revision;
 		tracking.load();
 	});
-	// The base→enriched upgrade above is untracked on `tracking`'s identity (MRQ-146), but its season
-	// summaries still need to reach the *existing* instance — otherwise a title opened from a stale
-	// cached copy (empty/partial local `seasons`) would seed `markSeriesWatched` from that stale
-	// snapshot for the rest of the page's life, even after the network detail lands. Keep it live.
+	// Keeps season summaries live despite `tracking`'s frozen identity above (MRQ-146) — otherwise a
+	// title opened from a stale local cache never picks up newly-synced season data.
 	$effect(() => {
 		tracking.updateSeasons(detail.seasons);
 	});

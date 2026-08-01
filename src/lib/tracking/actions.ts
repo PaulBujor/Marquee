@@ -190,14 +190,11 @@ export function isSeriesFullyWatched(
 }
 
 /**
- * Whether `episodesToMark` has enough local data to enumerate every aired episode accurately —
- * the readiness gate for the bulk "mark watched" controls (MRQ-130's other half: preventing a
- * false-`completed` write, not just seeding what's available). Mirrors `episodesToMark`'s own
- * per-season resolution: a season with no per-episode dates is only resolvable by its `episodeCount`
- * once the show is known **finished** (`inProduction === false`); while still in production
- * (`true`, or unknown), an aired season with no per-episode rows can't be enumerated and blocks
- * readiness. A season that hasn't aired yet needs no data. No seasons at all (summaries not loaded)
- * is never ready — we can't rule out an aired-but-unseen season.
+ * Whether `episodesToMark` has enough local data to enumerate every aired episode accurately.
+ * Mirrors its own per-season resolution: a season with no per-episode dates is only resolvable by
+ * `episodeCount` once the show is known **finished** (`inProduction === false`); still in production
+ * (`true`, or unknown), an aired season with no per-episode rows can't be enumerated. No seasons at
+ * all (summaries not loaded) is never ready — an aired-but-unseen season can't be ruled out.
  */
 export function hasSufficientEpisodeData(
 	seasons: SeasonSummary[],
@@ -206,18 +203,18 @@ export function hasSufficientEpisodeData(
 	today: string,
 	seasonFilter?: number
 ): boolean {
-	const relevant = seasons.filter(
+	const seasonsToCheck = seasons.filter(
 		(s) =>
 			!isSpecialsSeason(s.seasonNumber) &&
 			(seasonFilter === undefined || s.seasonNumber === seasonFilter)
 	);
-	if (relevant.length === 0) return false;
-	for (const s of relevant) {
-		if (s.airDate === null || s.airDate > today) continue; // hasn't aired — nothing to resolve
+	if (seasonsToCheck.length === 0) return false;
+	for (const s of seasonsToCheck) {
+		if (s.airDate === null || s.airDate > today) continue;
 		const seasonDated = dated.filter((e) => e.season === s.seasonNumber);
-		if (seasonDated.length > 0) continue; // per-episode dates present — resolvable
-		if (inProduction !== true) continue; // finished/unknown — count fallback resolves it
-		return false; // aired season, still in production, no per-episode data yet
+		if (seasonDated.length > 0) continue;
+		if (inProduction !== true) continue;
+		return false;
 	}
 	return true;
 }

@@ -57,11 +57,10 @@ export class TrackingState {
 	/**
 	 * Season summaries (count + air date) the detail page holds up-front. They let a bulk "mark
 	 * watched" enumerate episodes immediately — before the media channel syncs per-episode air dates
-	 * — so a fresh add can be marked watched without the unmark/re-mark dance (MRQ-130). Reactive
-	 * (`$state`, not constructor-frozen): the page's `detail` upgrades in place from a cached/offline
-	 * copy to the enriched network copy without this instance being recreated (see `title-detail.svelte`
-	 * — recreating would reset `view`/`ready`/`watched`, MRQ-146), so `updateSeasons` is how that
-	 * upgrade reaches the readiness/seeding logic below.
+	 * — so a fresh add can be marked watched without the unmark/re-mark dance (MRQ-130). `$state`,
+	 * not constructor-frozen: `title-detail.svelte` recreates this instance only when the media id
+	 * changes, not when `detail` upgrades from a cached copy to the enriched one (MRQ-146), so this
+	 * needs its own update path — see `updateSeasons`.
 	 */
 	#seasons = $state<SeasonSummary[]>([]);
 
@@ -206,12 +205,10 @@ export class TrackingState {
 	}
 
 	/**
-	 * Mark the whole series watched: every **aired** episode watched, then reconcile the status from
-	 * actual progress (rather than forcing `completed`) — so a seed that can't cover every aired
-	 * episode yet (see {@link readyToMarkSeries}) leaves the show `watching` instead of falsely
-	 * completing it with unmarked episodes. Bulk — one `episode.watched` per episode (the sync push
-	 * cap bounds delivery). Enumerated from the season summaries, so it works the instant a title is
-	 * added (MRQ-130).
+	 * Mark the whole series watched: every **aired** episode watched, then the status reconciled from
+	 * actual progress (see {@link readyToMarkSeries}). Bulk — one `episode.watched` per episode (the
+	 * sync push cap bounds delivery). Enumerated from the season summaries, so it works the instant a
+	 * title is added (MRQ-130).
 	 */
 	markSeriesWatched(): Promise<void> {
 		return this.#run(async () => {
@@ -222,10 +219,9 @@ export class TrackingState {
 	}
 
 	/**
-	 * Whether there's enough local season/episode data to seed every aired episode via
-	 * {@link markSeriesWatched} — i.e. `#markable()` won't silently under-seed an in-production
-	 * season it can't yet enumerate. Reactive: tracks `#seasons` (updated by {@link updateSeasons})
-	 * and `episodes` (reloaded on sync pulls), so it clears once the media channel catches up.
+	 * Whether there's enough local season/episode data for {@link markSeriesWatched} to seed every
+	 * aired episode without under-seeding an in-production season it can't yet enumerate. Reactive:
+	 * tracks `#seasons` (via {@link updateSeasons}) and `episodes` (reloaded on sync pulls).
 	 */
 	readyToMarkSeries(): boolean {
 		return hasSufficientEpisodeData(this.#seasons, this.episodes, this.#inProduction, todayIso());

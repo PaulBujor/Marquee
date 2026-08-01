@@ -356,21 +356,14 @@ describe('hasSufficientEpisodeData', () => {
 	});
 });
 
-// `markSeriesWatched` (tracking.svelte.ts) composes exactly `episodesToMark` (seed) then
-// `reconciledStatus` (derive status from the seed) — it must never force `completed` directly. These
-// exercise that composition against the regression: a zero/partial seed (insufficient local episode
-// data, per `hasSufficientEpisodeData` above) must leave the status short of `completed`, since the
-// server and client projections apply `status` and `episode_watches` independently with no
-// cross-check (see `src/lib/server/sync/projection.ts`) — a false `completed` write is unrecoverable
-// without a UI escape hatch, which is what this composition prevents at the source.
-describe('markSeriesWatched composition (seed via episodesToMark, then reconciledStatus)', () => {
+// markSeriesWatched (tracking.svelte.ts) composes exactly these two calls.
+describe('episodesToMark + reconciledStatus composition never forces completed on a partial seed', () => {
 	const TODAY = '2026-07-24';
 
 	it('a zero seed (in-production show, no per-episode data yet) does not force completed', () => {
 		const airing: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 8, airDate: '2026-06-01' }];
 		const seeded = episodesToMark(airing, [], true, TODAY);
 		expect(seeded).toEqual([]);
-		// `#ensureTracked` starts a fresh title at `watching`; a zero seed must not jump to completed.
 		expect(reconciledStatus('watching', seeded.length, 8, true)).not.toBe('completed');
 	});
 
@@ -384,11 +377,10 @@ describe('markSeriesWatched composition (seed via episodesToMark, then reconcile
 		const dated: DatedEpisode[] = [ep(1, 1, '2020-01-01'), ep(1, 2, '2020-02-01')];
 		const seeded = episodesToMark(seasons, dated, true, TODAY);
 		expect(seeded).toHaveLength(2); // only season 1 resolved
-		// The true aired count (10) exceeds what was actually seeded (2) — must stay short of completed.
 		expect(reconciledStatus('watching', seeded.length, 10, true)).not.toBe('completed');
 	});
 
-	it('a full seed (finished show, everything resolved) does complete, as before', () => {
+	it('a full seed (finished show, everything resolved) does complete', () => {
 		const finished: SeasonSummary[] = [
 			{ seasonNumber: 1, episodeCount: 2, airDate: '2020-01-01' },
 			{ seasonNumber: 2, episodeCount: 4, airDate: '2021-01-01' }

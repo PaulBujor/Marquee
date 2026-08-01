@@ -25,12 +25,9 @@
 	let markSeriesOpen = $state(false);
 
 	const view = $derived(tracking.view);
-	// A show's "done" reads the real per-episode watch state, not the raw `status` field — a status
-	// stuck at `completed` with unmarked episodes (e.g. a bulk mark that under-seeded, see
-	// `markSeriesWatched`) must not present as done, or the only recovery affordance (re-running the
-	// bulk mark) becomes unreachable: the button would show "Watched" and just step status back and
-	// forth without ever re-seeding. Movies have no episode log to check against, so `status` stays
-	// authoritative there.
+	// A show's "done" reads real episode-watch state, not the raw `status` field, which can be stuck
+	// at `completed` with episodes unmarked (see `markSeriesWatched`). Movies have no episode log, so
+	// `status` stays authoritative there.
 	const done = $derived(
 		view.tracked &&
 			(type === 'show'
@@ -53,9 +50,8 @@
 		type === 'show' && view.tracked && tracking.watched.size > 0 && tracking.nextEpisode() === null
 	);
 	const watchedState = $derived(done || (caughtUp && view.tracked && view.status === 'watching'));
-	// Whether a bulk "mark series watched" right now would under-seed (an in-production season we
-	// can't yet enumerate — see `TrackingState.readyToMarkSeries`). Only gates the not-yet-watched
-	// state; stepping back from "Watched" touches no episode data, so it's never blocked.
+	// Would a bulk mark under-seed right now (see `TrackingState.readyToMarkSeries`)? Excludes
+	// `watchedState`, since stepping back from "Watched" touches no episode data.
 	const seriesNotReady = $derived(
 		type === 'show' && !watchedState && !tracking.readyToMarkSeries()
 	);
