@@ -158,7 +158,8 @@
 	// Whether a bulk mark of the selected season right now would under-seed — see
 	// `TrackingState.readyToMarkSeason`.
 	const seasonNotReady = $derived(
-		selectedSeasonSummary !== null && !tracking.readyToMarkSeason(selectedSeasonSummary.seasonNumber)
+		selectedSeasonSummary !== null &&
+			!tracking.readyToMarkSeason(selectedSeasonSummary.seasonNumber)
 	);
 	let seasonConfirmOpen = $state(false);
 
