@@ -19,7 +19,13 @@ export type {
 	MarqueeDatabase
 } from './db';
 export { getUnsynced, markSynced, enqueueEvent } from './outbox';
-export { applyEventToIdb, getTracking, getTrackingByMediaId, getEpisodeWatches } from './state';
+export {
+	applyEventToIdb,
+	getTracking,
+	getTrackingByMediaId,
+	getEpisodeWatches,
+	getAllEpisodeWatches
+} from './state';
 export {
 	putMedia,
 	getMedia,

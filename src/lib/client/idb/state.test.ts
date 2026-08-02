@@ -7,7 +7,13 @@ import {
 	type SyncEventType
 } from '$lib/sync/events';
 import { openDb, setActiveUser } from './db';
-import { applyEventToIdb, getEpisodeWatches, getTracking, getTrackingByMediaId } from './state';
+import {
+	applyEventToIdb,
+	getAllEpisodeWatches,
+	getEpisodeWatches,
+	getTracking,
+	getTrackingByMediaId
+} from './state';
 
 setActiveUser('test-user'); // the store is namespaced per user; scope it before opening
 
@@ -122,5 +128,22 @@ describe('applyEventToIdb', () => {
 		await applyEventToIdb(ev('tracking.removed', MID, {}, 300));
 		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 200));
 		expect((await trackingRow(MID))?.removed).toBe(true); // removal@300 still wins
+	});
+});
+
+describe('getAllEpisodeWatches', () => {
+	it('returns watch rows across every show in one read', async () => {
+		const first = newMid();
+		const second = newMid();
+		await applyEventToIdb(ev('episode.watched', first, { season: 1, episode: 1 }, 100));
+		await applyEventToIdb(ev('episode.watched', second, { season: 2, episode: 5 }, 100));
+		// Unwatched rows are returned too — callers decide; the export filters them.
+		await applyEventToIdb(ev('episode.unwatched', second, { season: 2, episode: 6 }, 100));
+
+		const all = await getAllEpisodeWatches();
+		const mine = all.filter((w) => w.mediaId === first || w.mediaId === second);
+		expect(mine).toHaveLength(3);
+		expect(mine.filter((w) => w.mediaId === first)).toHaveLength(1);
+		expect(mine.find((w) => w.season === 2 && w.episode === 6)?.watched).toBe(false);
 	});
 });
