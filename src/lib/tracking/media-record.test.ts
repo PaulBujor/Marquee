@@ -1,6 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { tmdbExternalId, tmdbMediaId } from '$lib/sync/events';
-import { mediaRecordFromSearch } from './media-record';
+import { mediaRecordFromSearch, parseTmdbExternalId } from './media-record';
+
+describe('parseTmdbExternalId', () => {
+	it('splits a well-formed external id into type and numeric id', () => {
+		expect(parseTmdbExternalId('movie/27205')).toEqual({ type: 'movie', tmdbId: 27205 });
+		expect(parseTmdbExternalId('show/95396')).toEqual({ type: 'show', tmdbId: 95396 });
+	});
+
+	it('rejects ids that could not address a title', () => {
+		expect(parseTmdbExternalId('27205')).toBeNull();
+		expect(parseTmdbExternalId('movie/')).toBeNull();
+		expect(parseTmdbExternalId('movie/abc')).toBeNull();
+		expect(parseTmdbExternalId('movie/0')).toBeNull();
+		expect(parseTmdbExternalId('movie/-3')).toBeNull();
+		expect(parseTmdbExternalId('movie/12.5')).toBeNull();
+		expect(parseTmdbExternalId('episode/12')).toBeNull();
+		expect(parseTmdbExternalId('')).toBeNull();
+	});
+});
 
 describe('mediaRecordFromSearch', () => {
 	it('builds a linked, behind (version 0) snapshot with our derived id', () => {

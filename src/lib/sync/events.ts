@@ -210,12 +210,18 @@ export function episodeKey(userId: string, media: string, season: number, episod
 /**
  * Build a new event, stamping the client-owned fields. `entityId` is the target
  * `mediaId`; use {@link mediaId} to derive it.
+ *
+ * `clock` defaults to now, which is what a live user action wants. Pass an explicit value only
+ * when replaying something that genuinely happened earlier — an import seeding a restored library
+ * uses the exported `addedAt`, so the events merge by last-write-wins against their real age
+ * rather than winning every conflict by virtue of being replayed today.
  */
 export function createEvent<T extends SyncEventType>(
 	type: T,
 	entityId: string,
 	payload: EventPayloadMap[T],
-	deviceId: string
+	deviceId: string,
+	clock: number = Date.now()
 ): EventEnvelope<T> {
 	return {
 		id: crypto.randomUUID(),
@@ -223,7 +229,7 @@ export function createEvent<T extends SyncEventType>(
 		entityId,
 		payload,
 		deviceId,
-		clientCreatedAt: Date.now(),
+		clientCreatedAt: clock,
 		schemaVersion: EVENT_SCHEMA_VERSION
 	};
 }

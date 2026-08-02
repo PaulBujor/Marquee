@@ -18,9 +18,10 @@ export type {
 	ClientEpisodeWatch,
 	MarqueeDatabase
 } from './db';
-export { getUnsynced, markSynced, enqueueEvent } from './outbox';
+export { getUnsynced, markSynced, enqueueEvent, enqueueEvents } from './outbox';
 export {
 	applyEventToIdb,
+	applyEventsToIdb,
 	getTracking,
 	getTrackingByMediaId,
 	getEpisodeWatches,

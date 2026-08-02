@@ -1,5 +1,22 @@
 import { tmdbExternalId, tmdbMediaId, type MediaRecord } from '$lib/sync/events';
 
+/**
+ * Split a TMDB external id (`movie/27205`) back into its parts, or null when it isn't one we could
+ * address a title with. The inverse of {@link tmdbExternalId} — used wherever a stored external id
+ * has to become a TMDB request or a detail-page route.
+ */
+export function parseTmdbExternalId(
+	externalId: string
+): { type: 'movie' | 'show'; tmdbId: number } | null {
+	const [type, rest] = externalId.split('/');
+	if (type !== 'movie' && type !== 'show') return null;
+	// Reject anything Number() would coerce loosely (empty, floats, signs, whitespace).
+	if (!/^\d+$/.test(rest ?? '')) return null;
+	const tmdbId = Number(rest);
+	if (tmdbId <= 0) return null;
+	return { type, tmdbId };
+}
+
 /** The minimal fields a search result carries — enough to seed a media snapshot for a quick add. */
 export interface SearchLikeMedia {
 	tmdbId: number;

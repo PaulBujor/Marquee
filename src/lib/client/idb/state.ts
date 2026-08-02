@@ -4,7 +4,8 @@
  * per-field last-write-wins by `clientCreatedAt` — so local optimistic state and
  * pulled server state converge to the same result regardless of arrival order.
  */
-import { openDb, type ClientEpisodeWatch, type ClientTracking, type MarqueeDatabase } from './db';
+import type { IDBPTransaction } from 'idb';
+import { openDb, type ClientEpisodeWatch, type ClientTracking, type MarqueeDB } from './db';
 import type { EventEnvelope, EventPayloadMap } from '$lib/sync/events';
 
 /** Client episode key — no userId prefix (the store is already single-user). */
@@ -15,16 +16,20 @@ function localEpisodeId(mediaId: string, season: number, episode: number): strin
 type TrackingClock =
 	'statusUpdatedAt' | 'favoriteUpdatedAt' | 'ratingUpdatedAt' | 'removedUpdatedAt';
 
-/** Read-modify-write a tracking row under LWW guard on `clockField`. */
+/** The stores a projection writes. Both are held by one transaction so a batch commits as a unit. */
+const PROJECTION_STORES = ['tracking', 'episodeWatches'] as const;
+type ProjectionTx = IDBPTransaction<MarqueeDB, typeof PROJECTION_STORES, 'readwrite'>;
+
+/** Read-modify-write a tracking row under LWW guard on `clockField`, inside a caller's transaction. */
 async function upsertTracking(
-	db: MarqueeDatabase,
+	tx: ProjectionTx,
 	mediaId: string,
 	clock: number,
 	clockField: TrackingClock,
 	mutate: (t: ClientTracking) => void
 ): Promise<void> {
-	const transaction = db.transaction('tracking', 'readwrite');
-	const existing = await transaction.store.get(mediaId);
+	const store = tx.objectStore('tracking');
+	const existing = await store.get(mediaId);
 	const row: ClientTracking = existing ?? {
 		mediaId,
 		status: 'want_to_watch',
@@ -43,13 +48,11 @@ async function upsertTracking(
 		mutate(row);
 		row[clockField] = clock;
 	}
-	await transaction.store.put(row);
-	await transaction.done;
+	await store.put(row);
 }
 
-/** Apply a single event to the local materialized stores (idempotent, LWW). */
-export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
-	const db = await openDb();
+/** Apply one event within an open projection transaction (idempotent, LWW). */
+async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<void> {
 	const clock = event.clientCreatedAt;
 	const entityId = event.entityId;
 
@@ -59,37 +62,37 @@ export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 			// Media is reference data, handled off the event log; an add only asserts tracking
 			// state. Status and revive are independent LWW fields (mirrors the server): a stale
 			// add can't un-remove a title a newer removal tombstoned.
-			await upsertTracking(db, entityId, clock, 'statusUpdatedAt', (t) => {
+			await upsertTracking(tx, entityId, clock, 'statusUpdatedAt', (t) => {
 				t.status = payload.status;
 			});
-			await upsertTracking(db, entityId, clock, 'removedUpdatedAt', (t) => {
+			await upsertTracking(tx, entityId, clock, 'removedUpdatedAt', (t) => {
 				t.removed = false;
 			});
 			break;
 		}
 		case 'tracking.status_changed': {
 			const payload = event.payload as EventPayloadMap['tracking.status_changed'];
-			await upsertTracking(db, entityId, clock, 'statusUpdatedAt', (t) => {
+			await upsertTracking(tx, entityId, clock, 'statusUpdatedAt', (t) => {
 				t.status = payload.status;
 			});
 			break;
 		}
 		case 'tracking.favorite_toggled': {
 			const payload = event.payload as EventPayloadMap['tracking.favorite_toggled'];
-			await upsertTracking(db, entityId, clock, 'favoriteUpdatedAt', (t) => {
+			await upsertTracking(tx, entityId, clock, 'favoriteUpdatedAt', (t) => {
 				t.favorite = payload.favorite;
 			});
 			break;
 		}
 		case 'tracking.rated': {
 			const payload = event.payload as EventPayloadMap['tracking.rated'];
-			await upsertTracking(db, entityId, clock, 'ratingUpdatedAt', (t) => {
+			await upsertTracking(tx, entityId, clock, 'ratingUpdatedAt', (t) => {
 				t.rating = payload.rating;
 			});
 			break;
 		}
 		case 'tracking.removed': {
-			await upsertTracking(db, entityId, clock, 'removedUpdatedAt', (t) => {
+			await upsertTracking(tx, entityId, clock, 'removedUpdatedAt', (t) => {
 				t.removed = true;
 			});
 			break;
@@ -99,8 +102,8 @@ export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 			const payload = event.payload as EventPayloadMap['episode.watched'];
 			const watched = event.type === 'episode.watched';
 			const id = localEpisodeId(entityId, payload.season, payload.episode);
-			const transaction = db.transaction('episodeWatches', 'readwrite');
-			const current = await transaction.store.get(id);
+			const store = tx.objectStore('episodeWatches');
+			const current = await store.get(id);
 			if (!current || clock >= current.updatedAt) {
 				const row: ClientEpisodeWatch = {
 					id,
@@ -110,12 +113,32 @@ export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 					watched,
 					updatedAt: clock
 				};
-				await transaction.store.put(row);
+				await store.put(row);
 			}
-			await transaction.done;
 			break;
 		}
 	}
+}
+
+/** Apply a single event to the local materialized stores (idempotent, LWW). */
+export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
+	const db = await openDb();
+	const tx = db.transaction(PROJECTION_STORES, 'readwrite');
+	await applyEventInTx(tx, event);
+	await tx.done;
+}
+
+/**
+ * Apply many events in **one** transaction — same rules as {@link applyEventToIdb}, and the
+ * per-field LWW guards keep the result independent of the order passed in. For imports: one at a
+ * time, a few hundred titles runs into thousands of round trips with the UI blocked behind them.
+ */
+export async function applyEventsToIdb(events: EventEnvelope[]): Promise<void> {
+	if (events.length === 0) return;
+	const db = await openDb();
+	const tx = db.transaction(PROJECTION_STORES, 'readwrite');
+	for (const event of events) await applyEventInTx(tx, event);
+	await tx.done;
 }
 
 /** All non-removed tracking rows (optionally filtered by status). */

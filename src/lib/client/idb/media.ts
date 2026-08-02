@@ -4,7 +4,7 @@
  */
 import { openDb, type ClientEpisode, type ClientMedia, type ClientSeason } from './db';
 import type { MediaProvider, MediaRecord } from '$lib/sync/events';
-import type { SearchLikeMedia } from '$lib/tracking/media-record';
+import { parseTmdbExternalId, type SearchLikeMedia } from '$lib/tracking/media-record';
 
 function seasonKey(mediaId: string, seasonNumber: number): string {
 	return `${mediaId}::s${seasonNumber}`;
@@ -64,10 +64,10 @@ export async function searchLocalMedia(query: string, limit = 20): Promise<Searc
 	for (const m of await getAllMedia()) {
 		if (m.source !== 'linked' || m.externalId === null) continue;
 		if (!m.title.toLowerCase().includes(q)) continue;
-		const tmdbId = Number(m.externalId.split('/')[1]);
-		if (!Number.isInteger(tmdbId) || tmdbId <= 0) continue;
+		const ref = parseTmdbExternalId(m.externalId);
+		if (!ref) continue;
 		matches.push({
-			tmdbId,
+			tmdbId: ref.tmdbId,
 			type: m.type,
 			title: m.title,
 			year: m.year,
