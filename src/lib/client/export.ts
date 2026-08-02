@@ -21,9 +21,17 @@ export async function collectExport(now: Date = new Date()): Promise<MarqueeExpo
 	return buildExport({ tracking, media, watches, exportedAt: now });
 }
 
-/** `marquee-export-2026-08-01.json` — dated so repeated exports don't overwrite each other. */
+/**
+ * `marquee-export-2026-08-01.json` — dated so repeated exports don't overwrite each other.
+ *
+ * Uses the **local** calendar date, not UTC: someone exporting just after midnight should get
+ * today's date in the filename, not yesterday's. (`exportedAt` inside the document stays UTC, as
+ * an instant should.)
+ */
 export function exportFilename(now: Date = new Date()): string {
-	return `${EXPORT_FILENAME_PREFIX}-${now.toISOString().slice(0, 10)}.json`;
+	const month = String(now.getMonth() + 1).padStart(2, '0');
+	const day = String(now.getDate()).padStart(2, '0');
+	return `${EXPORT_FILENAME_PREFIX}-${now.getFullYear()}-${month}-${day}.json`;
 }
 
 /**
@@ -36,12 +44,16 @@ export async function downloadExport(): Promise<number> {
 	// Pretty-printed: the file is meant to be readable, and it compresses away in transit anyway.
 	const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
 	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = exportFilename(now);
+	// Firefox only dispatches a synthetic click on an element that's in the document.
+	link.style.display = 'none';
+	document.body.appendChild(link);
 	try {
-		const link = document.createElement('a');
-		link.href = url;
-		link.download = exportFilename(now);
 		link.click();
 	} finally {
+		link.remove();
 		// Safari needs the URL to outlive the click; a task turn is enough, then it can be reclaimed.
 		setTimeout(() => URL.revokeObjectURL(url), 0);
 	}

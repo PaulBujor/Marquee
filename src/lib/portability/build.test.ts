@@ -64,6 +64,67 @@ function watch(
 	};
 }
 
+describe('buildExport resilience', () => {
+	// Export is the escape hatch for getting your data out. One unreadable row must not be the
+	// reason the whole file can't be produced.
+	it('survives a tracking row with a missing clock', () => {
+		const broken = tracking({ mediaId: INCEPTION });
+		// A row written by an older schema version, or otherwise corrupt.
+		(broken as { addedAt: unknown }).addedAt = undefined;
+
+		const doc = buildExport({
+			tracking: [broken],
+			media: [],
+			watches: [],
+			exportedAt: EXPORTED_AT
+		});
+
+		expect(doc.titles).toHaveLength(1);
+		expect(doc.titles[0].addedAt).toBe(EXPORTED_AT.toISOString());
+	});
+
+	it('survives a watch row with a corrupt clock', () => {
+		const broken = watch(SEVERANCE, 1, 1);
+		(broken as { updatedAt: unknown }).updatedAt = Number.NaN;
+
+		const doc = buildExport({
+			tracking: [tracking({ mediaId: SEVERANCE })],
+			media: [],
+			watches: [broken],
+			exportedAt: EXPORTED_AT
+		});
+
+		expect(doc.titles[0].watchedEpisodes[0].watchedAt).toBe(EXPORTED_AT.toISOString());
+	});
+
+	it('never reports a status change from before the title was added', () => {
+		// A row that only ever saw a favorite/rating event keeps the initial 0 status clock, which
+		// would otherwise export as 1970.
+		const doc = buildExport({
+			tracking: [tracking({ mediaId: INCEPTION, statusUpdatedAt: 0 })],
+			media: [],
+			watches: [],
+			exportedAt: EXPORTED_AT
+		});
+
+		expect(doc.titles[0].statusChangedAt).toBe(doc.titles[0].addedAt);
+	});
+
+	it('orders titles the same way regardless of the device locale', () => {
+		const input = {
+			tracking: [tracking({ mediaId: 'a' }), tracking({ mediaId: 'b' })],
+			media: [media({ id: 'a', title: 'Ärger' }), media({ id: 'b', title: 'Zulu' })],
+			watches: [],
+			exportedAt: EXPORTED_AT
+		};
+
+		// Swedish sorts 'ä' after 'z'; English sorts it with 'a'. A locale-sensitive comparison would
+		// make the same library export in a different order on a different device.
+		const order = buildExport(input).titles.map((t) => t.title);
+		expect(order).toEqual(['Ärger', 'Zulu']);
+	});
+});
+
 describe('buildExport watched dates', () => {
 	it("exports a movie's completion clock, which is when it was watched", () => {
 		const completedAt = Date.UTC(2026, 5, 20, 18, 0, 0);

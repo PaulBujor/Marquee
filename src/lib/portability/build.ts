@@ -21,18 +21,38 @@ export interface ExportInput {
 	exportedAt: Date;
 }
 
+/**
+ * Fixed locale, not the device's. Collation is locale-dependent — Swedish orders 'ä' after 'z'
+ * where English orders it with 'a' — so sorting by the device default would make the same library
+ * export in a different order on a different phone, and two exports stop diffing cleanly.
+ */
+const collator = new Intl.Collator('en', { sensitivity: 'variant' });
+
 /** Order titles the way a reader expects, so two exports of the same state diff cleanly. */
 function compareTitles(a: ExportedTitle, b: ExportedTitle): number {
 	// Entries with no media row yet have no name to sort by, so they collect at the end.
 	if (a.title === null || b.title === null) {
 		if (a.title !== b.title) return a.title === null ? 1 : -1;
-		return a.mediaId.localeCompare(b.mediaId);
+		return collator.compare(a.mediaId, b.mediaId);
 	}
-	return a.title.localeCompare(b.title) || a.mediaId.localeCompare(b.mediaId);
+	return collator.compare(a.title, b.title) || collator.compare(a.mediaId, b.mediaId);
 }
 
 function compareEpisodes(a: ExportedEpisode, b: ExportedEpisode): number {
 	return a.season - b.season || a.episode - b.episode;
+}
+
+/**
+ * An epoch-ms clock as an ISO string, falling back when the value isn't a usable date.
+ *
+ * `new Date(x).toISOString()` throws a `RangeError` on `NaN` or `undefined`, so a single corrupt
+ * or missing clock — a row written by an older schema version, say — would otherwise abort the
+ * whole export. Losing one date is recoverable; losing the ability to get your data out is not.
+ */
+function isoClock(value: number | undefined, fallback: Date): string {
+	if (typeof value !== 'number' || !Number.isFinite(value)) return fallback.toISOString();
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? fallback.toISOString() : date.toISOString();
 }
 
 /** Build the export document for a user's library. */
@@ -48,7 +68,7 @@ export function buildExport(input: ExportInput): MarqueeExport {
 		const episode = {
 			season: w.season,
 			episode: w.episode,
-			watchedAt: new Date(w.updatedAt).toISOString()
+			watchedAt: isoClock(w.updatedAt, input.exportedAt)
 		};
 		if (list) list.push(episode);
 		else watchedByMedia.set(w.mediaId, [episode]);
@@ -56,6 +76,11 @@ export function buildExport(input: ExportInput): MarqueeExport {
 
 	const titles = input.tracking.map((t): ExportedTitle => {
 		const m = mediaById.get(t.mediaId);
+		const addedAt = isoClock(t.addedAt, input.exportedAt);
+		// A row that only ever saw a favorite or rating event keeps the initial 0 status clock, which
+		// would export as 1970 and read as a watch date decades before the title existed. Nothing can
+		// have changed status before it was added, so the add is the floor.
+		const statusChangedAt = isoClock(t.statusUpdatedAt, input.exportedAt);
 		return {
 			mediaId: t.mediaId,
 			provider: m?.provider ?? null,
@@ -66,8 +91,8 @@ export function buildExport(input: ExportInput): MarqueeExport {
 			status: t.status,
 			favorite: t.favorite,
 			rating: t.rating,
-			addedAt: new Date(t.addedAt).toISOString(),
-			statusChangedAt: new Date(t.statusUpdatedAt).toISOString(),
+			addedAt,
+			statusChangedAt: statusChangedAt < addedAt ? addedAt : statusChangedAt,
 			watchedEpisodes: (watchedByMedia.get(t.mediaId) ?? []).sort(compareEpisodes)
 		};
 	});
