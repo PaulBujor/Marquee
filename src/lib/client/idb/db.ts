@@ -95,7 +95,7 @@ export type MetaKey = keyof MetaValues;
 /** A single `meta` row — a known key paired with its typed value. */
 export type MetaEntry = { [K in MetaKey]: { key: K; value: MetaValues[K] } }[MetaKey];
 
-interface MarqueeDB extends DBSchema {
+export interface MarqueeDB extends DBSchema {
 	events: {
 		key: string;
 		value: OutboxEvent;

@@ -21,6 +21,7 @@ export type {
 export { getUnsynced, markSynced, enqueueEvent, enqueueEvents } from './outbox';
 export {
 	applyEventToIdb,
+	applyEventsToIdb,
 	getTracking,
 	getTrackingByMediaId,
 	getEpisodeWatches,

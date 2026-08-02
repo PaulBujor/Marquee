@@ -9,6 +9,7 @@ import {
 import { openDb, setActiveUser } from './db';
 import {
 	applyEventToIdb,
+	applyEventsToIdb,
 	getAllEpisodeWatches,
 	getEpisodeWatches,
 	getTracking,
@@ -128,6 +129,74 @@ describe('applyEventToIdb', () => {
 		await applyEventToIdb(ev('tracking.removed', MID, {}, 300));
 		await applyEventToIdb(ev('tracking.added', MID, { status: 'watching' }, 200));
 		expect((await trackingRow(MID))?.removed).toBe(true); // removal@300 still wins
+	});
+});
+
+describe('applyEventsToIdb', () => {
+	it('materializes a batch the same way applying each event would', async () => {
+		const one = newMid();
+		const two = newMid();
+		await applyEventsToIdb([
+			ev('tracking.added', one, { status: 'watching' }, 100),
+			ev('tracking.rated', one, { rating: 4 }, 150),
+			ev('episode.watched', one, { season: 1, episode: 1 }, 200),
+			ev('tracking.added', two, { status: 'completed' }, 100),
+			ev('tracking.favorite_toggled', two, { favorite: true }, 120)
+		]);
+
+		expect(await trackingRow(one)).toMatchObject({ status: 'watching', rating: 4 });
+		expect(await trackingRow(two)).toMatchObject({ status: 'completed', favorite: true });
+		expect((await getEpisodeWatches(one))[0].watched).toBe(true);
+	});
+
+	it('applies last-write-wins within the batch regardless of order', async () => {
+		const mid = newMid();
+		await applyEventsToIdb([
+			ev('tracking.status_changed', mid, { status: 'completed' }, 300),
+			ev('tracking.status_changed', mid, { status: 'want_to_watch' }, 100)
+		]);
+
+		expect((await trackingRow(mid))?.status).toBe('completed');
+	});
+
+	it('keeps the earliest clock as the date added across the batch', async () => {
+		const mid = newMid();
+		await applyEventsToIdb([
+			ev('episode.watched', mid, { season: 1, episode: 2 }, 500),
+			ev('tracking.added', mid, { status: 'watching' }, 100)
+		]);
+
+		expect((await trackingRow(mid))?.addedAt).toBe(100);
+	});
+
+	it('uses one transaction for the whole batch, not one per event', async () => {
+		const db = await openDb();
+		const original = db.transaction.bind(db);
+		let opened = 0;
+		const spied = db as unknown as { transaction: unknown };
+		spied.transaction = (...args: unknown[]) => {
+			opened += 1;
+			return (original as (...a: unknown[]) => unknown)(...args);
+		};
+
+		const mid = newMid();
+		try {
+			await applyEventsToIdb([
+				ev('tracking.added', mid, { status: 'watching' }, 100),
+				ev('tracking.rated', mid, { rating: 5 }, 100),
+				ev('episode.watched', mid, { season: 1, episode: 1 }, 100),
+				ev('episode.watched', mid, { season: 1, episode: 2 }, 100)
+			]);
+		} finally {
+			spied.transaction = original;
+		}
+
+		// Applied one at a time this would be five (a `tracking.added` alone costs two).
+		expect(opened).toBe(1);
+	});
+
+	it('does nothing, and opens nothing, for an empty batch', async () => {
+		await expect(applyEventsToIdb([])).resolves.toBeUndefined();
 	});
 });
 
