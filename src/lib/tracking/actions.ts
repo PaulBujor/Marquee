@@ -54,6 +54,40 @@ export function canRate(type: 'movie' | 'show', status: TrackingStatus): boolean
 		: status === 'completed' || status === 'did_not_finish';
 }
 
+/** What the watched-date helpers need about a title: its kind, its status, and the two clocks. */
+export interface WatchedAtInput {
+	type: 'movie' | 'show';
+	status: TrackingStatus;
+	/** Epoch ms the status last changed — when a `completed` title became completed. */
+	statusUpdatedAt: number;
+	/** Epoch ms the most recent episode was marked watched, or null (movies / nothing watched). */
+	lastEpisodeWatchedAt: number | null;
+}
+
+/**
+ * When a title was (last) watched, or null when there's nothing meaningful to show. Both clocks
+ * are already carried by the materialized projections — the episode watch clock and the tracking
+ * row's status clock — so this reads history the app has always recorded but never surfaced.
+ *
+ * A movie only has the status clock, and only once it's `completed`. A show prefers its newest
+ * episode watch (the real "last watched"), falling back to the status clock for a series marked
+ * completed on a device that never synced the per-episode rows.
+ *
+ * These record **when the user marked it**, which is as close to a watch date as the event log
+ * gets; back-dating a watch would need the date on the event itself.
+ */
+export function watchedAt(input: WatchedAtInput): number | null {
+	if (input.type === 'show' && input.lastEpisodeWatchedAt !== null) {
+		return input.lastEpisodeWatchedAt;
+	}
+	return input.status === 'completed' ? input.statusUpdatedAt : null;
+}
+
+/** How to label that date: a finished title was "Watched", one still in progress "Last watched". */
+export function watchedAtLabel(input: WatchedAtInput): 'Watched' | 'Last watched' {
+	return input.status === 'completed' ? 'Watched' : 'Last watched';
+}
+
 /** An episode coordinate with its air date — the input to the watchability helpers below. */
 export interface DatedEpisode {
 	season: number;

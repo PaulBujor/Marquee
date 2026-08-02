@@ -9,7 +9,7 @@
  * by the media channel; watchability is derived from those air dates. All writes route through
  * {@link recordEvent} — local event + optimistic projection — then reload.
  */
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import {
 	getEpisodeWatches,
 	getEpisodes,
@@ -47,6 +47,10 @@ export class TrackingState {
 	view = $state<TrackingView>({ tracked: false });
 	/** Watched-episode keys (`"season:episode"`). */
 	watched = $state<SvelteSet<string>>(new SvelteSet());
+	/** When each watched episode was marked: `"season:episode"` → epoch ms. */
+	episodeWatchedAt = $state<SvelteMap<string, number>>(new SvelteMap());
+	/** Epoch ms of the last status change — when a `completed` title became completed. */
+	statusUpdatedAt = $state(0);
 	/** False until the first IndexedDB read resolves — controls render disabled meanwhile. */
 	ready = $state(false);
 	/** True while a write is in flight, to disable controls and prevent double-submits. */
@@ -78,15 +82,20 @@ export class TrackingState {
 
 	/** Load tracking + episode metadata + episode-watched state from IndexedDB. */
 	async load(): Promise<void> {
-		this.view = toTrackingView(await getTrackingByMediaId(this.mediaId));
+		const row = await getTrackingByMediaId(this.mediaId);
+		this.view = toTrackingView(row);
+		this.statusUpdatedAt = row?.statusUpdatedAt ?? 0;
 		this.episodes = (await getEpisodes(this.mediaId)).map((e) => ({
 			season: e.season,
 			episode: e.episode,
 			airDate: e.airDate
 		}));
 		const watches = await getEpisodeWatches(this.mediaId);
-		this.watched = new SvelteSet(
-			watches.filter((e) => e.watched).map((e) => watchedKey(e.season, e.episode))
+		const marked = watches.filter((e) => e.watched);
+		this.watched = new SvelteSet(marked.map((e) => watchedKey(e.season, e.episode)));
+		// The same rows carry the LWW clock of the `episode.watched` event — i.e. when it was marked.
+		this.episodeWatchedAt = new SvelteMap(
+			marked.map((e) => [watchedKey(e.season, e.episode), e.updatedAt])
 		);
 		this.ready = true;
 	}
@@ -94,6 +103,20 @@ export class TrackingState {
 	/** Whether a given episode is marked watched. */
 	isWatched(season: number, episode: number): boolean {
 		return this.watched.has(watchedKey(season, episode));
+	}
+
+	/** Epoch ms a given episode was marked watched, or null if it isn't watched. */
+	watchedAtFor(season: number, episode: number): number | null {
+		return this.episodeWatchedAt.get(watchedKey(season, episode)) ?? null;
+	}
+
+	/** Epoch ms of the most recent episode watch, or null when nothing is watched. */
+	lastEpisodeWatchedAt(): number | null {
+		let latest: number | null = null;
+		for (const at of this.episodeWatchedAt.values()) {
+			if (latest === null || at > latest) latest = at;
+		}
+		return latest;
 	}
 
 	/** Whether every aired episode of a season is watched (so "mark season watched" can be hidden). */

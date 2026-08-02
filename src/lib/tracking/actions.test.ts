@@ -17,6 +17,8 @@ import {
 	statusEventType,
 	todayIso,
 	toTrackingView,
+	watchedAt,
+	watchedAtLabel,
 	watchedKey,
 	type DatedEpisode,
 	type SeasonSummary
@@ -102,6 +104,87 @@ describe('nextFavorite', () => {
 		expect(nextFavorite({ tracked: true, status: 'watching', favorite: false, rating: null })).toBe(
 			true
 		);
+	});
+});
+
+describe('watchedAt', () => {
+	const MARKED = 1_760_000_000_000;
+	const LAST_EPISODE = 1_770_000_000_000;
+
+	it('dates a completed movie from its status clock', () => {
+		expect(
+			watchedAt({
+				type: 'movie',
+				status: 'completed',
+				statusUpdatedAt: MARKED,
+				lastEpisodeWatchedAt: null
+			})
+		).toBe(MARKED);
+	});
+
+	it('has no date for a movie that is not completed', () => {
+		for (const status of ['want_to_watch', 'watching', 'did_not_finish'] as const) {
+			expect(
+				watchedAt({ type: 'movie', status, statusUpdatedAt: MARKED, lastEpisodeWatchedAt: null })
+			).toBeNull();
+		}
+	});
+
+	it("prefers a show's newest episode watch over its status clock", () => {
+		expect(
+			watchedAt({
+				type: 'show',
+				status: 'completed',
+				statusUpdatedAt: MARKED,
+				lastEpisodeWatchedAt: LAST_EPISODE
+			})
+		).toBe(LAST_EPISODE);
+	});
+
+	it('dates a show still in progress from its last episode watch', () => {
+		expect(
+			watchedAt({
+				type: 'show',
+				status: 'watching',
+				statusUpdatedAt: MARKED,
+				lastEpisodeWatchedAt: LAST_EPISODE
+			})
+		).toBe(LAST_EPISODE);
+	});
+
+	it('falls back to the status clock for a completed show with no episode rows synced', () => {
+		expect(
+			watchedAt({
+				type: 'show',
+				status: 'completed',
+				statusUpdatedAt: MARKED,
+				lastEpisodeWatchedAt: null
+			})
+		).toBe(MARKED);
+	});
+
+	it('has no date for an unwatched show', () => {
+		expect(
+			watchedAt({
+				type: 'show',
+				status: 'want_to_watch',
+				statusUpdatedAt: MARKED,
+				lastEpisodeWatchedAt: null
+			})
+		).toBeNull();
+	});
+});
+
+describe('watchedAtLabel', () => {
+	const base = { type: 'show', statusUpdatedAt: 1, lastEpisodeWatchedAt: 1 } as const;
+
+	it('reads as finished once completed', () => {
+		expect(watchedAtLabel({ ...base, status: 'completed' })).toBe('Watched');
+	});
+
+	it('reads as ongoing while still in progress', () => {
+		expect(watchedAtLabel({ ...base, status: 'watching' })).toBe('Last watched');
+		expect(watchedAtLabel({ ...base, status: 'did_not_finish' })).toBe('Last watched');
 	});
 });
 

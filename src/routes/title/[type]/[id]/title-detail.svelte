@@ -15,6 +15,7 @@
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
+	import { formatExactDateTime, formatRelativeDay } from '$lib/date.js';
 	import {
 		tmdbMediaId,
 		tmdbExternalId,
@@ -758,6 +759,9 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 					{#if currentSeason.episodes.length > 0}
 						<ul class="flex flex-col">
 							{#each currentSeason.episodes as ep (ep.episodeNumber)}
+								{@const epWatchedAt = currentSeason
+									? tracking.watchedAtFor(currentSeason.seasonNumber, ep.episodeNumber)
+									: null}
 								<li class="flex flex-col gap-1 border-b border-border py-3 last:border-b-0">
 									<div class="flex items-center gap-3">
 										<span class="w-6 shrink-0 text-sm font-semibold text-muted-foreground"
@@ -795,10 +799,18 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 											</Button>
 										{/if}
 									</div>
-									{#if ep.airDate || ep.overview}
+									{#if ep.airDate || ep.overview || epWatchedAt !== null}
 										<div class="flex flex-col gap-0.5 pl-9">
 											{#if ep.airDate}
 												<span class="text-xs text-muted-foreground">{ep.airDate}</span>
+											{/if}
+											{#if epWatchedAt !== null}
+												<span
+													class="text-xs font-medium text-primary"
+													title={formatExactDateTime(epWatchedAt)}
+												>
+													Watched {formatRelativeDay(epWatchedAt)}
+												</span>
 											{/if}
 											{#if ep.overview}
 												<p class="line-clamp-3 text-xs leading-relaxed text-muted-foreground">

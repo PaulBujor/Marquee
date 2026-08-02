@@ -12,7 +12,7 @@ import {
 	getTracking,
 	recordEvent
 } from '$lib/client/idb';
-import { watchedKey, type DatedEpisode } from './actions';
+import { watchedAt, watchedKey, type DatedEpisode } from './actions';
 import { showProgress, type LibraryItem } from './library';
 import { reconcileStatus } from './reconcile';
 import { sync } from '$lib/client/sync/engine.svelte';
@@ -32,14 +32,20 @@ export class LibraryState {
 			const isShow = m?.type === 'show';
 			let watched = new Set<string>();
 			let episodes: DatedEpisode[] = [];
+			// Newest episode-watch clock — the "last watched" date for a show (null for movies).
+			let lastEpisodeWatchedAt: number | null = null;
 			if (isShow) {
 				const [watches, eps] = await Promise.all([
 					getEpisodeWatches(t.mediaId),
 					getEpisodes(t.mediaId)
 				]);
-				watched = new Set(
-					watches.filter((e) => e.watched).map((e) => watchedKey(e.season, e.episode))
-				);
+				const marked = watches.filter((e) => e.watched);
+				watched = new Set(marked.map((e) => watchedKey(e.season, e.episode)));
+				for (const e of marked) {
+					if (lastEpisodeWatchedAt === null || e.updatedAt > lastEpisodeWatchedAt) {
+						lastEpisodeWatchedAt = e.updatedAt;
+					}
+				}
 				episodes = eps.map((e) => ({ season: e.season, episode: e.episode, airDate: e.airDate }));
 			}
 			items.push({
@@ -49,6 +55,12 @@ export class LibraryState {
 				favorite: t.favorite,
 				rating: t.rating,
 				addedAt: t.addedAt,
+				watchedAt: watchedAt({
+					type: m?.type ?? 'movie',
+					status: t.status,
+					statusUpdatedAt: t.statusUpdatedAt,
+					lastEpisodeWatchedAt
+				}),
 				type: m?.type ?? 'movie',
 				title: m?.title ?? 'Loading…',
 				year: m?.year ?? null,
