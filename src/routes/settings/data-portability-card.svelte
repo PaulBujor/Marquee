@@ -12,7 +12,12 @@
 
 	let fileInput = $state<HTMLInputElement | null>(null);
 	// A read-but-not-yet-applied file: import is a bulk write, so the user confirms what's in it first.
-	let pending = $state<ImportPlan | null>(null);
+	//
+	// The plan itself is held in a plain `let`, deliberately NOT `$state`. Svelte deeply proxies
+	// reactive values, and IndexedDB structured-clones what it writes — which refuses a Proxy. Only
+	// the counts drive the UI, so only they need to be reactive.
+	let pendingPlan: ImportPlan | null = null;
+	let pendingCounts = $state<ImportPlan['counts'] | null>(null);
 	let importError = $state<string | null>(null);
 	let imported = $state<number | null>(null);
 
@@ -40,11 +45,16 @@
 		busy = true;
 		importError = null;
 		imported = null;
-		pending = null;
+		pendingPlan = null;
+		pendingCounts = null;
 		try {
 			const result = await readImportFile(file);
-			if (result.ok) pending = result.plan;
-			else importError = parseFailureMessage(result.reason);
+			if (result.ok) {
+				pendingPlan = result.plan;
+				pendingCounts = result.plan.counts;
+			} else {
+				importError = parseFailureMessage(result.reason);
+			}
 		} catch (err) {
 			console.error('import: failed to read the export file', err);
 			importError = "We couldn't read that file. Please try again.";
@@ -53,16 +63,22 @@
 		}
 	}
 
+	function cancelImport() {
+		pendingPlan = null;
+		pendingCounts = null;
+	}
+
 	async function confirmImport() {
-		if (!pending) return;
+		if (!pendingPlan) return;
 		busy = true;
 		importError = null;
 		try {
-			const count = pending.counts.titles;
-			await applyImport(pending);
-			pending = null;
+			const count = pendingPlan.counts.titles;
+			await applyImport(pendingPlan);
+			cancelImport();
 			imported = count;
 		} catch (err) {
+			// applyImport already reported this to the observability sink.
 			console.error('import: failed to apply the export file', err);
 			importError = "We couldn't finish the import. Please try again.";
 		} finally {
@@ -114,14 +130,14 @@
 			<p class="text-sm text-destructive">Couldn't build the export file. Please try again.</p>
 		{/if}
 
-		{#if pending}
+		{#if pendingCounts}
 			<div class="flex flex-col gap-2 rounded-md bg-muted/50 p-3">
 				<p class="text-sm">
-					Found {plural(pending.counts.titles, 'title')} and
-					{plural(pending.counts.episodes, 'watched episode')}.
-					{#if pending.counts.skipped > 0}
+					Found {plural(pendingCounts.titles, 'title')} and
+					{plural(pendingCounts.episodes, 'watched episode')}.
+					{#if pendingCounts.skipped > 0}
 						<span class="text-muted-foreground">
-							{plural(pending.counts.skipped, 'entry')} couldn't be read and will be left out.</span
+							{plural(pendingCounts.skipped, 'entry')} couldn't be read and will be left out.</span
 						>
 					{/if}
 				</p>
@@ -133,7 +149,7 @@
 					<Button variant="outline" onclick={confirmImport} disabled={busy}>
 						{busy ? 'Importing…' : 'Import'}
 					</Button>
-					<Button variant="ghost" onclick={() => (pending = null)} disabled={busy}>Cancel</Button>
+					<Button variant="ghost" onclick={cancelImport} disabled={busy}>Cancel</Button>
 				</div>
 			</div>
 		{/if}

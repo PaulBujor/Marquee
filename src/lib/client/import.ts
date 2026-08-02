@@ -12,6 +12,7 @@
  * Client-safe (browser only).
  */
 import { applyEventToIdb, enqueueEvents, getDeviceId, putMedia } from '$lib/client/idb';
+import { reportClientError } from '$lib/client/report-error';
 import { sync } from '$lib/client/sync/engine.svelte';
 import { parseExport, type ParseFailure } from '$lib/portability/parse';
 import { planImport, type ImportPlan } from '$lib/portability/plan';
@@ -40,7 +41,16 @@ export type ReadResult = { ok: true; plan: ImportPlan } | { ok: false; reason: P
  */
 export async function readImportFile(file: File): Promise<ReadResult> {
 	const parsed = parseExport(await file.text());
-	if (!parsed.ok) return { ok: false, reason: parsed.reason };
+	if (!parsed.ok) {
+		// A rejected file is usually the user's mistake, not a bug — but it's also the only signal we
+		// get when our own export stops round-tripping, so it's worth a line in the log.
+		reportClientError({
+			message: `import rejected a file: ${parsed.reason}`,
+			source: 'import.read',
+			at: Date.now()
+		});
+		return { ok: false, reason: parsed.reason };
+	}
 	return { ok: true, plan: planImport(parsed.doc, await getDeviceId()) };
 }
 
@@ -51,13 +61,35 @@ export async function readImportFile(file: File): Promise<ReadResult> {
  * Additive — no `tracking.removed` is emitted and nothing local is cleared. Because the events
  * carry the exported `addedAt` as their clock, importing into an account that already has data
  * merges by last-write-wins: anything changed since the export was taken is newer, and wins.
+ *
+ * A failure part-way through leaves whatever already landed in place. That's safe rather than
+ * tidy: every write is an idempotent last-write-wins upsert, so re-running the same import
+ * converges on the same state.
+ *
+ * `plan` must be **plain data**. Passing a Svelte `$state` value hands IndexedDB a Proxy, which
+ * structured clone refuses — keep the plan out of reactive state, or snapshot it first.
  */
 export async function applyImport(plan: ImportPlan): Promise<void> {
-	// Media first, so the channel can start hydrating the real rows while events sync.
-	for (const record of plan.media) await putMedia(record);
+	// The catch reports and rethrows: the UI still needs to show a failure, but a silent import
+	// failure on someone else's device is exactly what we can't debug without a log line.
+	try {
+		// Media first, so the channel can start hydrating the real rows while events sync.
+		for (const record of plan.media) await putMedia(record);
 
-	await enqueueEvents(plan.events);
-	for (const event of plan.events) await applyEventToIdb(event);
+		await enqueueEvents(plan.events);
+		for (const event of plan.events) await applyEventToIdb(event);
+	} catch (err) {
+		reportClientError({
+			message:
+				`import failed applying ${plan.counts.titles} titles / ` +
+				`${plan.events.length} events / ${plan.media.length} media: ` +
+				(err instanceof Error ? err.message : String(err)),
+			stack: err instanceof Error ? err.stack : undefined,
+			source: 'import.apply',
+			at: Date.now()
+		});
+		throw err;
+	}
 
 	sync.requestSync();
 }
