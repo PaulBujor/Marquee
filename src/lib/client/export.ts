@@ -1,9 +1,8 @@
 /**
  * Data export: read the device's offline replica and hand the user a JSON file.
  *
- * Deliberately network-free. IndexedDB is a full replica of the user's tracking data, so the
- * export is complete without the server — which is the point: if the service disappears, or the
- * user is simply offline, they can still take everything with them.
+ * Deliberately network-free — IndexedDB is a full replica, so the export is complete without the
+ * server. That's the point: it works offline, and it works if the service disappears.
  *
  * Client-safe (browser only).
  */
@@ -22,11 +21,9 @@ export async function collectExport(now: Date = new Date()): Promise<MarqueeExpo
 }
 
 /**
- * `marquee-export-2026-08-01.json` — dated so repeated exports don't overwrite each other.
- *
- * Uses the **local** calendar date, not UTC: someone exporting just after midnight should get
- * today's date in the filename, not yesterday's. (`exportedAt` inside the document stays UTC, as
- * an instant should.)
+ * `marquee-export-2026-08-01.json` — dated so repeated exports don't overwrite each other. Uses
+ * the **local** calendar date: exporting just after midnight should give today, not yesterday.
+ * (`exportedAt` inside the document stays UTC, as an instant should.)
  */
 export function exportFilename(now: Date = new Date()): string {
 	const month = String(now.getMonth() + 1).padStart(2, '0');

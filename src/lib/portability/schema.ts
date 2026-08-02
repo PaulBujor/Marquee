@@ -1,13 +1,9 @@
 /**
- * The on-disk contract for a Marquee data export — the shared shape both directions of data
- * portability speak: the export builder writes it, the import parser reads it.
+ * The on-disk contract for a data export — written by the export builder, read by the import
+ * parser. A **library-level** document: one entry per tracked title carrying its end state, not a
+ * dump of the event log. History is deliberately absent.
  *
- * It is a **library-level** document, not a dump of the event log or the IndexedDB stores: one
- * entry per tracked title, carrying the end-state a user would recognise (status, rating,
- * favorite, which episodes they've seen). History is deliberately absent — the file records what
- * you have, not the sequence of edits that got you there.
- *
- * Client-safe (no server imports), so it can be read from anywhere in the app.
+ * Client-safe (no server imports).
  */
 import type { MediaProvider, TrackingStatus } from '$lib/sync/events';
 
@@ -31,26 +27,20 @@ export interface ExportedEpisode {
 /**
  * One tracked title.
  *
- * The metadata fields are **nullable together**: a tracking row can exist with no `media` row
- * behind it (a title added offline before the media channel pulled it), and dropping those on
- * export would lose the user's data. Such an entry keeps its `mediaId` and nothing else.
+ * The metadata fields are **nullable together** — a tracking row can exist before its `media` row
+ * synced, and dropping those would lose the user's data. Such an entry keeps only its `mediaId`.
  *
- * Several fields carry weight beyond display. `externalId` is the portable identity anchor —
- * `mediaId` is a deterministic UUIDv5 of `(provider, externalId)`, so an importer re-derives the
- * id rather than trusting ours.
- *
- * The rest are **clocks**, and they're why the document isn't just a snapshot. Import replays
- * events stamped with them, so a restored account keeps its real dates instead of looking like
- * everything happened the day it was imported — and last-write-wins can merge an old export into
- * a newer account without clobbering it. `addedAt` restores when a title joined the library;
- * `statusChangedAt` is when it reached its current status, which for a completed title is *when
- * it was watched*; and each episode carries its own `watchedAt`. Together they're what the
- * watched-date UI reads back out.
+ * The clocks are load-bearing: import replays events stamped with them, so a restored library
+ * keeps its real dates and last-write-wins can merge an old export into a newer account.
  */
 export interface ExportedTitle {
 	mediaId: string;
 	provider: MediaProvider | null;
-	/** The provider's own id, e.g. `show/95396`; null for custom media or an unhydrated entry. */
+	/**
+	 * The provider's own id, e.g. `show/95396`; null for custom media or an unhydrated entry. The
+	 * portable identity anchor — `mediaId` derives from it, so an importer recomputes rather than
+	 * trusting ours.
+	 */
 	externalId: string | null;
 	type: 'movie' | 'show' | null;
 	title: string | null;

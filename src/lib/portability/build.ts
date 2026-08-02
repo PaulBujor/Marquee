@@ -77,9 +77,8 @@ export function buildExport(input: ExportInput): MarqueeExport {
 	const titles = input.tracking.map((t): ExportedTitle => {
 		const m = mediaById.get(t.mediaId);
 		const addedAt = isoClock(t.addedAt, input.exportedAt);
-		// A row that only ever saw a favorite or rating event keeps the initial 0 status clock, which
-		// would export as 1970 and read as a watch date decades before the title existed. Nothing can
-		// have changed status before it was added, so the add is the floor.
+		// A row that only ever saw a favorite/rating event keeps the initial 0 clock, which would
+		// export as 1970. Nothing changes status before it was added, so the add is the floor.
 		const statusChangedAt = isoClock(t.statusUpdatedAt, input.exportedAt);
 		return {
 			mediaId: t.mediaId,
