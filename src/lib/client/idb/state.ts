@@ -129,12 +129,9 @@ export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 }
 
 /**
- * Apply many events in **one** transaction. Same rules as {@link applyEventToIdb}, and the
- * per-field last-write-wins guards make the result independent of the order they're passed in.
- *
- * This exists for imports, which replay a whole library at once: one at a time, a `tracking.added`
- * alone costs two transactions, so a few hundred titles with their episodes runs into thousands of
- * round trips and the UI sits blocked for seconds.
+ * Apply many events in **one** transaction — same rules as {@link applyEventToIdb}, and the
+ * per-field LWW guards keep the result independent of the order passed in. For imports: one at a
+ * time, a few hundred titles runs into thousands of round trips with the UI blocked behind them.
  */
 export async function applyEventsToIdb(events: EventEnvelope[]): Promise<void> {
 	if (events.length === 0) return;

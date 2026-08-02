@@ -1,16 +1,10 @@
 /**
- * Turns an export document into the writes that restore it: media stubs to seed, and the events
- * to replay. Pure — the device id is injected and every clock comes from the document — so the
- * whole translation unit-tests without IndexedDB or a network.
+ * Turns an export document into the writes that restore it: media stubs to seed, events to replay.
+ * Pure (device id injected, clocks from the document), so it tests without IndexedDB.
  *
- * Import deliberately produces **the fewest events that reconstruct the end state**, not a
- * plausible history: no intermediate statuses are invented, and favorite/rating events appear
- * only when they'd say something. A title in its default state costs exactly one event.
- *
- * The exception is dates. Every event is stamped with the clock the document recorded for it, and
- * a title that changed status after being added gets a second event to carry that later clock —
- * because those clocks *are* the watched dates the app derives and displays. Collapsing them
- * would restore a library where everything appears to have been watched on import day.
+ * Produces **the fewest events that reconstruct the end state**, not a plausible history — no
+ * intermediate statuses are invented. Dates are the exception: each event carries its recorded
+ * clock, since those clocks are the watched dates the app displays.
  */
 import {
 	createEvent,
@@ -64,13 +58,10 @@ function resolveClock(iso: string, fallback: number): number {
 }
 
 /**
- * A behind-version media stub for an entry, or null when we can't build one.
- *
- * These are not cosmetic. The media channel derives what to hydrate from the local `media` store
- * (`getLinkedMediaRefs`), and an event references a title only by an opaque derived id — so
- * without a stub carrying `(provider, externalId)`, the server can never learn what the title
- * *is*, and it stays unhydrated forever. `version: 0` marks the stub behind, so the next media
- * sync replaces it with the real row (genres, artwork, seasons, episodes, air dates).
+ * A behind-version media stub for an entry, or null when we can't build one. Required, not
+ * cosmetic: the media channel derives what to hydrate from the local `media` store, and an event
+ * names a title only by an opaque derived id — without a stub carrying `(provider, externalId)`
+ * the server never learns what the title is. `version: 0` makes the next sync replace it.
  */
 function mediaStub(entry: ExportedTitle): MediaRecord | null {
 	if (entry.provider !== 'tmdb' || !entry.externalId) return null;
@@ -110,18 +101,15 @@ export function planImport(
 		const statusAt = Math.max(resolveClock(entry.statusChangedAt, addedAt), addedAt);
 
 		events.push(createEvent('tracking.added', id, { status: entry.status }, deviceId, addedAt));
-		// A second event only when the status moved after the add — that's what separates "added in
-		// January" from "watched in June", and it's what the watched-date UI reads. Both carry the
-		// final status: the export records where the title ended up, not the path it took, so
-		// synthesising an intermediate status would be inventing history.
+		// A second event only when the status moved after the add — that separates "added in January"
+		// from "watched in June". Both carry the final status; the path taken wasn't exported.
 		if (statusAt > addedAt) {
 			events.push(
 				createEvent('tracking.status_changed', id, { status: entry.status }, deviceId, statusAt)
 			);
 		}
-		// Favorite and rating have their own last-write-wins clocks, which the document doesn't
-		// carry (nothing surfaces them). The status clock is the latest the title is known to have
-		// moved, so it's the closest honest stamp — and it keeps them from losing to the status.
+		// Their own LWW clocks aren't exported (nothing surfaces them), so use the status clock —
+		// the latest the title is known to have moved.
 		if (entry.favorite) {
 			events.push(
 				createEvent('tracking.favorite_toggled', id, { favorite: true }, deviceId, statusAt)
@@ -131,8 +119,7 @@ export function planImport(
 			events.push(createEvent('tracking.rated', id, { rating: entry.rating }, deviceId, statusAt));
 		}
 		for (const ep of entry.watchedEpisodes) {
-			// Each episode keeps its own mark-date, so a show watched over months doesn't come back
-			// looking binged in a day.
+			// Own mark-date, so a show watched over months doesn't come back looking binged in a day.
 			events.push(
 				createEvent(
 					'episode.watched',

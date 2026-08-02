@@ -47,17 +47,12 @@ export interface GlobalReportingOptions {
 let installed = false;
 
 /**
- * The catch-all net: report errors that escape everything else.
+ * The catch-all net: report errors that escape everything else. SvelteKit's `handleError` only
+ * sees throws during navigation and rendering, so anything from an event handler, a timer or a
+ * floating promise never reaches the sink otherwise.
  *
- * SvelteKit's `handleError` hook only sees throws during navigation and rendering, so anything
- * thrown from an event handler, a timer, or a floating promise never reaches the sink. These two
- * listeners cover that gap, which means new code is observable by default rather than only where
- * someone remembered to wire reporting up.
- *
- * It does **not** replace explicit reporting. An error a `catch` block handles — turning it into a
- * message in the UI — never becomes an unhandled error, so those sites still report themselves.
- *
- * Returns a teardown function. Idempotent: calling it twice installs one set of listeners.
+ * It doesn't replace explicit reporting — an error a `catch` handles never becomes uncaught.
+ * Returns a teardown function; calling it twice installs one set of listeners.
  */
 export function installGlobalErrorReporting(options: GlobalReportingOptions = {}): () => void {
 	const target = options.target ?? (typeof window === 'undefined' ? undefined : window);

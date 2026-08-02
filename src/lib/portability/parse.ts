@@ -1,11 +1,7 @@
 /**
- * Reads an untrusted export file into a typed document.
- *
- * This is the client half of the validate-on-both-sides convention. It exists to give the user a
- * clear reason a file was rejected before anything is written — it is *not* the security boundary.
- * That stays where it already is: every event import seeds is re-validated server-side by
- * `eventEnvelopeSchema`, so a hand-edited file can't push anything the normal pipeline wouldn't
- * accept.
+ * Reads an untrusted export file into a typed document — the client half of validate-on-both-sides.
+ * Its job is a clear rejection reason before anything is written, *not* security: every event
+ * import seeds is re-validated server-side by `eventEnvelopeSchema`.
  */
 import { z } from 'zod';
 import { MEDIA_PROVIDERS, TRACKING_STATUSES } from '$lib/sync/events';

@@ -11,11 +11,9 @@
 	let exported = $state<number | null>(null);
 
 	let fileInput = $state<HTMLInputElement | null>(null);
-	// A read-but-not-yet-applied file: import is a bulk write, so the user confirms what's in it first.
-	//
-	// The plan itself is held in a plain `let`, deliberately NOT `$state`. Svelte deeply proxies
-	// reactive values, and IndexedDB structured-clones what it writes — which refuses a Proxy. Only
-	// the counts drive the UI, so only they need to be reactive.
+	// A read-but-not-yet-applied file — import is a bulk write, so the user confirms first.
+	// The plan is a plain `let`, deliberately NOT `$state`: Svelte proxies reactive values and
+	// IndexedDB's structured clone refuses a Proxy. Only the counts are rendered.
 	let pendingPlan: ImportPlan | null = null;
 	let pendingCounts = $state<ImportPlan['counts'] | null>(null);
 	let importError = $state<string | null>(null);
