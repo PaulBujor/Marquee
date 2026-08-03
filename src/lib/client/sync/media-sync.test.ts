@@ -1,12 +1,28 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { mediaId, type MediaRecord } from '$lib/sync/events';
+import { applyEventToIdb } from '$lib/client/idb';
+import { createEvent, mediaId, type MediaRecord } from '$lib/sync/events';
 import { setActiveUser } from '$lib/client/idb/db';
 import { getEpisodes, getMedia, putMedia } from '$lib/client/idb/media';
 import type { MediaSyncRequest, MediaSyncResponse } from '$lib/sync/media-protocol';
 import { MAX_DRAIN_ITERATIONS, runMediaSync } from './media-sync';
 
 setActiveUser('media-sync-test');
+
+const DEVICE = '11111111-1111-1111-1111-111111111111';
+
+/** Seed a local `tracking` row for `externalId`, the way a real `tracking.added` event would. */
+async function track(externalId: string): Promise<void> {
+	const event = createEvent(
+		'tracking.added',
+		mediaId('tmdb', externalId),
+		{
+			status: 'want_to_watch'
+		},
+		DEVICE
+	);
+	await applyEventToIdb(event);
+}
 
 function record(externalId: string, over: Partial<MediaRecord> = {}): MediaRecord {
 	return {
@@ -59,29 +75,53 @@ function stubResponses(responses: MediaSyncResponse[], sent: MediaSyncRequest[])
 }
 
 describe('runMediaSync', () => {
-	it('reports local media versions in `have` and stores what the server returns', async () => {
+	it('makes no request when nothing is tracked', async () => {
+		const sent: MediaSyncRequest[] = [];
+		const result = await runMediaSync({ fullCheck: true }, stubFetch([], sent));
+		expect(sent).toHaveLength(0);
+		expect(result.applied).toBe(0);
+	});
+
+	it('light pass: makes no request when every tracked title already has a synced copy', async () => {
+		await track('movie/1');
+		await putMedia(record('movie/1', { version: 1 })); // already synced (version > 0)
+		const sent: MediaSyncRequest[] = [];
+		const result = await runMediaSync({ fullCheck: false }, stubFetch([], sent));
+		expect(sent).toHaveLength(0);
+		expect(result.applied).toBe(0);
+	});
+
+	it('light pass: asks about a tracked title with no synced copy yet', async () => {
 		const mid = mediaId('tmdb', 'movie/603');
-		await putMedia(record('movie/603', { version: 1 }));
+		await track('movie/603');
+		await putMedia(record('movie/603', { version: 0 })); // quick-add snapshot, not yet synced
 
 		const sent: MediaSyncRequest[] = [];
 		const result = await runMediaSync(
+			{ fullCheck: false },
 			stubFetch([record('movie/603', { version: 2, title: 'updated' })], sent)
 		);
 
-		expect(sent[0].have).toContainEqual({ id: mid, version: 1 });
+		expect(sent[0].have).toContainEqual({ id: mid, version: 0 });
+		expect(sent[0].refs).toContainEqual({ provider: 'tmdb', externalId: 'movie/603' });
 		expect(await getMedia(mid)).toMatchObject({ id: mid, title: 'updated', version: 2 });
 		expect(result.applied).toBe(1);
 	});
 
-	it('pushes identity refs for locally-known linked media', async () => {
-		await putMedia(record('movie/778'));
+	it("full pass: reports every tracked title's version, even ones already synced", async () => {
+		const mid = mediaId('tmdb', 'movie/778');
+		await track('movie/778');
+		await putMedia(record('movie/778', { version: 1 }));
+
 		const sent: MediaSyncRequest[] = [];
-		await runMediaSync(stubFetch([], sent));
+		await runMediaSync({ fullCheck: true }, stubFetch([], sent));
+		expect(sent[0].have).toContainEqual({ id: mid, version: 1 });
 		expect(sent[0].refs).toContainEqual({ provider: 'tmdb', externalId: 'movie/778' });
 	});
 
 	it('fans a returned show record out into the seasons/episodes stores', async () => {
 		const showId = mediaId('tmdb', 'show/1396');
+		await track('show/1396');
 		const show = record('show/1396', {
 			id: showId,
 			type: 'show',
@@ -118,7 +158,7 @@ describe('runMediaSync', () => {
 			]
 		});
 		const sent: MediaSyncRequest[] = [];
-		await runMediaSync(stubFetch([show], sent));
+		await runMediaSync({ fullCheck: true }, stubFetch([show], sent));
 
 		expect(await getMedia(showId)).toMatchObject({ id: showId, type: 'show', version: 3 });
 		const eps = await getEpisodes(showId);
@@ -129,8 +169,10 @@ describe('runMediaSync', () => {
 	});
 
 	it('loops until the server stops flagging `pending`, accumulating applied', async () => {
+		await track('movie/loop-a');
 		const sent: MediaSyncRequest[] = [];
 		const result = await runMediaSync(
+			{ fullCheck: true },
 			stubResponses(
 				[
 					{ media: [record('movie/1')], pending: true },
@@ -145,8 +187,9 @@ describe('runMediaSync', () => {
 	});
 
 	it('bounds the drain loop when the server never clears `pending`', async () => {
+		await track('movie/loop-b');
 		const sent: MediaSyncRequest[] = [];
-		await runMediaSync(stubResponses([{ media: [], pending: true }], sent));
+		await runMediaSync({ fullCheck: true }, stubResponses([{ media: [], pending: true }], sent));
 		expect(sent).toHaveLength(MAX_DRAIN_ITERATIONS); // capped, not infinite
 	});
 });

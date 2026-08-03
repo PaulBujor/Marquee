@@ -1,9 +1,24 @@
 /**
- * The media reference channel's client half: pull metadata for tracked titles this device is
- * missing, and push identity for the ones it has so the server can hydrate them for other
- * devices. Runs after the event sync (media is heavier, so it's a separate call). Testable core.
+ * The media reference channel's client half. The client already maintains its own
+ * `tracking`/`episodeWatches` projections (mirroring the server's), so it knows what it
+ * references and what it's missing without asking the server to recompute that — it sends
+ * exactly the ids it needs, bounded per request, rather than everything it holds.
+ *
+ * Two cadences (see `engine.svelte.ts`, which picks `fullCheck` per cycle):
+ *  - **Light** (the common case, every cycle): only ids with no local copy at all — the
+ *    server-side hydrate-on-miss path. Empty in steady state, so most cycles make no request.
+ *  - **Full** (a slower cadence): every referenced id's version, so a title the nightly cron
+ *    refreshed server-side gets pulled down even though the client already had *a* copy.
+ *
+ * Runs after the event sync (media is heavier, so it's a separate call). Testable core.
  */
-import { getLinkedMediaRefs, getMediaVersions, putMedia } from '$lib/client/idb';
+import {
+	getLinkedMediaRefs,
+	getMediaVersions,
+	getReferencedMediaIds,
+	getUnsyncedMediaIds,
+	putMedia
+} from '$lib/client/idb';
 import {
 	MEDIA_SYNC_MAX,
 	type MediaSyncRequest,
@@ -13,23 +28,33 @@ import {
 /**
  * Hard cap on drain iterations. The server caps TMDB work per request and sets `pending` when more
  * remains; we loop to drain it, but bound the loop so a title that can't hydrate (bad id, TMDB down)
- * can't spin forever — it just retries on the next natural sync. `ceil(MEDIA_SYNC_MAX / 25)` covers
- * a full 500-ref library drained 25-at-a-time, with a little margin.
+ * can't spin forever — it just retries on the next natural sync. Now that request-time refresh only
+ * ever hydrates titles with no stored row (TTL staleness is cron-only), this only fires on a genuine
+ * bulk-missing burst — cold start, a large import, or a big backlog pulled after being offline a
+ * long time — not on routine cycles. `ceil(MEDIA_SYNC_MAX / 25)` covers a full 500-ref backlog
+ * drained 25-at-a-time, with a little margin.
  */
 export const MAX_DRAIN_ITERATIONS = 25;
 
-export async function runMediaSync(fetchFn: typeof fetch = fetch): Promise<{ applied: number }> {
+export async function runMediaSync(
+	opts: { fullCheck: boolean } = { fullCheck: false },
+	fetchFn: typeof fetch = fetch
+): Promise<{ applied: number }> {
 	let applied = 0;
 
-	// The server caps how much it hydrates per request (CPU-bound); it flags `pending` when a backlog
-	// remains, so we loop — re-reading local state each pass (freshly stored rows shrink the backlog)
-	// — until it's drained or we hit the iteration cap.
 	for (let i = 0; i < MAX_DRAIN_ITERATIONS; i++) {
-		const [have, refs] = await Promise.all([getMediaVersions(), getLinkedMediaRefs()]);
+		const referencedIds = await getReferencedMediaIds();
+		if (referencedIds.length === 0) break;
 
-		// Report what we have + at which version; the server derives the referenced universe from the
-		// event log and returns rows we're missing or behind on (version-diff staleness, MRQ-122). We
-		// push identity for our linked rows so the server can hydrate them for other devices.
+		// Light pass: only ids with nothing local yet. Full pass: every referenced id, so a
+		// cron-side refresh of something we already have shows up via the version-diff.
+		const targetIds = opts.fullCheck ? referencedIds : await getUnsyncedMediaIds(referencedIds);
+		if (targetIds.length === 0) break;
+
+		const [refs, have] = await Promise.all([
+			getLinkedMediaRefs(targetIds),
+			getMediaVersions(targetIds)
+		]);
 		const body: MediaSyncRequest = {
 			refs: refs.slice(0, MEDIA_SYNC_MAX),
 			have: have.slice(0, MEDIA_SYNC_MAX)

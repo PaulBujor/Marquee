@@ -95,7 +95,11 @@ export const loginTokens = sqliteTable(
 	(table) => [
 		index('login_tokens_email_idx').on(table.email),
 		index('login_tokens_token_hash_idx').on(table.tokenHash),
-		index('login_tokens_request_ip_idx').on(table.requestIp)
+		index('login_tokens_request_ip_idx').on(table.requestIp),
+		// Support the nightly purge's two branches (expired-by-time, already-consumed) as separate
+		// indexed deletes — an OR across both isn't reliably planned as a single index scan.
+		index('login_tokens_expires_at_idx').on(table.expiresAt),
+		index('login_tokens_consumed_at_idx').on(table.consumedAt)
 	]
 );
 
@@ -151,7 +155,11 @@ export const sessions = sqliteTable(
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [index('sessions_user_id_idx').on(table.userId)]
+	(table) => [
+		index('sessions_user_id_idx').on(table.userId),
+		// The nightly purge deletes by expiry; unindexed it's a full scan of the table.
+		index('sessions_expires_at_idx').on(table.expiresAt)
+	]
 );
 
 export type User = typeof users.$inferSelect;
@@ -275,7 +283,14 @@ export const media = sqliteTable(
 	},
 	// SQLite treats each NULL as distinct in a UNIQUE index, so multiple custom rows
 	// (`external_id = null`) never collide.
-	(table) => [uniqueIndex('media_provider_external_idx').on(table.provider, table.externalId)]
+	(table) => [
+		uniqueIndex('media_provider_external_idx').on(table.provider, table.externalId),
+		// The nightly cron's "unsettled" sweep (refreshStaleMedia) filters shows and movies
+		// separately (type + in_production; type + release_date) rather than one OR'd query, so
+		// each branch gets its own supporting index instead of relying on SQLite to plan an OR.
+		index('media_type_in_production_idx').on(table.type, table.inProduction),
+		index('media_type_release_date_idx').on(table.type, table.releaseDate)
+	]
 );
 
 /** A show's season. TMDB numbers Specials as season 0. */
@@ -315,7 +330,10 @@ export const episodes = sqliteTable(
 	(table) => [
 		primaryKey({ columns: [table.mediaId, table.seasonNumber, table.episodeNumber] }),
 		index('episodes_media_idx').on(table.mediaId),
-		index('episodes_air_date_idx').on(table.airDate)
+		index('episodes_air_date_idx').on(table.airDate),
+		// The notify digest joins tracking → episodes on media_id and range-filters air_date in the
+		// same query; a compound index covers both instead of a media_id-only index scan.
+		index('episodes_media_air_date_idx').on(table.mediaId, table.airDate)
 	]
 );
 

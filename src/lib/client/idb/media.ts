@@ -88,18 +88,46 @@ export async function getEpisodes(mediaId: string): Promise<ClientEpisode[]> {
 	return (await openDb()).getAllFromIndex('episodes', 'by_media', mediaId);
 }
 
-/** Identity of locally-known provider-backed media, to push to the channel for server hydration. */
-export async function getLinkedMediaRefs(): Promise<
-	{ provider: MediaProvider; externalId: string }[]
-> {
-	const all = await getAllMedia();
-	return all
-		.filter((m) => m.source === 'linked' && m.externalId !== null)
+/**
+ * Every media id the local `tracking`/`episodeWatches` projections reference — the client-side
+ * mirror of what the server would derive from the same projections. Unconditional (a removed
+ * tracking row still counts, matching the server's scope): `tracking`'s keyPath *is* `mediaId`,
+ * so this is two cheap local index reads, no filtering needed beyond dedup.
+ */
+export async function getReferencedMediaIds(): Promise<string[]> {
+	const db = await openDb();
+	const ids = new Set<string>(await db.getAllKeys('tracking'));
+	for (const row of await db.getAll('episodeWatches')) ids.add(row.mediaId);
+	return [...ids];
+}
+
+/**
+ * Referenced ids the client has no synced copy of yet — no local row at all, or the `version: 0`
+ * placeholder a quick-add snapshot seeds (see `mediaRecordFromSearch`). These are what the media
+ * channel needs to ask the server about; everything else stays local until the next full check.
+ */
+export async function getUnsyncedMediaIds(referencedIds: string[]): Promise<string[]> {
+	const out: string[] = [];
+	for (const id of referencedIds) {
+		const row = await getMedia(id);
+		if (!row || row.version === 0) out.push(id);
+	}
+	return out;
+}
+
+/** Identity of locally-known provider-backed media among `ids`, to push to the channel for server
+ *  hydration. */
+export async function getLinkedMediaRefs(
+	ids: string[]
+): Promise<{ provider: MediaProvider; externalId: string }[]> {
+	const rows = await Promise.all(ids.map((id) => getMedia(id)));
+	return rows
+		.filter((m): m is ClientMedia => !!m && m.source === 'linked' && m.externalId !== null)
 		.map((m) => ({ provider: m.provider, externalId: m.externalId as string }));
 }
 
-/** Each local media id + the version held — the version-diff report the media channel sends. */
-export async function getMediaVersions(): Promise<{ id: string; version: number }[]> {
-	const all = await getAllMedia();
-	return all.map((m) => ({ id: m.id, version: m.version ?? 0 }));
+/** `id` + the version held for each of `ids` (0 when there's no local row) — the version-diff
+ *  report the media channel sends. */
+export async function getMediaVersions(ids: string[]): Promise<{ id: string; version: number }[]> {
+	return Promise.all(ids.map(async (id) => ({ id, version: (await getMedia(id))?.version ?? 0 })));
 }

@@ -24,7 +24,15 @@ export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 /** Coalesce bursts of trigger/nudge calls into one run this many ms later. */
 const NUDGE_MS = 300;
 /** Light polling cadence while the tab is open — also the natural retry cadence after a failure. */
-const INTERVAL_MS = 45_000;
+const INTERVAL_MS = 60_000;
+/**
+ * How often the media channel does a *full* version-diff pass (every referenced id, not just ones
+ * missing locally) — the only way to notice a title the nightly cron refreshed server-side while
+ * this device already had a copy. Much slower than the event-sync interval on purpose: nothing
+ * about a poll cadence under a day can usefully chase a 12h TTL, so there's no reason to pay for a
+ * full diff every cycle. Every other cycle is a "light" pass — see `#sync()`.
+ */
+const FULL_MEDIA_CHECK_MS = 15 * 60 * 1000;
 /** Per-channel in-cycle retry (2s → 4s), so a transient blip self-heals within one cycle. */
 const RETRY: RetryOptions = { maxAttempts: 3, baseMs: 2000, maxMs: 60000 };
 /** Trip a channel's breaker after this many consecutive cycle failures, then pause for the cooldown. */
@@ -59,6 +67,8 @@ class SyncEngine {
 	#interval: ReturnType<typeof setInterval> | null = null;
 	#teardown: Array<() => void> = [];
 	#started = false;
+	/** Epoch ms of the last full media version-diff pass; 0 forces one on the first cycle. */
+	#lastFullMediaCheck = 0;
 	// Independent breakers so a failing channel never stops the others.
 	#events = new CircuitBreaker({ ...CIRCUIT, name: 'sync:events' });
 	#media = new CircuitBreaker({ ...CIRCUIT, name: 'sync:media' });
@@ -180,6 +190,7 @@ class SyncEngine {
 		this.status = 'syncing';
 		try {
 			let changed = false;
+			let pulled = 0; // events pulled this cycle — the sequence-watermark signal for the media gate below
 
 			// Event channel — authoritative; drives the visible status.
 			try {
@@ -195,7 +206,8 @@ class SyncEngine {
 				const syncedAt = Date.now();
 				this.lastSyncAt = syncedAt;
 				void setLastSyncAt(syncedAt);
-				if (res.pulled > 0) changed = true;
+				pulled = res.pulled;
+				if (pulled > 0) changed = true;
 			} catch (err) {
 				this.lastError = toSyncErrorInfo(err, this.#events.failures, Date.now());
 				// Browser-visible; also forward to the observability sink — client-side
@@ -211,27 +223,39 @@ class SyncEngine {
 				return; // events are the base — don't run media/images on top of a failed event sync
 			}
 
-			// Media channel — also surfaces in the sync indicator (a failing media sync, e.g. a large
-			// library, should be visible, not silent). Same shape as the event channel: a breaker-open
-			// skip or a throw flips the status to error and skips images for this cycle.
-			try {
-				const res = await this.#runChannel(this.#media, () => runMediaSync());
-				if (res === null) {
+			// Media channel — gated on the event channel's sequence watermark: `pulled > 0`
+			// means the server had (or we just pushed) something new since our cursor, which is the
+			// only way a title's local-missing status can have changed since last cycle. When the
+			// watermark hasn't moved, referencedIds can't have changed either, so a light pass would
+			// find nothing — skip the request outright. A full version-diff pass still runs on its
+			// own slower cadence regardless, to pick up cron-side refreshes of titles we already have.
+			const dueForFullCheck = Date.now() - this.#lastFullMediaCheck >= FULL_MEDIA_CHECK_MS;
+			if (pulled > 0 || dueForFullCheck) {
+				// Also surfaces in the sync indicator (a failing media sync, e.g. a large library,
+				// should be visible, not silent). Same shape as the event channel: a breaker-open
+				// skip or a throw flips the status to error and skips images for this cycle.
+				try {
+					const mediaRes = await this.#runChannel(this.#media, () =>
+						runMediaSync({ fullCheck: dueForFullCheck })
+					);
+					if (mediaRes === null) {
+						this.status = 'error';
+						return;
+					}
+					if (dueForFullCheck) this.#lastFullMediaCheck = Date.now();
+					if (mediaRes.applied > 0) changed = true;
+				} catch (err) {
+					this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
+					console.error('[sync] media sync failed', this.lastError);
+					reportClientError({
+						message: this.lastError.message,
+						status: this.lastError.status,
+						source: 'media-sync',
+						at: this.lastError.at
+					});
 					this.status = 'error';
 					return;
 				}
-				if (res.applied > 0) changed = true;
-			} catch (err) {
-				this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
-				console.error('[sync] media sync failed', this.lastError);
-				reportClientError({
-					message: this.lastError.message,
-					status: this.lastError.status,
-					source: 'media-sync',
-					at: this.lastError.at
-				});
-				this.status = 'error';
-				return;
 			}
 
 			// Image channel — best-effort (blobs for already-known media); never flips the status.
