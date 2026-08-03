@@ -6,11 +6,18 @@
  *
  * `refreshMedia` is refresh-aware: on a miss it fully hydrates (details + every season's episodes);
  * on a hit it re-pulls only when the row is stale (airing shows past a TTL; movies + finished shows
- * never), reconciles the `seasons`/`episodes` child rows, and bumps `version` only when content
- * actually changed.
+ * never), diffs the `seasons`/`episodes` child rows against what's stored and writes only what
+ * actually changed, and bumps `version` only when content actually changed.
  */
-import { eq } from 'drizzle-orm';
-import { episodes, media, seasons, type EpisodeRow, type Media } from '$lib/server/db/schema';
+import { and, eq, or, sql } from 'drizzle-orm';
+import {
+	episodes,
+	media,
+	seasons,
+	type EpisodeRow,
+	type Media,
+	type SeasonRow
+} from '$lib/server/db/schema';
 import { mediaId, type MediaProvider } from '$lib/sync/events';
 import type { createDb } from '$lib/server/db';
 import type { MediaDetail, SeasonDetail, TmdbClient } from '$lib/server/tmdb';
@@ -28,13 +35,17 @@ export const AIRING_TTL_MS = 12 * 60 * 60 * 1000;
  */
 const D1_MAX_BOUND_PARAMS = 100;
 
-function chunkForD1<T extends object>(rows: T[]): T[][] {
+function chunkBySize<T>(rows: T[], size: number): T[][] {
 	if (rows.length === 0) return [];
-	const paramsPerRow = Object.keys(rows[0]).length;
-	const size = Math.max(1, Math.floor(D1_MAX_BOUND_PARAMS / paramsPerRow));
 	const chunks: T[][] = [];
 	for (let i = 0; i < rows.length; i += size) chunks.push(rows.slice(i, i + size));
 	return chunks;
+}
+
+function chunkForD1<T extends object>(rows: T[]): T[][] {
+	if (rows.length === 0) return [];
+	const paramsPerRow = Object.keys(rows[0]).length;
+	return chunkBySize(rows, Math.max(1, Math.floor(D1_MAX_BOUND_PARAMS / paramsPerRow)));
 }
 
 // TMDB's own TV statuses (full set: Returning Series / Planned / In Production / Ended / Canceled /
@@ -80,12 +91,52 @@ export function needsRefresh(row: Media, now: number): boolean {
 	return row.inProduction === true || AIRING_STATUSES.has(row.status ?? '');
 }
 
-/** Stable signature of the episode set (coords + air dates) to detect content changes. */
-function episodeSignature(
-	rows: { seasonNumber: number; episodeNumber: number; airDate: string | null }[]
+type SeasonInsert = typeof seasons.$inferInsert;
+type EpisodeInsert = typeof episodes.$inferInsert;
+
+/** Mutable (non-key) columns compared to decide whether a row needs (re)writing. */
+const SEASON_CONTENT_FIELDS = ['name', 'overview', 'airDate', 'posterPath', 'episodeCount'] as const;
+const EPISODE_CONTENT_FIELDS = ['name', 'overview', 'airDate', 'runtime', 'stillPath'] as const;
+
+function contentChanged<K extends string>(
+	a: Record<K, unknown>,
+	b: Record<K, unknown>,
+	fields: readonly K[]
+): boolean {
+	return fields.some((f) => a[f] !== b[f]);
+}
+
+/** Stable signature of a season set (coords + every mutable field) to detect content changes. */
+function seasonSignature(
+	rows: Pick<SeasonInsert, (typeof SEASON_CONTENT_FIELDS)[number] | 'seasonNumber'>[]
 ): string {
 	return rows
-		.map((e) => `${e.seasonNumber}:${e.episodeNumber}:${e.airDate ?? ''}`)
+		.map((s) =>
+			[s.seasonNumber, s.name, s.overview, s.airDate ?? '', s.posterPath ?? '', s.episodeCount].join(':')
+		)
+		.sort()
+		.join('|');
+}
+
+/** Stable signature of an episode set (coords + every mutable field) to detect content changes. */
+function episodeSignature(
+	rows: Pick<
+		EpisodeInsert,
+		(typeof EPISODE_CONTENT_FIELDS)[number] | 'seasonNumber' | 'episodeNumber'
+	>[]
+): string {
+	return rows
+		.map((e) =>
+			[
+				e.seasonNumber,
+				e.episodeNumber,
+				e.name,
+				e.overview,
+				e.airDate ?? '',
+				e.runtime ?? '',
+				e.stillPath ?? ''
+			].join(':')
+		)
 		.sort()
 		.join('|');
 }
@@ -142,16 +193,99 @@ function toRows(
 	return { scalars, seasonRows, episodeRows };
 }
 
-async function replaceChildren(
+/**
+ * Reconcile a show's stored seasons against freshly-fetched ones: upsert rows that are new or whose
+ * content differs, delete rows that disappeared (or were renumbered away from), and leave every
+ * unchanged row untouched — a genuinely unchanged season set issues zero queries.
+ */
+async function syncSeasons(
 	db: Db,
 	id: string,
-	seasonRows: (typeof seasons.$inferInsert)[],
-	episodeRows: (typeof episodes.$inferInsert)[]
+	oldRows: SeasonRow[],
+	newRows: SeasonInsert[]
 ): Promise<void> {
-	await db.delete(episodes).where(eq(episodes.mediaId, id));
-	await db.delete(seasons).where(eq(seasons.mediaId, id));
-	for (const chunk of chunkForD1(seasonRows)) await db.insert(seasons).values(chunk);
-	for (const chunk of chunkForD1(episodeRows)) await db.insert(episodes).values(chunk);
+	const oldByNumber = new Map(oldRows.map((r) => [r.seasonNumber, r]));
+	const newNumbers = new Set(newRows.map((r) => r.seasonNumber));
+
+	const toUpsert = newRows.filter((r) => {
+		const old = oldByNumber.get(r.seasonNumber);
+		return !old || contentChanged(old, r, SEASON_CONTENT_FIELDS);
+	});
+	const toDelete = oldRows.filter((r) => !newNumbers.has(r.seasonNumber));
+
+	for (const chunk of chunkForD1(toUpsert)) {
+		await db
+			.insert(seasons)
+			.values(chunk)
+			.onConflictDoUpdate({
+				target: [seasons.mediaId, seasons.seasonNumber],
+				set: {
+					name: sql`excluded.name`,
+					overview: sql`excluded.overview`,
+					airDate: sql`excluded.air_date`,
+					posterPath: sql`excluded.poster_path`,
+					episodeCount: sql`excluded.episode_count`
+				}
+			});
+	}
+	// One bound mediaId param + one seasonNumber param per deleted row.
+	for (const chunk of chunkBySize(toDelete, D1_MAX_BOUND_PARAMS - 1)) {
+		await db
+			.delete(seasons)
+			.where(
+				and(eq(seasons.mediaId, id), or(...chunk.map((r) => eq(seasons.seasonNumber, r.seasonNumber))))
+			);
+	}
+}
+
+/** Same reconciliation as {@link syncSeasons}, keyed on (seasonNumber, episodeNumber). */
+async function syncEpisodes(
+	db: Db,
+	id: string,
+	oldRows: EpisodeRow[],
+	newRows: EpisodeInsert[]
+): Promise<void> {
+	const key = (r: { seasonNumber: number; episodeNumber: number }) =>
+		`${r.seasonNumber}:${r.episodeNumber}`;
+	const oldByKey = new Map(oldRows.map((r) => [key(r), r]));
+	const newKeys = new Set(newRows.map(key));
+
+	const toUpsert = newRows.filter((r) => {
+		const old = oldByKey.get(key(r));
+		return !old || contentChanged(old, r, EPISODE_CONTENT_FIELDS);
+	});
+	const toDelete = oldRows.filter((r) => !newKeys.has(key(r)));
+
+	for (const chunk of chunkForD1(toUpsert)) {
+		await db
+			.insert(episodes)
+			.values(chunk)
+			.onConflictDoUpdate({
+				target: [episodes.mediaId, episodes.seasonNumber, episodes.episodeNumber],
+				set: {
+					name: sql`excluded.name`,
+					overview: sql`excluded.overview`,
+					airDate: sql`excluded.air_date`,
+					runtime: sql`excluded.runtime`,
+					stillPath: sql`excluded.still_path`
+				}
+			});
+	}
+	// One bound mediaId param + two (season, episode) params per deleted row.
+	for (const chunk of chunkBySize(toDelete, Math.floor((D1_MAX_BOUND_PARAMS - 1) / 2))) {
+		await db
+			.delete(episodes)
+			.where(
+				and(
+					eq(episodes.mediaId, id),
+					or(
+						...chunk.map((r) =>
+							and(eq(episodes.seasonNumber, r.seasonNumber), eq(episodes.episodeNumber, r.episodeNumber))
+						)
+					)
+				)
+			);
+	}
 }
 
 /**
@@ -222,26 +356,29 @@ export async function refreshMedia(
 			.insert(media)
 			.values({ ...scalars, source: 'linked', version: 1, refreshedAt: now })
 			.onConflictDoNothing();
-		if (detail.type === 'show') await replaceChildren(db, id, seasonRows, episodeRows);
+		if (detail.type === 'show') {
+			await syncSeasons(db, id, [], seasonRows);
+			await syncEpisodes(db, id, [], episodeRows);
+		}
 	} else {
-		const oldEpisodes: Pick<EpisodeRow, 'seasonNumber' | 'episodeNumber' | 'airDate'>[] = await db
-			.select({
-				seasonNumber: episodes.seasonNumber,
-				episodeNumber: episodes.episodeNumber,
-				airDate: episodes.airDate
-			})
-			.from(episodes)
-			.where(eq(episodes.mediaId, id));
+		const oldSeasons: SeasonRow[] =
+			detail.type === 'show' ? await db.select().from(seasons).where(eq(seasons.mediaId, id)) : [];
+		const oldEpisodes: EpisodeRow[] =
+			detail.type === 'show' ? await db.select().from(episodes).where(eq(episodes.mediaId, id)) : [];
 		const changed =
 			existing.title !== scalars.title ||
 			existing.status !== scalars.status ||
 			existing.inProduction !== scalars.inProduction ||
 			existing.lastAirDate !== scalars.lastAirDate ||
 			existing.releaseDate !== scalars.releaseDate ||
+			seasonSignature(oldSeasons) !== seasonSignature(seasonRows) ||
 			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows);
 		// Write the children first: if that throws, the media row keeps its old `refreshedAt`, so the
 		// next sync retries — rather than being stamped fresh-but-empty and never refreshing again.
-		if (detail.type === 'show') await replaceChildren(db, id, seasonRows, episodeRows);
+		if (detail.type === 'show') {
+			await syncSeasons(db, id, oldSeasons, seasonRows);
+			await syncEpisodes(db, id, oldEpisodes, episodeRows);
+		}
 		await db
 			.update(media)
 			.set({

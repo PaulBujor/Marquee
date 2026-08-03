@@ -1,10 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, getTableName } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
 import { episodes, seasons } from '$lib/server/db/schema';
 import { mediaId } from '$lib/sync/events';
 import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 import { needsRefresh, parseTmdbExternalId, refreshMedia } from './hydrate';
+
+type Db = ReturnType<typeof createTestDb>;
+
+/**
+ * Monkey-patches insert/update/delete on `db` to record which table each call targets, so a test
+ * can assert on write volume (not just end state) — e.g. "an unchanged refresh writes zero rows".
+ * Calls through to the real implementation; only observes.
+ */
+function trackWrites(db: Db): { op: 'insert' | 'update' | 'delete'; table: string }[] {
+	const writes: { op: 'insert' | 'update' | 'delete'; table: string }[] = [];
+	const target = db as unknown as Record<string, (...args: unknown[]) => unknown>;
+	for (const op of ['insert', 'update', 'delete'] as const) {
+		const original = target[op].bind(db);
+		target[op] = (...args: unknown[]) => {
+			writes.push({ op, table: getTableName(args[0] as never) });
+			return original(...args);
+		};
+	}
+	return writes;
+}
 
 const T0 = Date.UTC(2026, 6, 24); // fixed "now" for deterministic TTL tests
 
@@ -52,23 +72,65 @@ function movieStub(overrides: Partial<MediaDetail> = {}) {
 	};
 }
 
+interface EpisodeStub {
+	episodeNumber: number;
+	name: string;
+	overview: string;
+	airDate: string | null;
+	runtime: number | null;
+	stillPath: string | null;
+}
+
 /**
- * A show TMDB stub whose episode set + production status can be mutated between refreshes,
- * so a re-pull can observe a newly-aired episode or a status flip.
+ * A show TMDB stub whose episode set, season metadata, and production status can be mutated
+ * between refreshes, so a re-pull can observe a newly-aired/changed/removed episode, a season
+ * content edit, or a status flip.
  */
 function showStub() {
 	let detailCalls = 0;
 	let inProduction = true;
-	const episodesBySeason: Record<number, { episodeNumber: number; airDate: string | null }[]> = {
+	const season1 = { name: 'Season 1', overview: '', posterPath: null as string | null };
+	const episodesBySeason: Record<number, EpisodeStub[]> = {
 		1: [
-			{ episodeNumber: 1, airDate: '2026-01-01' },
-			{ episodeNumber: 2, airDate: '2026-08-01' }
+			{
+				episodeNumber: 1,
+				name: 'E1',
+				overview: '',
+				airDate: '2026-01-01',
+				runtime: 42,
+				stillPath: null
+			},
+			{
+				episodeNumber: 2,
+				name: 'E2',
+				overview: '',
+				airDate: '2026-08-01',
+				runtime: 42,
+				stillPath: null
+			}
 		]
 	};
 	return {
 		detailCalls: () => detailCalls,
-		addEpisode(ep: { episodeNumber: number; airDate: string | null }) {
-			episodesBySeason[1].push(ep);
+		addEpisode(ep: { episodeNumber: number; airDate: string | null } & Partial<EpisodeStub>) {
+			episodesBySeason[1].push({
+				name: `E${ep.episodeNumber}`,
+				overview: '',
+				runtime: 42,
+				stillPath: null,
+				...ep
+			});
+		},
+		updateEpisode(episodeNumber: number, patch: Partial<EpisodeStub>) {
+			const ep = episodesBySeason[1].find((e) => e.episodeNumber === episodeNumber);
+			if (!ep) throw new Error(`no stub episode ${episodeNumber}`);
+			Object.assign(ep, patch);
+		},
+		removeEpisode(episodeNumber: number) {
+			episodesBySeason[1] = episodesBySeason[1].filter((e) => e.episodeNumber !== episodeNumber);
+		},
+		updateSeason(patch: Partial<typeof season1>) {
+			Object.assign(season1, patch);
 		},
 		endProduction() {
 			inProduction = false;
@@ -88,11 +150,11 @@ function showStub() {
 					seasons: [
 						{
 							seasonNumber: 1,
-							name: 'Season 1',
+							name: season1.name,
 							episodeCount: episodesBySeason[1].length,
 							airDate: '2026-01-01',
-							posterPath: null,
-							overview: ''
+							posterPath: season1.posterPath,
+							overview: season1.overview
 						}
 					]
 				};
@@ -103,11 +165,11 @@ function showStub() {
 					name: `Season ${seasonNumber}`,
 					episodes: (episodesBySeason[seasonNumber] ?? []).map((e) => ({
 						episodeNumber: e.episodeNumber,
-						name: `E${e.episodeNumber}`,
+						name: e.name,
 						airDate: e.airDate,
-						overview: '',
-						stillPath: null,
-						runtime: 42
+						overview: e.overview,
+						stillPath: e.stillPath,
+						runtime: e.runtime
 					}))
 				};
 			}
@@ -245,6 +307,84 @@ describe('refreshMedia', () => {
 		const second = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0 + 13 * 3600_000);
 		expect(stub.detailCalls()).toBe(2);
 		expect(second!.version).toBe(1);
+	});
+
+	it('writes nothing to episodes/seasons when nothing changed past the TTL', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		const writes = trackWrites(db);
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0 + 13 * 3600_000);
+
+		expect(writes.filter((w) => w.table === 'episodes' || w.table === 'seasons')).toEqual([]);
+	});
+
+	it('updates only the changed episode row, leaving others untouched', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		const id = mediaId('tmdb', 'show/1396');
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+		stub.updateEpisode(2, { airDate: '2026-08-15', name: 'E2 renamed' });
+
+		const writes = trackWrites(db);
+		const second = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0 + 13 * 3600_000);
+
+		expect(second!.version).toBe(2);
+		expect(writes.filter((w) => w.table === 'episodes')).toHaveLength(1);
+		expect(writes.filter((w) => w.table === 'seasons')).toEqual([]);
+
+		const rows = await db.select().from(episodes).where(eq(episodes.mediaId, id));
+		expect(rows.find((r) => r.episodeNumber === 2)).toMatchObject({
+			airDate: '2026-08-15',
+			name: 'E2 renamed'
+		});
+		expect(rows.find((r) => r.episodeNumber === 1)).toMatchObject({
+			airDate: '2026-01-01',
+			name: 'E1'
+		});
+	});
+
+	it('inserts a new episode without rewriting unchanged existing episodes', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+		stub.addEpisode({ episodeNumber: 3, airDate: '2026-09-01' });
+
+		const writes = trackWrites(db);
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0 + 13 * 3600_000);
+
+		// One insert statement carries just the new row (chunked upserts only ever contain
+		// rows that are new or changed).
+		expect(writes.filter((w) => w.table === 'episodes')).toHaveLength(1);
+	});
+
+	it('deletes an episode that disappeared upstream', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		const id = mediaId('tmdb', 'show/1396');
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+		stub.removeEpisode(2);
+
+		const second = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0 + 13 * 3600_000);
+
+		expect(second!.version).toBe(2);
+		const rows = await db.select().from(episodes).where(eq(episodes.mediaId, id));
+		expect(rows.map((r) => r.episodeNumber)).toEqual([1]);
+	});
+
+	it('upserts only the changed season, leaving episodes untouched', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+		stub.updateSeason({ overview: 'New synopsis' });
+
+		const writes = trackWrites(db);
+		const second = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0 + 13 * 3600_000);
+
+		expect(second!.version).toBe(2);
+		expect(writes.filter((w) => w.table === 'episodes')).toEqual([]);
+		expect(writes.filter((w) => w.table === 'seasons')).toHaveLength(1);
 	});
 
 	it('returns null for an unknown provider or malformed id without calling TMDB', async () => {
