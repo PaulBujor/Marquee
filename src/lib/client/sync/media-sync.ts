@@ -19,6 +19,7 @@ import {
 	getUnsyncedMediaIds,
 	putMedia
 } from '$lib/client/idb';
+import { reportClientError } from '$lib/client/report-error';
 import {
 	MEDIA_SYNC_MAX,
 	type MediaSyncRequest,
@@ -26,39 +27,47 @@ import {
 } from '$lib/sync/media-protocol';
 
 /**
- * Hard cap on drain iterations. The server caps TMDB work per request and sets `pending` when more
- * remains; we loop to drain it, but bound the loop so a title that can't hydrate (bad id, TMDB down)
- * can't spin forever — it just retries on the next natural sync. Now that request-time refresh only
- * ever hydrates titles with no stored row (TTL staleness is cron-only), this only fires on a genuine
- * bulk-missing burst — cold start, a large import, or a big backlog pulled after being offline a
- * long time — not on routine cycles. `ceil(MEDIA_SYNC_MAX / 25)` covers a full 500-ref backlog
- * drained 25-at-a-time, with a little margin.
+ * Hard cap on total requests per `runMediaSync` call. `targetIds` is split into
+ * `MEDIA_SYNC_MAX`-sized chunks up front and each chunk gets its own request, queued FIFO — a
+ * chunk the server flags `pending` on (more TMDB hydration than it could do in one request) goes
+ * to the *back* of the queue rather than being retried immediately, so it can't starve chunks
+ * that haven't been visited yet. The queue is drained in full whenever the budget allows: every
+ * chunk gets at least one request before any chunk gets a second, so as long as
+ * `chunks.length <= MAX_DRAIN_ITERATIONS` the whole referenced set is covered in one call
+ * regardless of how it happens to be ordered. `25 * MEDIA_SYNC_MAX` covers a 12,500-title
+ * library; past that (or under heavy hydration-retry pressure) the loop still exits cleanly, but
+ * reports the leftover instead of dropping it silently — see the `truncated` return.
  */
 export const MAX_DRAIN_ITERATIONS = 25;
+
+function chunk<T>(items: T[], size: number): T[][] {
+	const out: T[][] = [];
+	for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+	return out;
+}
 
 export async function runMediaSync(
 	opts: { fullCheck: boolean } = { fullCheck: false },
 	fetchFn: typeof fetch = fetch
-): Promise<{ applied: number }> {
+): Promise<{ applied: number; truncated: boolean }> {
+	const referencedIds = await getReferencedMediaIds();
+	if (referencedIds.length === 0) return { applied: 0, truncated: false };
+
+	// Light pass: only ids with nothing local yet. Full pass: every referenced id, so a
+	// cron-side refresh of something we already have shows up via the version-diff.
+	const targetIds = opts.fullCheck ? referencedIds : await getUnsyncedMediaIds(referencedIds);
+	if (targetIds.length === 0) return { applied: 0, truncated: false };
+
+	const queue = chunk(targetIds, MEDIA_SYNC_MAX);
 	let applied = 0;
 
-	for (let i = 0; i < MAX_DRAIN_ITERATIONS; i++) {
-		const referencedIds = await getReferencedMediaIds();
-		if (referencedIds.length === 0) break;
-
-		// Light pass: only ids with nothing local yet. Full pass: every referenced id, so a
-		// cron-side refresh of something we already have shows up via the version-diff.
-		const targetIds = opts.fullCheck ? referencedIds : await getUnsyncedMediaIds(referencedIds);
-		if (targetIds.length === 0) break;
-
+	for (let i = 0; i < MAX_DRAIN_ITERATIONS && queue.length > 0; i++) {
+		const idsChunk = queue.shift()!;
 		const [refs, have] = await Promise.all([
-			getLinkedMediaRefs(targetIds),
-			getMediaVersions(targetIds)
+			getLinkedMediaRefs(idsChunk),
+			getMediaVersions(idsChunk)
 		]);
-		const body: MediaSyncRequest = {
-			refs: refs.slice(0, MEDIA_SYNC_MAX),
-			have: have.slice(0, MEDIA_SYNC_MAX)
-		};
+		const body: MediaSyncRequest = { refs, have };
 		const res = await fetchFn('/api/media/sync', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -70,8 +79,15 @@ export async function runMediaSync(
 		for (const record of data.media) await putMedia(record);
 		applied += data.media.length;
 
-		if (!data.pending) break;
+		if (data.pending) queue.push(idsChunk);
 	}
 
-	return { applied };
+	const truncated = queue.length > 0;
+	if (truncated) {
+		const message = `media sync: drain budget exhausted with ${queue.length} chunk(s) (${queue.flat().length} title(s)) still outstanding`;
+		console.warn(message);
+		reportClientError({ message, source: 'media-sync-truncated', at: Date.now() });
+	}
+
+	return { applied, truncated };
 }
