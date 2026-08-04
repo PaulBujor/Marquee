@@ -8,8 +8,7 @@
  * those ids (`refs` for identity to hydrate, `have` for a version-diff), bounded per request.
  * The server validates the request against the user's own `tracking`/`episode_watches` rows
  * (small, indexed by `user_id`) rather than recomputing the whole referenced universe from the
- * append-only `events` log on every call, which is what made this the dominant source of D1
- * read volume before this rework.
+ * append-only `events` log on every call.
  *
  * TTL-based re-hydration of already-stored titles (an in-production show past its airing TTL)
  * is **cron-only** now (`refreshStaleMedia`) — a request-time poll was never a meaningful driver
@@ -44,9 +43,9 @@ const ID_CHUNK = 90;
 /**
  * Max titles hydrated from TMDB in a single sync request. Each hydrate is a heavy TMDB pull
  * (details + every season) parsed + normalized on the isolate, so an unbounded pass over a large
- * backlog (a cold client, or a bulk import) blows the Worker CPU limit (MRQ-138). Anything beyond
- * the cap is left for the next request — the response's `pending` flag tells the client to loop
- * until it drains.
+ * backlog (a cold client, or a bulk import) blows the Worker CPU limit. Anything beyond the cap
+ * is left for the next request — the response's `pending` flag tells the client to loop until it
+ * drains.
  */
 export const MEDIA_SYNC_REFRESH_MAX = 25;
 
@@ -64,8 +63,7 @@ function chunk<T>(items: T[], size: number): T[][] {
  * The anti-abuse gate: only ids the user's own `tracking`/`episode_watches` projections
  * reference are ever touched, regardless of what the request claims. Both tables are indexed by
  * `user_id` and hold one row per (user, title) — orders of magnitude smaller than the event log
- * they're projected from — so this scoped, chunked lookup replaces what used to be an unbounded
- * `SELECT ... FROM events WHERE user_id = ?` scan of the user's entire history.
+ * they're projected from.
  */
 async function validateReferencedIds(db: Db, userId: string, ids: string[]): Promise<Set<string>> {
 	const valid = new Set<string>();

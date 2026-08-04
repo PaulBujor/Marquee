@@ -29,8 +29,7 @@ const INTERVAL_MS = 60_000;
  * How often the media channel does a *full* version-diff pass (every referenced id, not just ones
  * missing locally) — the only way to notice a title the nightly cron refreshed server-side while
  * this device already had a copy. Much slower than the event-sync interval on purpose: nothing
- * about a poll cadence under a day can usefully chase a 12h TTL, so there's no reason to pay for a
- * full diff every cycle. Every other cycle is a "light" pass — see `#sync()`.
+ * about a sub-day poll cadence can usefully chase a 12h TTL.
  */
 const FULL_MEDIA_CHECK_MS = 15 * 60 * 1000;
 /** Per-channel in-cycle retry (2s → 4s), so a transient blip self-heals within one cycle. */
@@ -223,12 +222,11 @@ class SyncEngine {
 				return; // events are the base — don't run media/images on top of a failed event sync
 			}
 
-			// Media channel — gated on the event channel's sequence watermark: `pulled > 0`
-			// means the server had (or we just pushed) something new since our cursor, which is the
-			// only way a title's local-missing status can have changed since last cycle. When the
-			// watermark hasn't moved, referencedIds can't have changed either, so a light pass would
-			// find nothing — skip the request outright. A full version-diff pass still runs on its
-			// own slower cadence regardless, to pick up cron-side refreshes of titles we already have.
+			// Media channel — gated on the event channel's sequence watermark: `pulled > 0` means the
+			// server had (or we just pushed) something new since our cursor, the only way a title's
+			// local-missing status can have changed since last cycle. Unmoved watermark ⇒
+			// referencedIds can't have changed either, so a light pass would find nothing — skip it
+			// outright. `dueForFullCheck` still runs on its own cadence (see `FULL_MEDIA_CHECK_MS`).
 			const dueForFullCheck = Date.now() - this.#lastFullMediaCheck >= FULL_MEDIA_CHECK_MS;
 			if (pulled > 0 || dueForFullCheck) {
 				// Also surfaces in the sync indicator (a failing media sync, e.g. a large library,

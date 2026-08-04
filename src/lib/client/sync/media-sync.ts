@@ -27,16 +27,13 @@ import {
 } from '$lib/sync/media-protocol';
 
 /**
- * Hard cap on total requests per `runMediaSync` call. `targetIds` is split into
- * `MEDIA_SYNC_MAX`-sized chunks up front and each chunk gets its own request, queued FIFO — a
- * chunk the server flags `pending` on (more TMDB hydration than it could do in one request) goes
- * to the *back* of the queue rather than being retried immediately, so it can't starve chunks
- * that haven't been visited yet. The queue is drained in full whenever the budget allows: every
- * chunk gets at least one request before any chunk gets a second, so as long as
- * `chunks.length <= MAX_DRAIN_ITERATIONS` the whole referenced set is covered in one call
- * regardless of how it happens to be ordered. `25 * MEDIA_SYNC_MAX` covers a 12,500-title
- * library; past that (or under heavy hydration-retry pressure) the loop still exits cleanly, but
- * reports the leftover instead of dropping it silently — see the `truncated` return.
+ * Hard cap on total requests per `runMediaSync` call. `targetIds` is chunked into
+ * `MEDIA_SYNC_MAX`-sized pieces and drained as a FIFO queue: a chunk the server flags `pending`
+ * on goes to the *back* of the queue rather than being retried immediately, so it can't starve
+ * chunks that haven't had a first request yet. Every chunk gets one request before any chunk
+ * gets a second, so coverage is guaranteed as long as `chunks.length <= MAX_DRAIN_ITERATIONS` —
+ * `25 * MEDIA_SYNC_MAX` covers a 12,500-title library. Past that, the loop exits and reports the
+ * leftover via `truncated` rather than dropping it silently.
  */
 export const MAX_DRAIN_ITERATIONS = 25;
 
@@ -53,8 +50,6 @@ export async function runMediaSync(
 	const referencedIds = await getReferencedMediaIds();
 	if (referencedIds.length === 0) return { applied: 0, truncated: false };
 
-	// Light pass: only ids with nothing local yet. Full pass: every referenced id, so a
-	// cron-side refresh of something we already have shows up via the version-diff.
 	const targetIds = opts.fullCheck ? referencedIds : await getUnsyncedMediaIds(referencedIds);
 	if (targetIds.length === 0) return { applied: 0, truncated: false };
 
