@@ -95,12 +95,18 @@ type SeasonInsert = typeof seasons.$inferInsert;
 type EpisodeInsert = typeof episodes.$inferInsert;
 
 /** Mutable (non-key) columns compared to decide whether a row needs (re)writing. */
-const SEASON_CONTENT_FIELDS = ['name', 'overview', 'airDate', 'posterPath', 'episodeCount'] as const;
+const SEASON_CONTENT_FIELDS = [
+	'name',
+	'overview',
+	'airDate',
+	'posterPath',
+	'episodeCount'
+] as const;
 const EPISODE_CONTENT_FIELDS = ['name', 'overview', 'airDate', 'runtime', 'stillPath'] as const;
 
 function contentChanged<K extends string>(
 	a: Record<K, unknown>,
-	b: Record<K, unknown>,
+	b: Partial<Record<K, unknown>>,
 	fields: readonly K[]
 ): boolean {
 	return fields.some((f) => a[f] !== b[f]);
@@ -112,7 +118,14 @@ function seasonSignature(
 ): string {
 	return rows
 		.map((s) =>
-			[s.seasonNumber, s.name, s.overview, s.airDate ?? '', s.posterPath ?? '', s.episodeCount].join(':')
+			[
+				s.seasonNumber,
+				s.name,
+				s.overview,
+				s.airDate ?? '',
+				s.posterPath ?? '',
+				s.episodeCount
+			].join(':')
 		)
 		.sort()
 		.join('|');
@@ -233,7 +246,10 @@ async function syncSeasons(
 		await db
 			.delete(seasons)
 			.where(
-				and(eq(seasons.mediaId, id), or(...chunk.map((r) => eq(seasons.seasonNumber, r.seasonNumber))))
+				and(
+					eq(seasons.mediaId, id),
+					or(...chunk.map((r) => eq(seasons.seasonNumber, r.seasonNumber)))
+				)
 			);
 	}
 }
@@ -280,7 +296,10 @@ async function syncEpisodes(
 					eq(episodes.mediaId, id),
 					or(
 						...chunk.map((r) =>
-							and(eq(episodes.seasonNumber, r.seasonNumber), eq(episodes.episodeNumber, r.episodeNumber))
+							and(
+								eq(episodes.seasonNumber, r.seasonNumber),
+								eq(episodes.episodeNumber, r.episodeNumber)
+							)
 						)
 					)
 				)
@@ -364,7 +383,9 @@ export async function refreshMedia(
 		const oldSeasons: SeasonRow[] =
 			detail.type === 'show' ? await db.select().from(seasons).where(eq(seasons.mediaId, id)) : [];
 		const oldEpisodes: EpisodeRow[] =
-			detail.type === 'show' ? await db.select().from(episodes).where(eq(episodes.mediaId, id)) : [];
+			detail.type === 'show'
+				? await db.select().from(episodes).where(eq(episodes.mediaId, id))
+				: [];
 		const changed =
 			existing.title !== scalars.title ||
 			existing.status !== scalars.status ||

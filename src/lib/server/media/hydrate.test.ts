@@ -373,6 +373,46 @@ describe('refreshMedia', () => {
 		expect(rows.map((r) => r.episodeNumber)).toEqual([1]);
 	});
 
+	it('deletes a season that disappeared upstream, and its episodes with it', async () => {
+		// The stub only ever reports season 1, so seed a season 2 (+ an episode under it) directly to
+		// simulate a stored season that TMDB no longer lists — there's no FK cascade from `seasons` to
+		// `episodes` (both just reference `media`), so the diff must delete both explicitly.
+		const db = createTestDb();
+		const stub = showStub();
+		const id = mediaId('tmdb', 'show/1396');
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+		await db.insert(seasons).values({
+			mediaId: id,
+			seasonNumber: 2,
+			name: 'Season 2',
+			overview: '',
+			airDate: '2026-06-01',
+			posterPath: null,
+			episodeCount: 1
+		});
+		await db.insert(episodes).values({
+			mediaId: id,
+			seasonNumber: 2,
+			episodeNumber: 1,
+			name: 'S2E1',
+			overview: '',
+			airDate: '2026-06-01',
+			runtime: 42,
+			stillPath: null
+		});
+
+		const second = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0 + 13 * 3600_000);
+
+		expect(second!.version).toBe(2);
+		const seasonRows = await db.select().from(seasons).where(eq(seasons.mediaId, id));
+		expect(seasonRows.map((r) => r.seasonNumber)).toEqual([1]);
+		const episodeRows = await db.select().from(episodes).where(eq(episodes.mediaId, id));
+		expect(episodeRows.map((r) => [r.seasonNumber, r.episodeNumber])).toEqual([
+			[1, 1],
+			[1, 2]
+		]);
+	});
+
 	it('upserts only the changed season, leaving episodes untouched', async () => {
 		const db = createTestDb();
 		const stub = showStub();
