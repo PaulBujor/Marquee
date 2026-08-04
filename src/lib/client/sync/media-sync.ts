@@ -28,7 +28,7 @@ export async function runMediaSync(fetchFn: typeof fetch = fetch): Promise<{ app
 		const [have, refs] = await Promise.all([getMediaVersions(), getLinkedMediaRefs()]);
 
 		// Report what we have + at which version; the server derives the referenced universe from the
-		// event log and returns rows we're missing or behind on (version-diff staleness, MRQ-122). We
+		// event log and returns rows we're missing or behind on (version-diff staleness). We
 		// push identity for our linked rows so the server can hydrate them for other devices.
 		const body: MediaSyncRequest = {
 			refs: refs.slice(0, MEDIA_SYNC_MAX),

@@ -2,7 +2,7 @@
  * Server-side projection of the event log into the materialized user-state tables
  * (`tracking`, `episode_watches`). The log is authoritative; those tables are strictly
  * derivable from it (see {@link rebuildProjection}). Media is reference data synced on a
- * separate parallel channel (MRQ-111), not through the event log — nothing here touches it.
+ * separate parallel channel, not through the event log — nothing here touches it.
  *
  * Idempotency and conflict resolution live in SQL: every write is an upsert guarded by
  * `ON CONFLICT DO UPDATE ... WHERE <clock> >= existing`, so re-applying is a no-op and

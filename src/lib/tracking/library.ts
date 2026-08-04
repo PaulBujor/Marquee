@@ -91,7 +91,7 @@ export interface UpcomingEntry {
 }
 
 /**
- * The upcoming-releases agenda (MRQ-65): future episodes of shows you're **watching**, merged with
+ * The upcoming-releases agenda: future episodes of shows you're **watching**, merged with
  * release dates of **want-to-watch** movies, sorted ascending by date. Excludes Specials (season 0)
  * and anything already aired/released (date must be strictly after `today`). Other statuses
  * (completed / did-not-finish, and want-to-watch shows) don't contribute.
@@ -142,7 +142,7 @@ export interface UpcomingYear {
 }
 
 /**
- * Group date-sorted upcoming entries into years, each holding its per-day runs (MRQ-131). The flat
+ * Group date-sorted upcoming entries into years, each holding its per-day runs. The flat
  * agenda only renders day + month, so the timeline needs a year divider to tell which year a release
  * falls in. Input must be ascending by `date` (as {@link filterUpcoming} returns), so equal dates and
  * equal years are contiguous — a single linear pass preserves order with no Map.

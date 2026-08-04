@@ -46,7 +46,7 @@ export function nextFavorite(view: TrackingView): boolean {
  * watched, never a "want to watch". A movie is rateable once finished (completed / didn't finish);
  * a series also while you're watching it. Drives both the detail-page rating control and whether a
  * stored rating is surfaced elsewhere (e.g. the poster badge) — the rating itself is kept on the row
- * either way, so it returns if the title moves back to a rateable status (MRQ-143).
+ * either way, so it returns if the title moves back to a rateable status.
  */
 export function canRate(type: 'movie' | 'show', status: TrackingStatus): boolean {
 	return type === 'show'
@@ -68,10 +68,6 @@ export interface WatchedAtInput {
  * When a title was (last) watched, or null when there's nothing meaningful to show. Both clocks
  * are already carried by the materialized projections — the episode watch clock and the tracking
  * row's status clock — so this reads history the app has always recorded but never surfaced.
- *
- * A movie only has the status clock, and only once it's `completed`. A show prefers its newest
- * episode watch (the real "last watched"), falling back to the status clock for a series marked
- * completed on a device that never synced the per-episode rows.
  *
  * These record **when the user marked it**, which is as close to a watch date as the event log
  * gets; back-dating a watch would need the date on the event itself.
@@ -98,8 +94,7 @@ export interface DatedEpisode {
 
 /**
  * The season number a provider uses for Specials. TMDB numbers them season 0; naming it
- * keeps the "skip Specials" rule from reading as a bare `>= 1`. Per-provider variance (other
- * catalogues may model Specials differently) is deferred to the Custom Media / provider epic.
+ * keeps the "skip Specials" rule from reading as a bare `>= 1`.
  */
 export const SPECIALS_SEASON = 0;
 
@@ -165,7 +160,7 @@ export interface SeasonSummary {
 /**
  * The episode coords a bulk "mark watched" should seed, derived from the season summaries the detail
  * page already has — so it works the instant a title is added, before the media channel syncs
- * per-episode air dates (the MRQ-130 race). Precision by source, per season:
+ * per-episode air dates. Precision by source, per season:
  *
  * - If we already hold **per-episode** air dates for the season (`dated`), mark only its aired episodes.
  * - Else, for a **finished** show (`inProduction === false`) whose season has aired, mark the whole
@@ -273,7 +268,7 @@ export function isStillAiring(
 
 /**
  * Derive the status a show should move to from its episode-watch progress, or null when no
- * change is warranted. This is the completion sequence (MRQ-55): watching the last episode
+ * change is warranted. This is the completion sequence: watching the last episode
  * completes it, unwatching one un-completes it, and the first watch starts it. It needs the
  * **aired episode count** (TMDB reference data, not in the event log), so it runs where that's
  * known and records a `status_changed`. An explicit `did_not_finish` is never auto-overridden;
@@ -293,8 +288,6 @@ export function reconciledStatus(
 	if (airedEpisodeCount === 0 || current === 'did_not_finish') return null;
 	const caughtUp = watchedCount >= airedEpisodeCount;
 	if (caughtUp && !stillAiring) return current === 'completed' ? null : 'completed';
-	// In progress (or caught up on a still-airing show): back out a stale `completed`, and start
-	// a `want_to_watch` title once its first episode is watched.
 	if (current === 'completed') return 'watching';
 	if (current === 'want_to_watch' && watchedCount > 0) return 'watching';
 	return null;

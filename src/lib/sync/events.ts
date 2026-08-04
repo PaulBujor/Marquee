@@ -30,10 +30,6 @@ export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
  * Episodes keep a `watched`/`unwatched` pair (a binary toggle reads cleaner than a
  * boolean payload), while `status` is an enum, so it's one `status_changed` carrying
  * the new value rather than an event per status.
- *
- * Future: re-watches (a completed title marked watching again, its episodes re-watched)
- * will need a richer episode model than a single boolean — likely a watch-session or
- * count dimension, added via a `schemaVersion` bump. Not supported yet.
  */
 export const SYNC_EVENT_TYPES = [
 	'tracking.added',

@@ -107,6 +107,6 @@ export class LibraryState {
  * App-wide home-library singleton (mirrors the `sync` engine). Held at module scope so it survives
  * client-side navigation — returning to the dashboard from a detail page finds the grid already
  * populated instead of remounting an empty `LibraryState` and flashing blank for a frame while the
- * IndexedDB read resolves (MRQ-147). Reset on logout / account switch so it can't leak across users.
+ * IndexedDB read resolves. Reset on logout / account switch so it can't leak across users.
  */
 export const library = new LibraryState();

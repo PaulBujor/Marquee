@@ -244,7 +244,7 @@ export const media = sqliteTable(
 		source: text('source', { enum: MEDIA_SOURCES }).notNull().default('linked'),
 		type: text('type', { enum: ['movie', 'show'] }).notNull(),
 		title: text('title').notNull(),
-		// Case-folded title for the degraded/offline search fallback (MRQ-141). SQLite `LIKE` folds
+		// Case-folded title for the degraded/offline search fallback. SQLite `LIKE` folds
 		// only ASCII, while the offline client search uses JS `toLowerCase()` (full Unicode) — so the
 		// two disagreed on accented/non-ASCII titles. We fold in app code on hydrate (matching the
 		// client) and query this column, so both paths return the same rows. `refreshMedia` populates

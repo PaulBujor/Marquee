@@ -27,7 +27,7 @@ const ID_CHUNK = 90;
 /**
  * Max titles hydrated/refreshed from TMDB in a single sync request. Each refresh is a heavy TMDB
  * pull (details + every season) parsed + normalized on the isolate, so an unbounded pass over a
- * whole library blows the Worker CPU limit (MRQ-138). Anything beyond the cap is left for the next
+ * whole library blows the Worker CPU limit. Anything beyond the cap is left for the next
  * sync — the response's `pending` flag tells the client to loop until it drains — plus the nightly
  * cron, which sweeps airing shows regardless.
  */
@@ -113,7 +113,7 @@ export async function resolveMediaSync(
 		else if (needsRefresh(existing, now)) stale.push(ref);
 	}
 
-	// Cap the per-request TMDB work (MRQ-138): an unbounded serial refresh over the whole library
+	// Cap the per-request TMDB work: an unbounded serial refresh over the whole library
 	// blows the Worker CPU limit. Missing rows first — they have no data to return yet, so hydrating
 	// them unblocks the client fastest; stale-but-stored rows already return usable data and the cron
 	// keeps them current. Overflow is signalled via `pending` so the client loops to drain it.
