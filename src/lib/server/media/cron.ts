@@ -20,7 +20,7 @@ export interface RefreshResult {
 
 /**
  * Refresh all provider-backed, unsettled titles: in-production shows, plus movies not yet released
- * (no date, or a date today-or-later — MRQ-128). Per-title failures are isolated so one bad title
+ * (no date, or a date today-or-later). Per-title failures are isolated so one bad title
  * can't abort the run; `refreshMedia`'s TTL still gates each. `force` bypasses that TTL (for a manual
  * re-hydrate); `now` is injectable for tests.
  */

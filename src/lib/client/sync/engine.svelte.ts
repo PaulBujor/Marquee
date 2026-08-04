@@ -2,7 +2,7 @@
  * The client sync engine: a browser-only singleton that drives the sync channels on the right
  * triggers (app open/foreground, reconnect, a light interval, and a write-nudge), coalesces
  * overlapping requests, and exposes a reactive {@link SyncEngine.status} (plus
- * {@link SyncEngine.lastError} detail) for a future sync-pending / error-reporting UI (MRQ-95).
+ * {@link SyncEngine.lastError} detail) for a future sync-pending / error-reporting UI.
  *
  * Resilience: each channel (event, media) runs through {@link withRetry} for in-cycle backoff and
  * its own {@link CircuitBreaker} so a persistently-failing channel **stops** hammering rather than
@@ -44,7 +44,7 @@ const syncRetryDelay = (err: unknown, computedMs: number): number =>
 
 class SyncEngine {
 	status = $state<SyncStatus>('idle');
-	/** Whether the browser currently reports a network connection — drives the offline indicator (MRQ-95). */
+	/** Whether the browser currently reports a network connection — drives the offline indicator. */
 	online = $state(true);
 	/** Detail of the most recent event-sync failure, retained for future error reporting; cleared on success. */
 	lastError = $state<SyncErrorInfo | null>(null);

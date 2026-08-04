@@ -63,7 +63,7 @@
 		timeZone: 'UTC'
 	});
 	const formatDate = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
-	// Our own media id for the tracking event pipeline (provider-agnostic, MRQ-112).
+	// Our own media id for the tracking event pipeline (provider-agnostic).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
 	// Today (YYYY-MM-DD) for the per-episode aired check — an episode is watchable once it's aired.
 	const today = todayIso();
@@ -96,10 +96,8 @@
 	// Reactive local tracking state (IndexedDB-backed); reloaded on sync pulls. Recreated **only when
 	// the media id changes** — not on the in-place base→enriched upgrade (which changes `detail`, and
 	// thus `mediaRecord`). A fresh instance would reset `view`/`ready`/`watched` and re-trickle the
-	// watch-status not-watched → watching → watched as it reloaded, reflowing the action row (MRQ-146).
+	// watch-status not-watched → watching → watched as it reloaded, reflowing the action row.
 	// `untrack` keeps the record/seasons reads from making this recompute on every enrichment.
-	// Season summaries (count + air date) let a bulk "mark watched" enumerate episodes immediately,
-	// before the media channel syncs per-episode air dates (MRQ-130).
 	const tracking = $derived.by(() => {
 		const id = mediaId;
 		return untrack(() => new TrackingState(id, mediaRecord, detail.seasons));
@@ -108,7 +106,7 @@
 		void sync.revision;
 		tracking.load();
 	});
-	// Keeps season summaries live despite `tracking`'s frozen identity above (MRQ-146) — otherwise a
+	// Keeps season summaries live despite `tracking`'s frozen identity above — otherwise a
 	// title opened from a stale local cache never picks up newly-synced season data.
 	$effect(() => {
 		tracking.updateSeasons(detail.seasons);
@@ -441,11 +439,9 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			{/each}
 		</div>
 
-		<!-- Watch-tracking controls, above the description. Shows get an extra "next episode" row
-		     when tracked; the action row adapts (movie → mark watched; show → mark series watched).
-		     Held behind a fixed-height placeholder until the tracking read resolves, so the row paints
-		     once in its final state instead of stepping through intermediate ones and reflowing
-		     everything below it (MRQ-146). -->
+		<!-- Watch-tracking controls, above the description. Held behind a fixed-height placeholder
+		     until the tracking read resolves, so the row paints once in its final state instead of
+		     stepping through intermediate ones and reflowing everything below it. -->
 		<div class="flex flex-col gap-2">
 			{#if !tracking.ready}
 				<div class="flex items-center gap-2" aria-hidden="true">
@@ -616,10 +612,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			{/if}
 		</div>
 
-		<!-- Similar titles: TMDB recommendations + similar merged, deduped (MRQ-124). Collapsible.
-		Posters use plain posterUrl (network, no offline blob); a status badge + favorite heart are
-		overlaid from local tracking when we already track the title. A skeleton row shows while the
-		enrichment streams in; offline (nothing cached for similar), it's simply omitted. -->
+		<!-- Similar titles: TMDB recommendations + similar merged, deduped. Collapsible. -->
 		{#if enrichState === 'loading'}
 			<section class="flex flex-col gap-3">
 				<div class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Similar</div>

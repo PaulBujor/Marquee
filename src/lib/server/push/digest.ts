@@ -163,10 +163,7 @@ export interface DigestSummary {
 
 /**
  * Send the daily new-release digest. Runs hourly; a user is notified only when it's ~9AM
- * their local time (timezone taken from their most recently used subscription). For each due user it
- * finds tracked titles with a release in the last `GRACE_DAYS`, drops anything already in the
- * `notification_log` ledger, pushes the rest to every device, records them, and prunes any
- * subscription the push service reports gone (404/410).
+ * their local time (timezone taken from their most recently used subscription).
  *
  * `sender` is injectable for tests; by default it's built from the VAPID env (throws if unconfigured,
  * which the cron wrapper catches).

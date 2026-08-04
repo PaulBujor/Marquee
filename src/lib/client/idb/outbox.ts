@@ -22,7 +22,7 @@ export async function enqueueEvents(events: EventEnvelope[]): Promise<void> {
 
 /**
  * Events not yet acknowledged by the server, oldest first. Pass `limit` to page the
- * outbox — the sync engine (MRQ-43) must keep a push at or under `SYNC_MAX_PUSH`, so
+ * outbox — the sync engine must keep a push at or under `SYNC_MAX_PUSH`, so
  * a large offline backlog is drained across several round trips rather than one
  * oversized request the server would reject.
  */

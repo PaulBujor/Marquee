@@ -1,5 +1,5 @@
 /**
- * Auth-hygiene sweep (MRQ-97): delete rows that no longer serve any purpose so the tables don't grow
+ * Auth-hygiene sweep: delete rows that no longer serve any purpose so the tables don't grow
  * unbounded — consumed or expired `login_tokens`, and expired `sessions`. Neither is a correctness
  * issue (the rate-limit window queries and session validation both filter by time already); this is
  * pure storage hygiene, run from the nightly cron alongside the media refresh.

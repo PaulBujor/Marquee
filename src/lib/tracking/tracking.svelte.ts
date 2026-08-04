@@ -61,9 +61,9 @@ export class TrackingState {
 	/**
 	 * Season summaries (count + air date) the detail page holds up-front. They let a bulk "mark
 	 * watched" enumerate episodes immediately — before the media channel syncs per-episode air dates
-	 * — so a fresh add can be marked watched without the unmark/re-mark dance (MRQ-130). `$state`,
+	 * — so a fresh add can be marked watched without the unmark/re-mark dance. `$state`,
 	 * not constructor-frozen: `title-detail.svelte` recreates this instance only when the media id
-	 * changes, not when `detail` upgrades from a cached copy to the enriched one (MRQ-146), so this
+	 * changes, not when `detail` upgrades from a cached copy to the enriched one, so this
 	 * needs its own update path — see `updateSeasons`.
 	 */
 	#seasons = $state<SeasonSummary[]>([]);
@@ -242,7 +242,7 @@ export class TrackingState {
 	 * Mark the whole series watched: every **aired** episode watched, then the status reconciled from
 	 * actual progress (see {@link readyToMarkSeries}). Bulk — one `episode.watched` per episode (the
 	 * sync push cap bounds delivery). Enumerated from the season summaries, so it works the instant a
-	 * title is added (MRQ-130).
+	 * title is added.
 	 */
 	markSeriesWatched(): Promise<void> {
 		return this.#run(async () => {

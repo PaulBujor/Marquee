@@ -58,7 +58,7 @@ export function parseTmdbExternalId(externalId: string): ParsedTmdbExternalId | 
 /**
  * Whether a movie hasn't released yet, so it should keep refreshing (release date + metadata can
  * still change). TMDB gives a full date or nothing; a missing/uncertain date is treated as end of
- * the current year — a concrete horizon to refresh toward (MRQ-128). A movie whose date is in the
+ * the current year — a concrete horizon to refresh toward. A movie whose date is in the
  * past has released and never refreshes again.
  */
 function movieUnreleased(releaseDate: string | null, now: number): boolean {
@@ -71,7 +71,7 @@ function movieUnreleased(releaseDate: string | null, now: number): boolean {
  * Whether a stored row should be re-pulled from TMDB. A `refreshed_at` of 0 marks a row that
  * predates the relational model (migration backfill) — always refresh it once to populate
  * seasons/episodes. Otherwise, past the TTL: airing shows refresh, and **unreleased movies** refresh
- * (MRQ-128); released movies and finished shows never change, so they don't.
+ * released movies and finished shows never change, so they don't.
  */
 export function needsRefresh(row: Media, now: number): boolean {
 	if (row.refreshedAt === 0) return true;
@@ -105,7 +105,7 @@ function toRows(
 		type: detail.type,
 		title: detail.title,
 		// Fold with JS `toLowerCase()` so the degraded search matches the offline client's folding
-		// (full Unicode), not SQLite's ASCII-only `LIKE` (MRQ-141).
+		// (full Unicode), not SQLite's ASCII-only `LIKE`.
 		titleNormalized: detail.title.toLowerCase(),
 		year: detail.year,
 		posterPath: detail.posterPath,
