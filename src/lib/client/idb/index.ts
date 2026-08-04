@@ -1,7 +1,7 @@
 /**
  * Public surface of the client offline store. UI code produces a tracking change
  * via {@link recordEvent}, which writes through the event pipeline from day one:
- * it enqueues the event in the outbox (for the sync engine to push, MRQ-43) *and*
+ * it enqueues the event in the outbox (for the sync engine to push) *and*
  * applies it to the local materialized stores optimistically.
  */
 import { enqueueEvent } from './outbox';

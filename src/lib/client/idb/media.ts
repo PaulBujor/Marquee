@@ -53,7 +53,7 @@ export async function getAllMedia(): Promise<ClientMedia[]> {
 }
 
 /**
- * Offline search over the locally-cached catalog — the user's own titles only (MRQ-90). Scoped to
+ * Offline search over the locally-cached catalog — the user's own titles only. Scoped to
  * provider-backed `linked` rows with a known external id (so each result can open its detail page),
  * a case-insensitive title substring, mapped to the same shape as a TMDB search result.
  */

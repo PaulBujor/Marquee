@@ -286,13 +286,6 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
 }
 
 /**
- * Permanently delete a user and everything tied to them, atomically. D1 has no
- * interactive transactions, so we use `db.batch()` — the four deletes run as one
- * all-or-nothing unit. Child rows are removed explicitly (not via FK cascade) so
- * this holds regardless of whether the connection enforces foreign keys:
- * sessions + email-change tokens by user id, login tokens by email (no FK).
- */
-/**
  * Permanently delete a user and everything they own — sessions, sign-in and email-change tokens,
  * the event log and sync cursor, the tracking + episode-watch projections, push subscriptions, and
  * the notification ledger — as one atomic D1 batch. The shared TMDB media cache (`media`/`seasons`/

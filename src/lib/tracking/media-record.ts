@@ -29,7 +29,7 @@ export interface SearchLikeMedia {
 
 /**
  * Build a minimal {@link MediaRecord} from a search result, for a quick add-to-list without opening
- * the detail page (MRQ-125). We only know the scalars TMDB puts on a search row; the rest is
+ * the detail page. We only know the scalars TMDB puts on a search row; the rest is
  * null/empty and `version: 0` marks the row behind, so the media channel pulls the authoritative
  * copy (backdrop, genres, seasons/episodes, air dates) on the next sync — same contract the detail
  * page's snapshot uses.
