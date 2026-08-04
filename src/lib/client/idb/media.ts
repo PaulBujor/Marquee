@@ -107,12 +107,8 @@ export async function getReferencedMediaIds(): Promise<string[]> {
  * channel needs to ask the server about; everything else stays local until the next full check.
  */
 export async function getUnsyncedMediaIds(referencedIds: string[]): Promise<string[]> {
-	const out: string[] = [];
-	for (const id of referencedIds) {
-		const row = await getMedia(id);
-		if (!row || row.version === 0) out.push(id);
-	}
-	return out;
+	const rows = await Promise.all(referencedIds.map((id) => getMedia(id)));
+	return referencedIds.filter((_, i) => !rows[i] || rows[i]?.version === 0);
 }
 
 /** Identity of locally-known provider-backed media among `ids`, to push to the channel for server

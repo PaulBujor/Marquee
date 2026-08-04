@@ -23,7 +23,7 @@ import {
 	tracking,
 	type Media
 } from '$lib/server/db/schema';
-import { mediaId, type MediaRecord } from '$lib/sync/events';
+import { mediaId, trackingKey, type MediaRecord } from '$lib/sync/events';
 import type { MediaSyncRequest, MediaSyncResponse } from '$lib/sync/media-protocol';
 import type { createDb } from '$lib/server/db';
 import type { TmdbClient } from '$lib/server/tmdb';
@@ -61,9 +61,12 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 /**
  * The anti-abuse gate: only ids the user's own `tracking`/`episode_watches` projections
- * reference are ever touched, regardless of what the request claims. Both tables are indexed by
- * `user_id` and hold one row per (user, title) — orders of magnitude smaller than the event log
- * they're projected from.
+ * reference are ever touched, regardless of what the request claims. `tracking` is looked up by
+ * its own PK (`${userId}::${mediaId}`, see `trackingKey`) rather than an `eq(userId) +
+ * inArray(mediaId)` filter — the latter has no supporting index (`tracking`'s only index is
+ * `(user_id, status)`) and would scan the user's whole tracking table on every request instead of
+ * doing point lookups. `episode_watches` has a genuine `(user_id, media_id)` compound index, so
+ * that one stays a straightforward filter.
  */
 async function validateReferencedIds(db: Db, userId: string, ids: string[]): Promise<Set<string>> {
 	const valid = new Set<string>();
@@ -72,7 +75,12 @@ async function validateReferencedIds(db: Db, userId: string, ids: string[]): Pro
 			db
 				.select({ mediaId: tracking.mediaId })
 				.from(tracking)
-				.where(and(eq(tracking.userId, userId), inArray(tracking.mediaId, c))),
+				.where(
+					inArray(
+						tracking.id,
+						c.map((id) => trackingKey(userId, id))
+					)
+				),
 			db
 				.select({ mediaId: episodeWatches.mediaId })
 				.from(episodeWatches)
