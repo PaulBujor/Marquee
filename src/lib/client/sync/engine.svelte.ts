@@ -216,12 +216,7 @@ class SyncEngine {
 				return; // events are the base — don't run media/images on top of a failed event sync
 			}
 
-			// Media channel — gated on the event channel's sequence watermark: `pulled > 0`
-			// means the server had (or we just pushed) something new since our cursor, which is the
-			// only way a title's local-missing status can have changed since last cycle. When the
-			// watermark hasn't moved, referencedIds can't have changed either, so a light pass would
-			// find nothing — skip the request outright. A full version-diff pass still runs on its
-			// own slower cadence regardless, to pick up cron-side refreshes of titles we already have.
+			// Media channel — gated on the event channel's watermark; see `media-gate.ts` for why.
 			const cycleNow = Date.now();
 			const dueForFullCheck = isFullMediaCheckDue(this.#lastFullMediaCheck, cycleNow);
 			if (shouldRunMediaSync(pulled, this.#lastFullMediaCheck, cycleNow)) {

@@ -8,8 +8,7 @@
  * How often the media channel does a *full* version-diff pass (every referenced id, not just ones
  * missing locally) — the only way to notice a title the nightly cron refreshed server-side while
  * this device already had a copy. Much slower than the event-sync interval on purpose: nothing
- * about a poll cadence under a day can usefully chase a 12h TTL, so there's no reason to pay for a
- * full diff every cycle. Every other cycle is a "light" pass — see `engine.svelte.ts#sync()`.
+ * about a sub-day poll cadence can usefully chase a 12h TTL.
  */
 export const FULL_MEDIA_CHECK_MS = 15 * 60 * 1000;
 
