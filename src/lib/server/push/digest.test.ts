@@ -224,7 +224,7 @@ describe('sendNewReleaseDigest', () => {
 		expect(calls[0].payload).toMatchObject({
 			title: 'New releases',
 			body: '2 new releases across 2 titles',
-			url: '/timeline'
+			url: '/'
 		});
 		const logged = await db.select().from(notificationLog).where(eq(notificationLog.userId, USER));
 		expect(logged).toHaveLength(2);
@@ -248,5 +248,32 @@ describe('sendNewReleaseDigest', () => {
 			body: 'Season 2, Episode 3 is out',
 			url: '/title/show/1396'
 		});
+	});
+
+	it('does not repeat a grouped push the next day when one more episode lands', async () => {
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'watching');
+		await seedEpisode(db, SHOW, 2, 1, '2026-07-26');
+		await seedEpisode(db, SHOW, 2, 2, '2026-07-27');
+		await seedEpisode(db, SHOW, 2, 3, '2026-07-27');
+		const day1 = await sendNewReleaseDigest(db, {} as Env, NOW, fakeSender().sender);
+		expect(day1).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
+
+		// Next day, 9AM Madrid again; episode 4 airs today, 1-3 are still within GRACE_DAYS=2
+		// and so are re-candidates from findReleases, but the ledger must exclude them.
+		await seedEpisode(db, SHOW, 2, 4, '2026-07-28');
+		const NEXT_DAY = new Date('2026-07-28T07:00:00Z');
+		const { sender, calls } = fakeSender();
+		const day2 = await sendNewReleaseDigest(db, {} as Env, NEXT_DAY, sender);
+
+		expect(day2).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
+		expect(calls).toHaveLength(1);
+		expect(calls[0].payload).toMatchObject({
+			title: 'Breaking Bad',
+			body: 'Season 2, Episode 4 is out',
+			url: '/title/show/1396'
+		});
+		const logged = await db.select().from(notificationLog).where(eq(notificationLog.userId, USER));
+		expect(logged).toHaveLength(4);
 	});
 });

@@ -203,8 +203,11 @@ function groupReleases(items: ReleaseItem[]): ReleaseGroup[] {
 			{
 				payload: {
 					title: 'New releases',
+					// `/timeline` only ever shows strictly-future releases (filterUpcoming excludes
+					// airDate/releaseDate <= today), so it would never show the items this notification
+					// is about — the library is the deep link that actually still contains them.
 					body: `${total} new release${total === 1 ? '' : 's'} across ${byMedia.size} titles`,
-					url: '/timeline',
+					url: '/',
 					tag: 'digest::summary'
 				},
 				items
