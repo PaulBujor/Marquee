@@ -15,6 +15,7 @@
 import { runSync, SyncError, toSyncErrorInfo, type SyncErrorInfo } from './sync';
 import { runMediaSync } from './media-sync';
 import { runImageSync } from './image-sync';
+import { isFullMediaCheckDue, nextFullMediaCheckStamp, shouldRunMediaSync } from './media-gate';
 import { CircuitBreaker, withRetry, type RetryOptions } from '$lib/resilience';
 import { getLastSyncAt, setLastSyncAt } from '$lib/client/idb';
 import { reportClientError } from '$lib/client/report-error';
@@ -25,13 +26,6 @@ export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 const NUDGE_MS = 300;
 /** Light polling cadence while the tab is open — also the natural retry cadence after a failure. */
 const INTERVAL_MS = 60_000;
-/**
- * How often the media channel does a *full* version-diff pass (every referenced id, not just ones
- * missing locally) — the only way to notice a title the nightly cron refreshed server-side while
- * this device already had a copy. Much slower than the event-sync interval on purpose: nothing
- * about a sub-day poll cadence can usefully chase a 12h TTL.
- */
-const FULL_MEDIA_CHECK_MS = 15 * 60 * 1000;
 /** Per-channel in-cycle retry (2s → 4s), so a transient blip self-heals within one cycle. */
 const RETRY: RetryOptions = { maxAttempts: 3, baseMs: 2000, maxMs: 60000 };
 /** Trip a channel's breaker after this many consecutive cycle failures, then pause for the cooldown. */
@@ -222,13 +216,10 @@ class SyncEngine {
 				return; // events are the base — don't run media/images on top of a failed event sync
 			}
 
-			// Media channel — gated on the event channel's sequence watermark: `pulled > 0` means the
-			// server had (or we just pushed) something new since our cursor, the only way a title's
-			// local-missing status can have changed since last cycle. Unmoved watermark ⇒
-			// referencedIds can't have changed either, so a light pass would find nothing — skip it
-			// outright. `dueForFullCheck` still runs on its own cadence (see `FULL_MEDIA_CHECK_MS`).
-			const dueForFullCheck = Date.now() - this.#lastFullMediaCheck >= FULL_MEDIA_CHECK_MS;
-			if (pulled > 0 || dueForFullCheck) {
+			// Media channel — gated on the event channel's watermark; see `media-gate.ts` for why.
+			const cycleNow = Date.now();
+			const dueForFullCheck = isFullMediaCheckDue(this.#lastFullMediaCheck, cycleNow);
+			if (shouldRunMediaSync(pulled, this.#lastFullMediaCheck, cycleNow)) {
 				// Also surfaces in the sync indicator (a failing media sync, e.g. a large library,
 				// should be visible, not silent). Same shape as the event channel: a breaker-open
 				// skip or a throw flips the status to error and skips images for this cycle.
@@ -240,7 +231,12 @@ class SyncEngine {
 						this.status = 'error';
 						return;
 					}
-					if (dueForFullCheck) this.#lastFullMediaCheck = Date.now();
+					this.#lastFullMediaCheck = nextFullMediaCheckStamp(
+						dueForFullCheck,
+						true,
+						Date.now(),
+						this.#lastFullMediaCheck
+					);
 					if (mediaRes.applied > 0) changed = true;
 				} catch (err) {
 					this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());

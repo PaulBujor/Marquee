@@ -329,7 +329,6 @@ export const episodes = sqliteTable(
 	},
 	(table) => [
 		primaryKey({ columns: [table.mediaId, table.seasonNumber, table.episodeNumber] }),
-		index('episodes_media_idx').on(table.mediaId),
 		index('episodes_air_date_idx').on(table.airDate),
 		// The notify digest joins tracking → episodes on media_id and range-filters air_date in the
 		// same query; a compound index covers both instead of a media_id-only index scan.

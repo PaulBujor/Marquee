@@ -1,0 +1,1 @@
+DROP INDEX `episodes_media_idx`;
