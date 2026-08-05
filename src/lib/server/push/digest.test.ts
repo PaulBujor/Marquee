@@ -64,6 +64,30 @@ async function seedShowEpisode(db: Db, airDate: string, status: TrackingStatus):
 	await db.insert(tracking).values({ id: `${USER}::${SHOW}`, userId: USER, mediaId: SHOW, status });
 }
 
+/** Seed an additional episode on an already-inserted show (no media/tracking re-insert). */
+async function seedEpisode(
+	db: Db,
+	mediaId: string,
+	season: number,
+	episode: number,
+	airDate: string
+): Promise<void> {
+	await db
+		.insert(episodes)
+		.values({ mediaId, seasonNumber: season, episodeNumber: episode, airDate });
+}
+
+async function seedShow(
+	db: Db,
+	mediaId: string,
+	title: string,
+	externalId: string,
+	status: TrackingStatus
+): Promise<void> {
+	await db.insert(media).values({ id: mediaId, type: 'show', title, externalId });
+	await db.insert(tracking).values({ id: `${USER}::${mediaId}`, userId: USER, mediaId, status });
+}
+
 let db: Db;
 beforeEach(async () => {
 	db = createTestDb();
@@ -159,5 +183,97 @@ describe('sendNewReleaseDigest', () => {
 		});
 		const logged = await db.select().from(notificationLog).where(eq(notificationLog.userId, USER));
 		expect(logged[0].id).toBe(`${USER}::media-movie-1::release`);
+	});
+
+	it('groups multiple new episodes of one show into a single push', async () => {
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'watching');
+		await seedEpisode(db, SHOW, 2, 1, '2026-07-26');
+		await seedEpisode(db, SHOW, 2, 2, '2026-07-27');
+		await seedEpisode(db, SHOW, 2, 3, '2026-07-27');
+		const { sender, calls } = fakeSender();
+
+		const result = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
+		expect(result).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
+		expect(calls).toHaveLength(1);
+		expect(calls[0].payload).toMatchObject({
+			title: 'Breaking Bad',
+			body: '3 new episodes',
+			url: '/title/show/1396'
+		});
+		// Every underlying episode is logged individually, so a later run's dedupe is per-episode.
+		const logged = await db.select().from(notificationLog).where(eq(notificationLog.userId, USER));
+		expect(logged).toHaveLength(3);
+
+		const second = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
+		expect(second).toEqual({ dueUsers: 1, sent: 0, pruned: 0 });
+		expect(calls).toHaveLength(1);
+	});
+
+	it('collapses releases across multiple shows into one summary push', async () => {
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'watching');
+		await seedEpisode(db, SHOW, 2, 1, '2026-07-27');
+		await seedShow(db, 'media-show-2', 'Better Call Saul', 'show/60059', 'want_to_watch');
+		await seedEpisode(db, 'media-show-2', 1, 1, '2026-07-27');
+		const { sender, calls } = fakeSender();
+
+		const result = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
+		expect(result).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
+		expect(calls).toHaveLength(1);
+		expect(calls[0].payload).toMatchObject({
+			title: 'New releases',
+			body: '2 new releases across 2 titles',
+			url: '/'
+		});
+		const logged = await db.select().from(notificationLog).where(eq(notificationLog.userId, USER));
+		expect(logged).toHaveLength(2);
+	});
+
+	it('falls back to the rich single-episode form once a group shrinks to one fresh item', async () => {
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'watching');
+		await seedEpisode(db, SHOW, 2, 1, '2026-07-26');
+		await seedEpisode(db, SHOW, 2, 2, '2026-07-27');
+		const { sender: firstSender } = fakeSender();
+		await sendNewReleaseDigest(db, {} as Env, NOW, firstSender);
+
+		// A third episode airs later the same day, still within the grace window.
+		await seedEpisode(db, SHOW, 2, 3, '2026-07-27');
+		const { sender, calls } = fakeSender();
+		const result = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
+		expect(result).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
+		expect(calls[0].payload).toMatchObject({
+			title: 'Breaking Bad',
+			body: 'Season 2, Episode 3 is out',
+			url: '/title/show/1396'
+		});
+	});
+
+	it('does not repeat a grouped push the next day when one more episode lands', async () => {
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'watching');
+		await seedEpisode(db, SHOW, 2, 1, '2026-07-26');
+		await seedEpisode(db, SHOW, 2, 2, '2026-07-27');
+		await seedEpisode(db, SHOW, 2, 3, '2026-07-27');
+		const day1 = await sendNewReleaseDigest(db, {} as Env, NOW, fakeSender().sender);
+		expect(day1).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
+
+		// Next day, 9AM Madrid again; episode 4 airs today, 1-3 are still within GRACE_DAYS=2
+		// and so are re-candidates from findReleases, but the ledger must exclude them.
+		await seedEpisode(db, SHOW, 2, 4, '2026-07-28');
+		const NEXT_DAY = new Date('2026-07-28T07:00:00Z');
+		const { sender, calls } = fakeSender();
+		const day2 = await sendNewReleaseDigest(db, {} as Env, NEXT_DAY, sender);
+
+		expect(day2).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
+		expect(calls).toHaveLength(1);
+		expect(calls[0].payload).toMatchObject({
+			title: 'Breaking Bad',
+			body: 'Season 2, Episode 4 is out',
+			url: '/title/show/1396'
+		});
+		const logged = await db.select().from(notificationLog).where(eq(notificationLog.userId, USER));
+		expect(logged).toHaveLength(4);
 	});
 });
