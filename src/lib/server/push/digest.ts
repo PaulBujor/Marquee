@@ -56,10 +56,23 @@ function titleUrl(externalId: string | null): string {
 	return parsed ? `/title/${parsed.type}/${parsed.tmdbId}` : '/';
 }
 
-interface DigestItem {
+/** A single notifiable release, prior to grouping into pushes. */
+interface ReleaseItem {
 	/** Ledger key — deterministic per (user, release). */
 	key: string;
+	mediaId: string;
+	kind: 'episode' | 'movie';
+	title: string;
+	externalId: string | null;
+	season?: number;
+	episode?: number;
+	epName?: string | null;
+}
+
+/** A push ready to send, plus the underlying releases it covers (for per-release ledger writes). */
+interface ReleaseGroup {
 	payload: PushPayload;
+	items: ReleaseItem[];
 }
 
 /** Newly-aired episodes + newly-released movies for a user within `[from, to]`, as notifiable items. */
@@ -68,8 +81,8 @@ async function findReleases(
 	userId: string,
 	from: string,
 	to: string
-): Promise<DigestItem[]> {
-	const items: DigestItem[] = [];
+): Promise<ReleaseItem[]> {
+	const items: ReleaseItem[] = [];
 
 	const episodeRows = await db
 		.select({
@@ -97,12 +110,13 @@ async function findReleases(
 	for (const r of episodeRows) {
 		items.push({
 			key: `${userId}::${r.mediaId}::s${r.season}e${r.episode}`,
-			payload: {
-				title: r.title,
-				body: `Season ${r.season}, Episode ${r.episode}${r.epName ? `: ${r.epName}` : ''} is out`,
-				url: titleUrl(r.externalId),
-				tag: `${r.mediaId}::s${r.season}e${r.episode}`
-			}
+			mediaId: r.mediaId,
+			kind: 'episode',
+			title: r.title,
+			externalId: r.externalId,
+			season: r.season,
+			episode: r.episode,
+			epName: r.epName
 		});
 	}
 
@@ -128,12 +142,10 @@ async function findReleases(
 	for (const r of movieRows) {
 		items.push({
 			key: `${userId}::${r.mediaId}::release`,
-			payload: {
-				title: r.title,
-				body: 'Out now',
-				url: titleUrl(r.externalId),
-				tag: `${r.mediaId}::release`
-			}
+			mediaId: r.mediaId,
+			kind: 'movie',
+			title: r.title,
+			externalId: r.externalId
 		});
 	}
 
@@ -141,7 +153,7 @@ async function findReleases(
 }
 
 /** Drop items already recorded in the ledger, so only genuinely new releases remain. */
-async function filterUnsent(db: Db, items: DigestItem[]): Promise<DigestItem[]> {
+async function filterUnsent(db: Db, items: ReleaseItem[]): Promise<ReleaseItem[]> {
 	const keys = items.map((i) => i.key);
 	const sent = new Set<string>();
 	for (let i = 0; i < keys.length; i += CHUNK) {
@@ -153,6 +165,70 @@ async function filterUnsent(db: Db, items: DigestItem[]): Promise<DigestItem[]> 
 		for (const row of rows) sent.add(row.id);
 	}
 	return items.filter((i) => !sent.has(i.key));
+}
+
+/** The rich, single-release payload — unchanged from before grouping existed. */
+function singleItemPayload(item: ReleaseItem): PushPayload {
+	const url = titleUrl(item.externalId);
+	if (item.kind === 'movie') {
+		return { title: item.title, body: 'Out now', url, tag: `${item.mediaId}::release` };
+	}
+	return {
+		title: item.title,
+		body: `Season ${item.season}, Episode ${item.episode}${item.epName ? `: ${item.epName}` : ''} is out`,
+		url,
+		tag: `${item.mediaId}::s${item.season}e${item.episode}`
+	};
+}
+
+/**
+ * Collapse a user's fresh releases into the pushes to actually send: a single release keeps its
+ * rich per-episode/movie form; multiple releases from one show collapse to one per-show
+ * notification; releases spanning more than one show/movie collapse further into a single
+ * cross-show summary (rather than one push per show) so a busy day never fans out per release.
+ */
+function groupReleases(items: ReleaseItem[]): ReleaseGroup[] {
+	if (items.length === 0) return [];
+
+	const byMedia = new Map<string, ReleaseItem[]>();
+	for (const item of items) {
+		const group = byMedia.get(item.mediaId) ?? [];
+		group.push(item);
+		byMedia.set(item.mediaId, group);
+	}
+
+	if (byMedia.size > 1) {
+		const total = items.length;
+		return [
+			{
+				payload: {
+					title: 'New releases',
+					body: `${total} new release${total === 1 ? '' : 's'} across ${byMedia.size} titles`,
+					url: '/timeline',
+					tag: 'digest::summary'
+				},
+				items
+			}
+		];
+	}
+
+	const [[mediaId, group]] = byMedia;
+	if (group.length === 1) {
+		return [{ payload: singleItemPayload(group[0]), items: group }];
+	}
+
+	const first = group[0];
+	return [
+		{
+			payload: {
+				title: first.title,
+				body: `${group.length} new episodes`,
+				url: titleUrl(first.externalId),
+				tag: `${mediaId}::digest`
+			},
+			items: group
+		}
+	];
 }
 
 export interface DigestSummary {
@@ -201,12 +277,12 @@ export async function sendNewReleaseDigest(
 		const fresh = await filterUnsent(db, candidates);
 		if (fresh.length === 0) continue;
 
-		for (const item of fresh) {
+		for (const group of groupReleases(fresh)) {
 			let delivered = false;
 			for (const sub of userSubs) {
 				const result = await sender.send(
 					{ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-					item.payload
+					group.payload
 				);
 				if (result.ok) {
 					delivered = true;
@@ -216,13 +292,16 @@ export async function sendNewReleaseDigest(
 					pruned += 1;
 				}
 			}
-			// Log only once we've actually delivered, so a transient failure retries within the grace
-			// window rather than being silently swallowed.
+			// Log every release the push covered — not just the group as a whole — so dedupe stays
+			// per-release: a later run that finds only some of these still unsent (e.g. one more
+			// episode airs) doesn't re-notify the ones already delivered in this group.
 			if (delivered) {
-				await db
-					.insert(notificationLog)
-					.values({ id: item.key, userId, sentAt: now })
-					.onConflictDoNothing();
+				for (const item of group.items) {
+					await db
+						.insert(notificationLog)
+						.values({ id: item.key, userId, sentAt: now })
+						.onConflictDoNothing();
+				}
 			}
 		}
 	}
