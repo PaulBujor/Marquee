@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDb } from '$lib/server/db/test-db';
-import { events, media, users } from '$lib/server/db/schema';
+import { media, tracking, users } from '$lib/server/db/schema';
 import { mediaId } from '$lib/sync/events';
 import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 import { MEDIA_SYNC_REFRESH_MAX, resolveMediaSync } from './sync';
@@ -54,19 +54,19 @@ function stub() {
 	};
 }
 
-/** Insert a `tracking.added` event so the user's log references `externalId`. */
-async function addEvent(db: Db, i: number, externalId: string): Promise<void> {
-	await db.insert(events).values({
-		id: `ev${i}`,
+/**
+ * Seed a `tracking` row so the user's projection references `externalId` — the anti-abuse source
+ * of truth `resolveMediaSync` validates requests against (a stand-in for the real projection a
+ * `tracking.added` event would produce; the event log itself is no longer read by this path).
+ */
+async function addTracking(db: Db, i: number, externalId: string): Promise<void> {
+	const id = mediaId('tmdb', externalId);
+	await db.insert(tracking).values({
+		id: `${USER}::${id}`,
 		userId: USER,
-		sequence: i + 1,
-		type: 'tracking.added',
-		entityId: mediaId('tmdb', externalId),
-		payload: { status: 'want_to_watch' },
-		deviceId: 'dev',
-		schemaVersion: 1,
-		clientCreatedAt: 1000 + i,
-		serverReceivedAt: new Date()
+		mediaId: id,
+		addedAt: new Date(1000 + i),
+		updatedAt: new Date(1000 + i)
 	});
 }
 
@@ -88,8 +88,8 @@ async function storeFreshMovie(db: Db, externalId: string, over: Record<string, 
 async function seed() {
 	const db = createTestDb();
 	await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
-	// The user has an event referencing REFERENCED (but not UNREFERENCED).
-	await addEvent(db, 1, REFERENCED);
+	// The user tracks REFERENCED (but not UNREFERENCED).
+	await addTracking(db, 1, REFERENCED);
 	return db;
 }
 
@@ -100,7 +100,7 @@ describe('resolveMediaSync', () => {
 		const res = await resolveMediaSync(db, client, USER, {
 			refs: [
 				{ provider: 'tmdb', externalId: REFERENCED },
-				{ provider: 'tmdb', externalId: UNREFERENCED } // not in the user's events
+				{ provider: 'tmdb', externalId: UNREFERENCED } // not in the user's tracking
 			],
 			have: []
 		});
@@ -109,7 +109,7 @@ describe('resolveMediaSync', () => {
 		expect(calls()).toBe(1); // only the referenced id was hydrated
 	});
 
-	it('returns a stored row the client is missing, even with no ref (cross-device)', async () => {
+	it('returns a stored row the client reports version 0 for (cross-device catch-up)', async () => {
 		const db = await seed();
 		const { client } = stub();
 		// Device A stores it via a ref.
@@ -117,9 +117,25 @@ describe('resolveMediaSync', () => {
 			refs: [{ provider: 'tmdb', externalId: REFERENCED }],
 			have: []
 		});
-		// Device B has the event but no media + no identity ref — still gets the stored row.
-		const res = await resolveMediaSync(db, client, USER, { refs: [], have: [] });
+		// Device B has the tracking row but no local copy — it asks by reporting version 0.
+		const res = await resolveMediaSync(db, client, USER, {
+			refs: [],
+			have: [{ id: REF_ID, version: 0 }]
+		});
 		expect(res.media.map((m) => m.id)).toContain(REF_ID);
+	});
+
+	it('ignores an id the request never asked about, even if referenced', async () => {
+		const db = await seed();
+		const { client } = stub();
+		await resolveMediaSync(db, client, USER, {
+			refs: [{ provider: 'tmdb', externalId: REFERENCED }],
+			have: []
+		});
+		// Empty request → nothing returned, even though the user still references REF_ID. The
+		// client is expected to ask (via `have`) when it wants a version-diff.
+		const res = await resolveMediaSync(db, client, USER, { refs: [], have: [] });
+		expect(res.media).toEqual([]);
 	});
 
 	it('omits a row the client already has at the current version (version-diff)', async () => {
@@ -143,7 +159,7 @@ describe('resolveMediaSync', () => {
 		expect(behind.media.map((m) => m.id)).toEqual([REF_ID]);
 	});
 
-	it('returns nothing when the user references no media', async () => {
+	it('returns nothing when the request is empty', async () => {
 		const db = createTestDb();
 		await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
 		const { client } = stub();
@@ -159,19 +175,19 @@ describe('resolveMediaSync', () => {
 			db,
 			client,
 			USER,
-			{ refs: [{ provider: 'tmdb', externalId: REFERENCED }], have: [] },
+			{ refs: [{ provider: 'tmdb', externalId: REFERENCED }], have: [{ id: REF_ID, version: 0 }] },
 			T0
 		);
-		expect(calls()).toBe(0); // within TTL → not re-fetched
-		expect(res.media.map((m) => m.id)).toEqual([REF_ID]); // still returned (client has no version)
+		expect(calls()).toBe(0); // already stored → not re-fetched (missing-only hydration)
+		expect(res.media.map((m) => m.id)).toEqual([REF_ID]); // still returned (client reported 0)
 		expect(res.pending).toBe(false);
 	});
 
-	it('refreshes a stale stored show past the airing TTL', async () => {
+	it("does not re-hydrate an existing row past its airing TTL — that is the cron's job now", async () => {
 		const db = createTestDb();
 		await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
 		const ext = 'show/1396';
-		await addEvent(db, 1, ext);
+		await addTracking(db, 1, ext);
 		await db.insert(media).values({
 			id: mediaId('tmdb', ext),
 			provider: 'tmdb',
@@ -181,28 +197,32 @@ describe('resolveMediaSync', () => {
 			status: 'Returning Series',
 			inProduction: true,
 			version: 1,
-			refreshedAt: T0 - 13 * 3600_000 // >12h ago → past the airing TTL
+			refreshedAt: T0 - 13 * 3600_000 // >12h ago → past the airing TTL, but already stored
 		});
 		const { client, calls } = stub();
 		const res = await resolveMediaSync(
 			db,
 			client,
 			USER,
-			{ refs: [{ provider: 'tmdb', externalId: ext }], have: [] },
+			{
+				refs: [{ provider: 'tmdb', externalId: ext }],
+				have: [{ id: mediaId('tmdb', ext), version: 1 }]
+			},
 			T0
 		);
-		expect(calls()).toBe(1); // airing + past TTL → re-pulled
+		expect(calls()).toBe(0); // request-time sync never re-pulls an existing row, TTL or not
+		expect(res.media).toEqual([]); // client already reports the current version
 		expect(res.pending).toBe(false);
 	});
 
-	it('caps refreshes per request and drains the rest via `pending` (MRQ-138)', async () => {
+	it('caps hydration per request and drains the rest via `pending` (MRQ-138)', async () => {
 		const db = createTestDb();
 		await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
 		const total = MEDIA_SYNC_REFRESH_MAX + 5;
 		const refs: { provider: 'tmdb'; externalId: string }[] = [];
 		for (let i = 0; i < total; i++) {
 			const ext = `movie/${2000 + i}`;
-			await addEvent(db, i, ext);
+			await addTracking(db, i, ext);
 			refs.push({ provider: 'tmdb', externalId: ext });
 		}
 		const { client, calls } = stub();
@@ -213,7 +233,7 @@ describe('resolveMediaSync', () => {
 		expect(first.pending).toBe(true);
 		expect(first.media).toHaveLength(MEDIA_SYNC_REFRESH_MAX);
 
-		// Second pass: the first batch is now stored + fresh, so only the remainder is hydrated.
+		// Second pass: the first batch is now stored, so only the remainder is hydrated.
 		const second = await resolveMediaSync(db, client, USER, { refs, have: [] }, T0);
 		expect(calls()).toBe(total); // the remaining 5, no re-fetch of the first 25
 		expect(second.pending).toBe(false);
@@ -222,18 +242,19 @@ describe('resolveMediaSync', () => {
 
 	it('returns a large stored library across chunked IN queries', async () => {
 		// More stored titles than the 90-id chunk (and than D1's 100-param cap), so the media
-		// `IN (...)` query must be split — otherwise D1 throws "too many SQL variables". No refs →
-		// no hydration, so this exercises only the chunked response read.
+		// `IN (...)` query must be split — otherwise D1 throws "too many SQL variables".
 		const db = createTestDb();
 		await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
 		const N = 205;
+		const have: { id: string; version: number }[] = [];
 		for (let i = 0; i < N; i++) {
 			const ext = `movie/${1000 + i}`;
-			await addEvent(db, i, ext);
+			await addTracking(db, i, ext);
 			await storeFreshMovie(db, ext, { title: `t-${i}` });
+			have.push({ id: mediaId('tmdb', ext), version: 0 });
 		}
 		const { client, calls } = stub();
-		const res = await resolveMediaSync(db, client, USER, { refs: [], have: [] }, T0);
+		const res = await resolveMediaSync(db, client, USER, { refs: [], have }, T0);
 		expect(calls()).toBe(0);
 		expect(res.media).toHaveLength(N);
 		expect(new Set(res.media.map((m) => m.id)).size).toBe(N);

@@ -4,7 +4,7 @@
  * Each goes through the shared {@link refreshMedia}, which skips titles refreshed recently and bumps
  * `version` only when content changed. Invoked by the cron via `POST /api/cron/refresh`.
  */
-import { and, eq, gte, isNull, or } from 'drizzle-orm';
+import { and, eq, gte, isNull } from 'drizzle-orm';
 import { media } from '$lib/server/db/schema';
 import type { createDb } from '$lib/server/db';
 import type { TmdbClient } from '$lib/server/tmdb';
@@ -31,20 +31,32 @@ export async function refreshStaleMedia(
 	force = false
 ): Promise<RefreshResult> {
 	const today = new Date(now).toISOString().slice(0, 10);
-	const rows = await db
-		.select({
-			id: media.id,
-			provider: media.provider,
-			externalId: media.externalId,
-			version: media.version
-		})
-		.from(media)
-		.where(
-			or(
-				and(eq(media.type, 'show'), eq(media.inProduction, true)),
-				and(eq(media.type, 'movie'), or(isNull(media.releaseDate), gte(media.releaseDate, today)))
-			)
-		);
+	const columns = {
+		id: media.id,
+		provider: media.provider,
+		externalId: media.externalId,
+		version: media.version
+	};
+	// Three separate indexed queries, unioned in JS, rather than one `OR`-across-branches query:
+	// SQLite/D1 won't reliably plan a single index scan across an OR of different-column
+	// predicates, so an unindexed OR here would fall back to a full table scan. Each branch below
+	// is a plain equality/range filter that `media_type_in_production_idx` /
+	// `media_type_release_date_idx` covers directly.
+	const [airingShows, undatedMovies, upcomingMovies] = await Promise.all([
+		db
+			.select(columns)
+			.from(media)
+			.where(and(eq(media.type, 'show'), eq(media.inProduction, true))),
+		db
+			.select(columns)
+			.from(media)
+			.where(and(eq(media.type, 'movie'), isNull(media.releaseDate))),
+		db
+			.select(columns)
+			.from(media)
+			.where(and(eq(media.type, 'movie'), gte(media.releaseDate, today)))
+	]);
+	const rows = [...airingShows, ...undatedMovies, ...upcomingMovies];
 
 	let changed = 0;
 	let failed = 0;

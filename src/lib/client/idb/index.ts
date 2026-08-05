@@ -35,7 +35,9 @@ export {
 	getSeasons,
 	getEpisodes,
 	getLinkedMediaRefs,
-	getMediaVersions
+	getMediaVersions,
+	getReferencedMediaIds,
+	getUnsyncedMediaIds
 } from './media';
 export { getDeviceId, getCursor, setCursor, getLastSyncAt, setLastSyncAt } from './meta';
 
