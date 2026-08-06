@@ -32,7 +32,8 @@ export const AIRING_TTL_MS = 12 * 60 * 60 * 1000;
 // TMDB's own TV statuses (full set: Returning Series / Planned / In Production / Ended / Canceled /
 // Pilot) for a show that may still gain episodes. `in_production` is the primary signal; these catch
 // a show between seasons where `in_production` has flipped false but more is expected.
-const AIRING_STATUSES = new Set(['Returning Series', 'In Production', 'Planned', 'Pilot']);
+export const AIRING_STATUSES = ['Returning Series', 'In Production', 'Planned', 'Pilot'] as const;
+const AIRING_STATUS_SET = new Set<string>(AIRING_STATUSES);
 
 /** A TMDB external id (`movie/603`) parsed into its media type and numeric id. */
 export interface ParsedTmdbExternalId {
@@ -69,7 +70,7 @@ export function needsRefresh(row: Media, now: number): boolean {
 	if (row.refreshedAt === 0) return true;
 	if (now - row.refreshedAt <= AIRING_TTL_MS) return false;
 	if (row.type === 'movie') return movieUnreleased(row.releaseDate, now);
-	return row.inProduction === true || AIRING_STATUSES.has(row.status ?? '');
+	return row.inProduction === true || AIRING_STATUS_SET.has(row.status ?? '');
 }
 
 type SeasonInsert = typeof seasons.$inferInsert;

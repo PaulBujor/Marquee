@@ -1,0 +1,1 @@
+CREATE INDEX `media_type_status_idx` ON `media` (`type`,`status`);

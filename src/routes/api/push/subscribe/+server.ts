@@ -24,7 +24,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		RATE_WINDOW_MS,
 		RATE_MAX
 	);
-	hits.set(locals.user.id, kept);
+	// Drop the key once its window is empty, so the map doesn't retain an entry per user that has
+	// ever hit this isolate.
+	if (kept.length === 0) hits.delete(locals.user.id);
+	else hits.set(locals.user.id, kept);
 	if (result.limited)
 		return new Response(null, {
 			status: 429,

@@ -1,19 +1,29 @@
 /**
- * Auth-hygiene sweep: delete rows that no longer serve any purpose so the tables don't grow
- * unbounded — consumed or expired `login_tokens`, and expired `sessions`. Neither is a correctness
- * issue (the rate-limit window queries and session validation both filter by time already); this is
- * pure storage hygiene, run from the nightly cron alongside the media refresh.
+ * Storage-hygiene sweep: delete rows that no longer serve any purpose so the tables don't grow
+ * unbounded — consumed or expired `login_tokens`, expired `sessions`, and `notification_log`
+ * entries past the digest's replay window. None is a correctness issue (the rate-limit window
+ * queries and session validation both filter by time already); this is pure hygiene, run from the
+ * nightly cron alongside the media refresh.
  */
 import { isNotNull, lt } from 'drizzle-orm';
 import type { createDb } from '$lib/server/db';
-import { loginTokens, sessions } from '$lib/server/db/schema';
+import { loginTokens, notificationLog, sessions } from '$lib/server/db/schema';
+import { GRACE_DAYS } from '$lib/server/push/digest';
 
 type Db = ReturnType<typeof createDb>;
+
+/**
+ * How long a `notification_log` row is kept. The digest only ever looks a row up while its release
+ * falls inside `GRACE_DAYS`, so anything older can never be consulted again — but keep a wide
+ * margin over that window so a run delayed by an outage still dedupes correctly.
+ */
+const NOTIFICATION_LOG_RETENTION_DAYS = GRACE_DAYS + 28;
 
 /** How many rows each table's sweep removed. */
 export interface AuthPurgeResult {
 	loginTokens: number;
 	sessions: number;
+	notifications: number;
 }
 
 /**
@@ -27,7 +37,8 @@ export interface AuthPurgeResult {
  */
 export async function purgeExpiredAuth(db: Db, now: number = Date.now()): Promise<AuthPurgeResult> {
 	const cutoff = new Date(now);
-	const [expired, consumed, sess] = await db.batch([
+	const notificationCutoff = new Date(now - NOTIFICATION_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+	const [expired, consumed, sess, notifications] = await db.batch([
 		db
 			.delete(loginTokens)
 			.where(lt(loginTokens.expiresAt, cutoff))
@@ -36,7 +47,15 @@ export async function purgeExpiredAuth(db: Db, now: number = Date.now()): Promis
 			.delete(loginTokens)
 			.where(isNotNull(loginTokens.consumedAt))
 			.returning({ id: loginTokens.id }),
-		db.delete(sessions).where(lt(sessions.expiresAt, cutoff)).returning({ id: sessions.id })
+		db.delete(sessions).where(lt(sessions.expiresAt, cutoff)).returning({ id: sessions.id }),
+		db
+			.delete(notificationLog)
+			.where(lt(notificationLog.sentAt, notificationCutoff))
+			.returning({ id: notificationLog.id })
 	]);
-	return { loginTokens: expired.length + consumed.length, sessions: sess.length };
+	return {
+		loginTokens: expired.length + consumed.length,
+		sessions: sess.length,
+		notifications: notifications.length
+	};
 }

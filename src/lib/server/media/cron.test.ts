@@ -4,7 +4,7 @@ import { createTestDb } from '$lib/server/db/test-db';
 import { media } from '$lib/server/db/schema';
 import { mediaId } from '$lib/sync/events';
 import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
-import { refreshStaleMedia } from './cron';
+import { CRON_REFRESH_MAX, refreshStaleMedia } from './cron';
 
 const T0 = Date.UTC(2026, 6, 24);
 
@@ -76,7 +76,12 @@ function stub() {
 async function seedMedia(
 	db: ReturnType<typeof createTestDb>,
 	externalId: string,
-	over: { type: 'movie' | 'show'; inProduction?: boolean | null; releaseDate?: string | null }
+	over: {
+		type: 'movie' | 'show';
+		inProduction?: boolean | null;
+		releaseDate?: string | null;
+		status?: string | null;
+	}
 ) {
 	await db.insert(media).values({
 		id: mediaId('tmdb', externalId),
@@ -87,6 +92,7 @@ async function seedMedia(
 		title: externalId,
 		inProduction: over.inProduction ?? null,
 		releaseDate: over.releaseDate ?? null,
+		status: over.status ?? null,
 		version: 1,
 		refreshedAt: 0
 	});
@@ -123,8 +129,50 @@ describe('refreshStaleMedia', () => {
 		const { client } = stub();
 		expect(await refreshStaleMedia(db, client, T0)).toEqual({
 			scanned: 0,
+			attempted: 0,
 			changed: 0,
-			failed: 0
+			failed: 0,
+			capped: false
 		});
+	});
+
+	it('sweeps a between-seasons show — in_production false but an airing status', async () => {
+		const db = createTestDb();
+		// Exactly the case `needsRefresh` covers via AIRING_STATUSES and the old query missed.
+		await seedMedia(db, 'show/42', {
+			type: 'show',
+			inProduction: false,
+			status: 'Returning Series'
+		});
+		const { client, detailCalls } = stub();
+		const result = await refreshStaleMedia(db, client, T0);
+		expect(result.scanned).toBe(1);
+		expect(result.attempted).toBe(1);
+		expect(detailCalls()).toBe(1);
+	});
+
+	it('counts a show matching both show branches once', async () => {
+		const db = createTestDb();
+		await seedMedia(db, 'show/43', {
+			type: 'show',
+			inProduction: true,
+			status: 'Returning Series'
+		});
+		const { client } = stub();
+		const result = await refreshStaleMedia(db, client, T0);
+		expect(result.scanned).toBe(1);
+		expect(result.attempted).toBe(1);
+	});
+
+	it('caps a run at CRON_REFRESH_MAX and reports the overflow', async () => {
+		const db = createTestDb();
+		for (let i = 0; i < CRON_REFRESH_MAX + 5; i++) {
+			await seedMedia(db, `show/${1000 + i}`, { type: 'show', inProduction: true });
+		}
+		const { client } = stub();
+		const result = await refreshStaleMedia(db, client, T0);
+		expect(result.scanned).toBe(CRON_REFRESH_MAX + 5);
+		expect(result.attempted).toBe(CRON_REFRESH_MAX);
+		expect(result.capped).toBe(true);
 	});
 });

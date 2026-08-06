@@ -289,7 +289,10 @@ export const media = sqliteTable(
 		// separately (type + in_production; type + release_date) rather than one OR'd query, so
 		// each branch gets its own supporting index instead of relying on SQLite to plan an OR.
 		index('media_type_in_production_idx').on(table.type, table.inProduction),
-		index('media_type_release_date_idx').on(table.type, table.releaseDate)
+		index('media_type_release_date_idx').on(table.type, table.releaseDate),
+		// The nightly sweep also matches shows by TMDB status (a between-seasons show has
+		// `in_production` false but an airing status), so that branch needs its own index.
+		index('media_type_status_idx').on(table.type, table.status)
 	]
 );
 

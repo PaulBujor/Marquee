@@ -4,7 +4,8 @@ import {
 	media as mediaTable,
 	notificationLog,
 	pushSubscriptions,
-	tracking as trackingTable
+	tracking as trackingTable,
+	type PushSubscriptionRow
 } from '$lib/server/db/schema';
 import { parseTmdbExternalId } from '$lib/server/media/hydrate';
 import { createPushSender, type PushSender, type PushPayload } from './index';
@@ -32,6 +33,14 @@ const ACTIVE_STATUSES = ['want_to_watch', 'watching'] as const;
  * a data-staleness question.
  */
 const ACTIVE_SHOW_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
+
+/**
+ * Max users notified in one hourly invocation. Every send is a serial network call, so an
+ * unbounded run grows with the user base until it exceeds the Worker's CPU/subrequest budget and
+ * silently drops whoever came last. Overflow rolls to the next run — `GRACE_DAYS` keeps the
+ * release notifiable and `notification_log` keeps it exactly-once.
+ */
+export const DIGEST_MAX_USERS_PER_RUN = 200;
 
 /** The user's local date (`YYYY-MM-DD`) and hour (0–23) for `now`, or a UTC fallback on a bad tz. */
 export function localDateHour(now: Date, timeZone: string | null): { date: string; hour: number } {
@@ -262,25 +271,65 @@ export async function sendNewReleaseDigest(
 	now: Date,
 	sender: PushSender = createPushSender(env)
 ): Promise<DigestSummary> {
-	const subs = await db.select().from(pushSubscriptions);
-	if (subs.length === 0) return { dueUsers: 0, sent: 0, pruned: 0 };
+	// Two passes, so the hourly run doesn't pull every device's key material to discard 23/24 of it.
+	// The first reads only what the 9AM-local test needs; the encryption keys are loaded in the
+	// second, for due users only.
+	const candidates = await db
+		.select({
+			userId: pushSubscriptions.userId,
+			timezone: pushSubscriptions.timezone,
+			lastUsedAt: pushSubscriptions.lastUsedAt
+		})
+		.from(pushSubscriptions);
+	if (candidates.length === 0) return { dueUsers: 0, sent: 0, pruned: 0 };
 
-	// Group by user, tracking the most-recently-used subscription's timezone as the user's timezone.
-	const byUser = new Map<string, typeof subs>();
-	for (const sub of subs) {
-		const list = byUser.get(sub.userId) ?? [];
-		list.push(sub);
-		byUser.set(sub.userId, list);
+	// The user's timezone is the one on their most-recently-used subscription.
+	const tzByUser = new Map<string, { timezone: string | null; lastUsedAt: Date }>();
+	for (const row of candidates) {
+		const current = tzByUser.get(row.userId);
+		if (!current || row.lastUsedAt > current.lastUsedAt) {
+			tzByUser.set(row.userId, { timezone: row.timezone, lastUsedAt: row.lastUsedAt });
+		}
+	}
+
+	const due: { userId: string; date: string }[] = [];
+	for (const [userId, { timezone }] of tzByUser) {
+		const { date, hour } = localDateHour(now, timezone);
+		if (hour === SEND_HOUR) due.push({ userId, date });
+	}
+	if (due.length === 0) return { dueUsers: 0, sent: 0, pruned: 0 };
+
+	// Bound the work per invocation. Sends are serial network calls, so an unbounded run would
+	// eventually exceed the Worker's limits and drop whoever sorted last. Overflow waits for the
+	// next hourly run: `GRACE_DAYS` keeps the release notifiable, and the ledger keeps it once-only.
+	const batch = due.slice(0, DIGEST_MAX_USERS_PER_RUN);
+	if (due.length > batch.length) {
+		console.warn(
+			`cron: notifications — ${due.length} users due, capping at ${DIGEST_MAX_USERS_PER_RUN}; the rest roll to the next run`
+		);
+	}
+
+	// Now load the full subscription rows (endpoint + keys) for just the users being notified.
+	const subsByUser = new Map<string, PushSubscriptionRow[]>();
+	for (const ids of chunkIds(batch.map((d) => d.userId))) {
+		const rows = await db
+			.select()
+			.from(pushSubscriptions)
+			.where(inArray(pushSubscriptions.userId, ids));
+		for (const row of rows) {
+			const list = subsByUser.get(row.userId) ?? [];
+			list.push(row);
+			subsByUser.set(row.userId, list);
+		}
 	}
 
 	let dueUsers = 0;
 	let sent = 0;
 	let pruned = 0;
 
-	for (const [userId, userSubs] of byUser) {
-		const primary = userSubs.reduce((a, b) => (b.lastUsedAt > a.lastUsedAt ? b : a));
-		const { date, hour } = localDateHour(now, primary.timezone);
-		if (hour !== SEND_HOUR) continue;
+	for (const { userId, date } of batch) {
+		const userSubs = subsByUser.get(userId);
+		if (!userSubs || userSubs.length === 0) continue; // unsubscribed between the two passes
 		dueUsers += 1;
 
 		const from = subtractDays(date, GRACE_DAYS);
