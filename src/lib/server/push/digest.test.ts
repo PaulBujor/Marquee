@@ -135,14 +135,28 @@ describe('sendNewReleaseDigest', () => {
 		expect(calls).toHaveLength(0);
 	});
 
-	it('ignores releases outside the grace window and non-active statuses', async () => {
+	it('ignores releases outside the grace window', async () => {
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await seedShowEpisode(db, '2026-07-24', 'watching'); // 3 days ago, GRACE_DAYS=2
 		expect((await sendNewReleaseDigest(db, {} as Env, NOW, fakeSender().sender)).sent).toBe(0);
+	});
 
-		await db.update(tracking).set({ status: 'completed' });
-		await db.update(episodes).set({ airDate: '2026-07-27' });
+	it('ignores a did_not_finish show even with a release in the window — a deliberate opt-out, not staleness', async () => {
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShowEpisode(db, '2026-07-27', 'did_not_finish');
 		expect((await sendNewReleaseDigest(db, {} as Env, NOW, fakeSender().sender)).sent).toBe(0);
+	});
+
+	it('notifies a completed show given a new release — tracking.status is never corrected server-side, so this query has to tolerate it being stale', async () => {
+		// A completed show getting a new season is exactly the case that motivated this: nothing
+		// ever writes `tracking.status` back to 'watching' server-side (see `deriveStatus` for the
+		// client-side, read-time correction) — the query includes `completed` shows itself instead.
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShowEpisode(db, '2026-07-27', 'completed');
+		const { sender, calls } = fakeSender();
+		const result = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
+		expect(result.sent).toBe(1);
+		expect(calls[0].payload.url).toBe('/title/show/1396');
 	});
 
 	it('prunes a subscription the push service reports gone', async () => {
@@ -183,6 +197,27 @@ describe('sendNewReleaseDigest', () => {
 		});
 		const logged = await db.select().from(notificationLog).where(eq(notificationLog.userId, USER));
 		expect(logged[0].id).toBe(`${USER}::media-movie-1::release`);
+	});
+
+	it('does not notify a completed movie — unlike shows, a movie release date never moves', async () => {
+		// Deliberately asymmetric: a show's stored `completed` can go stale (a new season lands with
+		// nothing correcting the column server-side), but a movie has no such drift — its release date
+		// is fixed once known, so `completed` staying excluded is never wrong the way it is for shows.
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await db.insert(media).values({
+			id: 'media-movie-1',
+			type: 'movie',
+			title: 'Dune',
+			externalId: 'movie/438631',
+			releaseDate: '2026-07-26'
+		});
+		await db.insert(tracking).values({
+			id: `${USER}::media-movie-1`,
+			userId: USER,
+			mediaId: 'media-movie-1',
+			status: 'completed'
+		});
+		expect((await sendNewReleaseDigest(db, {} as Env, NOW, fakeSender().sender)).sent).toBe(0);
 	});
 
 	it('groups multiple new episodes of one show into a single push', async () => {
