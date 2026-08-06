@@ -51,14 +51,16 @@ async function markWatched(
 	season: number,
 	episode: number
 ): Promise<void> {
-	await db.insert(episodeWatches).values({
-		id: `${userId}::${mediaId}::s${season}e${episode}`,
-		userId,
-		mediaId,
-		season,
-		episode,
-		watched: true
-	});
+	await db
+		.insert(episodeWatches)
+		.values({
+			id: `${userId}::${mediaId}::s${season}e${episode}`,
+			userId,
+			mediaId,
+			season,
+			episode,
+			watched: true
+		});
 }
 
 async function trackingRow(db: Db, userId: string, mediaId: string) {
@@ -218,13 +220,15 @@ describe('reconcileShowTrackers — season added after the show was marked compl
 		await insertEpisode(db, SHOW, 1, 1, '2020-01-01');
 		await insertTracking(db, USER, SHOW, 'want_to_watch');
 		await insertTracking(db, NOT_WATCHING, SHOW, 'did_not_finish');
-		await db.insert(tracking).values({
-			id: `${REMOVED}::${SHOW}`,
-			userId: REMOVED,
-			mediaId: SHOW,
-			status: 'completed',
-			removed: true
-		});
+		await db
+			.insert(tracking)
+			.values({
+				id: `${REMOVED}::${SHOW}`,
+				userId: REMOVED,
+				mediaId: SHOW,
+				status: 'completed',
+				removed: true
+			});
 
 		await reconcileShowTrackers(db, SHOW, TODAY);
 		expect((await trackingRow(db, USER, SHOW)).status).toBe('want_to_watch');

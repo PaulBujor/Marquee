@@ -49,14 +49,16 @@ async function markWatched(
 	season: number,
 	episode: number
 ) {
-	await db.insert(episodeWatches).values({
-		id: `${USER}::${mediaId}::s${season}e${episode}`,
-		userId: USER,
-		mediaId,
-		season,
-		episode,
-		watched: true
-	});
+	await db
+		.insert(episodeWatches)
+		.values({
+			id: `${USER}::${mediaId}::s${season}e${episode}`,
+			userId: USER,
+			mediaId,
+			season,
+			episode,
+			watched: true
+		});
 }
 
 async function trackerStatus(
