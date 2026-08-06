@@ -60,6 +60,14 @@ export function installGlobalErrorReporting(options: GlobalReportingOptions = {}
 	installed = true;
 
 	const report = options.report ?? reportClientError;
+	/**
+	 * Path only — the query string is dropped before the report leaves the browser. Reports are
+	 * logged into Cloudflare observability with `persist: true` and no sampling, so anything in a
+	 * URL lands in durable logs. No current route puts a secret in its query (the magic-link
+	 * `/auth/verify` never hydrates, so it can't reach this), but that is a property of today's
+	 * route table rather than a guarantee — enforce it here instead.
+	 */
+	const safeUrl = () => (typeof location === 'undefined' ? undefined : location.pathname);
 	const seen = new Set<string>();
 	let sent = 0;
 
@@ -74,7 +82,7 @@ export function installGlobalErrorReporting(options: GlobalReportingOptions = {}
 				message,
 				stack,
 				source,
-				url: typeof location === 'undefined' ? undefined : location.href,
+				url: safeUrl(),
 				at: Date.now()
 			});
 		} catch {

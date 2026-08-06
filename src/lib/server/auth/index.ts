@@ -344,6 +344,7 @@ export { normalizeEmail, EMAIL_REGEX, CODE_REGEX } from './validation';
 export {
 	validateSession,
 	invalidateSession,
+	invalidateOtherSessions,
 	deleteSessionCookie,
 	setSessionCookie,
 	SESSION_COOKIE
