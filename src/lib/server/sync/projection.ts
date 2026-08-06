@@ -177,6 +177,48 @@ export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 	}
 }
 
+/**
+ * Lower a tracking row's `addedAt` to the earliest clock seen for it.
+ *
+ * `trackingUpsert` can only set `addedAt` on the insert branch — its conflict branch is gated by
+ * that field-group's LWW guard, so an event older than the one that created the row updates
+ * nothing. That made the server's `addedAt` the clock of whichever event *arrived* first, while
+ * the client (`idb/state.ts`) takes the minimum across every event. Two devices adding the same
+ * title offline would then disagree permanently, and the value would depend on network arrival
+ * order — the one thing LWW is meant to make irrelevant.
+ *
+ * A plain unguarded `min()` is order-independent and idempotent, so replaying converges. Emitted
+ * once per (row, batch) rather than per event: the min over a push's events for a title is known
+ * up front, so bulk-marking a 200-episode series adds one statement, not 200.
+ *
+ * Runs as an UPDATE, not an upsert — the batch always projects the row's events first, so by the
+ * time this executes the row exists. `added_at` is a `timestamp` column (Unix *seconds*), while
+ * event clocks are epoch ms; convert before comparing.
+ */
+function addedAtFloor(db: Db, userId: string, entityId: string, clockMs: number): Statement {
+	return db
+		.update(tracking)
+		.set({ addedAt: sql`min(${tracking.addedAt}, ${Math.floor(clockMs / 1000)})` })
+		.where(eq(tracking.id, trackingKey(userId, entityId)));
+}
+
+/**
+ * The earliest clock per tracked entity across `events`, considering only `tracking.*` events —
+ * episode events project to `episode_watches` and never create or touch a tracking row, so they
+ * are outside `addedAt`'s definition on both sides.
+ */
+function earliestTrackingClocks(events: ServerEvent[]): Map<string, number> {
+	const earliest = new Map<string, number>();
+	for (const event of events) {
+		if (!event.type.startsWith('tracking.')) continue;
+		const current = earliest.get(event.entityId);
+		if (current === undefined || event.clientCreatedAt < current) {
+			earliest.set(event.entityId, event.clientCreatedAt);
+		}
+	}
+	return earliest;
+}
+
 /** The append-only log insert for one event (dedup by the composite `(user_id, id)` PK). */
 function insertEventStatement(db: Db, event: ServerEvent): Statement {
 	return db
@@ -256,6 +298,11 @@ export async function applyEvents(
 		if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) await flush();
 		batch.push(...statements);
 	}
+	// After the rows exist: pull each one's `addedAt` down to the earliest clock in this push.
+	for (const [entityId, clock] of earliestTrackingClocks(serverEvents)) {
+		if (batch.length >= BATCH_STATEMENTS) await flush();
+		batch.push(addedAtFloor(db, userId, entityId, clock));
+	}
 	await flush();
 
 	return serverEvents;
@@ -283,22 +330,27 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 			batch = [];
 		}
 	};
-	for (const row of rows) {
-		const event: ServerEvent = {
-			id: row.id,
-			userId: row.userId,
-			sequence: row.sequence,
-			type: row.type,
-			entityId: row.entityId,
-			payload: row.payload,
-			deviceId: row.deviceId,
-			clientCreatedAt: row.clientCreatedAt,
-			schemaVersion: row.schemaVersion,
-			serverReceivedAt: row.serverReceivedAt.getTime()
-		};
+	const replayed: ServerEvent[] = rows.map((row) => ({
+		id: row.id,
+		userId: row.userId,
+		sequence: row.sequence,
+		type: row.type,
+		entityId: row.entityId,
+		payload: row.payload,
+		deviceId: row.deviceId,
+		clientCreatedAt: row.clientCreatedAt,
+		schemaVersion: row.schemaVersion,
+		serverReceivedAt: row.serverReceivedAt.getTime()
+	}));
+	for (const event of replayed) {
 		const statements = projectEvent(db, event);
 		if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) await flush();
 		batch.push(...statements);
+	}
+	// Same `addedAt` floor as the live path, so a rebuild reproduces it exactly.
+	for (const [entityId, clock] of earliestTrackingClocks(replayed)) {
+		if (batch.length >= BATCH_STATEMENTS) await flush();
+		batch.push(addedAtFloor(db, userId, entityId, clock));
 	}
 	await flush();
 }
