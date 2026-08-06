@@ -18,6 +18,7 @@ import {
 	type Media,
 	type SeasonRow
 } from '$lib/server/db/schema';
+import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '$lib/server/db/chunk';
 import { mediaId, type MediaProvider } from '$lib/sync/events';
 import type { createDb } from '$lib/server/db';
 import type { MediaDetail, SeasonDetail, TmdbClient } from '$lib/server/tmdb';
@@ -27,26 +28,6 @@ type TmdbHydrator = Pick<TmdbClient, 'getDetails' | 'getSeason'>;
 
 /** How long an unsettled title's cache (airing show / unreleased movie) is trusted before a re-pull (12h). */
 export const AIRING_TTL_MS = 12 * 60 * 60 * 1000;
-
-/**
- * D1 caps bound parameters per query at 100, so multi-row inserts must be chunked to stay under it
- * — a 50-row episode insert is 400 params and fails on D1 (better-sqlite3 in tests has no such cap,
- * so it doesn't surface there). Chunk size is derived per table from its column count.
- */
-const D1_MAX_BOUND_PARAMS = 100;
-
-function chunkBySize<T>(rows: T[], size: number): T[][] {
-	if (rows.length === 0) return [];
-	const chunks: T[][] = [];
-	for (let i = 0; i < rows.length; i += size) chunks.push(rows.slice(i, i + size));
-	return chunks;
-}
-
-function chunkForD1<T extends object>(rows: T[]): T[][] {
-	if (rows.length === 0) return [];
-	const paramsPerRow = Object.keys(rows[0]).length;
-	return chunkBySize(rows, Math.max(1, Math.floor(D1_MAX_BOUND_PARAMS / paramsPerRow)));
-}
 
 // TMDB's own TV statuses (full set: Returning Series / Planned / In Production / Ended / Canceled /
 // Pilot) for a show that may still gain episodes. `in_production` is the primary signal; these catch
@@ -226,7 +207,7 @@ async function syncSeasons(
 	});
 	const toDelete = oldRows.filter((r) => !newNumbers.has(r.seasonNumber));
 
-	for (const chunk of chunkForD1(toUpsert)) {
+	for (const chunk of chunkRows(toUpsert)) {
 		await db
 			.insert(seasons)
 			.values(chunk)
@@ -272,7 +253,7 @@ async function syncEpisodes(
 	});
 	const toDelete = oldRows.filter((r) => !newKeys.has(key(r)));
 
-	for (const chunk of chunkForD1(toUpsert)) {
+	for (const chunk of chunkRows(toUpsert)) {
 		await db
 			.insert(episodes)
 			.values(chunk)

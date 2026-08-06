@@ -11,6 +11,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { chunkIds } from '../db/chunk';
 import type { createDb } from '../db';
 import { episodeWatches, events as eventsTable, syncState, tracking } from '../db/schema';
 import {
@@ -26,18 +27,8 @@ type Db = ReturnType<typeof createDb>;
 type Statement = BatchItem<'sqlite'>;
 type TrackingFields = Partial<typeof tracking.$inferInsert>;
 
-/**
- * D1 caps bound parameters per query and statements per batch. Chunk well under any
- * plausible limit: dedup `IN (...)` lists and projection batches are split accordingly.
- */
-const DEDUP_CHUNK = 90;
+/** D1 caps statements per batch; chunk well under any plausible limit. */
 const BATCH_STATEMENTS = 90;
-
-function chunk<T>(items: T[], size: number): T[][] {
-	const out: T[][] = [];
-	for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-	return out;
-}
 
 /** Drizzle's `batch` wants a non-empty tuple type; at runtime it takes an array. */
 function runBatch(db: Db, statements: Statement[]): Promise<unknown[]> {
@@ -230,10 +221,7 @@ export async function applyEvents(
 
 	// Dedup within this user's events (PK is composite), chunked for D1's param limit.
 	const seen = new Set<string>();
-	for (const ids of chunk(
-		unique.map((e) => e.id),
-		DEDUP_CHUNK
-	)) {
+	for (const ids of chunkIds(unique.map((e) => e.id))) {
 		const rows = await db
 			.select({ id: eventsTable.id })
 			.from(eventsTable)

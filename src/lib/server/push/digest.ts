@@ -8,6 +8,7 @@ import {
 } from '$lib/server/db/schema';
 import { parseTmdbExternalId } from '$lib/server/media/hydrate';
 import { createPushSender, type PushSender, type PushPayload } from './index';
+import { chunkIds } from '$lib/server/db/chunk';
 import type { createDb } from '$lib/server/db';
 
 type Db = ReturnType<typeof createDb>;
@@ -31,8 +32,6 @@ const ACTIVE_STATUSES = ['want_to_watch', 'watching'] as const;
  * a data-staleness question.
  */
 const ACTIVE_SHOW_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
-/** D1 caps bound params ~100/query — chunk id `IN (...)` lists well under that. */
-const CHUNK = 90;
 
 /** The user's local date (`YYYY-MM-DD`) and hour (0–23) for `now`, or a UTC fallback on a bad tz. */
 export function localDateHour(now: Date, timeZone: string | null): { date: string; hour: number } {
@@ -167,8 +166,7 @@ async function findReleases(
 async function filterUnsent(db: Db, items: ReleaseItem[]): Promise<ReleaseItem[]> {
 	const keys = items.map((i) => i.key);
 	const sent = new Set<string>();
-	for (let i = 0; i < keys.length; i += CHUNK) {
-		const chunk = keys.slice(i, i + CHUNK);
+	for (const chunk of chunkIds(keys)) {
 		const rows = await db
 			.select({ id: notificationLog.id })
 			.from(notificationLog)

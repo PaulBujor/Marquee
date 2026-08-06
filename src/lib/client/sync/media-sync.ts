@@ -20,6 +20,7 @@ import {
 	putMedia
 } from '$lib/client/idb';
 import { reportClientError } from '$lib/client/report-error';
+import { fetchWithTimeout } from '$lib/resilience';
 import {
 	MEDIA_SYNC_MAX,
 	type MediaSyncRequest,
@@ -36,6 +37,9 @@ import {
  * leftover via `truncated` rather than dropping it silently.
  */
 export const MAX_DRAIN_ITERATIONS = 25;
+
+/** Wall-clock budget per chunk request, so one stalled connection can't hang the whole drain. */
+const MEDIA_SYNC_TIMEOUT_MS = 30_000;
 
 function chunk<T>(items: T[], size: number): T[][] {
 	const out: T[][] = [];
@@ -63,11 +67,16 @@ export async function runMediaSync(
 			getMediaVersions(idsChunk)
 		]);
 		const body: MediaSyncRequest = { refs, have };
-		const res = await fetchFn('/api/media/sync', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify(body)
-		});
+		const res = await fetchWithTimeout(
+			'/api/media/sync',
+			{
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(body),
+				timeoutMs: MEDIA_SYNC_TIMEOUT_MS
+			},
+			fetchFn
+		);
 		if (!res.ok) throw new Error(`media sync failed: HTTP ${res.status}`);
 
 		const data = (await res.json()) as MediaSyncResponse;

@@ -1,6 +1,10 @@
 import { error } from '@sveltejs/kit';
 import { tmdbImageUrl, TMDB_IMAGE_SIZES, type TmdbImageSize } from '$lib/media';
+import { fetchWithTimeout } from '$lib/resilience';
 import type { RequestHandler } from './$types';
+
+/** Wall-clock budget for the upstream image fetch, so a stalled CDN can't hold the Worker open. */
+const IMAGE_TIMEOUT_MS = 10_000;
 
 /**
  * Same-origin proxy for TMDB images, so the client can fetch poster/backdrop **bytes** to cache
@@ -18,7 +22,15 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const path = url.searchParams.get('path') ?? '';
 	if (!SIZES.has(size) || !PATH_RE.test(path)) error(400, 'Bad image request');
 
-	const upstream = await fetch(tmdbImageUrl(path, size as TmdbImageSize));
+	let upstream: Response;
+	try {
+		upstream = await fetchWithTimeout(tmdbImageUrl(path, size as TmdbImageSize), {
+			timeoutMs: IMAGE_TIMEOUT_MS
+		});
+	} catch (err) {
+		console.error(`media/image: upstream fetch failed for ${size}${path}`, err);
+		error(502, 'Upstream image error');
+	}
 	if (!upstream.ok) {
 		console.error(`media/image: upstream ${upstream.status} for ${size}${path}`);
 		error(502, 'Upstream image error');
