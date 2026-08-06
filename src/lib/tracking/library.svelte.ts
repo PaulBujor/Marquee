@@ -13,6 +13,7 @@ import {
 	recordEvent
 } from '$lib/client/idb';
 import { watchedAt, watchedKey, type DatedEpisode } from './actions';
+import { deriveStatus } from './derive-status';
 import { showProgress, type LibraryItem } from './library';
 import { reconcileStatus } from './reconcile';
 import { sync } from '$lib/client/sync/engine.svelte';
@@ -51,7 +52,13 @@ export class LibraryState {
 			items.push({
 				mediaId: t.mediaId,
 				externalId: m?.externalId ?? null,
-				status: t.status,
+				status: deriveStatus({
+					type: m?.type ?? 'movie',
+					projectedStatus: t.status,
+					episodes,
+					watched,
+					inProduction: m?.inProduction ?? null
+				}),
 				favorite: t.favorite,
 				rating: t.rating,
 				addedAt: t.addedAt,
