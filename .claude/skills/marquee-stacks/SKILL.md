@@ -15,11 +15,8 @@ This file only covers where Marquee differs from its defaults.
 
 ## Repo facts
 
-- The extension is per-machine, not per-repo: if `gh stack` is missing, run
-  `gh extension install github/gh-stack`.
 - Trunk is `main`. One remote (`origin`), so `--remote` is never needed.
 - The repo squash-merges and deletes branches on merge.
-- One-time local setup: `git config rerere.enabled true` (`gh stack init` does this anyway).
 
 ## Branch naming
 
@@ -94,11 +91,8 @@ gh stack merge <pr-number> --yes --squash   # that PR and every unmerged PR belo
 gh stack sync --prune                       # then resync and drop merged local branches
 ```
 
-`gh pr merge` cannot merge a stack — always `gh stack merge`. Merging is all-or-nothing over the
-set, and GitHub retargets and rebases the remaining layers itself, so no manual cleanup.
-
-If `submit` exits **9**, stacked PRs aren't enabled for this repository — that's a GitHub feature
-availability issue, not a CLI problem. Say so rather than falling back to hand-rolled stacks.
+GitHub retargets and rebases the remaining layers itself, so none of this repo's old post-merge
+branch cleanup applies.
 
 ## Workarounds this replaces
 
