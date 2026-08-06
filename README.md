@@ -77,16 +77,21 @@ src/
   lib/
     sync/          # Shared event model + wire contracts (client- and server-safe)
     server/        # Server-only code — never import from client
-      auth/        # Passwordless magic-link: tokens, sessions, request/verify
+      auth/        # Passwordless magic-link: tokens, sessions, request/verify, email change
       db/          # Drizzle schema + migrations (D1)
       email/       # EmailSender — Resend (prod) / Mailpit (dev)
+      http/        # Shared HTTP concerns: problem+json, rate limiting
       media/       # TMDB hydration + the media reference channel (+ refresh cron)
+      push/        # Web Push: subscriptions, sender, the release digest
       sync/        # Server-side event projection
       tmdb/        # TMDB API client
     client/
       idb/         # IndexedDB stores: outbox, projections, media cache
       sync/        # Sync engine: events + media + image channels
+    portability/   # Export/import document schema, build, parse, plan
     tracking/      # Watchlist read models + watchability helpers
+    state/         # Rune singletons: theme, pwa, navigation, notifications
+    validation/    # Shared DTO primitives (client- and server-safe)
     components/    # Shared Svelte components
   routes/          # SvelteKit file-based routing (incl. the cron refresh endpoint)
 ```
