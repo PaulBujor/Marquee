@@ -13,6 +13,7 @@ import type { BatchItem } from 'drizzle-orm/batch';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { createDb } from '../db';
 import { episodeWatches, events as eventsTable, syncState, tracking } from '../db/schema';
+import { reconcileUserShowStatus } from '../tracking/reconcile';
 import {
 	episodeKey,
 	trackingKey,
@@ -263,12 +264,27 @@ export async function applyEvents(
 			batch = [];
 		}
 	};
+	// Media ids touched by an episode event in this push, each with the latest clock among them —
+	// the input `reconcileUserShowStatus` needs after the writes below land.
+	const touchedShows = new Map<string, number>();
 	for (const event of serverEvents) {
 		const statements = [insertEventStatement(db, event), ...projectEvent(db, event)];
 		if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) await flush();
 		batch.push(...statements);
+		if (event.type === 'episode.watched' || event.type === 'episode.unwatched') {
+			const prior = touchedShows.get(event.entityId) ?? 0;
+			touchedShows.set(event.entityId, Math.max(prior, event.clientCreatedAt));
+		}
 	}
 	await flush();
+
+	// Re-derive the stored status for every show an episode watch/unwatch touched, so `tracking.status`
+	// reflects actual progress even when the client's own opportunistic reconcile didn't have enough
+	// local episode data to do it itself (see `reconcileUserShowStatus`) — runs after `flush()` so it
+	// reads this push's own writes.
+	for (const [mediaId, clock] of touchedShows) {
+		await reconcileUserShowStatus(db, userId, mediaId, clock);
+	}
 
 	return serverEvents;
 }
@@ -295,6 +311,7 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 			batch = [];
 		}
 	};
+	const touchedShows = new Map<string, number>();
 	for (const row of rows) {
 		const event: ServerEvent = {
 			id: row.id,
@@ -311,6 +328,17 @@ export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 		const statements = projectEvent(db, event);
 		if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) await flush();
 		batch.push(...statements);
+		if (event.type === 'episode.watched' || event.type === 'episode.unwatched') {
+			const prior = touchedShows.get(event.entityId) ?? 0;
+			touchedShows.set(event.entityId, Math.max(prior, event.clientCreatedAt));
+		}
 	}
 	await flush();
+
+	// Same reconciliation pass as `applyEvents` — a rebuild replays raw writes only, so without
+	// this a title whose completion was never backed by an explicit `status_changed` event (the
+	// bug this mechanism fixes) would come back from a rebuild still wrong.
+	for (const [mediaId, clock] of touchedShows) {
+		await reconcileUserShowStatus(db, userId, mediaId, clock);
+	}
 }

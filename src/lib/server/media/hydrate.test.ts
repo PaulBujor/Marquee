@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { eq, getTableName } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
-import { episodes, seasons } from '$lib/server/db/schema';
-import { mediaId } from '$lib/sync/events';
+import { episodes, episodeWatches, seasons, tracking, users } from '$lib/server/db/schema';
+import { mediaId, trackingKey } from '$lib/sync/events';
 import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 import { needsRefresh, parseTmdbExternalId, refreshMedia } from './hydrate';
 
@@ -27,6 +27,50 @@ function trackWrites(db: Db): { op: 'insert' | 'update' | 'delete'; table: strin
 }
 
 const T0 = Date.UTC(2026, 6, 24); // fixed "now" for deterministic TTL tests
+const USER = 'user-1';
+
+async function seedTracker(
+	db: ReturnType<typeof createTestDb>,
+	mediaId: string,
+	status: 'watching' | 'completed'
+) {
+	await db
+		.insert(users)
+		.values({ id: USER, email: 'u1@x.com', status: 'enabled' })
+		.onConflictDoNothing();
+	await db
+		.insert(tracking)
+		.values({ id: trackingKey(USER, mediaId), userId: USER, mediaId, status });
+}
+
+async function markWatched(
+	db: ReturnType<typeof createTestDb>,
+	mediaId: string,
+	season: number,
+	episode: number
+) {
+	await db
+		.insert(episodeWatches)
+		.values({
+			id: `${USER}::${mediaId}::s${season}e${episode}`,
+			userId: USER,
+			mediaId,
+			season,
+			episode,
+			watched: true
+		});
+}
+
+async function trackerStatus(
+	db: ReturnType<typeof createTestDb>,
+	mediaId: string
+): Promise<string> {
+	const [row] = await db
+		.select({ status: tracking.status })
+		.from(tracking)
+		.where(eq(tracking.id, trackingKey(USER, mediaId)));
+	return row.status;
+}
 
 const movieDefaults: MediaDetail = {
 	tmdbId: 603,
@@ -434,5 +478,92 @@ describe('refreshMedia', () => {
 		// @ts-expect-error — exercising an unknown provider guard
 		expect(await refreshMedia(db, client, 'omdb', 'movie/603', T0)).toBeNull();
 		expect(detailCalls()).toBe(0);
+	});
+});
+
+describe('refreshMedia — reconciles trackers, the reported bug fixed at its source', () => {
+	it('resolves a show to completed on its very first hydrate, from watches recorded before any episode data existed', async () => {
+		const db = createTestDb();
+		const id = mediaId('tmdb', 'show/1396');
+		// The tracking row + watches exist before this title has ever been hydrated server-side —
+		// e.g. a bulk "mark watched" seeded from season summaries, pushed before the media channel
+		// caught up.
+		await seedTracker(db, id, 'watching');
+		await markWatched(db, id, 1, 1);
+
+		// A finished, single-episode season — no announced-but-unaired episode, so "caught up" really
+		// does mean "completed" (see the still-airing case in the next test for the other shape).
+		const stub = showStub();
+		stub.removeEpisode(2);
+		stub.endProduction();
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		expect(await trackerStatus(db, id)).toBe('completed');
+	});
+
+	it('leaves a caught-up show watching, not completed, when an announced episode has not aired yet', async () => {
+		const db = createTestDb();
+		const id = mediaId('tmdb', 'show/1396');
+		await seedTracker(db, id, 'watching');
+		await markWatched(db, id, 1, 1);
+
+		// showStub's default season has s1e2 airing in the future ('2026-08-01' > T0) — caught up on
+		// what's aired, but the show isn't finished, so this must stay `watching` (isStillAiring).
+		const stub = showStub();
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		expect(await trackerStatus(db, id)).toBe('watching');
+	});
+
+	it('demotes a completed tracker when an already-known episode simply finishes airing (no TMDB content change)', async () => {
+		const db = createTestDb();
+		const id = mediaId('tmdb', 'show/1396');
+		const stub = showStub();
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		await seedTracker(db, id, 'completed');
+		await markWatched(db, id, 1, 1);
+		// s1e2 ('2026-08-01') hasn't aired as of T0, so 'completed' (watched every *aired* episode)
+		// is the correct state to start from.
+		expect(await trackerStatus(db, id)).toBe('completed');
+
+		// Past the TTL, s1e2 has now aired — TMDB's content is byte-for-byte the same as before, so
+		// `version` doesn't bump, but the reconcile trigger isn't gated on that: only today's date
+		// needed to move for s1e2 to count as aired-and-unwatched.
+		const second = await refreshMedia(
+			db,
+			stub.client,
+			'tmdb',
+			'show/1396',
+			Date.UTC(2026, 7, 2) // 2026-08-02, past s1e2's air date and the 12h TTL
+		);
+		expect(second!.version).toBe(1); // content itself didn't change
+
+		expect(await trackerStatus(db, id)).toBe('watching');
+	});
+
+	it('demotes a completed tracker back to watching when new content actually changes (a new season)', async () => {
+		const db = createTestDb();
+		const id = mediaId('tmdb', 'show/1396');
+		const stub = showStub();
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		await seedTracker(db, id, 'completed');
+		await markWatched(db, id, 1, 1);
+		expect(await trackerStatus(db, id)).toBe('completed');
+
+		// A new, already-aired episode appears — genuine content change, so `changed` is true and
+		// the reconcile trigger fires.
+		stub.addEpisode({ episodeNumber: 3, airDate: '2026-01-15' });
+		const second = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0 + 13 * 3600_000);
+		expect(second!.version).toBe(2);
+
+		expect(await trackerStatus(db, id)).toBe('watching');
+	});
+
+	it('does not reconcile when nothing tracks the show', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		await expect(refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0)).resolves.toBeTruthy();
 	});
 });

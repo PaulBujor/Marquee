@@ -369,7 +369,12 @@ export const tracking = sqliteTable(
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [index('tracking_user_status_idx').on(table.userId, table.status)]
+	(table) => [
+		index('tracking_user_status_idx').on(table.userId, table.status),
+		// Server-side status reconciliation (`src/lib/server/tracking/reconcile.ts`) looks up a
+		// show's `completed` trackers by media id when its episode/production data changes.
+		index('tracking_media_status_idx').on(table.mediaId, table.status)
+	]
 );
 
 /**
@@ -390,7 +395,12 @@ export const episodeWatches = sqliteTable(
 		watched: integer('watched', { mode: 'boolean' }).notNull().default(false),
 		updatedAt: integer('updated_at').notNull().default(0)
 	},
-	(table) => [index('episode_watches_user_media_idx').on(table.userId, table.mediaId)]
+	(table) => [
+		index('episode_watches_user_media_idx').on(table.userId, table.mediaId),
+		// Status reconciliation needs "who has watched what" scoped to one show across many
+		// users (media id first) — the complement of the user-first index above.
+		index('episode_watches_media_id_idx').on(table.mediaId)
+	]
 );
 
 export type Event = typeof events.$inferSelect;
