@@ -4,8 +4,8 @@
  * it enqueues the event in the outbox (for the sync engine to push) *and*
  * applies it to the local materialized stores optimistically.
  */
-import { enqueueEvent } from './outbox';
-import { applyEventToIdb } from './state';
+import { enqueueEvent, enqueueEvents } from './outbox';
+import { applyEventToIdb, applyEventsToIdb } from './state';
 import { getDeviceId } from './meta';
 import { createEvent, type EventPayloadMap, type SyncEventType } from '$lib/sync/events';
 
@@ -29,6 +29,7 @@ export {
 } from './state';
 export {
 	putMedia,
+	putMediaBatch,
 	getMedia,
 	getAllMedia,
 	searchLocalMedia,
@@ -54,4 +55,26 @@ export async function recordEvent<T extends SyncEventType>(
 	const event = createEvent(type, entityId, payload, deviceId);
 	await enqueueEvent(event);
 	await applyEventToIdb(event);
+}
+
+/** One event to record, for {@link recordEvents}. */
+export type EventSpec = {
+	[T in SyncEventType]: { type: T; entityId: string; payload: EventPayloadMap[T] };
+}[SyncEventType];
+
+/**
+ * Record many local changes in **two** transactions rather than two per event.
+ *
+ * `recordEvent` opens one transaction to enqueue and another to project, which is right for a
+ * single user action but wrong for a bulk one: marking a 250-episode series watched runs 500
+ * sequential IndexedDB round trips with the UI blocked behind them. The import path already
+ * batches for exactly this reason (`enqueueEvents` / `applyEventsToIdb`); this gives the bulk
+ * tracking actions the same treatment.
+ */
+export async function recordEvents(specs: EventSpec[]): Promise<void> {
+	if (specs.length === 0) return;
+	const deviceId = await getDeviceId();
+	const events = specs.map((s) => createEvent(s.type, s.entityId, s.payload, deviceId));
+	await enqueueEvents(events);
+	await applyEventsToIdb(events);
 }

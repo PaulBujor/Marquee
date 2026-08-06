@@ -5,7 +5,6 @@
  */
 import {
 	airedEpisodes,
-	nextEpisode,
 	todayIso,
 	watchedKey,
 	type DatedEpisode,
@@ -67,11 +66,14 @@ export function showProgress(item: LibraryItem, today: string = todayIso()): Sho
 	const aired = airedEpisodes(item.episodes, today);
 	if (aired.length === 0) return null;
 	const watched = aired.filter((e) => item.watched.has(watchedKey(e.season, e.episode))).length;
+	// Derive `next` from the list already computed rather than calling nextEpisode, which would
+	// filter and re-sort the same episodes a second time.
+	const next = aired.find((e) => !item.watched.has(watchedKey(e.season, e.episode))) ?? null;
 	return {
 		watched,
 		total: aired.length,
 		fraction: watched / aired.length,
-		next: nextEpisode(item.episodes, item.watched, today)
+		next: next ? { season: next.season, episode: next.episode } : null
 	};
 }
 

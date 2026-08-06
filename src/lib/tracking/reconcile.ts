@@ -34,17 +34,18 @@ export async function reconcileStatus(
 	const row = await getTrackingByMediaId(mediaId);
 	if (!row || row.removed) return;
 	const watches = await getEpisodeWatches(mediaId);
+	const airDates = airDatesByCoord(episodes);
 	const watchedCount = watches.filter(
 		(w) =>
 			w.watched &&
 			w.season >= 1 &&
-			isAired({ airDate: airDateOf(episodes, w.season, w.episode) }, today)
+			isAired({ airDate: airDates.get(`${w.season}:${w.episode}`) ?? null }, today)
 	).length;
 	const next = reconciledStatus(row.status, watchedCount, total, stillAiring);
 	if (next) await recordEvent('tracking.status_changed', mediaId, { status: next });
 }
 
-/** The air date of a given episode coord in the reference list, or null if unknown. */
-function airDateOf(episodes: DatedEpisode[], season: number, episode: number): string | null {
-	return episodes.find((e) => e.season === season && e.episode === episode)?.airDate ?? null;
+/** Index episodes by `season:episode` so the watch-row scan below is linear, not quadratic. */
+function airDatesByCoord(episodes: DatedEpisode[]): Map<string, string | null> {
+	return new Map(episodes.map((e) => [`${e.season}:${e.episode}`, e.airDate]));
 }
