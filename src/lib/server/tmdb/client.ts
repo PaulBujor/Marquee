@@ -1,4 +1,11 @@
+import type { ZodType } from 'zod';
 import { CircuitBreaker, fetchWithTimeout, withRetry } from '$lib/resilience';
+import {
+	movieDetailsResponseSchema,
+	multiSearchResponseSchema,
+	seasonDetailResponseSchema,
+	tvDetailsResponseSchema
+} from './schemas';
 import type {
 	MediaDetail,
 	MediaSearchResult,
@@ -57,6 +64,20 @@ export class TmdbError extends Error {
 		super(message);
 		this.name = 'TmdbError';
 	}
+}
+
+/**
+ * Validate a TMDB payload against its shape, turning a mismatch into a `TmdbError` so it flows
+ * through the same handling as any other bad upstream response — 502 is retried by `shouldRetry`,
+ * and the search endpoint's degraded fallback still returns the local catalog.
+ */
+function parseTmdb<T>(schema: ZodType<T>, data: unknown, what: string): T {
+	const result = schema.safeParse(data);
+	if (!result.success) {
+		console.error(`TMDB ${what}: unexpected response shape`, result.error.issues.slice(0, 3));
+		throw new TmdbError(`TMDB ${what} returned an unexpected shape`, 502);
+	}
+	return result.data;
 }
 
 /** Parse a leading 4-digit year out of a TMDB date string (`YYYY-MM-DD`). */
@@ -266,10 +287,12 @@ export function createTmdbClient(apiKey: string) {
 			const trimmed = query.trim();
 			if (!trimmed) return [];
 
-			const data = (await request('/search/multi', {
-				query: trimmed,
-				include_adult: 'false'
-			})) as TmdbMultiSearchResponse;
+			const raw = await request('/search/multi', { query: trimmed, include_adult: 'false' });
+			const data = parseTmdb(
+				multiSearchResponseSchema,
+				raw,
+				'search'
+			) as unknown as TmdbMultiSearchResponse;
 
 			return (data.results ?? []).map(normalize).filter((r): r is MediaSearchResult => r !== null);
 		},
@@ -277,19 +300,24 @@ export function createTmdbClient(apiKey: string) {
 		/** Fetch a single movie/show with credits, images, videos, and similar titles appended. */
 		async getDetails(type: 'movie' | 'show', id: number): Promise<MediaDetail> {
 			const path = type === 'movie' ? `/movie/${id}` : `/tv/${id}`;
-			const data = (await request(path, {
+			const raw = await request(path, {
 				append_to_response: 'credits,images,videos,recommendations,similar'
-			})) as TmdbMovieDetailsResponse | TmdbTvDetailsResponse;
+			});
+			const schema = type === 'movie' ? movieDetailsResponseSchema : tvDetailsResponseSchema;
+			const data = parseTmdb(schema, raw, `${type} details`) as unknown as
+				TmdbMovieDetailsResponse | TmdbTvDetailsResponse;
 
 			return normalizeDetails(type, data);
 		},
 
 		/** Fetch a single TV season with its episodes, normalized. */
 		async getSeason(showId: number, seasonNumber: number): Promise<SeasonDetail> {
-			const data = (await request(
-				`/tv/${showId}/season/${seasonNumber}`,
-				{}
-			)) as TmdbSeasonDetailResponse;
+			const raw = await request(`/tv/${showId}/season/${seasonNumber}`, {});
+			const data = parseTmdb(
+				seasonDetailResponseSchema,
+				raw,
+				'season'
+			) as unknown as TmdbSeasonDetailResponse;
 
 			return normalizeSeason(data);
 		}
