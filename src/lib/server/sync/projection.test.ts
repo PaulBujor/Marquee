@@ -1,14 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
-import {
-	episodes,
-	episodeWatches,
-	events as eventsTable,
-	media,
-	tracking,
-	users
-} from '$lib/server/db/schema';
+import { episodeWatches, events as eventsTable, tracking, users } from '$lib/server/db/schema';
 import {
 	tmdbMediaId,
 	trackingKey,
@@ -23,7 +16,6 @@ type Db = ReturnType<typeof createTestDb>;
 const USER = 'user-1';
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 const MID = tmdbMediaId('movie', 603);
-const SHOW_MID = tmdbMediaId('show', 1396);
 
 let uuidCounter = 0;
 function nextUuid(): string {
@@ -186,64 +178,5 @@ describe('projectEvent via applyEvents', () => {
 		const epsAfter = await db.select().from(episodeWatches);
 		expect(after).toEqual(before);
 		expect(epsAfter).toEqual(epsBefore);
-	});
-});
-
-async function showTrackingRow(db: Db) {
-	const [row] = await db
-		.select()
-		.from(tracking)
-		.where(eq(tracking.id, trackingKey(USER, SHOW_MID)));
-	return row;
-}
-
-describe('applyEvents — server-side status reconciliation', () => {
-	it('completes a show from an episode.watched push, with no status_changed event at all', async () => {
-		await db
-			.insert(media)
-			.values({ id: SHOW_MID, type: 'show', title: 'Show', inProduction: false });
-		await db.insert(episodes).values([
-			{ mediaId: SHOW_MID, seasonNumber: 1, episodeNumber: 1, airDate: '2020-01-01' },
-			{ mediaId: SHOW_MID, seasonNumber: 1, episodeNumber: 2, airDate: '2020-01-08' }
-		]);
-		await applyEvents(db, USER, [ev('tracking.added', SHOW_MID, { status: 'watching' }, 100)]);
-
-		await applyEvents(db, USER, [
-			ev('episode.watched', SHOW_MID, { season: 1, episode: 1 }, 200),
-			ev('episode.watched', SHOW_MID, { season: 1, episode: 2 }, 201)
-		]);
-
-		expect((await showTrackingRow(db)).status).toBe('completed');
-	});
-
-	it('un-completes a show when the last watched episode is unwatched, no explicit status write needed', async () => {
-		await db
-			.insert(media)
-			.values({ id: SHOW_MID, type: 'show', title: 'Show', inProduction: false });
-		await db
-			.insert(episodes)
-			.values({ mediaId: SHOW_MID, seasonNumber: 1, episodeNumber: 1, airDate: '2020-01-01' });
-		await applyEvents(db, USER, [ev('tracking.added', SHOW_MID, { status: 'watching' }, 100)]);
-		await applyEvents(db, USER, [ev('episode.watched', SHOW_MID, { season: 1, episode: 1 }, 200)]);
-		expect((await showTrackingRow(db)).status).toBe('completed');
-
-		await applyEvents(db, USER, [
-			ev('episode.unwatched', SHOW_MID, { season: 1, episode: 1 }, 300)
-		]);
-		expect((await showTrackingRow(db)).status).toBe('watching');
-	});
-
-	it('does not touch a movie even though episode-shaped events are (nonsensically) sent for it', async () => {
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'did_not_finish' }, 100)]);
-		await applyEvents(db, USER, [ev('episode.watched', MID, { season: 1, episode: 1 }, 200)]);
-		expect((await trackingRow(db)).status).toBe('did_not_finish'); // no `media` row for MID at all
-	});
-
-	it('leaves status alone when the show has not been hydrated server-side yet (insufficient data)', async () => {
-		// No `media`/`episodes` rows for SHOW_MID — mirrors episode watches recorded before the
-		// media channel has ever hydrated this title server-side.
-		await applyEvents(db, USER, [ev('tracking.added', SHOW_MID, { status: 'watching' }, 100)]);
-		await applyEvents(db, USER, [ev('episode.watched', SHOW_MID, { season: 1, episode: 1 }, 200)]);
-		expect((await showTrackingRow(db)).status).toBe('watching');
 	});
 });

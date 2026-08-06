@@ -18,7 +18,6 @@ import {
 	type Media,
 	type SeasonRow
 } from '$lib/server/db/schema';
-import { reconcileShowTrackers } from '$lib/server/tracking/reconcile';
 import { mediaId, type MediaProvider } from '$lib/sync/events';
 import type { createDb } from '$lib/server/db';
 import type { MediaDetail, SeasonDetail, TmdbClient } from '$lib/server/tmdb';
@@ -379,12 +378,6 @@ export async function refreshMedia(
 		if (detail.type === 'show') {
 			await syncSeasons(db, id, [], seasonRows);
 			await syncEpisodes(db, id, [], episodeRows);
-			// A tracking row can reference this media id before it's ever hydrated (no FK — see the
-			// `tracking` schema doc), e.g. a bulk "mark watched" seeded from season summaries alone.
-			// Those episode.watched events land with no episode data to reconcile against and no-op
-			// (`reconcileUserShowStatus`'s aired.length === 0 guard); this is the first point real
-			// episode data exists, so it's also the first point that watch history can resolve.
-			await reconcileShowTrackers(db, id, now);
 		}
 	} else {
 		const oldSeasons: SeasonRow[] =
@@ -418,20 +411,6 @@ export async function refreshMedia(
 				version: changed ? existing.version + 1 : existing.version
 			})
 			.where(eq(media.id, id));
-
-		// Deliberately *not* gated on `changed`: a show can need reconciling even when TMDB's content
-		// is byte-for-byte the same as last time — an episode already known with a future air date
-		// needs no content change to become "aired", just today's date moving past it (which is
-		// exactly what keeps a caught-up show in `watching` rather than `completed` in the first
-		// place — see `isStillAiring`). This function is called from the one place an existing show's
-		// content is re-examined at all, rather than from each caller (today: the nightly cron), so
-		// every caller — including a future one — gets it for free instead of having to remember to
-		// wire it; it cheaply no-ops via `reconcileShowTrackers`'s own guards when nothing moved. See
-		// its doc for why both `watching` and `completed` trackers need reconsidering, not just
-		// `completed`.
-		if (detail.type === 'show') {
-			await reconcileShowTrackers(db, id, now);
-		}
 	}
 
 	const stored = await db.select().from(media).where(eq(media.id, id)).limit(1);

@@ -3,14 +3,12 @@ import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
 import {
 	episodes,
-	episodeWatches,
 	media,
 	notificationLog,
 	pushSubscriptions,
 	tracking,
 	users
 } from '$lib/server/db/schema';
-import { reconcileShowTrackers } from '$lib/server/tracking/reconcile';
 import type { TrackingStatus } from '$lib/sync/events';
 import type { PushPayload, PushResult, PushSender, PushTarget } from './index';
 import { localDateHour, sendNewReleaseDigest } from './digest';
@@ -145,35 +143,6 @@ describe('sendNewReleaseDigest', () => {
 		await db.update(tracking).set({ status: 'completed' });
 		await db.update(episodes).set({ airDate: '2026-07-27' });
 		expect((await sendNewReleaseDigest(db, {} as Env, NOW, fakeSender().sender)).sent).toBe(0);
-	});
-
-	it('notifies a show demoted from completed to watching by server-side reconciliation', async () => {
-		// digest.ts's SQL filter (`status IN ('want_to_watch', 'watching')`) never re-derives status
-		// itself — it needs the stored column to already be correct. This is the scenario that
-		// motivated server-side reconciliation: a `completed` show gets a new season, and without
-		// something correcting `tracking.status` before this query runs, the release below would be
-		// silently excluded no matter how new-release-worthy it is.
-		await seedSub(db, 'https://push.example/ep-1', MADRID);
-		await seedShowEpisode(db, '2020-01-01', 'completed'); // s2e1, long finished
-		await db.insert(episodeWatches).values({
-			id: `${USER}::${SHOW}::s2e1`,
-			userId: USER,
-			mediaId: SHOW,
-			season: 2,
-			episode: 1,
-			watched: true
-		});
-		await seedEpisode(db, SHOW, 3, 1, '2026-07-27'); // new season's release, within the window, unwatched
-
-		// The media/hydration trigger, not the digest, is what fixes the stored status.
-		await reconcileShowTrackers(db, SHOW, NOW.getTime());
-		expect((await db.select().from(tracking)).find((t) => t.mediaId === SHOW)?.status).toBe(
-			'watching'
-		);
-
-		const { sender } = fakeSender();
-		const result = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
-		expect(result.sent).toBe(1);
 	});
 
 	it('prunes a subscription the push service reports gone', async () => {
