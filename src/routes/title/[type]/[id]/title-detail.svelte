@@ -22,9 +22,10 @@
 		type MediaRecord,
 		type TrackingStatus
 	} from '$lib/sync/events';
-	import { isAired, todayIso } from '$lib/tracking/actions';
+	import { isAired, todayIso, watchedKey, type DatedEpisode } from '$lib/tracking/actions';
+	import { deriveStatus } from '$lib/tracking/derive-status';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
-	import { getTracking, getEpisodes } from '$lib/client/idb';
+	import { getTracking, getEpisodes, getAllMedia, getEpisodeWatches } from '$lib/client/idb';
 	import { offlineSeason } from '$lib/client/media/offline-detail';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import { navigation } from '$lib/state/navigation.svelte.js';
@@ -114,6 +115,9 @@
 
 	// Tracking status + favorite of the *similar* titles, for the badge + heart on each card — we
 	// already hold this offline, keyed by our derived media id. Reloaded on sync pulls / navigation.
+	// Status is derived the same way as the detail page and dashboard (see `deriveStatus`), so a show
+	// caught up on everything aired shows correctly here too, not just wherever the user happened to
+	// last take an action on it.
 	const STATUS_LABEL: Record<TrackingStatus, string> = {
 		want_to_watch: 'On list',
 		watching: 'Watching',
@@ -127,10 +131,39 @@
 		loadSimilarState();
 	});
 	async function loadSimilarState() {
-		const rows = await getTracking();
-		similarState = Object.fromEntries(
-			rows.map((r) => [r.mediaId, { status: r.status, favorite: r.favorite }])
+		const [rows, media] = await Promise.all([getTracking(), getAllMedia()]);
+		const mediaById = new Map(media.map((m) => [m.id, m]));
+		const entries = await Promise.all(
+			rows.map(async (r) => {
+				const m = mediaById.get(r.mediaId);
+				let episodes: DatedEpisode[] = [];
+				let watched = new Set<string>();
+				if (m?.type === 'show') {
+					const [watches, eps] = await Promise.all([
+						getEpisodeWatches(r.mediaId),
+						getEpisodes(r.mediaId)
+					]);
+					watched = new Set(
+						watches.filter((w) => w.watched).map((w) => watchedKey(w.season, w.episode))
+					);
+					episodes = eps.map((e) => ({ season: e.season, episode: e.episode, airDate: e.airDate }));
+				}
+				return [
+					r.mediaId,
+					{
+						status: deriveStatus({
+							type: m?.type ?? 'movie',
+							projectedStatus: r.status,
+							episodes,
+							watched,
+							inProduction: m?.inProduction ?? null
+						}),
+						favorite: r.favorite
+					}
+				] as const;
+			})
 		);
+		similarState = Object.fromEntries(entries);
 	}
 
 	let detailsOpen = $state(true);

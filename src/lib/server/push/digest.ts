@@ -18,8 +18,19 @@ export const SEND_HOUR = 9;
  *  back-filling a whole back catalogue when a long-running show is newly tracked. */
 export const GRACE_DAYS = 2;
 const SPECIALS_SEASON = 0;
-/** Statuses we notify for (not `completed` / `did_not_finish`). */
+/** Movie statuses we notify for (not `completed` / `did_not_finish`). */
 const ACTIVE_STATUSES = ['want_to_watch', 'watching'] as const;
+/**
+ * Show statuses we notify for. Includes `completed`, unlike movies: this query already scopes to
+ * episodes whose air date falls in the last `GRACE_DAYS` days, so any row it returns for a show
+ * stored `completed` is guaranteed genuinely new — the user couldn't have completed the show
+ * before that episode existed. This is what lets a show demoted by a new season (`tracking.status`
+ * is user-intent only; nothing corrects it server-side, see `deriveStatus` for the client-side
+ * read-time correction) still surface a release notification without the stored column ever being
+ * fixed up. `did_not_finish` stays excluded — that's a deliberate "stop notifying me" signal, not
+ * a data-staleness question.
+ */
+const ACTIVE_SHOW_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
 /** D1 caps bound params ~100/query — chunk id `IN (...)` lists well under that. */
 const CHUNK = 90;
 
@@ -100,7 +111,7 @@ async function findReleases(
 			and(
 				eq(trackingTable.userId, userId),
 				eq(trackingTable.removed, false),
-				inArray(trackingTable.status, [...ACTIVE_STATUSES]),
+				inArray(trackingTable.status, [...ACTIVE_SHOW_STATUSES]),
 				gte(episodesTable.seasonNumber, SPECIALS_SEASON + 1),
 				gte(episodesTable.airDate, from),
 				lte(episodesTable.airDate, to)

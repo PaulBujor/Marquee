@@ -16,7 +16,6 @@ import {
 	SPECIALS_SEASON,
 	statusEventType,
 	todayIso,
-	toTrackingView,
 	watchedAt,
 	watchedAtLabel,
 	watchedKey,
@@ -40,42 +39,6 @@ const show: DatedEpisode[] = [
 	ep(2, 2, '2026-12-01'), // future
 	ep(2, 3, null) // unannounced
 ];
-
-describe('toTrackingView', () => {
-	it('treats a missing row as untracked', () => {
-		expect(toTrackingView(undefined)).toEqual({ tracked: false });
-	});
-
-	it('treats a removed (tombstoned) row as untracked', () => {
-		expect(
-			toTrackingView({ status: 'completed', favorite: true, rating: 5, removed: true })
-		).toEqual({
-			tracked: false
-		});
-	});
-
-	it('exposes status, favorite, and rating for a live row', () => {
-		expect(
-			toTrackingView({ status: 'watching', favorite: true, rating: 4, removed: false })
-		).toEqual({
-			tracked: true,
-			status: 'watching',
-			favorite: true,
-			rating: 4
-		});
-	});
-
-	it('carries a null rating through as unrated', () => {
-		expect(
-			toTrackingView({ status: 'want_to_watch', favorite: false, rating: null, removed: false })
-		).toEqual({
-			tracked: true,
-			status: 'want_to_watch',
-			favorite: false,
-			rating: null
-		});
-	});
-});
 
 describe('statusEventType', () => {
 	it('adds when the title is not yet tracked', () => {

@@ -25,7 +25,6 @@ import {
 	isSeasonFullyWatched,
 	nextEpisode,
 	todayIso,
-	toTrackingView,
 	statusEventType,
 	nextFavorite,
 	watchedKey,
@@ -34,6 +33,7 @@ import {
 	type SeasonSummary,
 	type TrackingView
 } from './actions';
+import { toTrackingView } from './derive-status';
 import { reconcileStatus } from './reconcile';
 import { notifications } from '$lib/state/notifications.svelte.js';
 
@@ -83,8 +83,6 @@ export class TrackingState {
 	/** Load tracking + episode metadata + episode-watched state from IndexedDB. */
 	async load(): Promise<void> {
 		const row = await getTrackingByMediaId(this.mediaId);
-		this.view = toTrackingView(row);
-		this.statusUpdatedAt = row?.statusUpdatedAt ?? 0;
 		this.episodes = (await getEpisodes(this.mediaId)).map((e) => ({
 			season: e.season,
 			episode: e.episode,
@@ -97,6 +95,16 @@ export class TrackingState {
 		this.episodeWatchedAt = new SvelteMap(
 			marked.map((e) => [watchedKey(e.season, e.episode), e.updatedAt])
 		);
+		// Status is derived here, every load — not cached from whichever write last happened to have
+		// episode/production metadata on hand, so a title that finishes syncing after the user already
+		// marked it watched still ends up correct on the next read, with no further write required.
+		this.view = toTrackingView(row, {
+			type: this.#media?.type ?? 'movie',
+			episodes: this.episodes,
+			watched: this.watched,
+			inProduction: this.#inProduction
+		});
+		this.statusUpdatedAt = row?.statusUpdatedAt ?? 0;
 		this.ready = true;
 	}
 

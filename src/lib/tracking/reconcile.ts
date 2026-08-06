@@ -1,8 +1,13 @@
 /**
- * Move a show's status in line with its episode progress (completion sequence, MRQ-55): the last
- * episode completes it, un-watching one un-completes it, the first watch starts it. Needs the show's
- * episode air dates + production status (media reference data), so it runs where those are known and
- * records a `status_changed`. Shared by the detail page (`TrackingState`) and the dashboard quick-mark.
+ * Move a show's stored status in line with its episode progress (completion sequence, MRQ-55):
+ * the last episode completes it, un-watching one un-completes it, the first watch starts it.
+ *
+ * This is an opportunistic cache-warm, not the source of truth for what's displayed — every read
+ * path derives status live via `deriveStatus` (`./derive-status`), so a stale or absent write here
+ * self-corrects on the next render with no further action needed. It still runs after episode
+ * writes so a plain SQL query or the JSON export (which read the stored column directly, not
+ * through `deriveStatus`) see a mostly-correct value; when the episode/production data it needs
+ * hasn't synced locally yet, it just no-ops rather than guessing, same as `deriveStatus` does.
  */
 import { getEpisodeWatches, getTrackingByMediaId, recordEvent } from '$lib/client/idb';
 import {
