@@ -4,7 +4,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Input } from '$lib/components/ui/input';
-	import { buttonVariants } from '$lib/components/ui/button';
+	import { Button } from '$lib/components/ui/button';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import BackButton from '$lib/components/back-button.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
@@ -267,13 +267,7 @@
 			<div class="flex flex-col gap-2">
 				<div class="flex items-center justify-between">
 					<h2 class="text-sm font-medium text-muted-foreground">Recent searches</h2>
-					<button
-						type="button"
-						onclick={clearHistory}
-						class={buttonVariants({ variant: 'ghost', size: 'sm' })}
-					>
-						Clear
-					</button>
+					<Button variant="ghost" size="sm" onclick={clearHistory}>Clear</Button>
 				</div>
 				<ul class="flex flex-col gap-1">
 					{#each recentSearches as q (q)}
