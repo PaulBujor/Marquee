@@ -40,7 +40,15 @@ export {
 	getReferencedMediaIds,
 	getUnsyncedMediaIds
 } from './media';
-export { getDeviceId, getCursor, setCursor, getLastSyncAt, setLastSyncAt } from './meta';
+export {
+	getDeviceId,
+	getCursor,
+	setCursor,
+	getLastSyncAt,
+	setLastSyncAt,
+	getLastFullMediaCheck,
+	setLastFullMediaCheck
+} from './meta';
 
 /**
  * Record a local tracking change: stamp it as an event, enqueue it for sync, and

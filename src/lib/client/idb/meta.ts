@@ -39,3 +39,12 @@ export async function getLastSyncAt(): Promise<number | null> {
 export async function setLastSyncAt(at: number): Promise<void> {
 	await setMeta('lastSyncAt', at);
 }
+
+/** Epoch ms of the last full media version-diff pass, or 0 if never run on this device. */
+export async function getLastFullMediaCheck(): Promise<number> {
+	return (await getMeta('lastFullMediaCheck')) ?? 0;
+}
+
+export async function setLastFullMediaCheck(at: number): Promise<void> {
+	await setMeta('lastFullMediaCheck', at);
+}

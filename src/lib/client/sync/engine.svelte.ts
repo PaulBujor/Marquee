@@ -17,7 +17,12 @@ import { runMediaSync } from './media-sync';
 import { runImageSync } from './image-sync';
 import { isFullMediaCheckDue, nextFullMediaCheckStamp, shouldRunMediaSync } from './media-gate';
 import { CircuitBreaker, withRetry, type RetryOptions } from '$lib/resilience';
-import { getLastSyncAt, setLastSyncAt } from '$lib/client/idb';
+import {
+	getLastSyncAt,
+	setLastSyncAt,
+	getLastFullMediaCheck,
+	setLastFullMediaCheck
+} from '$lib/client/idb';
 import { reportClientError } from '$lib/client/report-error';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
@@ -108,8 +113,15 @@ class SyncEngine {
 			);
 		}
 
-		this.#interval = setInterval(() => this.requestSync(), INTERVAL_MS);
-		this.requestSync();
+		// Load the persisted full-check watermark before the first cycle can run, so a relaunch
+		// resumes the cadence instead of restarting it at 0 (see media-gate.ts). The `#started`
+		// guard drops this if `stop()` ran before the (local, near-instant) read resolved.
+		void getLastFullMediaCheck().then((at) => {
+			if (!this.#started) return;
+			this.#lastFullMediaCheck = at;
+			this.#interval = setInterval(() => this.requestSync(), INTERVAL_MS);
+			this.requestSync();
+		});
 	}
 
 	/** Remove triggers and cancel pending timers (call on logout / teardown). */
@@ -231,12 +243,16 @@ class SyncEngine {
 						this.status = 'error';
 						return;
 					}
-					this.#lastFullMediaCheck = nextFullMediaCheckStamp(
+					const nextCheck = nextFullMediaCheckStamp(
 						dueForFullCheck,
 						true,
 						Date.now(),
 						this.#lastFullMediaCheck
 					);
+					if (nextCheck !== this.#lastFullMediaCheck) {
+						this.#lastFullMediaCheck = nextCheck;
+						void setLastFullMediaCheck(nextCheck);
+					}
 					if (mediaRes.applied > 0) changed = true;
 				} catch (err) {
 					this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
