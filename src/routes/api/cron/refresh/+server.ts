@@ -1,6 +1,7 @@
 import { error, json } from '@sveltejs/kit';
-import { createTmdbClient } from '$lib/server/tmdb';
-import { refreshStaleMedia } from '$lib/server/media/cron';
+import { enqueueStaleMedia } from '$lib/server/media/cron';
+import type { MediaRefreshMessage } from '$lib/server/media/refresh-consumer';
+import { cloudflareQueueProducer } from '$lib/server/queue/cloudflare';
 import { purgeExpiredAuth } from '$lib/server/auth/cleanup';
 import type { createDb } from '$lib/server/db';
 import { isAuthorizedCronRequest } from '$lib/server/http/secret';
@@ -8,21 +9,20 @@ import type { RequestHandler } from './$types';
 
 type Db = ReturnType<typeof createDb>;
 
-/** Re-hydrate stale in-production media from TMDB. Self-contained: catches its own failures so a
- * TMDB outage (or missing key) can't prevent the other maintenance jobs from running. */
-async function refreshMedia(db: Db, apiKey: string | undefined, force: boolean) {
-	if (!apiKey) return { ok: false as const, error: 'TMDB is not configured.' };
+/** Enqueue stale in-production media for re-hydration by the media-refresh queue consumer.
+ * Self-contained: catches its own failures so a D1/queue outage can't prevent the other
+ * maintenance jobs from running. */
+async function enqueueMedia(db: Db, queue: Queue<MediaRefreshMessage>, force: boolean) {
 	try {
-		const result = await refreshStaleMedia(db, createTmdbClient(apiKey), Date.now(), force);
+		const result = await enqueueStaleMedia(db, cloudflareQueueProducer(queue), Date.now(), force);
 		console.log(
-			`cron: ${result.scanned} unsettled titles, refreshed ${result.attempted} — ` +
-				`${result.changed} changed, ${result.failed} failed` +
+			`cron: ${result.scanned} unsettled titles, enqueued ${result.queued}` +
 				`${result.capped ? ' (capped; remainder rolls to the next run)' : ''}${force ? ' (forced)' : ''}`
 		);
 		return { ok: true as const, ...result };
 	} catch (err) {
-		console.error('cron: media refresh failed', err);
-		return { ok: false as const, error: 'media refresh failed' };
+		console.error('cron: media enqueue failed', err);
+		return { ok: false as const, error: 'media enqueue failed' };
 	}
 }
 
@@ -59,7 +59,9 @@ export const POST: RequestHandler = async ({ request, url, locals, platform }) =
 	// `?force=1` bypasses the per-row TTL — a manual re-hydrate (also useful for diagnostics).
 	const force = url.searchParams.get('force') === '1';
 
-	const media = await refreshMedia(locals.db, platform?.env.TMDB_API_KEY, force);
+	// `platform` is always set alongside `locals.db` (see hooks.server.ts) — the guard above covers
+	// both.
+	const media = await enqueueMedia(locals.db, platform!.env.MEDIA_REFRESH_QUEUE, force);
 	const auth = await purgeAuth(locals.db);
 
 	return json({ media, auth });

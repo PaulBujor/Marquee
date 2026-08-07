@@ -23,6 +23,32 @@
 		// digest (so 9AM lands in every timezone) and the daily maintenance sweep at 06:00 UTC.
 		"crons": ["0 * * * *", "0 6 * * *"]
 	},
+	"queues": {
+		"producers": [
+			{
+				"binding": "MEDIA_REFRESH_QUEUE",
+				"queue": "marquee-media-refresh"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "marquee-media-refresh",
+				// Each message costs one TMDB detail call plus one per season, sequentially — small
+				// batches keep a single invocation well inside the Worker's CPU/wall-time budget.
+				"max_batch_size": 10,
+				"max_batch_timeout": 30,
+				// Backstop only: refresh-consumer.ts gives up (acks) after MAX_DELIVERY_ATTEMPTS (3),
+				// which must stay below this so *that* decision is what ends retries, not this one.
+				"max_retries": 5,
+				// Conservative: the previous cron refresh was effectively single-flight (a sequential
+				// per-title loop). A full-backlog drain now concentrates requests into one nightly
+				// window instead of spreading across nights, so concurrency starts low pending real
+				// TMDB headroom data; raise once that's confirmed (see MRQ-195 PR description).
+				"max_concurrency": 2,
+				"dead_letter_queue": "marquee-media-refresh-dlq"
+			}
+		]
+	},
 	"observability": {
 		"enabled": true,
 		"head_sampling_rate": 1,
@@ -52,6 +78,24 @@
 			"triggers": {
 				// Two schedules (see prod triggers above): hourly notifications + daily 06:00 maintenance.
 				"crons": ["0 * * * *", "0 6 * * *"]
+			},
+			"queues": {
+				"producers": [
+					{
+						"binding": "MEDIA_REFRESH_QUEUE",
+						"queue": "marquee-preview-media-refresh"
+					}
+				],
+				"consumers": [
+					{
+						"queue": "marquee-preview-media-refresh",
+						"max_batch_size": 10,
+						"max_batch_timeout": 30,
+						"max_retries": 5,
+						"max_concurrency": 2,
+						"dead_letter_queue": "marquee-preview-media-refresh-dlq"
+					}
+				]
 			},
 			"observability": {
 				"enabled": true,
