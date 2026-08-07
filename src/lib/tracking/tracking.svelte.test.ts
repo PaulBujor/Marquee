@@ -28,17 +28,17 @@ describe('TrackingState.updateInProduction', () => {
 });
 
 /**
- * MRQ-210 part 1: readiness used to be enforced only by the `disabled` binding on the calling
- * buttons — `markSeriesWatched`/`markSeasonWatched` themselves would write regardless. These drive
- * the real write path (through the actual event pipeline, into real — fake-indexeddb-backed —
- * IndexedDB) so a regression that re-opens the bypass shows up as an actual persisted write, not
- * just a readiness-flag assertion.
+ * Readiness used to be enforced only by the `disabled` binding on the calling buttons —
+ * `markSeriesWatched`/`markSeasonWatched` themselves would write regardless. These drive the real
+ * write path (through the actual event pipeline, into real — fake-indexeddb-backed — IndexedDB) so
+ * a regression that re-opens the bypass shows up as an actual persisted write, not just a
+ * readiness-flag assertion.
  */
 describe('TrackingState.markSeriesWatched / markSeasonWatched — readiness enforced on the write path', () => {
 	// A weekly show that premiered two months ago with only 5 of 10 episodes actually out — TMDB's
 	// `in_production` hasn't synced to this device yet, so it reads `null` (unknown), and no
-	// per-episode data has synced either. This is exactly the MRQ-210 scenario: the disabled binding
-	// would normally prevent the click, but the guard inside the method is what actually matters.
+	// per-episode data has synced either. The disabled binding would normally prevent the click, but
+	// the guard inside the method is what actually matters.
 	const unairedWeeklyShow: SeasonSummary[] = [
 		{ seasonNumber: 1, episodeCount: 10, airDate: '2026-05-24' }
 	];
@@ -72,7 +72,7 @@ describe('TrackingState.markSeriesWatched / markSeasonWatched — readiness enfo
 		const mediaId = 'finished-show-no-episode-records';
 		// TMDB confirms the show wrapped (inProduction: false, not null) and the season aired, but
 		// per-episode rows were never synced — the confirmed-finished fallback should still resolve
-		// the whole season by its episodeCount (MRQ-210 option B: trust TMDB's count once finished).
+		// the whole season by its episodeCount (trusting TMDB's count once the show is finished).
 		const finished: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 3, airDate: '2020-01-01' }];
 		const state = new TrackingState(mediaId, null, finished);
 		state.updateInProduction(false);

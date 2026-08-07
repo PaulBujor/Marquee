@@ -164,7 +164,7 @@ export interface SeasonSummary {
  * - Else (still in production, unknown production status, or the season hasn't aired / has no data),
  *   mark nothing: we can't tell aired from unaired without per-episode dates or a confirmed-finished
  *   show, and must not seed a future episode as watched. `inProduction === null` (unknown) is treated
- *   the same as still-airing here — mirrors `hasSufficientEpisodeData`'s post-MRQ-194 fix, so the two
+ *   the same as still-airing here — mirrors `hasSufficientEpisodeData`'s equivalent fix, so the two
  *   never disagree about whether a show is markable.
  *
  * Skips Specials (season 0). `seasonFilter` limits to one season ("mark season watched").
