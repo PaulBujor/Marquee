@@ -366,6 +366,11 @@ describe('hasSufficientEpisodeData', () => {
 		expect(hasSufficientEpisodeData(airing, [], true, TODAY)).toBe(false);
 	});
 
+	it('is not ready for a show with unknown production status and no per-episode data — unknown is not finished', () => {
+		const airing: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 8, airDate: '2026-06-01' }];
+		expect(hasSufficientEpisodeData(airing, [], null, TODAY)).toBe(false);
+	});
+
 	it('is ready once per-episode data fully covers that season, even in production', () => {
 		const airing: SeasonSummary[] = [{ seasonNumber: 1, episodeCount: 2, airDate: '2026-06-01' }];
 		const dated: DatedEpisode[] = [ep(1, 1, '2026-06-01'), ep(1, 2, '2026-06-08')];

@@ -239,7 +239,7 @@ export function hasSufficientEpisodeData(
 		if (s.airDate === null || s.airDate > today) continue;
 		const seasonDated = dated.filter((e) => e.season === s.seasonNumber);
 		if (seasonDated.length >= s.episodeCount) continue;
-		if (inProduction !== true) continue;
+		if (inProduction === false) continue;
 		return false;
 	}
 	return true;

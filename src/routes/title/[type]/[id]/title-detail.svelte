@@ -107,10 +107,11 @@
 		void sync.revision;
 		tracking.load();
 	});
-	// Keeps season summaries live despite `tracking`'s frozen identity above — otherwise a
-	// title opened from a stale local cache never picks up newly-synced season data.
+	// Keeps season summaries + production status live despite `tracking`'s frozen identity above
+	// — otherwise a title opened from a stale local cache never picks up newly-synced data.
 	$effect(() => {
 		tracking.updateSeasons(detail.seasons);
+		tracking.updateInProduction(detail.inProduction);
 	});
 
 	// Tracking status + favorite of the *similar* titles, for the badge + heart on each card — we
