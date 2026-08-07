@@ -97,6 +97,24 @@ export function isSpecialsSeason(seasonNumber: number): boolean {
 	return seasonNumber === SPECIALS_SEASON;
 }
 
+/** Number of main (non-Specials) seasons — what a "N seasons" label should count. */
+export function seasonCount(seasons: { seasonNumber: number }[]): number {
+	return seasons.filter((s) => !isSpecialsSeason(s.seasonNumber)).length;
+}
+
+/**
+ * A show's on-screen airing state, derived from `inProduction`. Three states, not two:
+ * `null` (unknown) must never render as `finished` — that conflation caused MRQ-193/194/210.
+ */
+export type AiringState = 'airing' | 'finished' | 'unknown';
+
+/** Derive the 3-state airing label from the raw nullable `inProduction` flag. */
+export function airingState(inProduction: boolean | null): AiringState {
+	if (inProduction === true) return 'airing';
+	if (inProduction === false) return 'finished';
+	return 'unknown';
+}
+
 /** Stable key for an episode's watched-state, matching the client `episodeWatches` set. */
 export function watchedKey(season: number, episode: number): string {
 	return `${season}:${episode}`;

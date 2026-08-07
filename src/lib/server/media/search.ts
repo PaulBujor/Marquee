@@ -8,8 +8,9 @@
  * and this is a rare fallback path, so a scan is acceptable; an FTS5 table would be the upgrade if it
  * ever gets hot.
  */
-import { and, desc, eq, sql } from 'drizzle-orm';
-import { media } from '$lib/server/db/schema';
+import { and, count, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { media, seasons } from '$lib/server/db/schema';
+import { SPECIALS_SEASON } from '$lib/tracking/actions';
 import type { createDb } from '$lib/server/db';
 import type { MediaSearchResult } from '$lib/server/tmdb';
 
@@ -37,11 +38,13 @@ export async function searchLinkedMedia(
 	const pattern = `%${escapeLike(q.toLowerCase())}%`;
 	const rows = await db
 		.select({
+			id: media.id,
 			externalId: media.externalId,
 			type: media.type,
 			title: media.title,
 			year: media.year,
-			posterPath: media.posterPath
+			posterPath: media.posterPath,
+			inProduction: media.inProduction
 		})
 		.from(media)
 		.where(
@@ -54,6 +57,18 @@ export async function searchLinkedMedia(
 		.orderBy(desc(media.updatedAt))
 		.limit(limit);
 
+	const showIds = rows.filter((r) => r.type === 'show').map((r) => r.id);
+	// Season counts (excluding Specials), one grouped query for every show row rather than N+1.
+	const seasonCounts =
+		showIds.length > 0
+			? await db
+					.select({ mediaId: seasons.mediaId, n: count() })
+					.from(seasons)
+					.where(and(inArray(seasons.mediaId, showIds), ne(seasons.seasonNumber, SPECIALS_SEASON)))
+					.groupBy(seasons.mediaId)
+			: [];
+	const seasonCountById = new Map(seasonCounts.map((s) => [s.mediaId, s.n]));
+
 	return rows
 		.map((r) => ({
 			// `linked` tmdb rows carry an `external_id` of `type/tmdbId` (e.g. `movie/603`).
@@ -62,7 +77,10 @@ export async function searchLinkedMedia(
 			title: r.title,
 			year: r.year,
 			posterPath: r.posterPath,
-			overview: ''
+			overview: '',
+			...(r.type === 'show'
+				? { numberOfSeasons: seasonCountById.get(r.id) ?? 0, inProduction: r.inProduction }
+				: {})
 		}))
 		.filter((r) => Number.isInteger(r.tmdbId) && r.tmdbId > 0);
 }

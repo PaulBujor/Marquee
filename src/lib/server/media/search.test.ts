@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDb } from '$lib/server/db/test-db';
-import { media } from '$lib/server/db/schema';
+import { media, seasons } from '$lib/server/db/schema';
 import { searchLinkedMedia } from './search';
 
 /** Seed a handful of catalog rows: two linked TMDB titles + one private custom entry. */
@@ -109,6 +109,34 @@ describe('searchLinkedMedia', () => {
 		]);
 		const results = await searchLinkedMedia(db, 'alpha');
 		expect(results.map((r) => r.tmdbId)).toEqual([200, 100]);
+	});
+
+	it('includes season count (excluding Specials) and inProduction for shows, not movies', async () => {
+		const db = await createTestDb();
+		await seed(db);
+		await db.insert(media).values({
+			id: 'd',
+			provider: 'tmdb',
+			externalId: 'show/999',
+			source: 'linked',
+			type: 'show',
+			title: 'Better Call Saul',
+			titleNormalized: 'better call saul',
+			year: 2015,
+			inProduction: false
+		});
+		await db.insert(seasons).values([
+			{ mediaId: 'd', seasonNumber: 0, episodeCount: 1 }, // Specials — excluded from the count
+			{ mediaId: 'd', seasonNumber: 1, episodeCount: 10 },
+			{ mediaId: 'd', seasonNumber: 2, episodeCount: 10 }
+		]);
+
+		const [show] = await searchLinkedMedia(db, 'better call saul');
+		expect(show).toMatchObject({ numberOfSeasons: 2, inProduction: false });
+
+		const [movie] = await searchLinkedMedia(db, 'the matrix');
+		expect(movie.numberOfSeasons).toBeUndefined();
+		expect(movie.inProduction).toBeUndefined();
 	});
 
 	it('folds non-ASCII case like the offline client (matches accented titles)', async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	airedEpisodes,
+	airingState,
 	canRate,
 	episodesToMark,
 	hasSufficientEpisodeData,
@@ -13,6 +14,7 @@ import {
 	nextEpisode,
 	nextFavorite,
 	reconciledStatus,
+	seasonCount,
 	SPECIALS_SEASON,
 	statusEventType,
 	todayIso,
@@ -169,6 +171,31 @@ describe('episode helpers', () => {
 
 	it('todayIso formats an epoch as YYYY-MM-DD (UTC)', () => {
 		expect(todayIso(Date.UTC(2026, 6, 24, 10, 0, 0))).toBe('2026-07-24');
+	});
+});
+
+describe('seasonCount', () => {
+	it('counts main seasons, excluding Specials', () => {
+		expect(seasonCount([{ seasonNumber: 0 }, { seasonNumber: 1 }, { seasonNumber: 2 }])).toBe(2);
+	});
+
+	it('is zero for a movie (no seasons) or a Specials-only list', () => {
+		expect(seasonCount([])).toBe(0);
+		expect(seasonCount([{ seasonNumber: 0 }])).toBe(0);
+	});
+});
+
+describe('airingState', () => {
+	it('is airing when inProduction is true', () => {
+		expect(airingState(true)).toBe('airing');
+	});
+
+	it('is finished when inProduction is false', () => {
+		expect(airingState(false)).toBe('finished');
+	});
+
+	it('is unknown — never finished — when inProduction is null', () => {
+		expect(airingState(null)).toBe('unknown');
 	});
 });
 

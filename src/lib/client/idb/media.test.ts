@@ -84,6 +84,51 @@ describe('searchLocalMedia', () => {
 		expect((await searchLocalMedia('i')).map((r) => r.title)).toEqual(['Amelie', 'Zodiac']);
 		expect(await searchLocalMedia('  ')).toEqual([]);
 	});
+
+	it('includes season count (excluding Specials) and inProduction for shows, not movies', async () => {
+		await putMedia(
+			record({
+				type: 'show',
+				externalId: 'show/999',
+				title: 'Better Call Saul',
+				inProduction: false,
+				seasons: [
+					{
+						seasonNumber: 0,
+						name: 'Specials',
+						overview: '',
+						airDate: null,
+						posterPath: null,
+						episodeCount: 1
+					},
+					{
+						seasonNumber: 1,
+						name: 'Season 1',
+						overview: '',
+						airDate: null,
+						posterPath: null,
+						episodeCount: 10
+					},
+					{
+						seasonNumber: 2,
+						name: 'Season 2',
+						overview: '',
+						airDate: null,
+						posterPath: null,
+						episodeCount: 10
+					}
+				]
+			})
+		);
+		await putMedia(record({ type: 'movie', externalId: 'movie/603', title: 'The Matrix' }));
+
+		const [show] = await searchLocalMedia('better call saul');
+		expect(show).toMatchObject({ numberOfSeasons: 2, inProduction: false });
+
+		const [movie] = await searchLocalMedia('the matrix');
+		expect(movie.numberOfSeasons).toBeUndefined();
+		expect(movie.inProduction).toBeUndefined();
+	});
 });
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';

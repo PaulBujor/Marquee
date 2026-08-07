@@ -14,6 +14,7 @@
 	import { getTracking, putMedia, recordEvent, searchLocalMedia } from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
+	import { airingState } from '$lib/tracking/actions';
 	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { PageData } from './$types';
@@ -245,6 +246,7 @@
 		<ul class="flex flex-col gap-1">
 			{#each results as item (item.type + item.tmdbId)}
 				{@const id = tmdbMediaId(item.type, item.tmdbId)}
+				{@const airing = airingState(item.inProduction ?? null)}
 				<li class="flex items-center gap-1">
 					<a
 						href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
@@ -259,9 +261,17 @@
 						</div>
 						<div class="flex min-w-0 flex-1 flex-col gap-1">
 							<span class="truncate font-medium">{item.title}</span>
-							<div class="flex items-center gap-2 text-sm text-muted-foreground">
+							<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
 								<MediaBadge>{item.type === 'movie' ? 'Movie' : 'Show'}</MediaBadge>
 								{#if item.year}<span>{item.year}</span>{/if}
+								{#if item.numberOfSeasons}
+									<span>{item.numberOfSeasons} season{item.numberOfSeasons === 1 ? '' : 's'}</span>
+								{/if}
+								{#if airing !== 'unknown'}
+									<MediaBadge variant="status"
+										>{airing === 'airing' ? 'Airing' : 'Finished'}</MediaBadge
+									>
+								{/if}
 							</div>
 						</div>
 					</a>
