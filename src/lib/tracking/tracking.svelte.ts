@@ -253,8 +253,14 @@ export class TrackingState {
 		});
 	}
 
-	/** Mark every **aired** episode of one season watched (bulk), then reconcile the show's status. */
+	/**
+	 * Mark every **aired** episode of one season watched (bulk), then reconcile the show's status.
+	 * Gated on {@link readyToMarkSeason}: the `disabled` bindings on the calling buttons are UX only,
+	 * not the guarantee — this check is what actually stops an under-seeded write. A no-op (not an
+	 * error) when not ready, same as the reconcile pass no-ops rather than guessing.
+	 */
 	markSeasonWatched(seasonNumber: number): Promise<void> {
+		if (!this.readyToMarkSeason(seasonNumber)) return Promise.resolve();
 		return this.#run(async () => {
 			await this.#ensureTracked('watching');
 			await this.#seedWatched(this.#markable(seasonNumber));
@@ -277,9 +283,13 @@ export class TrackingState {
 	 * Mark the whole series watched: every **aired** episode watched, then the status reconciled from
 	 * actual progress (see {@link readyToMarkSeries}). Bulk — one `episode.watched` per episode (the
 	 * sync push cap bounds delivery). Enumerated from the season summaries, so it works the instant a
-	 * title is added.
+	 * title is added. Gated on {@link readyToMarkSeries}: the `disabled` bindings on the calling
+	 * buttons are UX only, not the guarantee — this check is what actually stops an under-seeded
+	 * write. A no-op (not an error) when not ready, same as the reconcile pass no-ops rather than
+	 * guessing.
 	 */
 	markSeriesWatched(): Promise<void> {
+		if (!this.readyToMarkSeries()) return Promise.resolve();
 		return this.#run(async () => {
 			await this.#ensureTracked('watching');
 			await this.#seedWatched(this.#markable());

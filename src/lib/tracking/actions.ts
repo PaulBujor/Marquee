@@ -157,10 +157,15 @@ export interface SeasonSummary {
  * per-episode air dates. Precision by source, per season:
  *
  * - If we already hold **per-episode** air dates for the season (`dated`), mark only its aired episodes.
- * - Else, for a **finished** show (`inProduction === false`) whose season has aired, mark the whole
- *   season by its `episodeCount` — every episode of a finished, aired season has aired.
- * - Else (still in production, or the season hasn't aired / has no data), mark nothing: we can't tell
- *   aired from unaired without per-episode dates, and must not seed a future episode as watched.
+ * - Else, for a **confirmed-finished** show (`inProduction === false` — never `null`/unknown) whose
+ *   season has aired, mark the whole season by its `episodeCount`: TMDB's episode count for a season
+ *   whose production has wrapped is trusted as accurate, even when it never backfilled per-episode
+ *   rows for that season (a real, permanent TMDB data gap, not sync lag — see `hasSufficientEpisodeData`).
+ * - Else (still in production, unknown production status, or the season hasn't aired / has no data),
+ *   mark nothing: we can't tell aired from unaired without per-episode dates or a confirmed-finished
+ *   show, and must not seed a future episode as watched. `inProduction === null` (unknown) is treated
+ *   the same as still-airing here — mirrors `hasSufficientEpisodeData`'s post-MRQ-194 fix, so the two
+ *   never disagree about whether a show is markable.
  *
  * Skips Specials (season 0). `seasonFilter` limits to one season ("mark season watched").
  */
@@ -180,7 +185,7 @@ export function episodesToMark(
 			for (const e of seasonDated) {
 				if (isAired(e, today)) out.push({ season: e.season, episode: e.episode });
 			}
-		} else if (!inProduction && s.airDate !== null && s.airDate <= today) {
+		} else if (inProduction === false && s.airDate !== null && s.airDate <= today) {
 			for (let episode = 1; episode <= s.episodeCount; episode++) {
 				out.push({ season: s.seasonNumber, episode });
 			}
