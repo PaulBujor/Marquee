@@ -7,6 +7,7 @@
 	import PageHeader from '$lib/components/page-header.svelte';
 	import BackButton from '$lib/components/back-button.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
+	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -262,11 +263,11 @@
 						<div class="flex min-w-0 flex-1 flex-col gap-1">
 							<span class="truncate font-medium">{item.title}</span>
 							<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-								<MediaBadge>{item.type === 'movie' ? 'Movie' : 'Show'}</MediaBadge>
-								{#if item.year}<span>{item.year}</span>{/if}
-								{#if item.numberOfSeasons}
-									<span>{item.numberOfSeasons} season{item.numberOfSeasons === 1 ? '' : 's'}</span>
-								{/if}
+								<MediaTypeLabel
+									type={item.type}
+									year={item.year}
+									seasons={item.numberOfSeasons ?? 0}
+								/>
 								{#if airing !== 'unknown'}
 									<MediaBadge variant="status"
 										>{airing === 'airing' ? 'Airing' : 'Finished'}</MediaBadge

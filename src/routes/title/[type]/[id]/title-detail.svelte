@@ -6,6 +6,7 @@
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
+	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
@@ -457,11 +458,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 					{detail.title}
 				</h1>
 				<div class="flex flex-wrap items-center gap-2">
-					<MediaBadge>
-						{detail.type === 'movie' ? 'Movie' : 'Show'}{detail.year
-							? ` · ${detail.year}`
-							: ''}{seasons > 0 ? ` · ${seasons} season${seasons === 1 ? '' : 's'}` : ''}
-					</MediaBadge>
+					<MediaTypeLabel type={detail.type} year={detail.year} {seasons} />
 					{#if airing !== 'unknown'}
 						<MediaBadge variant="status">{airing === 'airing' ? 'Airing' : 'Finished'}</MediaBadge>
 					{/if}
