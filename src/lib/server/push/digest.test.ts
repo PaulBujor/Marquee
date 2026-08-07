@@ -135,6 +135,114 @@ describe('sendNewReleaseDigest', () => {
 		expect(calls).toHaveLength(0);
 	});
 
+	it('scopes the candidate read to due timezones, without dropping a due user in a different one', async () => {
+		const USER_2 = 'user-2';
+		await db.insert(users).values({ id: USER_2, email: 'u2@x.com', status: 'enabled' });
+
+		// Due: Madrid, 9AM local at 07:00 UTC.
+		await seedSub(db, 'https://push.example/madrid', MADRID);
+		await seedShowEpisode(db, '2026-07-27', 'watching');
+
+		// Not due: New York, 3AM local at 07:00 UTC — must not shadow the Madrid user above.
+		await db.insert(pushSubscriptions).values({
+			userId: USER_2,
+			endpoint: 'https://push.example/ny',
+			p256dh: 'p256',
+			auth: 'authsecret',
+			deviceId: 'device-2',
+			timezone: 'America/New_York',
+			createdAt: NOW,
+			lastUsedAt: NOW
+		});
+		await db
+			.insert(media)
+			.values({
+				id: 'media-show-2',
+				type: 'show',
+				title: 'Better Call Saul',
+				externalId: 'show/60059'
+			});
+		await db.insert(episodes).values({
+			mediaId: 'media-show-2',
+			seasonNumber: 1,
+			episodeNumber: 1,
+			airDate: '2026-07-27'
+		});
+		await db.insert(tracking).values({
+			id: `${USER_2}::media-show-2`,
+			userId: USER_2,
+			mediaId: 'media-show-2',
+			status: 'watching'
+		});
+
+		const { sender, calls } = fakeSender();
+		const result = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
+		expect(result).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
+		expect(calls).toHaveLength(1);
+		expect(calls[0].payload.url).toBe('/title/show/1396');
+	});
+
+	it('treats a null timezone as UTC when determining due-ness', async () => {
+		const utcNow = new Date('2026-07-27T09:00:00Z'); // UTC hour 9 == SEND_HOUR
+		await seedSub(db, 'https://push.example/ep-1', null);
+		await seedShowEpisode(db, '2026-07-27', 'watching');
+		const { sender, calls } = fakeSender();
+
+		const result = await sendNewReleaseDigest(db, {} as Env, utcNow, sender);
+		expect(result).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
+		expect(calls).toHaveLength(1);
+	});
+
+	it('notifies due users across a mix of a named due timezone and null (UTC) in the same run', async () => {
+		// 09:00 UTC in January — London has no DST offset then, so it's 9AM local too, alongside
+		// a null-timezone subscription (also UTC) being due at the same instant.
+		const winterNow = new Date('2026-01-27T09:00:00Z');
+		const USER_2 = 'user-2';
+		await db.insert(users).values({ id: USER_2, email: 'u2@x.com', status: 'enabled' });
+
+		await seedSub(db, 'https://push.example/london', 'Europe/London');
+		await seedShowEpisode(db, '2026-01-27', 'watching');
+
+		await db.insert(pushSubscriptions).values({
+			userId: USER_2,
+			endpoint: 'https://push.example/utc',
+			p256dh: 'p256',
+			auth: 'authsecret',
+			deviceId: 'device-2',
+			timezone: null,
+			createdAt: winterNow,
+			lastUsedAt: winterNow
+		});
+		await db
+			.insert(media)
+			.values({
+				id: 'media-show-2',
+				type: 'show',
+				title: 'Better Call Saul',
+				externalId: 'show/60059'
+			});
+		await db.insert(episodes).values({
+			mediaId: 'media-show-2',
+			seasonNumber: 1,
+			episodeNumber: 1,
+			airDate: '2026-01-27'
+		});
+		await db.insert(tracking).values({
+			id: `${USER_2}::media-show-2`,
+			userId: USER_2,
+			mediaId: 'media-show-2',
+			status: 'watching'
+		});
+
+		const { sender, calls } = fakeSender();
+		const result = await sendNewReleaseDigest(db, {} as Env, winterNow, sender);
+		expect(result).toEqual({ dueUsers: 2, sent: 2, pruned: 0 });
+		expect(calls.map((c) => c.payload.url).sort()).toEqual([
+			'/title/show/1396',
+			'/title/show/60059'
+		]);
+	});
+
 	it('ignores releases outside the grace window', async () => {
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await seedShowEpisode(db, '2026-07-24', 'watching'); // 3 days ago, GRACE_DAYS=2
