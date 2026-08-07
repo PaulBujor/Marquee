@@ -35,7 +35,7 @@
 	let { data }: { data: PageData } = $props();
 
 	// The home library reads local IndexedDB (works offline); reloads whenever a sync pulls. It's a
-	// module singleton, so navigating back from a detail page finds it already populated (MRQ-147).
+	// module singleton, so navigating back from a detail page finds it already populated.
 	$effect(() => {
 		void sync.revision;
 		library.load();
@@ -43,7 +43,7 @@
 
 	// Suppress the poster intro transition on the first render after (re)mount — otherwise returning
 	// to the dashboard fades the whole grid up from transparent, reading as a blank flash even though
-	// the data is already there (MRQ-147). Real add/remove/status changes still animate.
+	// the data is already there. Real add/remove/status changes still animate.
 	let mounted = $state(false);
 	onMount(() => {
 		mounted = true;
@@ -188,7 +188,7 @@
 	});
 
 	// Preserve pagination depth + scroll across navigation. Opening a title unmounts this route, so
-	// without a snapshot Back would reinitialize visibleCount to PAGE_SIZE and lose scroll (MRQ-156).
+	// without a snapshot Back would reinitialize visibleCount to PAGE_SIZE and lose scroll.
 	// The `library` singleton is already populated on Back, so restoring visibleCount renders the full
 	// grid synchronously; we scroll after a tick so the page is tall enough to reach the saved offset.
 	export const snapshot = {

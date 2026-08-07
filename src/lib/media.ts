@@ -25,8 +25,8 @@ export function posterUrl(path: string | null, size: TmdbImageSize = POSTER_SIZE
 }
 
 /**
- * Same-origin proxy URL for a TMDB image, used to **fetch the bytes** to cache offline
- * (MRQ-111b). `image.tmdb.org` doesn't send CORS headers, so a direct client `fetch` is
+ * Same-origin proxy URL for a TMDB image, used to **fetch the bytes** to cache offline.
+ * `image.tmdb.org` doesn't send CORS headers, so a direct client `fetch` is
  * blocked; the `<img>` tag can still use {@link posterUrl} directly. Null when there's no path.
  */
 export function proxiedImageUrl(

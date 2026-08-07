@@ -200,7 +200,7 @@ describe('needsRefresh', () => {
 		const released = { type: 'movie' as const, releaseDate: '2020-01-01', refreshedAt: T0 };
 		expect(needsRefresh(released as never, T0 + 5e9)).toBe(false);
 	});
-	it('refreshes an unreleased movie only past the TTL (MRQ-128)', () => {
+	it('refreshes an unreleased movie only past the TTL', () => {
 		const future = { type: 'movie' as const, releaseDate: '2030-01-01', refreshedAt: T0 };
 		expect(needsRefresh(future as never, T0 + 1000)).toBe(false);
 		expect(needsRefresh(future as never, T0 + 13 * 3600_000)).toBe(true);
@@ -231,7 +231,7 @@ describe('refreshMedia', () => {
 			source: 'linked',
 			type: 'movie',
 			title: 'The Matrix',
-			titleNormalized: 'the matrix', // JS-folded for the degraded search (MRQ-141)
+			titleNormalized: 'the matrix', // JS-folded for the degraded search
 			backdropPath: '/backdrop.jpg',
 			releaseDate: '1999-03-31',
 			version: 1,

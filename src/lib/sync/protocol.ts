@@ -1,6 +1,6 @@
 /**
  * Wire contract for the `POST /api/sync` endpoint — client-safe, shared by the
- * endpoint and (later, MRQ-43) the client sync engine. A single round trip both
+ * endpoint and the client sync engine. A single round trip both
  * pushes local events and pulls everything the client is missing since its cursor.
  */
 import { z } from 'zod';
@@ -14,7 +14,7 @@ export const SYNC_MAX_PUSH = 1000;
 
 /**
  * DTO for the `POST /api/sync` request body — the server parses against this authoritatively.
- * Events only: media is reference data synced on a separate parallel channel (MRQ-111), never
+ * Events only: media is reference data synced on a separate parallel channel, never
  * in the sync request.
  */
 export const syncRequestSchema = z.object({

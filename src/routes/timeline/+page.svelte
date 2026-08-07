@@ -20,7 +20,7 @@
 
 	const upcoming = $derived(filterUpcoming(library.items));
 	// Group into years, each holding per-day runs. The agenda only shows day + month, so a sticky
-	// year divider tells you which year a release lands in (MRQ-131).
+	// year divider tells you which year a release lands in.
 	const years = $derived(groupUpcomingByYear(upcoming));
 
 	// Format `YYYY-MM-DD` as e.g. "Tue, Jul 28" in UTC, so a local timezone can't shift the day.

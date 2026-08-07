@@ -40,7 +40,7 @@
 		// Hard online reload: the server load runs where it can't read IndexedDB, so `base` is null and
 		// we'd sit on the skeleton until the network enrichment lands — even for a fully-cached title.
 		// Rebuild the cached copy client-side and show it as soon as it's ready, unless the enrichment
-		// already delivered the full page (MRQ-142). (Offline cold boots have no SSR, so `base` is
+		// already delivered the full page. (Offline cold boots have no SSR, so `base` is
 		// already built there and this is a no-op.)
 		if (!base && browser && (data.type === 'movie' || data.type === 'show')) {
 			buildOfflineDetail(data.type, data.id, data.season).then((built) => {
@@ -56,7 +56,7 @@
 			if (cancelled) return;
 			if (e.status === 'ok') {
 				// Nothing shown yet (still the skeleton): wait for the hero image to decode before
-				// revealing the content, so it doesn't paint into a blank hero for a frame (MRQ-145).
+				// revealing the content, so it doesn't paint into a blank hero for a frame.
 				// A cached copy (from `base` or the client rebuild above) is already up — upgrade in place.
 				if (pageState === 'skeleton') await preloadHero(e.detail);
 				if (cancelled) return;
@@ -86,7 +86,7 @@
 	});
 
 	// Decode the hero image (backdrop, else poster) before we swap the skeleton for the content, so
-	// the first painted frame already has artwork instead of a blank hero (MRQ-145). Bounded by a
+	// the first painted frame already has artwork instead of a blank hero. Bounded by a
 	// short timeout so a slow or broken image can never strand the user on the skeleton.
 	function preloadHero(d: MediaDetail): Promise<void> {
 		if (!browser) return Promise.resolve();
