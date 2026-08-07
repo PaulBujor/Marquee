@@ -6,7 +6,6 @@
 	import { Input } from '$lib/components/ui/input';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import BackButton from '$lib/components/back-button.svelte';
-	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
@@ -15,7 +14,6 @@
 	import { getTracking, putMedia, recordEvent, searchLocalMedia } from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
-	import { airingState } from '$lib/tracking/actions';
 	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { PageData } from './$types';
@@ -247,7 +245,6 @@
 		<ul class="flex flex-col gap-1">
 			{#each results as item (item.type + item.tmdbId)}
 				{@const id = tmdbMediaId(item.type, item.tmdbId)}
-				{@const airing = airingState(item.inProduction ?? null)}
 				<li class="flex items-center gap-1">
 					<a
 						href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
@@ -268,11 +265,6 @@
 									year={item.year}
 									seasons={item.numberOfSeasons ?? 0}
 								/>
-								{#if airing !== 'unknown'}
-									<MediaBadge variant="status"
-										>{airing === 'airing' ? 'Airing' : 'Finished'}</MediaBadge
-									>
-								{/if}
 							</div>
 						</div>
 					</a>

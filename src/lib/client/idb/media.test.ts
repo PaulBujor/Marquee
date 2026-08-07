@@ -85,7 +85,7 @@ describe('searchLocalMedia', () => {
 		expect(await searchLocalMedia('  ')).toEqual([]);
 	});
 
-	it('includes season count (excluding Specials) and inProduction for shows, not movies', async () => {
+	it('includes season count (excluding Specials) for shows, not movies', async () => {
 		await putMedia(
 			record({
 				type: 'show',
@@ -123,11 +123,10 @@ describe('searchLocalMedia', () => {
 		await putMedia(record({ type: 'movie', externalId: 'movie/603', title: 'The Matrix' }));
 
 		const [show] = await searchLocalMedia('better call saul');
-		expect(show).toMatchObject({ numberOfSeasons: 2, inProduction: false });
+		expect(show).toMatchObject({ numberOfSeasons: 2 });
 
 		const [movie] = await searchLocalMedia('the matrix');
 		expect(movie.numberOfSeasons).toBeUndefined();
-		expect(movie.inProduction).toBeUndefined();
 	});
 });
 

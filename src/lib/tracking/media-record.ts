@@ -27,7 +27,6 @@ export interface SearchLikeMedia {
 	overview?: string;
 	/** Shows only; `undefined` when the source (see {@link MediaSearchResult}) couldn't tell us. */
 	numberOfSeasons?: number;
-	inProduction?: boolean | null;
 }
 
 /**
@@ -52,7 +51,7 @@ export function mediaRecordFromSearch(item: SearchLikeMedia): MediaRecord {
 		genres: [],
 		releaseDate: null,
 		status: null,
-		inProduction: item.inProduction ?? null,
+		inProduction: null,
 		firstAirDate: null,
 		lastAirDate: null,
 		version: 0,

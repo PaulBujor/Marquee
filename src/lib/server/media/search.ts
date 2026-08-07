@@ -54,8 +54,7 @@ export async function searchLinkedMedia(
 			type: media.type,
 			title: media.title,
 			year: media.year,
-			posterPath: media.posterPath,
-			inProduction: media.inProduction
+			posterPath: media.posterPath
 		})
 		.from(media)
 		.where(
@@ -80,20 +79,18 @@ export async function searchLinkedMedia(
 			year: r.year,
 			posterPath: r.posterPath,
 			overview: '',
-			...(r.type === 'show'
-				? { numberOfSeasons: seasonCountById.get(r.id) ?? 0, inProduction: r.inProduction }
-				: {})
+			...(r.type === 'show' ? { numberOfSeasons: seasonCountById.get(r.id) ?? 0 } : {})
 		}))
 		.filter((r) => Number.isInteger(r.tmdbId) && r.tmdbId > 0);
 }
 
 /**
- * Fill in season count / production status on live TMDB search results (MRQ-209) for any show
- * we already hold a `linked` copy of — TMDB's `/search/multi` endpoint doesn't return either
- * field itself, and fetching per-result details would mean an extra TMDB call per row on every
- * keystroke. A title neither this nor any other user has opened/tracked before still won't carry
- * a season count on first search; it fills in once someone views it (the catalog is shared across
- * all users, see `source: 'linked'`). Movies are returned unchanged — the fields are shows-only.
+ * Fill in season count on live TMDB search results (MRQ-209) for any show we already hold a
+ * `linked` copy of — TMDB's `/search/multi` endpoint doesn't return it itself, and fetching
+ * per-result details would mean an extra TMDB call per row on every keystroke. A title neither
+ * this nor any other user has opened/tracked before still won't carry a season count on first
+ * search; it fills in once someone views it (the catalog is shared across all users, see
+ * `source: 'linked'`). Movies are returned unchanged — the field is shows-only.
  */
 export async function enrichWithLinkedData(
 	db: Db,
@@ -103,7 +100,7 @@ export async function enrichWithLinkedData(
 	if (externalIds.length === 0) return results;
 
 	const rows = await db
-		.select({ id: media.id, externalId: media.externalId, inProduction: media.inProduction })
+		.select({ id: media.id, externalId: media.externalId })
 		.from(media)
 		.where(
 			and(
@@ -119,10 +116,7 @@ export async function enrichWithLinkedData(
 		rows.map((r) => r.id)
 	);
 	const byExternalId = new Map(
-		rows.map((r) => [
-			r.externalId,
-			{ numberOfSeasons: seasonCountById.get(r.id) ?? 0, inProduction: r.inProduction }
-		])
+		rows.map((r) => [r.externalId, { numberOfSeasons: seasonCountById.get(r.id) ?? 0 }])
 	);
 
 	return results.map((r) => {

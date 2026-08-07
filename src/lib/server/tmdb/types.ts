@@ -31,13 +31,11 @@ export interface MediaSearchResult {
 	posterPath: string | null;
 	overview: string;
 	/**
-	 * Shows only. `undefined` when the source couldn't tell us (TMDB's `/search/multi` doesn't
-	 * return season counts or production status — only the degraded/offline paths, backed by our
-	 * own `media`/`seasons` rows, populate these). `inProduction: null` still means unknown, same
-	 * as everywhere else — never treat it as finished.
+	 * Shows only. `undefined` when the source couldn't tell us — TMDB's `/search/multi` doesn't
+	 * return season counts itself; only the degraded/offline paths and the D1-backed enrichment of
+	 * live results, all backed by our own `media`/`seasons` rows, populate this.
 	 */
 	numberOfSeasons?: number;
-	inProduction?: boolean | null;
 }
 
 /**

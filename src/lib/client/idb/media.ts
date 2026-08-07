@@ -120,8 +120,7 @@ export async function searchLocalMedia(query: string, limit = 20): Promise<Searc
 			title: m.title,
 			year: m.year,
 			posterPath: m.posterPath,
-			overview: m.overview,
-			...(m.type === 'show' ? { inProduction: m.inProduction } : {})
+			overview: m.overview
 		});
 	}
 	const top = matches.sort((a, b) => a.title.localeCompare(b.title)).slice(0, limit);

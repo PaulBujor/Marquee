@@ -112,7 +112,7 @@ describe('searchLinkedMedia', () => {
 		expect(results.map((r) => r.tmdbId)).toEqual([200, 100]);
 	});
 
-	it('includes season count (excluding Specials) and inProduction for shows, not movies', async () => {
+	it('includes season count (excluding Specials) for shows, not movies', async () => {
 		const db = await createTestDb();
 		await seed(db);
 		await db.insert(media).values({
@@ -133,11 +133,10 @@ describe('searchLinkedMedia', () => {
 		]);
 
 		const [show] = await searchLinkedMedia(db, 'better call saul');
-		expect(show).toMatchObject({ numberOfSeasons: 2, inProduction: false });
+		expect(show).toMatchObject({ numberOfSeasons: 2 });
 
 		const [movie] = await searchLinkedMedia(db, 'the matrix');
 		expect(movie.numberOfSeasons).toBeUndefined();
-		expect(movie.inProduction).toBeUndefined();
 	});
 
 	it('folds non-ASCII case like the offline client (matches accented titles)', async () => {
@@ -165,7 +164,7 @@ describe('enrichWithLinkedData', () => {
 		return { tmdbId: 1, title: 'Title', year: 2020, posterPath: null, overview: '', ...over };
 	}
 
-	it('fills in season count + inProduction for a show we already hold linked', async () => {
+	it('fills in season count for a show we already hold linked', async () => {
 		const db = await createTestDb();
 		await db.insert(media).values({
 			id: 'saul',
@@ -185,9 +184,7 @@ describe('enrichWithLinkedData', () => {
 
 		const raw = [tmdbResult({ tmdbId: 1396, type: 'show', title: 'Breaking Bad' })];
 		const enriched = await enrichWithLinkedData(db, raw);
-		expect(enriched).toEqual([
-			expect.objectContaining({ tmdbId: 1396, numberOfSeasons: 1, inProduction: false })
-		]);
+		expect(enriched).toEqual([expect.objectContaining({ tmdbId: 1396, numberOfSeasons: 1 })]);
 	});
 
 	it('leaves a show unchanged when we have no linked copy of it', async () => {
