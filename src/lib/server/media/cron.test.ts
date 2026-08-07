@@ -138,7 +138,7 @@ describe('refreshStaleMedia', () => {
 
 	it('sweeps a between-seasons show — in_production false but an airing status', async () => {
 		const db = createTestDb();
-		// Exactly the case `needsRefresh` covers via AIRING_STATUSES and the old query missed.
+		// The case `needsRefresh` covers via AIRING_STATUSES; the sweep has to match the same rule.
 		await seedMedia(db, 'show/42', {
 			type: 'show',
 			inProduction: false,
