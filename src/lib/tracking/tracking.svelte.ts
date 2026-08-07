@@ -15,9 +15,12 @@ import {
 	getEpisodes,
 	getTrackingByMediaId,
 	putMedia,
-	recordEvent
+	recordEvent,
+	recordEvents
 } from '$lib/client/idb';
+import { reportClientError } from '$lib/client/report-error';
 import { sync } from '$lib/client/sync/engine.svelte';
+import { toast } from 'svelte-sonner';
 import type { MediaRecord, TrackingStatus } from '$lib/sync/events';
 import {
 	episodesToMark,
@@ -150,7 +153,20 @@ export class TrackingState {
 			await this.load();
 			sync.requestSync(); // nudge a push so the change reaches the server promptly
 		} catch (err) {
+			// Don't fail silently: the controls re-enable either way, so a swallowed error leaves the
+			// user believing a change was saved that wasn't. Report it (the console alone never
+			// reaches a backend), tell them, and re-read local state so the UI shows what actually
+			// persisted rather than the optimistic value.
+			const message = err instanceof Error ? err.message : String(err);
 			console.error(`tracking: write failed for ${this.mediaId}`, err);
+			reportClientError({
+				message: `tracking write failed: ${message}`,
+				stack: err instanceof Error ? err.stack : undefined,
+				source: 'tracking',
+				at: Date.now()
+			});
+			toast.error("Couldn't save that change", { description: 'Please try again.' });
+			await this.load().catch(() => {});
 		} finally {
 			this.busy = false;
 		}
@@ -199,15 +215,16 @@ export class TrackingState {
 	remove(): Promise<void> {
 		return this.#run(async () => {
 			const watches = await getEpisodeWatches(this.mediaId);
-			for (const e of watches) {
-				if (e.watched) {
-					await recordEvent('episode.unwatched', this.mediaId, {
-						season: e.season,
-						episode: e.episode
-					});
-				}
-			}
-			await recordEvent('tracking.removed', this.mediaId, {});
+			await recordEvents([
+				...watches
+					.filter((e) => e.watched)
+					.map((e) => ({
+						type: 'episode.unwatched' as const,
+						entityId: this.mediaId,
+						payload: { season: e.season, episode: e.episode }
+					})),
+				{ type: 'tracking.removed' as const, entityId: this.mediaId, payload: {} }
+			]);
 		});
 	}
 
@@ -289,9 +306,14 @@ export class TrackingState {
 	}
 
 	async #seedWatched(episodes: EpisodeCoord[]): Promise<void> {
-		for (const { season, episode } of episodes) {
-			await recordEvent('episode.watched', this.mediaId, { season, episode });
-		}
+		// One batch, not one transaction pair per episode — a long-running series is hundreds.
+		await recordEvents(
+			episodes.map(({ season, episode }) => ({
+				type: 'episode.watched' as const,
+				entityId: this.mediaId,
+				payload: { season, episode }
+			}))
+		);
 	}
 
 	/** Move the status in line with episode progress (completion sequence) — see {@link reconcileStatus}. */

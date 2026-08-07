@@ -44,6 +44,52 @@ export async function putMedia(record: MediaRecord): Promise<void> {
 	await tx.done;
 }
 
+/**
+ * Upsert many media records in one transaction. `putMedia` opens its own three-store transaction
+ * per record, which an import of a whole library turns into thousands of them.
+ */
+export async function putMediaBatch(records: MediaRecord[]): Promise<void> {
+	if (records.length === 0) return;
+	const db = await openDb();
+	const tx = db.transaction(['media', 'seasons', 'episodes'], 'readwrite');
+	const mediaStore = tx.objectStore('media');
+	const seasonStore = tx.objectStore('seasons');
+	const episodeStore = tx.objectStore('episodes');
+	const now = Date.now();
+
+	for (const record of records) {
+		const { seasons, episodes, ...scalars } = record;
+		await mediaStore.put({ ...scalars, updatedAt: now });
+		// Same rule as putMedia: a null child array is a scalar-only snapshot and leaves any
+		// already-synced child rows alone; a non-null one replaces them.
+		if (seasons) {
+			for (const key of await seasonStore.index('by_media').getAllKeys(record.id)) {
+				await seasonStore.delete(key);
+			}
+			for (const s of seasons) {
+				await seasonStore.put({
+					...s,
+					id: seasonKey(record.id, s.seasonNumber),
+					mediaId: record.id
+				});
+			}
+		}
+		if (episodes) {
+			for (const key of await episodeStore.index('by_media').getAllKeys(record.id)) {
+				await episodeStore.delete(key);
+			}
+			for (const e of episodes) {
+				await episodeStore.put({
+					...e,
+					id: episodeKey(record.id, e.season, e.episode),
+					mediaId: record.id
+				});
+			}
+		}
+	}
+	await tx.done;
+}
+
 export async function getMedia(id: string): Promise<ClientMedia | undefined> {
 	return (await openDb()).get('media', id);
 }

@@ -7,7 +7,7 @@
  *
  * Client-safe (browser only).
  */
-import { applyEventsToIdb, enqueueEvents, getDeviceId, putMedia } from '$lib/client/idb';
+import { applyEventsToIdb, enqueueEvents, getDeviceId, putMediaBatch } from '$lib/client/idb';
 import { reportClientError } from '$lib/client/report-error';
 import { sync } from '$lib/client/sync/engine.svelte';
 import { parseExport, type ParseFailure } from '$lib/portability/parse';
@@ -67,8 +67,9 @@ export async function applyImport(plan: ImportPlan): Promise<void> {
 	// Report and rethrow — the UI still shows the failure, but a silent one on someone else's
 	// device is exactly what we can't debug without a log line.
 	try {
-		// Media first, so the channel can start hydrating the real rows while events sync.
-		for (const record of plan.media) await putMedia(record);
+		// Media first, so the channel can start hydrating the real rows while events sync. Batched
+		// for the same reason the events below are: one transaction, not one per record.
+		await putMediaBatch(plan.media);
 
 		await enqueueEvents(plan.events);
 		// One transaction for the whole batch — a library's worth of events applied one at a time
