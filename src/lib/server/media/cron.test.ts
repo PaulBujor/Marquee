@@ -56,6 +56,7 @@ function stub() {
 				return {
 					seasonNumber,
 					name: `S${seasonNumber}`,
+					overview: '',
 					episodes: [
 						{
 							episodeNumber: 1,

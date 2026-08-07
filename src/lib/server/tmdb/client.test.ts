@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTmdbClient, TmdbError } from './client';
+import { createTmdbClient, hasDescription, TmdbError } from './client';
 import type {
 	TmdbMovieDetailsResponse,
 	TmdbMultiSearchResponse,
@@ -470,6 +470,7 @@ describe('createTmdbClient.getSeason', () => {
 		expect(season).toEqual({
 			seasonNumber: 1,
 			name: 'Season 1',
+			overview: 'The beginning.',
 			episodes: [
 				{
 					episodeNumber: 1,
@@ -503,7 +504,13 @@ describe('createTmdbClient.getSeason', () => {
 	it('handles a season with no episodes', async () => {
 		mockFetch({ season_number: 3, name: 'Season 3' });
 		const season = await createTmdbClient('key').getSeason(1396, 3);
-		expect(season).toEqual({ seasonNumber: 3, name: 'Season 3', episodes: [] });
+		expect(season).toEqual({ seasonNumber: 3, name: 'Season 3', overview: '', episodes: [] });
+	});
+
+	it('normalizes a missing overview to an empty string, not undefined', async () => {
+		mockFetch({ season_number: 4, name: 'Season 4', overview: '' });
+		const season = await createTmdbClient('key').getSeason(1396, 4);
+		expect(season.overview).toBe('');
 	});
 
 	it('throws TmdbError on a non-2xx response', async () => {
@@ -512,5 +519,19 @@ describe('createTmdbClient.getSeason', () => {
 			name: 'TmdbError',
 			status: 404
 		});
+	});
+});
+
+describe('hasDescription', () => {
+	it('is false for an empty string', () => {
+		expect(hasDescription('')).toBe(false);
+	});
+
+	it('is false for a whitespace-only string', () => {
+		expect(hasDescription('   ')).toBe(false);
+	});
+
+	it('is true for a non-empty description', () => {
+		expect(hasDescription('The beginning.')).toBe(true);
 	});
 });

@@ -217,11 +217,21 @@ function normalizeDetails(
 	};
 }
 
+/**
+ * Whether an overview/description string is present and meaningful. TMDB sends `""` rather than
+ * omitting the field for a missing description, so this is the one check for "has a description" —
+ * callers should use it instead of ad hoc truthiness tests on the raw string.
+ */
+export function hasDescription(overview: string): boolean {
+	return overview.trim().length > 0;
+}
+
 /** Normalize a raw `/tv/{id}/season/{n}` response to the app-facing `SeasonDetail` shape. */
 function normalizeSeason(data: TmdbSeasonDetailResponse): SeasonDetail {
 	return {
 		seasonNumber: data.season_number,
 		name: data.name ?? '',
+		overview: data.overview ?? '',
 		episodes: (data.episodes ?? []).map((e) => ({
 			episodeNumber: e.episode_number,
 			name: e.name ?? '',

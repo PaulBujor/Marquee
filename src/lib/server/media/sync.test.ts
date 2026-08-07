@@ -48,7 +48,7 @@ function stub() {
 				};
 			},
 			async getSeason(): Promise<SeasonDetail> {
-				return { seasonNumber: 0, name: '', episodes: [] };
+				return { seasonNumber: 0, name: '', overview: '', episodes: [] };
 			}
 		}
 	};

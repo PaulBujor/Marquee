@@ -21,7 +21,12 @@ import {
 import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '$lib/server/db/chunk';
 import { mediaId, type MediaProvider } from '$lib/sync/events';
 import type { createDb } from '$lib/server/db';
-import type { MediaDetail, SeasonDetail, TmdbClient } from '$lib/server/tmdb';
+import {
+	hasDescription,
+	type MediaDetail,
+	type SeasonDetail,
+	type TmdbClient
+} from '$lib/server/tmdb';
 
 type Db = ReturnType<typeof createDb>;
 type TmdbHydrator = Pick<TmdbClient, 'getDetails' | 'getSeason'>;
@@ -164,15 +169,21 @@ function toRows(
 		firstAirDate: detail.firstAirDate,
 		lastAirDate: detail.lastAirDate
 	};
-	const seasonRows = detail.seasons.map((s) => ({
-		mediaId: id,
-		seasonNumber: s.seasonNumber,
-		name: s.name,
-		overview: s.overview,
-		airDate: s.airDate,
-		posterPath: s.posterPath,
-		episodeCount: s.episodeCount
-	}));
+	// The show-detail season summary's `overview` is often blank; the dedicated season endpoint
+	// (fetched anyway, for episodes) usually carries the real synopsis — prefer it when present.
+	const seasonOverviewByNumber = new Map(seasonDetails.map((sd) => [sd.seasonNumber, sd.overview]));
+	const seasonRows = detail.seasons.map((s) => {
+		const detailOverview = seasonOverviewByNumber.get(s.seasonNumber) ?? '';
+		return {
+			mediaId: id,
+			seasonNumber: s.seasonNumber,
+			name: s.name,
+			overview: hasDescription(detailOverview) ? detailOverview : s.overview,
+			airDate: s.airDate,
+			posterPath: s.posterPath,
+			episodeCount: s.episodeCount
+		};
+	});
 	const episodeRows = seasonDetails.flatMap((sd) =>
 		sd.episodes.map((e) => ({
 			mediaId: id,

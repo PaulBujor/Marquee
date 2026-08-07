@@ -330,6 +330,7 @@
 			seasonCache[seasonNumber] = offlineSeason(
 				seasonNumber,
 				summary?.name ?? `Season ${seasonNumber}`,
+				summary?.overview ?? '',
 				await getEpisodes(mediaId)
 			);
 			return;

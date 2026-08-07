@@ -66,7 +66,7 @@ function movieStub(overrides: Partial<MediaDetail> = {}) {
 				return { ...movieDefaults, tmdbId: id, type, ...overrides };
 			},
 			async getSeason(): Promise<SeasonDetail> {
-				return { seasonNumber: 0, name: '', episodes: [] };
+				return { seasonNumber: 0, name: '', overview: '', episodes: [] };
 			}
 		}
 	};
@@ -90,6 +90,9 @@ function showStub() {
 	let detailCalls = 0;
 	let inProduction = true;
 	const season1 = { name: 'Season 1', overview: '', posterPath: null as string | null };
+	// The full `/tv/{id}/season/{n}` endpoint's own overview — independent of the show-detail
+	// season summary's `overview` above, so tests can exercise which one wins.
+	let seasonDetailOverview = '';
 	const episodesBySeason: Record<number, EpisodeStub[]> = {
 		1: [
 			{
@@ -132,6 +135,9 @@ function showStub() {
 		updateSeason(patch: Partial<typeof season1>) {
 			Object.assign(season1, patch);
 		},
+		updateSeasonDetailOverview(overview: string) {
+			seasonDetailOverview = overview;
+		},
 		endProduction() {
 			inProduction = false;
 		},
@@ -163,6 +169,7 @@ function showStub() {
 				return {
 					seasonNumber,
 					name: `Season ${seasonNumber}`,
+					overview: seasonNumber === 1 ? seasonDetailOverview : '',
 					episodes: (episodesBySeason[seasonNumber] ?? []).map((e) => ({
 						episodeNumber: e.episodeNumber,
 						name: e.name,
@@ -425,6 +432,33 @@ describe('refreshMedia', () => {
 		expect(second!.version).toBe(2);
 		expect(writes.filter((w) => w.table === 'episodes')).toEqual([]);
 		expect(writes.filter((w) => w.table === 'seasons')).toHaveLength(1);
+	});
+
+	it('prefers the season-endpoint overview over the thinner show-detail summary', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		stub.updateSeason({ overview: 'Thin summary.' });
+		stub.updateSeasonDetailOverview('The full season synopsis.');
+
+		const result = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		expect(result).not.toBeNull();
+		const seasonRows = await db.select().from(seasons).where(eq(seasons.mediaId, result!.id));
+		expect(seasonRows[0]?.overview).toBe('The full season synopsis.');
+	});
+
+	it('falls back to the show-detail summary overview when the season endpoint has none', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		stub.updateSeason({ overview: 'Thin summary.' });
+		// seasonDetailOverview left at its default '' — simulates TMDB returning an empty string
+		// (not omitting the field) for a season with no dedicated synopsis.
+
+		const result = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		expect(result).not.toBeNull();
+		const seasonRows = await db.select().from(seasons).where(eq(seasons.mediaId, result!.id));
+		expect(seasonRows[0]?.overview).toBe('Thin summary.');
 	});
 
 	it('returns null for an unknown provider or malformed id without calling TMDB', async () => {

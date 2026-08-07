@@ -1,4 +1,4 @@
-export { createTmdbClient, TmdbError, type TmdbClient } from './client';
+export { createTmdbClient, hasDescription, TmdbError, type TmdbClient } from './client';
 export type {
 	CastMember,
 	Episode,
