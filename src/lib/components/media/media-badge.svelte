@@ -8,7 +8,7 @@
 		children,
 		...restProps
 	}: {
-		variant?: 'default' | 'status' | 'genre' | 'custom';
+		variant?: 'default' | 'status' | 'genre' | 'custom' | 'airing';
 		dashed?: boolean;
 		class?: string;
 		children?: import('svelte').Snippet;
@@ -17,11 +17,12 @@
 
 <span
 	class={cn(
-		'inline-flex items-center rounded-full px-2.5 py-0.5 text-[0.65rem] font-bold tracking-widest uppercase',
+		'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[0.65rem] font-bold tracking-widest uppercase',
 		variant === 'default' && 'border border-border text-muted-foreground',
 		variant === 'status' && 'border border-border text-muted-foreground',
 		variant === 'genre' && 'bg-secondary text-secondary-foreground',
 		variant === 'custom' && 'border border-dashed border-border text-muted-foreground',
+		variant === 'airing' && 'border border-primary/40 bg-primary/10 text-primary',
 		dashed && 'border-dashed',
 		className
 	)}

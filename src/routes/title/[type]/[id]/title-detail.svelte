@@ -6,6 +6,7 @@
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
+	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
@@ -22,7 +23,14 @@
 		type MediaRecord,
 		type TrackingStatus
 	} from '$lib/sync/events';
-	import { isAired, todayIso, watchedKey, type DatedEpisode } from '$lib/tracking/actions';
+	import {
+		airingState,
+		isAired,
+		seasonCount,
+		todayIso,
+		watchedKey,
+		type DatedEpisode
+	} from '$lib/tracking/actions';
 	import { deriveStatus } from '$lib/tracking/derive-status';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
 	import { getTracking, getEpisodes, getAllMedia, getEpisodeWatches } from '$lib/client/idb';
@@ -66,6 +74,8 @@
 	const formatDate = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
 	// Our own media id for the tracking event pipeline (provider-agnostic).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
+	const seasons = $derived(detail.type === 'show' ? seasonCount(detail.seasons) : 0);
+	const airing = $derived(detail.type === 'show' ? airingState(detail.inProduction) : 'unknown');
 	// Today (YYYY-MM-DD) for the per-episode aired check — an episode is watchable once it's aired.
 	const today = todayIso();
 
@@ -447,9 +457,14 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 					{detail.title}
 				</h1>
 				<div class="flex flex-wrap items-center gap-2">
-					<MediaBadge>
-						{detail.type === 'movie' ? 'Movie' : 'Show'}{detail.year ? ` · ${detail.year}` : ''}
-					</MediaBadge>
+					<MediaTypeLabel type={detail.type} year={detail.year} {seasons} />
+					{#if airing === 'airing'}
+						<MediaBadge variant="airing">
+							<span class="size-1.5 rounded-full bg-primary"></span>Airing
+						</MediaBadge>
+					{:else if airing === 'finished'}
+						<MediaBadge variant="status">Finished</MediaBadge>
+					{/if}
 				</div>
 			</div>
 		</div>
