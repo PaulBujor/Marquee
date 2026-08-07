@@ -35,7 +35,7 @@ describe('getLastFullMediaCheck / setLastFullMediaCheck', () => {
 		const shortlyAfterRelaunch = sessionOneNow + 60_000; // well under FULL_MEDIA_CHECK_MS
 		expect(isFullMediaCheckDue(relaunchWatermark, shortlyAfterRelaunch)).toBe(false);
 		// Without persistence the relaunch would have reset to 0, which *would* be due immediately —
-		// this is the bug MRQ-197 fixes.
+		// the assertion below guards against regressing to that behavior.
 		expect(isFullMediaCheckDue(0, shortlyAfterRelaunch)).toBe(true);
 
 		const afterCadence = sessionOneNow + FULL_MEDIA_CHECK_MS;

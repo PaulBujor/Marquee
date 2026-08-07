@@ -15,7 +15,7 @@ const PAGES = `pages-${version}`;
 const ASSETS = [...build, ...files];
 const BUILD = new Set(build);
 const OFFLINE_URL = '/offline.html';
-/** Background Sync tag: flush queued offline writes when connectivity returns (MRQ-44). */
+/** Background Sync tag: flush queued offline writes when connectivity returns. */
 const SYNC_TAG = 'marquee-sync';
 
 self.addEventListener('install', (event) => {

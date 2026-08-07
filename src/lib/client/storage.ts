@@ -1,5 +1,5 @@
 /**
- * Best-effort persistent storage (MRQ-46). Ask the browser to keep our IndexedDB — the event queue,
+ * Best-effort persistent storage. Ask the browser to keep our IndexedDB — the event queue,
  * media cache, and image blobs — from being evicted under storage pressure, and expose a rough usage
  * estimate for the settings data/cache card. All feature-detected: unsupported browsers (e.g. older
  * iOS) simply no-op. Storage is tighter on iOS (~50 MB/origin), so persistence + pruning matter most

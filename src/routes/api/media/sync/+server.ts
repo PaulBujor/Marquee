@@ -8,7 +8,7 @@ import type { RequestHandler } from './$types';
 /**
  * The media reference channel — separate from `/api/sync` (events), since media is heavier.
  * The client sends identity only; the server derives our id and hydrates from TMDB, so shared
- * `linked` rows can't be poisoned with client-supplied metadata (see MRQ-111a). Auth-gated.
+ * `linked` rows can't be poisoned with client-supplied metadata. Auth-gated.
  */
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	if (!locals.user) error(401, 'Unauthorized');

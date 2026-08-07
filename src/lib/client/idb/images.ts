@@ -44,11 +44,11 @@ async function estimateStorageUsage(): Promise<number | null> {
 }
 
 /**
- * Bound the image cache (MRQ-46): always drop blobs for media outside `keepIds` (untracked / removed
+ * Bound the image cache: always drop blobs for media outside `keepIds` (untracked / removed
  * titles). The still-tracked survivors are the working set we *want* available offline, so they're
  * only trimmed to `maxEntries` (least-recently-updated first) when the device is actually under
  * storage pressure — otherwise a user tracking more than the cap would lose posters they still track
- * for no reason, since the images are re-fetchable when online (MRQ-144). When the browser can't
+ * for no reason, since the images are re-fetchable when online. When the browser can't
  * report usage, we fall back to enforcing the cap (a conservative backstop). Returns how many
  * entries were deleted. `usage` is injectable for testing.
  */

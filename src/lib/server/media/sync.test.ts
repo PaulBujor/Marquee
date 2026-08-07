@@ -167,7 +167,7 @@ describe('resolveMediaSync', () => {
 		expect(res.media).toEqual([]);
 	});
 
-	it('skips a fresh stored row — no TMDB fetch (MRQ-138)', async () => {
+	it('skips a fresh stored row — no TMDB fetch', async () => {
 		const db = await seed();
 		await storeFreshMovie(db, REFERENCED);
 		const { client, calls } = stub();
@@ -215,7 +215,7 @@ describe('resolveMediaSync', () => {
 		expect(res.pending).toBe(false);
 	});
 
-	it('caps hydration per request and drains the rest via `pending` (MRQ-138)', async () => {
+	it('caps hydration per request and drains the rest via `pending`', async () => {
 		const db = createTestDb();
 		await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
 		const total = MEDIA_SYNC_REFRESH_MAX + 5;

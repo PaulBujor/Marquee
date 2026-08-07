@@ -21,7 +21,7 @@ const syncHits = new Map<string, number[]>();
 /**
  * The sync round trip: push the client's local events and pull everything it's
  * missing since its cursor. Auth-gated (a session-bound user) and idempotent —
- * duplicate pushes dedupe by event id, so MRQ-43's retry/backoff is safe.
+ * duplicate pushes dedupe by event id, so the client can safely retry with backoff after a failed push.
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) error(401, 'Unauthorized');

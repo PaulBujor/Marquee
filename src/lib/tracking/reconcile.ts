@@ -1,5 +1,5 @@
 /**
- * Move a show's stored status in line with its episode progress (completion sequence, MRQ-55):
+ * Move a show's stored status in line with its episode progress (completion sequence):
  * the last episode completes it, un-watching one un-completes it, the first watch starts it.
  *
  * This is an opportunistic cache-warm, not the source of truth for what's displayed — every read
