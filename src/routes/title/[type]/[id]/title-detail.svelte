@@ -459,8 +459,12 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				</h1>
 				<div class="flex flex-wrap items-center gap-2">
 					<MediaTypeLabel type={detail.type} year={detail.year} {seasons} />
-					{#if airing !== 'unknown'}
-						<MediaBadge variant="status">{airing === 'airing' ? 'Airing' : 'Finished'}</MediaBadge>
+					{#if airing === 'airing'}
+						<MediaBadge variant="airing">
+							<span class="size-1.5 rounded-full bg-primary"></span>Airing
+						</MediaBadge>
+					{:else if airing === 'finished'}
+						<MediaBadge variant="status">Finished</MediaBadge>
 					{/if}
 				</div>
 			</div>

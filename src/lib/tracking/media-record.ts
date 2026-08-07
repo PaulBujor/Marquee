@@ -25,8 +25,6 @@ export interface SearchLikeMedia {
 	year: number | null;
 	posterPath: string | null;
 	overview?: string;
-	/** Shows only; `undefined` when the source (see {@link MediaSearchResult}) couldn't tell us. */
-	numberOfSeasons?: number;
 }
 
 /**

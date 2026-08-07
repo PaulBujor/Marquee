@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { createTmdbClient, TmdbError } from '$lib/server/tmdb';
-import { enrichWithLinkedData, searchLinkedMedia } from '$lib/server/media/search';
+import { searchLinkedMedia } from '$lib/server/media/search';
 import type { RequestHandler } from './$types';
 
 /**
@@ -8,6 +8,10 @@ import type { RequestHandler } from './$types';
  * degrade to a substring search over the shared `linked` catalog we already hold (`degraded: true`)
  * so the screen still returns results. Called by the search page's universal load; **offline** the
  * client falls back to its own IndexedDB catalog instead (this endpoint is never reached).
+ *
+ * Deliberately makes no D1 calls on the happy path (TMDB reachable) — the DB is expected to move to
+ * a serverless engine that cold-starts on first query, and search runs on every keystroke, so it
+ * must not be what wakes it. Season count (MRQ-209) is detail-page-only for the same reason.
  */
 export const GET: RequestHandler = async ({ locals, platform, url }) => {
 	if (!locals.user) error(401, 'Unauthorized');
@@ -20,10 +24,7 @@ export const GET: RequestHandler = async ({ locals, platform, url }) => {
 	if (!apiKey) error(503, 'Search is not configured.');
 
 	try {
-		const raw = await createTmdbClient(apiKey).search(q);
-		// TMDB's multi-search doesn't return season count / production status; fill them in for any
-		// show we already hold a linked copy of (MRQ-209).
-		const results = locals.db ? await enrichWithLinkedData(locals.db, raw) : raw;
+		const results = await createTmdbClient(apiKey).search(q);
 		return json({ results, degraded: false });
 	} catch (err) {
 		if (err instanceof TmdbError) {

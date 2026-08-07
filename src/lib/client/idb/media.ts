@@ -5,7 +5,6 @@
 import { openDb, type ClientEpisode, type ClientMedia, type ClientSeason } from './db';
 import type { MediaProvider, MediaRecord } from '$lib/sync/events';
 import { parseTmdbExternalId, type SearchLikeMedia } from '$lib/tracking/media-record';
-import { seasonCount } from '$lib/tracking/actions';
 
 function seasonKey(mediaId: string, seasonNumber: number): string {
 	return `${mediaId}::s${seasonNumber}`;
@@ -107,14 +106,13 @@ export async function getAllMedia(): Promise<ClientMedia[]> {
 export async function searchLocalMedia(query: string, limit = 20): Promise<SearchLikeMedia[]> {
 	const q = query.trim().toLowerCase();
 	if (!q) return [];
-	const matches: (SearchLikeMedia & { mediaId: string })[] = [];
+	const matches: SearchLikeMedia[] = [];
 	for (const m of await getAllMedia()) {
 		if (m.source !== 'linked' || m.externalId === null) continue;
 		if (!m.title.toLowerCase().includes(q)) continue;
 		const ref = parseTmdbExternalId(m.externalId);
 		if (!ref) continue;
 		matches.push({
-			mediaId: m.id,
 			tmdbId: ref.tmdbId,
 			type: m.type,
 			title: m.title,
@@ -123,14 +121,7 @@ export async function searchLocalMedia(query: string, limit = 20): Promise<Searc
 			overview: m.overview
 		});
 	}
-	const top = matches.sort((a, b) => a.title.localeCompare(b.title)).slice(0, limit);
-	// Season counts (excluding Specials) only need looking up for the titles we're actually returning.
-	return Promise.all(
-		top.map(async ({ mediaId, ...result }) => ({
-			...result,
-			...(result.type === 'show' ? { numberOfSeasons: seasonCount(await getSeasons(mediaId)) } : {})
-		}))
-	);
+	return matches.sort((a, b) => a.title.localeCompare(b.title)).slice(0, limit);
 }
 
 /** A title's cached seasons — the source for the season selector when rendering offline. */

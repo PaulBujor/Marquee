@@ -260,11 +260,7 @@
 						<div class="flex min-w-0 flex-1 flex-col gap-1">
 							<span class="truncate font-medium">{item.title}</span>
 							<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-								<MediaTypeLabel
-									type={item.type}
-									year={item.year}
-									seasons={item.numberOfSeasons ?? 0}
-								/>
+								<MediaTypeLabel type={item.type} year={item.year} />
 							</div>
 						</div>
 					</a>
