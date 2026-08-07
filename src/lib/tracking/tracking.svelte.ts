@@ -42,8 +42,13 @@ import { notifications } from '$lib/state/notifications.svelte.js';
 
 export class TrackingState {
 	readonly mediaId: string;
-	/** Whether TMDB considers the show still in production — feeds completion reconciliation. */
-	readonly #inProduction: boolean | null;
+	/**
+	 * Whether TMDB considers the show still in production — feeds completion reconciliation.
+	 * `$state`, not constructor-frozen, for the same reason as `#seasons`: `title-detail.svelte`
+	 * recreates this instance only on media-id change, not on the base→enriched detail upgrade,
+	 * so this needs its own update path — see `updateInProduction`.
+	 */
+	#inProduction = $state<boolean | null>(null);
 	/** Per-episode metadata (coords + air dates), loaded from IndexedDB (empty for movies / unsynced). */
 	episodes = $state<DatedEpisode[]>([]);
 	/** Current tracking view (untracked, or status + favorite). */
@@ -81,6 +86,11 @@ export class TrackingState {
 	/** Refresh the season summaries — call whenever the page's `detail.seasons` changes. */
 	updateSeasons(seasons: SeasonSummary[]): void {
 		this.#seasons = seasons;
+	}
+
+	/** Refresh production status — call whenever the page's `detail.inProduction` changes. */
+	updateInProduction(inProduction: boolean | null): void {
+		this.#inProduction = inProduction;
 	}
 
 	/** Load tracking + episode metadata + episode-watched state from IndexedDB. */
