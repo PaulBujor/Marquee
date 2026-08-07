@@ -188,12 +188,10 @@ describe('addedAt parity with the client projection', () => {
 	const MAR = Date.UTC(2026, 2, 20);
 
 	it('is the earliest event clock even when the newer event arrives first', async () => {
-		// Separate pushes: a single push is clock-sorted before it is applied, so the divergence
-		// only ever showed up across round trips.
+		// Separate pushes: a single push is clock-sorted before it is applied, so only a round trip
+		// can deliver the newer event first.
 		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, MAR)]);
 		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)]);
-		// Previously MAR: the conflict branch is LWW-gated, so the older event updated nothing and
-		// `addedAt` kept whichever clock happened to arrive first.
 		expect((await trackingRow(db)).addedAt.getTime()).toBe(JAN);
 	});
 

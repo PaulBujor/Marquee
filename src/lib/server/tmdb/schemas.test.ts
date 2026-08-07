@@ -21,8 +21,7 @@ describe('TMDB response schemas', () => {
 	});
 
 	it('rejects an error envelope in place of a search response', () => {
-		// What TMDB actually returns on a bad key — previously cast straight to the result type,
-		// so `results` came back undefined and the failure surfaced somewhere else entirely.
+		// What TMDB actually returns on a bad key.
 		const parsed = multiSearchResponseSchema.safeParse({
 			success: false,
 			status_code: 7,
