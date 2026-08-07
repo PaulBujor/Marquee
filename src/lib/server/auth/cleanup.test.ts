@@ -70,6 +70,10 @@ describe('purgeExpiredAuth', () => {
 			kind: 'link',
 			expiresAt: new Date(NOW + HOUR)
 		});
-		expect(await purgeExpiredAuth(db, NOW)).toEqual({ loginTokens: 0, sessions: 0 });
+		expect(await purgeExpiredAuth(db, NOW)).toEqual({
+			loginTokens: 0,
+			sessions: 0,
+			notifications: 0
+		});
 	});
 });

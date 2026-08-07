@@ -14,7 +14,9 @@ async function refreshMedia(db: Db, apiKey: string | undefined, force: boolean) 
 	try {
 		const result = await refreshStaleMedia(db, createTmdbClient(apiKey), Date.now(), force);
 		console.log(
-			`cron: scanned ${result.scanned} unsettled titles — ${result.changed} changed, ${result.failed} failed${force ? ' (forced)' : ''}`
+			`cron: ${result.scanned} unsettled titles, refreshed ${result.attempted} — ` +
+				`${result.changed} changed, ${result.failed} failed` +
+				`${result.capped ? ' (capped; remainder rolls to the next run)' : ''}${force ? ' (forced)' : ''}`
 		);
 		return { ok: true as const, ...result };
 	} catch (err) {
@@ -29,7 +31,8 @@ async function purgeAuth(db: Db) {
 	try {
 		const purged = await purgeExpiredAuth(db, Date.now());
 		console.log(
-			`cron: purged ${purged.loginTokens} stale login tokens and ${purged.sessions} expired sessions`
+			`cron: purged ${purged.loginTokens} stale login tokens, ${purged.sessions} expired sessions ` +
+				`and ${purged.notifications} old notification-log rows`
 		);
 		return { ok: true as const, ...purged };
 	} catch (err) {
