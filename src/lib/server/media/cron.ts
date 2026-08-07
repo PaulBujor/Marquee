@@ -1,55 +1,56 @@
 /**
- * Nightly refresh sweep: re-pull every "unsettled" provider-backed title — in-production shows and
- * not-yet-released movies — from TMDB so cached data stays current without a user opening the title.
- * Each goes through the shared {@link refreshMedia}, which skips titles refreshed recently and bumps
- * `version` only when content changed. Invoked by the cron via `POST /api/cron/refresh`.
+ * Nightly refresh sweep: find every "unsettled" provider-backed title — in-production shows and
+ * not-yet-released movies — and enqueue one `MediaRefreshMessage` per title onto the media-refresh
+ * queue. Actual hydration happens later, asynchronously, in `refresh-consumer.ts` — this module
+ * only selects candidates and enqueues; it never calls TMDB. Cloudflare Queues then invokes the
+ * consumer repeatedly, in batches, until the queue drains, which is what replaces the previous
+ * one-capped-batch-per-night behavior: the backlog no longer takes multiple nights to clear.
+ * Invoked by the cron via `POST /api/cron/refresh`.
  */
 import { and, asc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { media } from '$lib/server/db/schema';
 import type { createDb } from '$lib/server/db';
-import type { TmdbClient } from '$lib/server/tmdb';
-import { AIRING_STATUSES, refreshMedia } from './hydrate';
+import type { QueueProducer } from '$lib/server/queue/types';
+import { AIRING_STATUSES } from './hydrate';
+import type { MediaRefreshMessage } from './refresh-consumer';
 
 type Db = ReturnType<typeof createDb>;
 
 /**
- * Max titles refreshed in one sweep. Each show costs a TMDB detail call plus one per season, so an
- * unbounded pass over a growing catalog eventually exceeds the Worker's CPU/subrequest budget and
- * aborts partway — always at the same place, leaving the tail permanently stale. Candidates are
- * ordered oldest-refresh-first, so consecutive nightly runs walk the whole catalog instead of
- * replaying its head.
+ * Safety ceiling on how many titles one nightly sweep enqueues. Unlike the old `CRON_REFRESH_MAX`
+ * (which bounded TMDB calls + D1 writes made synchronously inside the request), enqueueing is just
+ * a D1 read plus cheap queue sends — no TMDB round-trip — so this is a generous backstop against a
+ * runaway catalog or a candidate-query bug, not a real budget constraint. Candidates are still
+ * ordered oldest-refresh-first, so a capped run's remainder is exactly what the next run picks up.
  */
-export const CRON_REFRESH_MAX = 200;
+export const ENQUEUE_MAX = 5000;
 
-export interface RefreshResult {
+export interface EnqueueResult {
 	/** Candidates matched by the staleness query, before the per-run cap. */
 	scanned: number;
-	/** Titles actually put through `refreshMedia` this run (at most {@link CRON_REFRESH_MAX}). */
-	attempted: number;
-	changed: number;
-	failed: number;
+	/** Titles actually enqueued this run (at most {@link ENQUEUE_MAX}). */
+	queued: number;
 	/** True when the cap left candidates for the next run. */
 	capped: boolean;
 }
 
 /**
- * Refresh all provider-backed, unsettled titles: in-production shows, plus movies not yet released
- * (no date, or a date today-or-later). Per-title failures are isolated so one bad title
- * can't abort the run; `refreshMedia`'s TTL still gates each. `force` bypasses that TTL (for a manual
- * re-hydrate); `now` is injectable for tests.
+ * Select every provider-backed, unsettled title — in-production shows, plus movies not yet
+ * released (no date, or a date today-or-later) — oldest-refresh-first, and enqueue each as a
+ * `MediaRefreshMessage`. `force` is carried onto every enqueued message so the consumer bypasses
+ * `refreshMedia`'s TTL (a manual re-hydrate); `now` is injectable for tests.
  */
-export async function refreshStaleMedia(
+export async function enqueueStaleMedia(
 	db: Db,
-	tmdb: Pick<TmdbClient, 'getDetails' | 'getSeason'>,
+	queue: QueueProducer<MediaRefreshMessage>,
 	now: number = Date.now(),
 	force = false
-): Promise<RefreshResult> {
+): Promise<EnqueueResult> {
 	const today = new Date(now).toISOString().slice(0, 10);
 	const columns = {
 		id: media.id,
 		provider: media.provider,
 		externalId: media.externalId,
-		version: media.version,
 		refreshedAt: media.refreshedAt
 	};
 	// Three separate indexed queries, unioned in JS, rather than one `OR`-across-branches query:
@@ -85,7 +86,7 @@ export async function refreshStaleMedia(
 	]);
 
 	// The two show queries overlap (in-production *and* an airing status is the common case), so
-	// dedupe by id before counting or refreshing.
+	// dedupe by id before counting or enqueueing.
 	type Candidate = (typeof airingShows)[number] & { externalId: string };
 	const byId = new Map<string, Candidate>();
 	for (const row of [...airingShows, ...betweenSeasonShows, ...undatedMovies, ...upcomingMovies]) {
@@ -95,25 +96,20 @@ export async function refreshStaleMedia(
 	}
 	// Oldest refresh first, so a capped run resumes where the previous one stopped.
 	const candidates = [...byId.values()].sort((a, b) => a.refreshedAt - b.refreshedAt);
-	const batch = candidates.slice(0, CRON_REFRESH_MAX);
+	const batch = candidates.slice(0, ENQUEUE_MAX);
 	const capped = candidates.length > batch.length;
 	if (capped) {
 		console.warn(
-			`cron: ${candidates.length} unsettled titles, refreshing ${batch.length} this run (oldest first)`
+			`cron: ${candidates.length} unsettled titles, enqueueing ${batch.length} this run (oldest first)`
 		);
 	}
 
-	let changed = 0;
-	let failed = 0;
-	for (const row of batch) {
-		try {
-			const updated = await refreshMedia(db, tmdb, row.provider, row.externalId, now, force);
-			if (updated && updated.version > row.version) changed++;
-		} catch (err) {
-			failed++;
-			console.error(`cron: failed to refresh ${row.provider}:${row.externalId}`, err);
-		}
-	}
+	const messages: MediaRefreshMessage[] = batch.map((row) => ({
+		provider: row.provider,
+		externalId: row.externalId,
+		...(force ? { force: true as const } : {})
+	}));
+	await queue.enqueueBatch(messages);
 
-	return { scanned: candidates.length, attempted: batch.length, changed, failed, capped };
+	return { scanned: candidates.length, queued: batch.length, capped };
 }
