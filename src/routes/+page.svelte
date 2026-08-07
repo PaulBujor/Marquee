@@ -8,6 +8,7 @@
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { buttonVariants } from '$lib/components/ui/button';
+	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import ProgressRing from '$lib/components/media/progress-ring.svelte';
 	import * as Tabs from '$lib/components/ui/tabs';
@@ -61,7 +62,7 @@
 	const TABS: TabDef[] = [
 		{ key: 'want_to_watch', label: 'Want to Watch' },
 		{ key: 'watching', label: 'Watching' },
-		{ key: 'completed', label: 'Completed' },
+		{ key: 'completed', label: 'Watched' },
 		{ key: 'favorites', label: 'Favorites' }
 	];
 	const TYPES: TypeDef[] = [
@@ -427,6 +428,9 @@
 						/>
 						<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>
 						{#if item.year}<div class="text-xs text-muted-foreground">{item.year}</div>{/if}
+						{#if item.status === 'did_not_finish'}
+							<MediaBadge variant="status" class="mt-1">Didn't finish</MediaBadge>
+						{/if}
 					</a>
 				{/each}
 			</div>

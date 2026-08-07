@@ -7,6 +7,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import BackButton from '$lib/components/back-button.svelte';
+	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
@@ -322,6 +323,9 @@
 							<span class="truncate font-medium">{item.title}</span>
 							<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
 								<MediaTypeLabel type={item.type} year={item.year} />
+								{#if tracked.get(id) === 'did_not_finish'}
+									<MediaBadge variant="status">Didn't finish</MediaBadge>
+								{/if}
 							</div>
 						</div>
 					</a>
