@@ -2,7 +2,13 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { FULL_MEDIA_CHECK_MS, isFullMediaCheckDue } from '$lib/client/sync/media-gate';
 import { setActiveUser } from './db';
-import { getLastFullMediaCheck, setLastFullMediaCheck } from './meta';
+import {
+	addRecentSearch,
+	clearRecentSearches,
+	getLastFullMediaCheck,
+	getRecentSearches,
+	setLastFullMediaCheck
+} from './meta';
 
 setActiveUser('meta-test-user');
 
@@ -34,5 +40,64 @@ describe('getLastFullMediaCheck / setLastFullMediaCheck', () => {
 
 		const afterCadence = sessionOneNow + FULL_MEDIA_CHECK_MS;
 		expect(isFullMediaCheckDue(relaunchWatermark, afterCadence)).toBe(true);
+	});
+});
+
+describe('recent searches', () => {
+	it('starts empty when nothing has been recorded', async () => {
+		await clearRecentSearches();
+		expect(await getRecentSearches()).toEqual([]);
+	});
+
+	it('records a search as the most recent entry', async () => {
+		await clearRecentSearches();
+		await addRecentSearch('dune');
+		expect(await getRecentSearches()).toEqual(['dune']);
+	});
+
+	it('puts the newest search first', async () => {
+		await clearRecentSearches();
+		await addRecentSearch('dune');
+		await addRecentSearch('arrival');
+		expect(await getRecentSearches()).toEqual(['arrival', 'dune']);
+	});
+
+	it('caps the list at 5 entries, dropping the oldest', async () => {
+		await clearRecentSearches();
+		for (const q of ['a', 'b', 'c', 'd', 'e', 'f']) await addRecentSearch(q);
+		expect(await getRecentSearches()).toEqual(['f', 'e', 'd', 'c', 'b']);
+	});
+
+	it('bumps a repeated query to the top instead of duplicating it', async () => {
+		await clearRecentSearches();
+		await addRecentSearch('dune');
+		await addRecentSearch('arrival');
+		await addRecentSearch('dune');
+		expect(await getRecentSearches()).toEqual(['dune', 'arrival']);
+	});
+
+	it('trims whitespace before comparing and storing', async () => {
+		await clearRecentSearches();
+		await addRecentSearch('dune');
+		await addRecentSearch('  dune  ');
+		expect(await getRecentSearches()).toEqual(['dune']);
+	});
+
+	it('ignores blank queries', async () => {
+		await clearRecentSearches();
+		await addRecentSearch('   ');
+		expect(await getRecentSearches()).toEqual([]);
+	});
+
+	it('returns the updated list so callers can update UI state directly', async () => {
+		await clearRecentSearches();
+		const result = await addRecentSearch('dune');
+		expect(result).toEqual(['dune']);
+	});
+
+	it('clears all recorded searches', async () => {
+		await addRecentSearch('dune');
+		await clearRecentSearches();
+		expect(await getRecentSearches()).toEqual([]);
 	});
 });

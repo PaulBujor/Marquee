@@ -47,7 +47,10 @@ export {
 	getLastSyncAt,
 	setLastSyncAt,
 	getLastFullMediaCheck,
-	setLastFullMediaCheck
+	setLastFullMediaCheck,
+	getRecentSearches,
+	addRecentSearch,
+	clearRecentSearches
 } from './meta';
 
 /**

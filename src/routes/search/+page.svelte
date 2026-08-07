@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Input } from '$lib/components/ui/input';
+	import { buttonVariants } from '$lib/components/ui/button';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import BackButton from '$lib/components/back-button.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
@@ -11,10 +12,19 @@
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
-	import { getTracking, putMedia, recordEvent, searchLocalMedia } from '$lib/client/idb';
+	import {
+		addRecentSearch,
+		clearRecentSearches,
+		getRecentSearches,
+		getTracking,
+		putMedia,
+		recordEvent,
+		searchLocalMedia
+	} from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
 	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
+	import ClockIcon from '@lucide/svelte/icons/clock';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { PageData } from './$types';
 
@@ -63,6 +73,24 @@
 		} finally {
 			writing.delete(id);
 		}
+	}
+
+	// Local-only search history (device IndexedDB, never synced) — shown before the user types.
+	let recentSearches = $state<string[]>([]);
+	onMount(() => {
+		void getRecentSearches().then((r) => (recentSearches = r));
+	});
+	async function recordSearch(q: string) {
+		recentSearches = await addRecentSearch(q);
+	}
+	async function selectRecentSearch(q: string) {
+		query = q;
+		await commit();
+		await recordSearch(q);
+	}
+	async function clearHistory() {
+		await clearRecentSearches();
+		recentSearches = [];
 	}
 
 	const DEBOUNCE_MS = 300;
@@ -174,6 +202,15 @@
 		commit();
 		searchInput?.focus();
 	}
+
+	// Record to history once the user settles on a query (Enter, or leaving the field) rather than on
+	// every keystroke the live-search debounce reacts to — `recordSearch` itself ignores blanks.
+	function onSearchKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') void recordSearch(query);
+	}
+	function onSearchBlur() {
+		void recordSearch(query);
+	}
 </script>
 
 <svelte:head>
@@ -190,6 +227,8 @@
 				type="search"
 				bind:value={query}
 				oninput={onInput}
+				onkeydown={onSearchKeydown}
+				onblur={onSearchBlur}
 				placeholder="Search movies and shows"
 				aria-label="Search movies and shows"
 				autocomplete="off"
@@ -224,6 +263,34 @@
 			{/each}
 		</ul>
 	{:else}
+		{#if !activeQuery && recentSearches.length > 0}
+			<div class="flex flex-col gap-2">
+				<div class="flex items-center justify-between">
+					<h2 class="text-sm font-medium text-muted-foreground">Recent searches</h2>
+					<button
+						type="button"
+						onclick={clearHistory}
+						class={buttonVariants({ variant: 'ghost', size: 'sm' })}
+					>
+						Clear
+					</button>
+				</div>
+				<ul class="flex flex-col gap-1">
+					{#each recentSearches as q (q)}
+						<li>
+							<button
+								type="button"
+								onclick={() => selectRecentSearch(q)}
+								class="flex w-full items-center gap-3 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-secondary"
+							>
+								<ClockIcon class="size-4 shrink-0 text-muted-foreground" />
+								<span class="truncate">{q}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 		{#if networkMode !== 'up' && activeQuery}
 			<!-- Degraded/offline banner: TMDB unreachable → shared library; offline → your own titles. -->
 			<p
