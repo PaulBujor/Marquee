@@ -20,7 +20,14 @@ export default defineConfig({
 		include: ['src/**/*.test.ts'],
 		coverage: {
 			provider: 'v8',
-			include: ['src/lib/server/**'],
+			// The client half is as load-bearing as the server half — this app is offline-first, so
+			// IndexedDB is the source of truth for the user's data — and it *is* tested. Scoping
+			// coverage to `server/**` meant those tests ran but never appeared in the number CI
+			// publishes, so a gap in the sync engine or the local projection was invisible to the one
+			// signal meant to surface it. Excludes generated shadcn primitives and the type-only
+			// wire-contract modules, which would otherwise dilute the figure without being testable.
+			include: ['src/lib/**', 'src/routes/**/+server.ts'],
+			exclude: ['src/lib/components/ui/**', 'src/lib/server/db/test-db.ts'],
 			reporter: ['text', 'json-summary', 'html']
 		}
 	}
