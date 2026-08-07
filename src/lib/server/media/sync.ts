@@ -25,6 +25,7 @@ import {
 } from '$lib/server/db/schema';
 import { mediaId, trackingKey, type MediaRecord } from '$lib/sync/events';
 import type { MediaSyncRequest, MediaSyncResponse } from '$lib/sync/media-protocol';
+import { chunkIds } from '$lib/server/db/chunk';
 import type { createDb } from '$lib/server/db';
 import type { TmdbClient } from '$lib/server/tmdb';
 import { refreshMedia } from './hydrate';
@@ -32,13 +33,6 @@ import { refreshMedia } from './hydrate';
 type Db = ReturnType<typeof createDb>;
 type SeasonRecord = NonNullable<MediaRecord['seasons']>[number];
 type EpisodeRecord = NonNullable<MediaRecord['episodes']>[number];
-
-/**
- * D1 caps bound parameters at 100 per query, so `IN (...)` id lists are split into chunks well under
- * it — a user tracking 100+ titles would otherwise overflow the limit ("too many SQL variables").
- * Matches the events projection's dedup chunking.
- */
-const ID_CHUNK = 90;
 
 /**
  * Max titles hydrated from TMDB in a single sync request. Each hydrate is a heavy TMDB pull
@@ -53,12 +47,6 @@ export const MEDIA_SYNC_REFRESH_MAX = 25;
  *  treated as "the client has nothing" rather than needing special-cased undefined-handling. */
 const NO_VERSION = -1;
 
-function chunk<T>(items: T[], size: number): T[][] {
-	const out: T[][] = [];
-	for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-	return out;
-}
-
 /**
  * The anti-abuse gate: only ids the user's own `tracking`/`episode_watches` projections
  * reference are ever touched, regardless of what the request claims. `tracking` is looked up by
@@ -70,7 +58,7 @@ function chunk<T>(items: T[], size: number): T[][] {
  */
 async function validateReferencedIds(db: Db, userId: string, ids: string[]): Promise<Set<string>> {
 	const valid = new Set<string>();
-	for (const c of chunk(ids, ID_CHUNK)) {
+	for (const c of chunkIds(ids)) {
 		const [trackingRows, watchRows] = await Promise.all([
 			db
 				.select({ mediaId: tracking.mediaId })
@@ -144,7 +132,7 @@ export async function resolveMediaSync(
 	const loadMedia = async (ids: string[]): Promise<Media[]> =>
 		(
 			await Promise.all(
-				chunk(ids, ID_CHUNK).map((c) => db.select().from(media).where(inArray(media.id, c)))
+				chunkIds(ids).map((c) => db.select().from(media).where(inArray(media.id, c)))
 			)
 		).flat();
 
@@ -192,14 +180,14 @@ export async function resolveMediaSync(
 	const staleShowIds = staleForClient.filter((r) => r.type === 'show').map((r) => r.id);
 	const seasonRows = (
 		await Promise.all(
-			chunk(staleShowIds, ID_CHUNK).map((ids) =>
+			chunkIds(staleShowIds).map((ids) =>
 				db.select().from(seasons).where(inArray(seasons.mediaId, ids))
 			)
 		)
 	).flat();
 	const episodeRows = (
 		await Promise.all(
-			chunk(staleShowIds, ID_CHUNK).map((ids) =>
+			chunkIds(staleShowIds).map((ids) =>
 				db.select().from(episodes).where(inArray(episodes.mediaId, ids))
 			)
 		)

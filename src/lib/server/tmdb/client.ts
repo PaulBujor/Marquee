@@ -1,4 +1,4 @@
-import { CircuitBreaker, withRetry } from '$lib/resilience';
+import { CircuitBreaker, fetchWithTimeout, withRetry } from '$lib/resilience';
 import type {
 	MediaDetail,
 	MediaSearchResult,
@@ -21,6 +21,11 @@ const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
  */
 const tmdbBreaker = new CircuitBreaker({ maxFailures: 5, cooldownMs: 30_000, name: 'tmdb' });
 const TMDB_RETRY = { maxAttempts: 3, baseMs: 300, maxMs: 3000 };
+/**
+ * Per-attempt wall-clock budget. A metadata fetch shouldn't hold a Worker invocation open on a
+ * stalled connection — and with `maxAttempts: 3` an untimed stall could stack three times over.
+ */
+const TMDB_TIMEOUT_MS = 5_000;
 
 /** How many cast members the detail page shows (TMDB orders `cast` by billing). */
 const CAST_LIMIT = 10;
@@ -229,8 +234,13 @@ export function createTmdbClient(apiKey: string) {
 				async () => {
 					let res: Response;
 					try {
-						res = await fetch(url, { headers: { accept: 'application/json' } });
+						res = await fetchWithTimeout(url, {
+							headers: { accept: 'application/json' },
+							timeoutMs: TMDB_TIMEOUT_MS
+						});
 					} catch (err) {
+						// Includes FetchTimeoutError — mapped to 502 so `shouldRetry` treats a stalled
+						// connection as the transient failure it is.
 						throw new TmdbError(`TMDB request failed: ${String(err)}`, 502);
 					}
 					if (!res.ok) throw new TmdbError(`TMDB responded ${res.status}`, res.status);

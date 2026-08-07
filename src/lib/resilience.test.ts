@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { backoffDelay, CircuitBreaker, withRetry } from './resilience';
+import {
+	backoffDelay,
+	CircuitBreaker,
+	fetchWithTimeout,
+	FetchTimeoutError,
+	withRetry
+} from './resilience';
 
 describe('backoffDelay', () => {
 	it('grows exponentially from base and caps at max', () => {
@@ -107,5 +113,61 @@ describe('CircuitBreaker', () => {
 		expect(cb.canAttempt()).toBe(false);
 		t = 2000;
 		expect(cb.canAttempt()).toBe(true);
+	});
+});
+
+describe('fetchWithTimeout', () => {
+	/** A fetch that never settles until the request signal aborts, mimicking a stalled connection. */
+	const stallingFetch: typeof fetch = (_input, init) =>
+		new Promise((_resolve, reject) => {
+			init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+		});
+
+	it('resolves normally when the response beats the deadline', async () => {
+		const ok = new Response('hi', { status: 200 });
+		const res = await fetchWithTimeout('/x', { timeoutMs: 1000 }, async () => ok);
+		expect(res).toBe(ok);
+	});
+
+	it('throws FetchTimeoutError when the request outlives its budget', async () => {
+		const promise = fetchWithTimeout('/x', { timeoutMs: 20 }, stallingFetch);
+		await expect(promise).rejects.toBeInstanceOf(FetchTimeoutError);
+		await expect(promise).rejects.toMatchObject({ timeoutMs: 20 });
+	});
+
+	it('passes the caller init through, minus timeoutMs', async () => {
+		let seen: RequestInit | undefined;
+		await fetchWithTimeout(
+			'/x',
+			{ method: 'POST', body: 'payload', timeoutMs: 1000 },
+			async (_i, init) => {
+				seen = init;
+				return new Response(null, { status: 204 });
+			}
+		);
+		expect(seen?.method).toBe('POST');
+		expect(seen?.body).toBe('payload');
+		expect(seen).not.toHaveProperty('timeoutMs');
+		expect(seen?.signal).toBeInstanceOf(AbortSignal);
+	});
+
+	it('surfaces a caller-initiated abort as itself, not as a timeout', async () => {
+		const controller = new AbortController();
+		const promise = fetchWithTimeout(
+			'/x',
+			{ signal: controller.signal, timeoutMs: 10_000 },
+			stallingFetch
+		);
+		controller.abort();
+		await expect(promise).rejects.not.toBeInstanceOf(FetchTimeoutError);
+	});
+
+	it('rethrows a genuine network failure unchanged', async () => {
+		const boom = new TypeError('network down');
+		await expect(
+			fetchWithTimeout('/x', { timeoutMs: 1000 }, async () => {
+				throw boom;
+			})
+		).rejects.toBe(boom);
 	});
 });

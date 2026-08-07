@@ -56,6 +56,50 @@ export async function withRetry<T>(
 	}
 }
 
+/**
+ * Thrown when {@link fetchWithTimeout} aborts a request that took longer than its budget.
+ * A distinct class (rather than the raw `AbortError`) so callers can tell a timeout apart from a
+ * caller-initiated abort, and so `shouldRetry` predicates can treat it as transient.
+ */
+export class FetchTimeoutError extends Error {
+	constructor(readonly timeoutMs: number) {
+		super(`request timed out after ${timeoutMs}ms`);
+		this.name = 'FetchTimeoutError';
+	}
+}
+
+/**
+ * `fetch` with a wall-clock budget. A bare `fetch` has no timeout in either workerd or the
+ * browser, so a connection that opens and then stalls hangs until the platform gives up — which
+ * on the client wedges the sync engine's in-flight guard and silently stops all further syncing.
+ *
+ * The abort surfaces as a thrown {@link FetchTimeoutError}, so existing retry/circuit-breaker
+ * wrappers treat a stall like any other transient failure. A caller-supplied `signal` still works:
+ * whichever fires first wins.
+ */
+export async function fetchWithTimeout(
+	input: RequestInfo | URL,
+	init: RequestInit & { timeoutMs: number },
+	fetchFn: typeof fetch = fetch
+): Promise<Response> {
+	const { timeoutMs, signal, ...rest } = init;
+	const controller = new AbortController();
+	const onAbort = () => controller.abort();
+	signal?.addEventListener('abort', onAbort, { once: true });
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		return await fetchFn(input, { ...rest, signal: controller.signal });
+	} catch (err) {
+		// Distinguish our deadline from a caller-initiated abort: only the former is a timeout.
+		if (controller.signal.aborted && signal?.aborted !== true)
+			throw new FetchTimeoutError(timeoutMs);
+		throw err;
+	} finally {
+		clearTimeout(timer);
+		signal?.removeEventListener('abort', onAbort);
+	}
+}
+
 /** Options for {@link CircuitBreaker}. */
 export interface CircuitOptions {
 	/** Consecutive failures that trip the breaker open (default 5). */

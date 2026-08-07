@@ -10,7 +10,15 @@ import {
 	markSynced,
 	setCursor
 } from '$lib/client/idb';
+import { fetchWithTimeout } from '$lib/resilience';
 import { SYNC_MAX_PUSH, type SyncRequest, type SyncResponse } from '$lib/sync/protocol';
+
+/**
+ * Wall-clock budget per sync round trip. Generous — a large push against a slow connection is
+ * legitimate — but bounded, because an unbounded stall leaves the engine's in-flight guard set
+ * and silently stops every later sync for the life of the tab.
+ */
+const SYNC_TIMEOUT_MS = 30_000;
 
 /** Thrown when `/api/sync` returns a non-2xx status, so the engine can back off and retry. */
 export class SyncError extends Error {
@@ -93,11 +101,16 @@ export async function runSync(
 		const events = await getUnsynced(SYNC_MAX_PUSH);
 		const body: SyncRequest = { deviceId, cursor, events };
 
-		const res = await fetchFn('/api/sync', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify(body)
-		});
+		const res = await fetchWithTimeout(
+			'/api/sync',
+			{
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(body),
+				timeoutMs: SYNC_TIMEOUT_MS
+			},
+			fetchFn
+		);
 		if (!res.ok) throw new SyncError(res.status, parseRetryAfter(res.headers.get('retry-after')));
 
 		const data = (await res.json()) as SyncResponse;
