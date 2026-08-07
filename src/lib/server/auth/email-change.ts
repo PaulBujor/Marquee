@@ -126,12 +126,16 @@ export async function verifyEmailChange(opts: {
 	if (row.expiresAt.getTime() <= Date.now()) return { ok: false, reason: 'expired' };
 
 	if ((await hashToken(opts.code)) !== row.tokenHash) {
-		// Increment atomically so concurrent wrong guesses can't lose a count.
-		const [{ attempts }] = await opts.db
+		// Increment atomically so concurrent wrong guesses can't lose a count. A missing row means it
+		// was consumed or purged between the select and here; treat that as invalid rather than
+		// destructuring undefined.
+		const incremented = await opts.db
 			.update(emailChangeTokens)
 			.set({ attempts: sql`${emailChangeTokens.attempts} + 1` })
 			.where(eq(emailChangeTokens.id, row.id))
 			.returning({ attempts: emailChangeTokens.attempts });
+		const attempts = incremented.at(0)?.attempts;
+		if (attempts === undefined) return { ok: false, reason: 'invalid' };
 		if (attempts >= MAX_ATTEMPTS) {
 			await opts.db
 				.update(emailChangeTokens)

@@ -250,12 +250,17 @@ export async function verifyCode(db: Db, rawEmail: string, code: string): Promis
 	if (row.expiresAt.getTime() <= Date.now()) return { ok: false, reason: 'expired' };
 
 	if ((await hashToken(code)) !== row.tokenHash) {
-		// Increment atomically so concurrent wrong guesses can't lose a count.
-		const [{ attempts }] = await db
+		// Increment atomically so concurrent wrong guesses can't lose a count. `returning` yields no
+		// row if the token vanished between the select and here — the nightly purge deletes expired
+		// and consumed tokens — so treat a missing row as "already gone" rather than destructuring
+		// undefined and throwing an opaque TypeError.
+		const incremented = await db
 			.update(loginTokens)
 			.set({ attempts: sql`${loginTokens.attempts} + 1` })
 			.where(eq(loginTokens.id, row.id))
 			.returning({ attempts: loginTokens.attempts });
+		const attempts = incremented.at(0)?.attempts;
+		if (attempts === undefined) return { ok: false, reason: 'invalid' };
 		if (attempts >= CODE_MAX_ATTEMPTS) {
 			await db
 				.update(loginTokens)
