@@ -74,7 +74,6 @@
 	const formatDate = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
 	// Our own media id for the tracking event pipeline (provider-agnostic).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
-	// Season count (excluding Specials) and airing state for the header badges — shows only.
 	const seasons = $derived(detail.type === 'show' ? seasonCount(detail.seasons) : 0);
 	const airing = $derived(detail.type === 'show' ? airingState(detail.inProduction) : 'unknown');
 	// Today (YYYY-MM-DD) for the per-episode aired check — an episode is watchable once it's aired.

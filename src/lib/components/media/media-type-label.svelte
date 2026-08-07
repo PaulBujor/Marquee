@@ -8,7 +8,6 @@
 	}: {
 		type: 'movie' | 'show';
 		year: number | null;
-		/** Season count (excluding Specials) — appended for shows only, when known and non-zero. */
 		seasons?: number;
 	} = $props();
 </script>

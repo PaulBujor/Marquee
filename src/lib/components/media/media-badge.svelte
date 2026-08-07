@@ -22,8 +22,6 @@
 		variant === 'status' && 'border border-border text-muted-foreground',
 		variant === 'genre' && 'bg-secondary text-secondary-foreground',
 		variant === 'custom' && 'border border-dashed border-border text-muted-foreground',
-		// A currently-ongoing show is the one status worth calling out visually; everything else
-		// (finished, genres, plain type/year) stays on the neutral pill treatment.
 		variant === 'airing' && 'border border-primary/40 bg-primary/10 text-primary',
 		dashed && 'border-dashed',
 		className
