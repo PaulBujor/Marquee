@@ -180,3 +180,52 @@ describe('projectEvent via applyEvents', () => {
 		expect(epsAfter).toEqual(epsBefore);
 	});
 });
+
+describe('addedAt parity with the client projection', () => {
+	// Two devices add the same title offline; only the arrival order differs.
+	const JAN = Date.UTC(2026, 0, 10);
+	const FEB = Date.UTC(2026, 1, 5);
+	const MAR = Date.UTC(2026, 2, 20);
+
+	it('is the earliest event clock even when the newer event arrives first', async () => {
+		// Separate pushes: a single push is clock-sorted before it is applied, so the divergence
+		// only ever showed up across round trips.
+		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, MAR)]);
+		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)]);
+		// Previously MAR: the conflict branch is LWW-gated, so the older event updated nothing and
+		// `addedAt` kept whichever clock happened to arrive first.
+		expect((await trackingRow(db)).addedAt.getTime()).toBe(JAN);
+	});
+
+	it('is unchanged when events arrive oldest-first', async () => {
+		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)]);
+		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, MAR)]);
+		expect((await trackingRow(db)).addedAt.getTime()).toBe(JAN);
+	});
+
+	it('takes the minimum across a mixed push, matching the client projection', async () => {
+		await applyEvents(db, USER, [
+			ev('tracking.added', MID, { status: 'want_to_watch' }, MAR),
+			ev('tracking.rated', MID, { rating: 4 }, JAN),
+			ev('tracking.favorite_toggled', MID, { favorite: true }, FEB)
+		]);
+		expect((await trackingRow(db)).addedAt.getTime()).toBe(JAN);
+	});
+
+	it('ignores episode events, which never touch a tracking row', async () => {
+		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, FEB)]);
+		await applyEvents(db, USER, [ev('episode.watched', MID, { season: 1, episode: 1 }, JAN)]);
+		// The client's addedAt is a min over tracking.* events only — an earlier episode watch
+		// must not pull it back on either side.
+		expect((await trackingRow(db)).addedAt.getTime()).toBe(FEB);
+	});
+
+	it('is reproduced exactly by a rebuild from the log', async () => {
+		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, MAR)]);
+		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)]);
+		const live = (await trackingRow(db)).addedAt.getTime();
+		await rebuildProjection(db, USER);
+		expect((await trackingRow(db)).addedAt.getTime()).toBe(live);
+		expect((await trackingRow(db)).addedAt.getTime()).toBe(JAN);
+	});
+});
