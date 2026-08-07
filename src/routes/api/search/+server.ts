@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { createTmdbClient, TmdbError } from '$lib/server/tmdb';
-import { searchLinkedMedia } from '$lib/server/media/search';
+import { enrichWithLinkedData, searchLinkedMedia } from '$lib/server/media/search';
 import type { RequestHandler } from './$types';
 
 /**
@@ -20,7 +20,10 @@ export const GET: RequestHandler = async ({ locals, platform, url }) => {
 	if (!apiKey) error(503, 'Search is not configured.');
 
 	try {
-		const results = await createTmdbClient(apiKey).search(q);
+		const raw = await createTmdbClient(apiKey).search(q);
+		// TMDB's multi-search doesn't return season count / production status; fill them in for any
+		// show we already hold a linked copy of (MRQ-209).
+		const results = locals.db ? await enrichWithLinkedData(locals.db, raw) : raw;
 		return json({ results, degraded: false });
 	} catch (err) {
 		if (err instanceof TmdbError) {

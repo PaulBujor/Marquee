@@ -21,6 +21,17 @@ function escapeLike(input: string): string {
 	return input.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/** Season counts (excluding Specials) for a batch of media ids, one grouped query rather than N+1. */
+async function seasonCountsByMediaId(db: Db, mediaIds: string[]): Promise<Map<string, number>> {
+	if (mediaIds.length === 0) return new Map();
+	const rows = await db
+		.select({ mediaId: seasons.mediaId, n: count() })
+		.from(seasons)
+		.where(and(inArray(seasons.mediaId, mediaIds), ne(seasons.seasonNumber, SPECIALS_SEASON)))
+		.groupBy(seasons.mediaId);
+	return new Map(rows.map((r) => [r.mediaId, r.n]));
+}
+
 /**
  * Case-insensitive title substring search over the shared `linked` catalog, newest-cached first,
  * mapped to the same {@link MediaSearchResult} shape the live TMDB search returns.
@@ -58,16 +69,7 @@ export async function searchLinkedMedia(
 		.limit(limit);
 
 	const showIds = rows.filter((r) => r.type === 'show').map((r) => r.id);
-	// Season counts (excluding Specials), one grouped query for every show row rather than N+1.
-	const seasonCounts =
-		showIds.length > 0
-			? await db
-					.select({ mediaId: seasons.mediaId, n: count() })
-					.from(seasons)
-					.where(and(inArray(seasons.mediaId, showIds), ne(seasons.seasonNumber, SPECIALS_SEASON)))
-					.groupBy(seasons.mediaId)
-			: [];
-	const seasonCountById = new Map(seasonCounts.map((s) => [s.mediaId, s.n]));
+	const seasonCountById = await seasonCountsByMediaId(db, showIds);
 
 	return rows
 		.map((r) => ({
@@ -83,4 +85,49 @@ export async function searchLinkedMedia(
 				: {})
 		}))
 		.filter((r) => Number.isInteger(r.tmdbId) && r.tmdbId > 0);
+}
+
+/**
+ * Fill in season count / production status on live TMDB search results (MRQ-209) for any show
+ * we already hold a `linked` copy of — TMDB's `/search/multi` endpoint doesn't return either
+ * field itself, and fetching per-result details would mean an extra TMDB call per row on every
+ * keystroke. A title neither this nor any other user has opened/tracked before still won't carry
+ * a season count on first search; it fills in once someone views it (the catalog is shared across
+ * all users, see `source: 'linked'`). Movies are returned unchanged — the fields are shows-only.
+ */
+export async function enrichWithLinkedData(
+	db: Db,
+	results: MediaSearchResult[]
+): Promise<MediaSearchResult[]> {
+	const externalIds = results.filter((r) => r.type === 'show').map((r) => `show/${r.tmdbId}`);
+	if (externalIds.length === 0) return results;
+
+	const rows = await db
+		.select({ id: media.id, externalId: media.externalId, inProduction: media.inProduction })
+		.from(media)
+		.where(
+			and(
+				eq(media.source, 'linked'),
+				eq(media.provider, 'tmdb'),
+				inArray(media.externalId, externalIds)
+			)
+		);
+	if (rows.length === 0) return results;
+
+	const seasonCountById = await seasonCountsByMediaId(
+		db,
+		rows.map((r) => r.id)
+	);
+	const byExternalId = new Map(
+		rows.map((r) => [
+			r.externalId,
+			{ numberOfSeasons: seasonCountById.get(r.id) ?? 0, inProduction: r.inProduction }
+		])
+	);
+
+	return results.map((r) => {
+		if (r.type !== 'show') return r;
+		const match = byExternalId.get(`show/${r.tmdbId}`);
+		return match ? { ...r, ...match } : r;
+	});
 }

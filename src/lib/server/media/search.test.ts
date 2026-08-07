@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDb } from '$lib/server/db/test-db';
 import { media, seasons } from '$lib/server/db/schema';
-import { searchLinkedMedia } from './search';
+import { enrichWithLinkedData, searchLinkedMedia } from './search';
+import type { MediaSearchResult } from '$lib/server/tmdb';
 
 /** Seed a handful of catalog rows: two linked TMDB titles + one private custom entry. */
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>) {
@@ -155,5 +156,54 @@ describe('searchLinkedMedia', () => {
 		});
 		expect((await searchLinkedMedia(db, 'été')).map((r) => r.title)).toEqual(['ÉTÉ']);
 		expect((await searchLinkedMedia(db, 'ÉTÉ')).map((r) => r.title)).toEqual(['ÉTÉ']);
+	});
+});
+
+describe('enrichWithLinkedData', () => {
+	/** A bare TMDB multi-search-shaped result, before any enrichment. */
+	function tmdbResult(over: Partial<MediaSearchResult> & Pick<MediaSearchResult, 'type'>) {
+		return { tmdbId: 1, title: 'Title', year: 2020, posterPath: null, overview: '', ...over };
+	}
+
+	it('fills in season count + inProduction for a show we already hold linked', async () => {
+		const db = await createTestDb();
+		await db.insert(media).values({
+			id: 'saul',
+			provider: 'tmdb',
+			externalId: 'show/1396',
+			source: 'linked',
+			type: 'show',
+			title: 'Breaking Bad',
+			titleNormalized: 'breaking bad',
+			year: 2008,
+			inProduction: false
+		});
+		await db.insert(seasons).values([
+			{ mediaId: 'saul', seasonNumber: 0, episodeCount: 1 }, // Specials — excluded
+			{ mediaId: 'saul', seasonNumber: 1, episodeCount: 7 }
+		]);
+
+		const raw = [tmdbResult({ tmdbId: 1396, type: 'show', title: 'Breaking Bad' })];
+		const enriched = await enrichWithLinkedData(db, raw);
+		expect(enriched).toEqual([
+			expect.objectContaining({ tmdbId: 1396, numberOfSeasons: 1, inProduction: false })
+		]);
+	});
+
+	it('leaves a show unchanged when we have no linked copy of it', async () => {
+		const db = await createTestDb();
+		const raw = [tmdbResult({ tmdbId: 42, type: 'show' })];
+		expect(await enrichWithLinkedData(db, raw)).toEqual(raw);
+	});
+
+	it('never touches movie results', async () => {
+		const db = await createTestDb();
+		const raw = [tmdbResult({ tmdbId: 603, type: 'movie' })];
+		expect(await enrichWithLinkedData(db, raw)).toEqual(raw);
+	});
+
+	it('is a no-op for an empty result set', async () => {
+		const db = await createTestDb();
+		expect(await enrichWithLinkedData(db, [])).toEqual([]);
 	});
 });
