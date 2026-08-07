@@ -154,14 +154,12 @@ describe('sendNewReleaseDigest', () => {
 			createdAt: NOW,
 			lastUsedAt: NOW
 		});
-		await db
-			.insert(media)
-			.values({
-				id: 'media-show-2',
-				type: 'show',
-				title: 'Better Call Saul',
-				externalId: 'show/60059'
-			});
+		await db.insert(media).values({
+			id: 'media-show-2',
+			type: 'show',
+			title: 'Better Call Saul',
+			externalId: 'show/60059'
+		});
 		await db.insert(episodes).values({
 			mediaId: 'media-show-2',
 			seasonNumber: 1,
@@ -213,14 +211,12 @@ describe('sendNewReleaseDigest', () => {
 			createdAt: winterNow,
 			lastUsedAt: winterNow
 		});
-		await db
-			.insert(media)
-			.values({
-				id: 'media-show-2',
-				type: 'show',
-				title: 'Better Call Saul',
-				externalId: 'show/60059'
-			});
+		await db.insert(media).values({
+			id: 'media-show-2',
+			type: 'show',
+			title: 'Better Call Saul',
+			externalId: 'show/60059'
+		});
 		await db.insert(episodes).values({
 			mediaId: 'media-show-2',
 			seasonNumber: 1,
