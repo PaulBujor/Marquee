@@ -1,6 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import { sendNewReleaseDigest } from '$lib/server/push/digest';
 import type { createDb } from '$lib/server/db';
+import { isAuthorizedCronRequest } from '$lib/server/http/secret';
 import type { RequestHandler } from './$types';
 
 type Db = ReturnType<typeof createDb>;
@@ -28,8 +29,9 @@ async function sendDigests(db: Db, env: Env | undefined, now: Date) {
  * `x-cron-key: <CRON_SECRET>` header also runs it on demand.
  */
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
-	const secret = platform?.env.CRON_SECRET;
-	if (!secret || request.headers.get('x-cron-key') !== secret) error(401, 'Unauthorized');
+	if (!(await isAuthorizedCronRequest(request, platform?.env.CRON_SECRET))) {
+		error(401, 'Unauthorized');
+	}
 	if (!locals.db) error(503, 'Service unavailable');
 
 	const notifications = await sendDigests(locals.db, platform?.env, new Date());

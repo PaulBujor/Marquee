@@ -1,5 +1,5 @@
 import type { Cookies } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { createDb } from '$lib/server/db';
 import { sessions, users, type Session, type User } from '$lib/server/db/schema';
 import { generateToken, hashToken } from './tokens';
@@ -70,6 +70,31 @@ export async function validateSession(
 /** Delete a session by its cookie token (used on logout). */
 export async function invalidateSession(db: Db, token: string): Promise<void> {
 	await db.delete(sessions).where(eq(sessions.id, await hashToken(token)));
+}
+
+/**
+ * Drop every session for a user except the one presented, and report how many went. Used after a
+ * credential change: sign-in is keyed entirely on the email address, so changing it is the
+ * equivalent of a password change and should not leave older sessions live.
+ *
+ * `keepToken` is the raw cookie value of the session doing the changing, so the user isn't signed
+ * out of the device they're using. Pass null to drop all of them.
+ */
+export async function invalidateOtherSessions(
+	db: Db,
+	userId: string,
+	keepToken: string | null
+): Promise<number> {
+	const keepId = keepToken ? await hashToken(keepToken) : null;
+	const deleted = await db
+		.delete(sessions)
+		.where(
+			keepId
+				? and(eq(sessions.userId, userId), ne(sessions.id, keepId))
+				: eq(sessions.userId, userId)
+		)
+		.returning({ id: sessions.id });
+	return deleted.length;
 }
 
 export function setSessionCookie(cookies: Cookies, token: string, expiresAt: Date): void {

@@ -5,6 +5,7 @@ import type { EmailSender } from '$lib/server/email';
 import { renderEmailChangeCode } from '$lib/server/email/templates';
 import { EMAIL_REGEX, normalizeEmail } from './validation';
 import { generateCode, hashToken } from './tokens';
+import { invalidateOtherSessions } from './session';
 import { EMAIL_CHANGE_TTL_MINUTES } from '$lib/email-change';
 
 type Db = ReturnType<typeof createDb>;
@@ -33,7 +34,7 @@ export type EmailChangeRequestResult =
 	| { kind: 'rate_limited' };
 
 export type EmailChangeVerifyResult =
-	| { ok: true; newEmail: string }
+	| { ok: true; newEmail: string; previousEmail: string }
 	| { ok: false; reason: 'invalid' | 'expired' | 'too_many_attempts' | 'taken' };
 
 /**
@@ -109,6 +110,8 @@ export async function verifyEmailChange(opts: {
 	db: Db;
 	user: User;
 	code: string;
+	/** Raw session cookie of the device making the change, so it stays signed in. */
+	keepSessionToken?: string | null;
 }): Promise<EmailChangeVerifyResult> {
 	const row = (
 		await opts.db
@@ -154,6 +157,17 @@ export async function verifyEmailChange(opts: {
 	).at(0);
 	if (taken) return { ok: false, reason: 'taken' };
 
+	const previousEmail = opts.user.email;
 	await opts.db.update(users).set({ email: row.newEmail }).where(eq(users.id, opts.user.id));
-	return { ok: true, newEmail: row.newEmail };
+
+	// Sign-in is passwordless and keyed on the address, so moving it is a credential change: drop
+	// every other session. Best-effort — the address has already changed, and failing the request
+	// here would tell the user it didn't.
+	try {
+		await invalidateOtherSessions(opts.db, opts.user.id, opts.keepSessionToken ?? null);
+	} catch (err) {
+		console.error('email change: failed to invalidate other sessions', err);
+	}
+
+	return { ok: true, newEmail: row.newEmail, previousEmail };
 }

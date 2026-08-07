@@ -4,11 +4,12 @@ import {
 	deleteSessionCookie,
 	normalizeEmail,
 	requestEmailChange,
+	SESSION_COOKIE,
 	verifyEmailChange
 } from '$lib/server/auth';
 import { codeField } from '$lib/validation';
 import { createEmailSender } from '$lib/server/email';
-import { renderAccountDeletedEmail } from '$lib/server/email/templates';
+import { renderAccountDeletedEmail, renderEmailChangedNotice } from '$lib/server/email/templates';
 import type { Actions } from './$types';
 
 const SERVICE_UNAVAILABLE = 'Service unavailable.';
@@ -75,7 +76,7 @@ export const actions: Actions = {
 	},
 
 	// Step 2: verify the code and switch the account email.
-	verifyEmailChange: async ({ request, locals }) => {
+	verifyEmailChange: async ({ request, locals, platform, cookies }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
 
@@ -88,13 +89,39 @@ export const actions: Actions = {
 
 		let result;
 		try {
-			result = await verifyEmailChange({ db: locals.db, user: locals.user, code });
+			result = await verifyEmailChange({
+				db: locals.db,
+				user: locals.user,
+				code,
+				// Keep this device signed in; every other session is dropped.
+				keepSessionToken: cookies.get(SESSION_COOKIE) ?? null
+			});
 		} catch (err) {
 			console.error('email-change verification failed:', err);
 			return fail(502, { step: 'code' as const, newEmail, codeError: SERVICE_UNAVAILABLE });
 		}
 
-		if (result.ok) return { step: 'done' as const, newEmail: result.newEmail };
+		if (result.ok) {
+			// Tell the address that just lost the account. Best-effort and fire-and-forget, like the
+			// deletion notice: the change is already committed, so a mail failure must not fail it.
+			if (platform) {
+				try {
+					const sender = createEmailSender(platform.env);
+					platform.ctx.waitUntil(
+						sender
+							.send({
+								to: result.previousEmail,
+								subject: 'Your Marquee email was changed',
+								html: renderEmailChangedNotice(result.newEmail)
+							})
+							.catch((err) => console.error('email-change notice failed:', err))
+					);
+				} catch (err) {
+					console.error('email-change notice setup failed:', err);
+				}
+			}
+			return { step: 'done' as const, newEmail: result.newEmail };
+		}
 		return fail(400, {
 			step: 'code' as const,
 			newEmail,

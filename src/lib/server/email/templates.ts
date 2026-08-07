@@ -11,6 +11,20 @@ const SERIF = "'Fraunces', ui-serif, Georgia, serif";
 const MUTED = 'color: #5c6470; font-size: 13px;'; // --muted-foreground
 const IGNORE_REQUEST = "If you didn't request this, you can safely ignore this email.";
 
+/**
+ * Escape a value interpolated into email HTML. Only the sign-in codes and links are
+ * server-generated; an address the user typed is not — `EMAIL_REGEX` is permissive enough to
+ * allow `<` and `>`, so anything user-supplied goes through here.
+ */
+function escapeHtml(value: string): string {
+	return value
+		.replaceAll('&', '&amp;')
+		.replaceAll('<', '&lt;')
+		.replaceAll('>', '&gt;')
+		.replaceAll('"', '&quot;')
+		.replaceAll("'", '&#39;');
+}
+
 /** Shared shell: doctype + base typography + a serif heading. */
 function layout(heading: string, body: string): string {
 	return `<!doctype html>
@@ -72,6 +86,20 @@ export function renderEmailChangeCode(code: string, ttlMinutes: number): string 
 		`<p>Enter this code in Marquee to confirm this as your new account email. It expires in ${ttlMinutes} minutes.</p>
 		${codeBlock(code)}
 		<p style="${MUTED}">If you didn't request this change, you can safely ignore this email — your address won't change.</p>`
+	);
+}
+
+/**
+ * Sent to the **previous** address after an email change completes. Sign-in is passwordless and
+ * keyed entirely on the address, so control of the address is control of the account — this is the
+ * only signal the former owner gets that it moved.
+ */
+export function renderEmailChangedNotice(newEmail: string): string {
+	return layout(
+		'Your Marquee email was changed',
+		`<p>The email address on your Marquee account was changed to <strong>${escapeHtml(newEmail)}</strong>. Sign-in codes and links will now go there instead.</p>
+		<p>You've been signed out on your other devices.</p>
+		<p style="${MUTED}">If you didn't make this change, contact us right away — whoever made it now controls the account.</p>`
 	);
 }
 

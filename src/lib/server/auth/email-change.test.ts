@@ -157,11 +157,47 @@ describe('verifyEmailChange', () => {
 
 		expect(await verifyEmailChange({ db, user, code })).toEqual({
 			ok: true,
-			newEmail: 'new@x.com'
+			newEmail: 'new@x.com',
+			previousEmail: 'me@x.com'
 		});
 		expect((await db.select().from(users).where(eq(users.id, user.id)))[0].email).toBe('new@x.com');
 		// single-use: the same code no longer works
 		expect((await verifyEmailChange({ db, user, code })).ok).toBe(false);
+	});
+
+	it('signs out other devices but keeps the one making the change', async () => {
+		const user = await seedUser(db, 'me@x.com');
+		const { sender, sent } = fakeSender();
+		// Three signed-in devices; the change is made from `keeper`.
+		const keeper = await createSession(db, user.id);
+		await createSession(db, user.id);
+		await createSession(db, user.id);
+		expect(await db.select().from(sessions).where(eq(sessions.userId, user.id))).toHaveLength(3);
+
+		await requestEmailChange({ db, user, newEmail: 'new@x.com', sender });
+		const result = await verifyEmailChange({
+			db,
+			user,
+			code: codeFromEmail(sent[0].html),
+			keepSessionToken: keeper.token
+		});
+
+		expect(result.ok).toBe(true);
+		const remaining = await db.select().from(sessions).where(eq(sessions.userId, user.id));
+		expect(remaining).toHaveLength(1);
+		expect(remaining[0].id).toBe(await hashToken(keeper.token));
+	});
+
+	it('drops every session when no token is kept', async () => {
+		const user = await seedUser(db, 'me@x.com');
+		const { sender, sent } = fakeSender();
+		await createSession(db, user.id);
+		await createSession(db, user.id);
+
+		await requestEmailChange({ db, user, newEmail: 'new@x.com', sender });
+		await verifyEmailChange({ db, user, code: codeFromEmail(sent[0].html) });
+
+		expect(await db.select().from(sessions).where(eq(sessions.userId, user.id))).toHaveLength(0);
 	});
 
 	it('rejects a wrong code and counts the attempt', async () => {
