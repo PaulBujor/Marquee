@@ -16,8 +16,10 @@ const config = {
 			directives: {
 				'default-src': ['self'],
 				'script-src': ['self'],
-				// Svelte/bits-ui transitions inject runtime inline <style>; per SvelteKit's CSP
-				// docs these require 'unsafe-inline'. Google Fonts stylesheet is loaded in app.html.
+				// 'unsafe-inline': Svelte/bits-ui transitions inject runtime inline <style>; per
+				// SvelteKit's CSP docs these require it.
+				// fonts.googleapis.com: app.html loads the Google Fonts stylesheet — dropping this
+				// origin breaks the webfonts.
 				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
 				'font-src': ['self', 'https://fonts.gstatic.com'],
 				// data: for inline/blur placeholders; blob: for offline image blobs cached in
