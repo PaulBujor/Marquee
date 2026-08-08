@@ -72,6 +72,7 @@ describe('season endpoint', () => {
 			tmdbResponse({
 				season_number: 1,
 				name: 'Season 1',
+				overview: 'The beginning.',
 				episodes: [{ episode_number: 1, name: 'Pilot', air_date: '2008-01-20', runtime: 58 }]
 			})
 		);
@@ -80,10 +81,14 @@ describe('season endpoint', () => {
 		const body = (await res.json()) as {
 			seasonNumber: number;
 			name: string;
+			overview: string;
 			episodes: Array<{ episodeNumber: number; name: string; runtime: number | null }>;
 		};
 		expect(body).toMatchObject({ seasonNumber: 1, name: 'Season 1' });
 		expect(body.episodes[0]).toMatchObject({ episodeNumber: 1, name: 'Pilot', runtime: 58 });
+		// The description reaches the client verbatim — this is what the detail page renders under
+		// the season selector.
+		expect(body.overview).toBe('The beginning.');
 	});
 
 	it('maps a TMDB 404 to a 404', async () => {

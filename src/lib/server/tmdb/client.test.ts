@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTmdbClient, hasDescription, TmdbError } from './client';
+import { createTmdbClient, TmdbError } from './client';
 import type {
 	TmdbMovieDetailsResponse,
 	TmdbMultiSearchResponse,
@@ -519,19 +519,5 @@ describe('createTmdbClient.getSeason', () => {
 			name: 'TmdbError',
 			status: 404
 		});
-	});
-});
-
-describe('hasDescription', () => {
-	it('is false for an empty string', () => {
-		expect(hasDescription('')).toBe(false);
-	});
-
-	it('is false for a whitespace-only string', () => {
-		expect(hasDescription('   ')).toBe(false);
-	});
-
-	it('is true for a non-empty description', () => {
-		expect(hasDescription('The beginning.')).toBe(true);
 	});
 });

@@ -15,7 +15,7 @@
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { posterUrl } from '$lib/media.js';
+	import { hasDescription, posterUrl } from '$lib/media.js';
 	import { formatExactDateTime, formatRelativeDay } from '$lib/date.js';
 	import {
 		tmdbMediaId,
@@ -197,6 +197,12 @@
 		selectedSeason !== null
 			? (detail.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
 			: null
+	);
+	// The open season's description. Same preference order as server-side hydration: the loaded
+	// season (from the per-season endpoint, or the cached copy offline) carries the real synopsis;
+	// the show-detail summary is the thinner stand-in shown until that resolves.
+	const selectedSeasonOverview = $derived(
+		[currentSeason?.overview, selectedSeasonSummary?.overview].find(hasDescription) ?? null
 	);
 	// Whether a bulk mark of the selected season right now would under-seed — see
 	// `TrackingState.readyToMarkSeason`.
@@ -739,6 +745,10 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						</button>
 					{/each}
 				</div>
+
+				{#if selectedSeasonOverview}
+					<p class="text-sm leading-relaxed text-muted-foreground">{selectedSeasonOverview}</p>
+				{/if}
 
 				{#if tracking.view.tracked && selectedSeasonSummary && !tracking.isSeasonWatched(selectedSeasonSummary.seasonNumber)}
 					<Button

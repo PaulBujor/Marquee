@@ -19,14 +19,10 @@ import {
 	type SeasonRow
 } from '$lib/server/db/schema';
 import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '$lib/server/db/chunk';
+import { hasDescription } from '$lib/media';
 import { mediaId, type MediaProvider } from '$lib/sync/events';
 import type { createDb } from '$lib/server/db';
-import {
-	hasDescription,
-	type MediaDetail,
-	type SeasonDetail,
-	type TmdbClient
-} from '$lib/server/tmdb';
+import type { MediaDetail, SeasonDetail, TmdbClient } from '$lib/server/tmdb';
 
 type Db = ReturnType<typeof createDb>;
 type TmdbHydrator = Pick<TmdbClient, 'getDetails' | 'getSeason'>;
