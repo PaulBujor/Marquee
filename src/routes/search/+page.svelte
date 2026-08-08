@@ -322,6 +322,9 @@
 							<span class="truncate font-medium">{item.title}</span>
 							<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
 								<MediaTypeLabel type={item.type} year={item.year} />
+								{#if tracked.get(id) === 'did_not_finish'}
+									<span class="text-xs">Didn't finish</span>
+								{/if}
 							</div>
 						</div>
 					</a>

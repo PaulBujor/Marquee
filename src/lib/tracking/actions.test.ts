@@ -190,11 +190,11 @@ describe('airingState', () => {
 		expect(airingState(true)).toBe('airing');
 	});
 
-	it('is finished when inProduction is false', () => {
-		expect(airingState(false)).toBe('finished');
+	it('is ended when inProduction is false', () => {
+		expect(airingState(false)).toBe('ended');
 	});
 
-	it('is unknown — never finished — when inProduction is null', () => {
+	it('is unknown — never ended — when inProduction is null', () => {
 		expect(airingState(null)).toBe('unknown');
 	});
 });

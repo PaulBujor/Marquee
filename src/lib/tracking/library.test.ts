@@ -148,6 +148,24 @@ describe('filterAndSortLibrary', () => {
 		).toEqual(['c']);
 	});
 
+	it('includes did_not_finish titles in the completed ("Watched") tab, alongside completed ones', () => {
+		const rows = [
+			item({ mediaId: 'watched', title: 'Watched Title', status: 'completed' }),
+			item({ mediaId: 'dnf', title: 'Dnf Title', status: 'did_not_finish' }),
+			item({ mediaId: 'watching', title: 'Watching Title', status: 'watching' })
+		];
+		expect(
+			filterAndSortLibrary(rows, {
+				tab: 'completed',
+				type: 'all',
+				year: null,
+				genre: null,
+				release: 'all',
+				sort: 'title'
+			}).map((i) => i.mediaId)
+		).toEqual(['dnf', 'watched']);
+	});
+
 	it('filters by type, year, and genre', () => {
 		expect(
 			filterAndSortLibrary(items, {

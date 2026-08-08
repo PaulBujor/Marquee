@@ -462,8 +462,8 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						<MediaBadge variant="airing">
 							<span class="size-1.5 rounded-full bg-primary"></span>Airing
 						</MediaBadge>
-					{:else if airing === 'finished'}
-						<MediaBadge variant="status">Finished</MediaBadge>
+					{:else if airing === 'ended'}
+						<MediaBadge variant="status">Ended</MediaBadge>
 					{/if}
 				</div>
 			</div>

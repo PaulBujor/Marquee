@@ -61,7 +61,7 @@
 	const TABS: TabDef[] = [
 		{ key: 'want_to_watch', label: 'Want to Watch' },
 		{ key: 'watching', label: 'Watching' },
-		{ key: 'completed', label: 'Completed' },
+		{ key: 'completed', label: 'Watched' },
 		{ key: 'favorites', label: 'Favorites' }
 	];
 	const TYPES: TypeDef[] = [
@@ -408,6 +408,7 @@
 			<div class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5">
 				<!-- flip reflows survivors; fade eases items in/out on sync add/remove or status change -->
 				{#each visible as item (item.mediaId)}
+					{@const dnf = item.status === 'did_not_finish'}
 					<a
 						href={resolve('/title/[type]/[id]', {
 							type: item.type,
@@ -426,7 +427,11 @@
 							alt={item.title}
 						/>
 						<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>
-						{#if item.year}<div class="text-xs text-muted-foreground">{item.year}</div>{/if}
+						{#if item.year || dnf}
+							<div class="truncate text-xs text-muted-foreground">
+								{item.year ?? ''}{item.year && dnf ? ' · ' : ''}{dnf ? "Didn't finish" : ''}
+							</div>
+						{/if}
 					</a>
 				{/each}
 			</div>
