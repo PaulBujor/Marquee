@@ -322,8 +322,6 @@
 							<span class="truncate font-medium">{item.title}</span>
 							<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
 								<MediaTypeLabel type={item.type} year={item.year} />
-								<!-- Quieter than a second pill next to the type label: a search list is mostly
-								untracked rows, so this should read as a footnote on the few that are. -->
 								{#if tracked.get(id) === 'did_not_finish'}
 									<span class="text-xs">Didn't finish</span>
 								{/if}

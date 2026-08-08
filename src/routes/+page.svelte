@@ -427,9 +427,6 @@
 							alt={item.title}
 						/>
 						<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>
-						<!-- "Didn't finish" rides the existing year line rather than its own pill — the
-						Watched tab mixes finished and dropped titles, so it only needs to be legible, not
-						loud. -->
 						{#if item.year || dnf}
 							<div class="truncate text-xs text-muted-foreground">
 								{item.year ?? ''}{item.year && dnf ? ' · ' : ''}{dnf ? "Didn't finish" : ''}

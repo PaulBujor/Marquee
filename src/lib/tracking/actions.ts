@@ -102,9 +102,8 @@ export function seasonCount(seasons: { seasonNumber: number }[]): number {
 }
 
 /**
- * A show's production state. `ended` (not "finished") keeps this vocabulary clear of the
- * *user's* `did_not_finish` tracking status — the two are unrelated, and a show can be both.
- * It also matches TMDB's own term for the underlying `in_production: false`.
+ * A show's production state. `ended` — TMDB's own term for `in_production: false` — rather than
+ * "finished", which would collide with the user's unrelated `did_not_finish` status.
  */
 export type AiringState = 'airing' | 'ended' | 'unknown';
 
