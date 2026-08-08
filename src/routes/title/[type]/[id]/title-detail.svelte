@@ -15,7 +15,7 @@
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { posterUrl } from '$lib/media.js';
+	import { hasDescription, posterUrl } from '$lib/media.js';
 	import { formatExactDateTime, formatRelativeDay } from '$lib/date.js';
 	import {
 		tmdbMediaId,
@@ -198,6 +198,10 @@
 			? (detail.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
 			: null
 	);
+	// The loaded season carries the real synopsis; the summary stands in until it resolves.
+	const selectedSeasonOverview = $derived(
+		[currentSeason?.overview, selectedSeasonSummary?.overview].find(hasDescription) ?? null
+	);
 	// Whether a bulk mark of the selected season right now would under-seed — see
 	// `TrackingState.readyToMarkSeason`.
 	const seasonNotReady = $derived(
@@ -330,6 +334,7 @@
 			seasonCache[seasonNumber] = offlineSeason(
 				seasonNumber,
 				summary?.name ?? `Season ${seasonNumber}`,
+				summary?.overview ?? '',
 				await getEpisodes(mediaId)
 			);
 			return;
@@ -738,6 +743,10 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						</button>
 					{/each}
 				</div>
+
+				{#if selectedSeasonOverview}
+					<p class="text-sm leading-relaxed text-muted-foreground">{selectedSeasonOverview}</p>
+				{/if}
 
 				{#if tracking.view.tracked && selectedSeasonSummary && !tracking.isSeasonWatched(selectedSeasonSummary.seasonNumber)}
 					<Button

@@ -36,3 +36,8 @@ export function proxiedImageUrl(
 	if (!path) return null;
 	return `/api/media/image?size=${encodeURIComponent(size)}&path=${encodeURIComponent(path)}`;
 }
+
+/** Whether a description is present. TMDB sends `""`, not null, for a missing overview. */
+export function hasDescription(overview: string | null | undefined): boolean {
+	return (overview ?? '').trim().length > 0;
+}

@@ -222,6 +222,7 @@ function normalizeSeason(data: TmdbSeasonDetailResponse): SeasonDetail {
 	return {
 		seasonNumber: data.season_number,
 		name: data.name ?? '',
+		overview: data.overview ?? '',
 		episodes: (data.episodes ?? []).map((e) => ({
 			episodeNumber: e.episode_number,
 			name: e.name ?? '',

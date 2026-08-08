@@ -51,6 +51,7 @@ function stubShowFetch() {
 				JSON.stringify({
 					season_number: seasonNumber,
 					name: `Season ${seasonNumber}`,
+					overview: `Synopsis for season ${seasonNumber}.`,
 					episodes: []
 				})
 			);
@@ -133,6 +134,13 @@ describe('GET /api/title/[type]/[id]', () => {
 		const res = await GET(makeEvent({}));
 		const body = (await res.json()) as { season: unknown };
 		expect(body.season).toBeNull();
+	});
+
+	it('embeds the season description the detail page renders under the selector', async () => {
+		stubShowFetch();
+		const res = await GET(makeEvent({ type: 'show', id: '1396' }));
+		const body = (await res.json()) as { season: { overview: string } };
+		expect(body.season.overview).toBe('Synopsis for season 1.');
 	});
 
 	it('embeds the first non-Specials season by default for shows', async () => {
