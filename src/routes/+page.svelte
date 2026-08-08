@@ -8,7 +8,6 @@
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { buttonVariants } from '$lib/components/ui/button';
-	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import ProgressRing from '$lib/components/media/progress-ring.svelte';
 	import * as Tabs from '$lib/components/ui/tabs';
@@ -409,6 +408,7 @@
 			<div class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5">
 				<!-- flip reflows survivors; fade eases items in/out on sync add/remove or status change -->
 				{#each visible as item (item.mediaId)}
+					{@const dnf = item.status === 'did_not_finish'}
 					<a
 						href={resolve('/title/[type]/[id]', {
 							type: item.type,
@@ -427,9 +427,13 @@
 							alt={item.title}
 						/>
 						<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>
-						{#if item.year}<div class="text-xs text-muted-foreground">{item.year}</div>{/if}
-						{#if item.status === 'did_not_finish'}
-							<MediaBadge variant="status" class="mt-1">Didn't finish</MediaBadge>
+						<!-- "Didn't finish" rides the existing year line rather than its own pill — the
+						Watched tab mixes finished and dropped titles, so it only needs to be legible, not
+						loud. -->
+						{#if item.year || dnf}
+							<div class="truncate text-xs text-muted-foreground">
+								{item.year ?? ''}{item.year && dnf ? ' · ' : ''}{dnf ? "Didn't finish" : ''}
+							</div>
 						{/if}
 					</a>
 				{/each}

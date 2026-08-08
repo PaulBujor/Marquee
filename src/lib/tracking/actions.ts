@@ -101,11 +101,16 @@ export function seasonCount(seasons: { seasonNumber: number }[]): number {
 	return seasons.filter((s) => !isSpecialsSeason(s.seasonNumber)).length;
 }
 
-export type AiringState = 'airing' | 'finished' | 'unknown';
+/**
+ * A show's production state. `ended` (not "finished") keeps this vocabulary clear of the
+ * *user's* `did_not_finish` tracking status — the two are unrelated, and a show can be both.
+ * It also matches TMDB's own term for the underlying `in_production: false`.
+ */
+export type AiringState = 'airing' | 'ended' | 'unknown';
 
 export function airingState(inProduction: boolean | null): AiringState {
 	if (inProduction === true) return 'airing';
-	if (inProduction === false) return 'finished';
+	if (inProduction === false) return 'ended';
 	return 'unknown';
 }
 

@@ -197,8 +197,8 @@ function isReleased(item: LibraryItem, today: string): boolean {
 /**
  * Apply the tab + type/year/genre/release filters and the chosen sort. `favorites` spans all
  * statuses; the `completed` tab (displayed as "Watched") also includes `did_not_finish` — a
- * dropped title is still a title you're done with, just not one you finished (see `MediaBadge`
- * "Didn't finish" indicator on each card, which is what distinguishes the two within the tab).
+ * dropped title is still a title you're done with, just not one you finished. The two are told
+ * apart in the list itself, by a "Didn't finish" note on the entry.
  */
 export function filterAndSortLibrary(
 	items: LibraryItem[],
