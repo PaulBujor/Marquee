@@ -3,13 +3,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { openDb, setActiveUser } from './db';
 import {
 	getLinkedMediaRefs,
+	getMedia,
 	getMediaVersions,
 	getReferencedMediaIds,
 	getUnsyncedMediaIds,
+	pruneStaleMedia,
 	putMedia,
 	searchLocalMedia
 } from './media';
-import { applyEventToIdb } from './state';
+import { applyEventToIdb, applyEventsToIdb } from './state';
 import { createEvent, mediaId, tmdbMediaId, type MediaRecord } from '$lib/sync/events';
 
 setActiveUser('media-search-test');
@@ -102,7 +104,7 @@ describe('getReferencedMediaIds / getUnsyncedMediaIds / getLinkedMediaRefs / get
 		await db.clear('media');
 	});
 
-	it('collects referenced ids from tracking (unconditionally) and episode watches', async () => {
+	it('collects ids from non-removed tracking rows and actively watched episodes', async () => {
 		const trackedId = mediaId('tmdb', 'movie/1');
 		await track('movie/1');
 		const watchedOnlyId = mediaId('tmdb', 'show/2');
@@ -118,6 +120,41 @@ describe('getReferencedMediaIds / getUnsyncedMediaIds / getLinkedMediaRefs / get
 
 		const ids = await getReferencedMediaIds();
 		expect(new Set(ids)).toEqual(new Set([trackedId, watchedOnlyId]));
+	});
+
+	it('excludes a removed (tombstoned) tracking row', async () => {
+		const id = mediaId('tmdb', 'movie/5');
+		await track('movie/5');
+		await applyEventToIdb(createEvent('tracking.removed', id, {}, DEVICE));
+
+		expect(await getReferencedMediaIds()).toEqual([]);
+	});
+
+	it('excludes an unwatched (tombstoned) episode row even with no tracking row at all', async () => {
+		const id = mediaId('tmdb', 'show/6');
+		const db = await openDb();
+		await db.put('episodeWatches', {
+			id: `${id}::s1e1`,
+			mediaId: id,
+			season: 1,
+			episode: 1,
+			watched: false,
+			updatedAt: 1
+		});
+
+		expect(await getReferencedMediaIds()).toEqual([]);
+	});
+
+	it('stops referencing a title once removed, even though its watch history remains unwatched', async () => {
+		const id = mediaId('tmdb', 'show/7');
+		await track('show/7');
+		await applyEventsToIdb([
+			createEvent('episode.watched', id, { season: 1, episode: 1 }, DEVICE),
+			createEvent('episode.unwatched', id, { season: 1, episode: 1 }, DEVICE),
+			createEvent('tracking.removed', id, {}, DEVICE)
+		]);
+
+		expect(await getReferencedMediaIds()).toEqual([]);
 	});
 
 	it('flags a referenced id as unsynced when it has no local row or a version-0 placeholder', async () => {
@@ -145,5 +182,121 @@ describe('getReferencedMediaIds / getUnsyncedMediaIds / getLinkedMediaRefs / get
 			{ id: a, version: 1 },
 			{ id: b, version: 1 }
 		]);
+	});
+});
+
+function showRecord(id: string, externalId: string, title: string): MediaRecord {
+	return record({
+		id,
+		type: 'show',
+		title,
+		externalId,
+		seasons: [
+			{
+				seasonNumber: 1,
+				name: 'Season 1',
+				overview: '',
+				airDate: null,
+				posterPath: null,
+				episodeCount: 1
+			}
+		],
+		episodes: [
+			{
+				season: 1,
+				episode: 1,
+				name: 'Episode 1',
+				overview: '',
+				airDate: null,
+				runtime: null,
+				stillPath: null
+			}
+		]
+	});
+}
+
+describe('pruneStaleMedia', () => {
+	beforeEach(async () => {
+		const db = await openDb();
+		await db.clear('media');
+		await db.clear('seasons');
+		await db.clear('episodes');
+	});
+
+	it('deletes a media row and its seasons/episodes when outside the keep set', async () => {
+		const kept = mediaId('tmdb', 'show/30');
+		const dropped = mediaId('tmdb', 'show/31');
+		await putMedia(showRecord(kept, 'show/30', 'Kept Show'));
+		await putMedia(showRecord(dropped, 'show/31', 'Dropped Show'));
+
+		const deleted = await pruneStaleMedia(new Set([kept]));
+
+		expect(deleted).toBe(1);
+		expect(await getMedia(dropped)).toBeUndefined();
+		expect(await getMedia(kept)).toBeDefined();
+
+		const db = await openDb();
+		expect(await db.getAllFromIndex('seasons', 'by_media', dropped)).toEqual([]);
+		expect(await db.getAllFromIndex('episodes', 'by_media', dropped)).toEqual([]);
+		expect(await db.getAllFromIndex('seasons', 'by_media', kept)).toHaveLength(1);
+		expect(await db.getAllFromIndex('episodes', 'by_media', kept)).toHaveLength(1);
+	});
+
+	it('keeps everything when nothing is outside the keep set', async () => {
+		const id = mediaId('tmdb', 'movie/40');
+		await putMedia(record({ id, type: 'movie', title: 'Keep', externalId: 'movie/40' }));
+
+		expect(await pruneStaleMedia(new Set([id]))).toBe(0);
+		expect(await getMedia(id)).toBeDefined();
+	});
+
+	it('is a no-op on an empty media store', async () => {
+		expect(await pruneStaleMedia(new Set())).toBe(0);
+	});
+});
+
+describe('removal-then-eviction (MRQ-211)', () => {
+	beforeEach(async () => {
+		const db = await openDb();
+		await db.clear('tracking');
+		await db.clear('episodeWatches');
+		await db.clear('media');
+		await db.clear('seasons');
+		await db.clear('episodes');
+	});
+
+	it('stops caching a title once it is removed from every list', async () => {
+		const kept = mediaId('tmdb', 'show/50');
+		const removed = mediaId('tmdb', 'show/51');
+		await track('show/50');
+		await track('show/51');
+		await putMedia(showRecord(kept, 'show/50', 'Kept Show'));
+		await putMedia(showRecord(removed, 'show/51', 'Removed Show'));
+
+		// Both still on a list — nothing evicted yet.
+		let keepIds = new Set(await getReferencedMediaIds());
+		expect(keepIds).toEqual(new Set([kept, removed]));
+		expect(await pruneStaleMedia(keepIds)).toBe(0);
+
+		// Remove one title the way `TrackingState.remove()` does: unwatch, then tombstone tracking.
+		await applyEventsToIdb([
+			createEvent('episode.unwatched', removed, { season: 1, episode: 1 }, DEVICE),
+			createEvent('tracking.removed', removed, {}, DEVICE)
+		]);
+
+		keepIds = new Set(await getReferencedMediaIds());
+		expect(keepIds).toEqual(new Set([kept]));
+
+		const deleted = await pruneStaleMedia(keepIds);
+		expect(deleted).toBe(1);
+		expect(await getMedia(removed)).toBeUndefined();
+		const db = await openDb();
+		expect(await db.getAllFromIndex('seasons', 'by_media', removed)).toEqual([]);
+		expect(await db.getAllFromIndex('episodes', 'by_media', removed)).toEqual([]);
+
+		// The still-tracked title, and the tracking/episodeWatches rows themselves, are untouched.
+		expect(await getMedia(kept)).toBeDefined();
+		expect((await db.getAllFromIndex('seasons', 'by_media', kept)).length).toBe(1);
+		expect(await db.get('tracking', removed)).toMatchObject({ removed: true });
 	});
 });

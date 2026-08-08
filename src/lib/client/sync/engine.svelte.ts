@@ -21,8 +21,11 @@ import {
 	getLastSyncAt,
 	setLastSyncAt,
 	getLastFullMediaCheck,
-	setLastFullMediaCheck
+	setLastFullMediaCheck,
+	getReferencedMediaIds,
+	pruneStaleMedia
 } from '$lib/client/idb';
+import { pruneMediaImages } from '$lib/client/idb/images';
 import { reportClientError } from '$lib/client/report-error';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
@@ -274,6 +277,19 @@ class SyncEngine {
 				if (res && res.stored > 0) changed = true;
 			} catch (err) {
 				console.warn('[sync] image sync failed (will retry later)', err);
+			}
+
+			// Cache-scoping sweep (MRQ-211): drop reference data + images for ids that dropped off
+			// every list since the last cycle. Purely local (reads the tracking/episodeWatches state
+			// the event channel above just brought current) and independent of the media/image
+			// channels' own success — a removal is reflected within this cycle, not just at the next
+			// app boot's sweep (`+layout.svelte`, which also covers the fully-offline case).
+			try {
+				const keepIds = new Set(await getReferencedMediaIds());
+				await pruneStaleMedia(keepIds);
+				await pruneMediaImages(keepIds);
+			} catch (err) {
+				console.warn('[sync] cache sweep failed (will retry next cycle)', err);
 			}
 
 			if (changed) this.revision++;

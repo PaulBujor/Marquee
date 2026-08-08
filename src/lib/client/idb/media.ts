@@ -135,16 +135,51 @@ export async function getEpisodes(mediaId: string): Promise<ClientEpisode[]> {
 }
 
 /**
- * Every media id the local `tracking`/`episodeWatches` projections reference — the client-side
- * mirror of what the server would derive from the same projections. Unconditional (a removed
- * tracking row still counts, matching the server's scope): `tracking`'s keyPath *is* `mediaId`,
- * so this is two cheap local index reads, no filtering needed beyond dedup.
+ * Media ids currently "on a list" (MRQ-211) — a non-removed `tracking` row, or an actively watched
+ * (`watched: true`) `episodeWatches` row. This is the client's single scoping boundary: it's what
+ * the media channel asks the server about (below) *and* the keep-set eviction is computed against
+ * (see `pruneStaleMedia`, `pruneMediaImages`) — a title stops being cached the moment it drops out
+ * of this set. Removed titles and unwatch tombstones (`watched: false`, left behind so a later
+ * unwatch can't be replayed as a watch) don't count; `remove()` always unwatches first, so a
+ * lingering `watched: true` row without a live tracking row shouldn't occur, but a stray one (e.g. a
+ * cross-device race) still legitimately means "the user has watch history worth keeping cached."
  */
 export async function getReferencedMediaIds(): Promise<string[]> {
 	const db = await openDb();
-	const ids = new Set<string>(await db.getAllKeys('tracking'));
-	for (const row of await db.getAll('episodeWatches')) ids.add(row.mediaId);
+	const ids = new Set<string>();
+	for (const row of await db.getAll('tracking')) if (!row.removed) ids.add(row.mediaId);
+	for (const row of await db.getAll('episodeWatches')) if (row.watched) ids.add(row.mediaId);
 	return [...ids];
+}
+
+/**
+ * Evict `media` rows (+ their `seasons`/`episodes` children) for ids outside `keepIds` — the
+ * MRQ-211 counterpart to `pruneMediaImages` for reference data rather than artwork. Unlike images,
+ * there's no storage-pressure-gated survivor trim: reference data is small and cheaply re-fetched on
+ * re-add via the media channel, so the only question is "still on a list or not" (see
+ * `getReferencedMediaIds`). Returns how many media rows were deleted.
+ */
+export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
+	const db = await openDb();
+	const tx = db.transaction(['media', 'seasons', 'episodes'], 'readwrite');
+	const mediaStore = tx.objectStore('media');
+	const seasonStore = tx.objectStore('seasons');
+	const episodeStore = tx.objectStore('episodes');
+	const seasonIndex = seasonStore.index('by_media');
+	const episodeIndex = episodeStore.index('by_media');
+	let deleted = 0;
+
+	for (let cursor = await mediaStore.openCursor(); cursor; cursor = await cursor.continue()) {
+		if (keepIds.has(cursor.value.id)) continue;
+		const id = cursor.value.id;
+		await cursor.delete();
+		deleted++;
+		for (const key of await seasonIndex.getAllKeys(id)) await seasonStore.delete(key);
+		for (const key of await episodeIndex.getAllKeys(id)) await episodeStore.delete(key);
+	}
+
+	await tx.done;
+	return deleted;
 }
 
 /**
