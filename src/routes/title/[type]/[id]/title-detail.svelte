@@ -198,9 +198,7 @@
 			? (detail.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
 			: null
 	);
-	// The open season's description. Same preference order as server-side hydration: the loaded
-	// season (from the per-season endpoint, or the cached copy offline) carries the real synopsis;
-	// the show-detail summary is the thinner stand-in shown until that resolves.
+	// The loaded season carries the real synopsis; the summary stands in until it resolves.
 	const selectedSeasonOverview = $derived(
 		[currentSeason?.overview, selectedSeasonSummary?.overview].find(hasDescription) ?? null
 	);

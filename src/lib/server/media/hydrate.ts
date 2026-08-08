@@ -165,8 +165,7 @@ function toRows(
 		firstAirDate: detail.firstAirDate,
 		lastAirDate: detail.lastAirDate
 	};
-	// The show-detail season summary's `overview` is often blank; the dedicated season endpoint
-	// (fetched anyway, for episodes) usually carries the real synopsis — prefer it when present.
+	// The show-detail summary's overview is often blank; the season endpoint's is the real synopsis.
 	const seasonOverviewByNumber = new Map(seasonDetails.map((sd) => [sd.seasonNumber, sd.overview]));
 	const seasonRows = detail.seasons.map((s) => {
 		const detailOverview = seasonOverviewByNumber.get(s.seasonNumber) ?? '';

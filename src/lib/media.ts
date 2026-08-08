@@ -37,12 +37,7 @@ export function proxiedImageUrl(
 	return `/api/media/image?size=${encodeURIComponent(size)}&path=${encodeURIComponent(path)}`;
 }
 
-/**
- * Whether an overview/description string is present and meaningful. TMDB sends `""` rather than
- * omitting the field for a missing description, so this is the one check for "has a description" —
- * callers (hydration picking the richer of two overviews, the UI deciding whether to render a
- * block) should use it instead of ad hoc truthiness tests.
- */
+/** Whether a description is present. TMDB sends `""`, not null, for a missing overview. */
 export function hasDescription(overview: string | null | undefined): boolean {
 	return (overview ?? '').trim().length > 0;
 }

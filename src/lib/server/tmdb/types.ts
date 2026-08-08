@@ -267,7 +267,7 @@ export interface Episode {
 export interface SeasonDetail {
 	seasonNumber: number;
 	name: string;
-	/** The season-endpoint's own overview — richer than the show-detail season summary's. */
+	/** Richer than the show-detail season summary's overview. */
 	overview: string;
 	episodes: Episode[];
 }

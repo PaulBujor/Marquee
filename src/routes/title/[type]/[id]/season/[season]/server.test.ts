@@ -86,8 +86,6 @@ describe('season endpoint', () => {
 		};
 		expect(body).toMatchObject({ seasonNumber: 1, name: 'Season 1' });
 		expect(body.episodes[0]).toMatchObject({ episodeNumber: 1, name: 'Pilot', runtime: 58 });
-		// The description reaches the client verbatim — this is what the detail page renders under
-		// the season selector.
 		expect(body.overview).toBe('The beginning.');
 	});
 
