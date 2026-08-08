@@ -43,10 +43,8 @@
 	}
 
 	// Ask the browser to keep our IndexedDB from being evicted, and bound the media + image cache to
-	// titles still on a list (MRQ-211: untracked/removed titles' reference data and posters are
-	// dropped). Runs once per boot as a network-independent backstop — the sync engine repeats this
-	// sweep every cycle once online (see `engine.svelte.ts`), so a removal is usually reflected long
-	// before the next launch; this covers the fully-offline case. Best-effort; all guarded.
+	// titles still on a list. Boot-time backstop for a removal made offline — the sync engine sweeps
+	// again on any cycle that moves events. Best-effort; all guarded.
 	async function initOfflineStorage() {
 		await requestPersistentStorage();
 		const keepIds = new Set(await getReferencedMediaIds());

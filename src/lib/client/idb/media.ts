@@ -135,14 +135,10 @@ export async function getEpisodes(mediaId: string): Promise<ClientEpisode[]> {
 }
 
 /**
- * Media ids currently "on a list" (MRQ-211) — a non-removed `tracking` row, or an actively watched
- * (`watched: true`) `episodeWatches` row. This is the client's single scoping boundary: it's what
- * the media channel asks the server about (below) *and* the keep-set eviction is computed against
- * (see `pruneStaleMedia`, `pruneMediaImages`) — a title stops being cached the moment it drops out
- * of this set. Removed titles and unwatch tombstones (`watched: false`, left behind so a later
- * unwatch can't be replayed as a watch) don't count; `remove()` always unwatches first, so a
- * lingering `watched: true` row without a live tracking row shouldn't occur, but a stray one (e.g. a
- * cross-device race) still legitimately means "the user has watch history worth keeping cached."
+ * Media ids on a list — a non-removed `tracking` row, or a `watched: true` episode. Both what the
+ * media channel asks the server about and the keep-set eviction runs against, so a title stops
+ * being fetched and starts being dropped the moment it leaves every list. Tombstones (a removed
+ * tracking row, a `watched: false` episode) don't count.
  */
 export async function getReferencedMediaIds(): Promise<string[]> {
 	const db = await openDb();
@@ -153,11 +149,9 @@ export async function getReferencedMediaIds(): Promise<string[]> {
 }
 
 /**
- * Evict `media` rows (+ their `seasons`/`episodes` children) for ids outside `keepIds` — the
- * MRQ-211 counterpart to `pruneMediaImages` for reference data rather than artwork. Unlike images,
- * there's no storage-pressure-gated survivor trim: reference data is small and cheaply re-fetched on
- * re-add via the media channel, so the only question is "still on a list or not" (see
- * `getReferencedMediaIds`). Returns how many media rows were deleted.
+ * Drop `media` rows and their `seasons`/`episodes` children for ids outside `keepIds`. No
+ * storage-pressure gate like `pruneMediaImages` has — reference data is small and re-fetched from
+ * the channel on re-add, so leaving every list is reason enough. Returns how many rows were deleted.
  */
 export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
 	const db = await openDb();

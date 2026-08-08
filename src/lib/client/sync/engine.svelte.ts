@@ -199,6 +199,7 @@ class SyncEngine {
 		try {
 			let changed = false;
 			let pulled = 0; // events pulled this cycle — the sequence-watermark signal for the media gate below
+			let pushed = 0; // events pushed this cycle — with `pulled`, gates the cache sweep below
 
 			// Event channel — authoritative; drives the visible status.
 			try {
@@ -215,6 +216,7 @@ class SyncEngine {
 				this.lastSyncAt = syncedAt;
 				void setLastSyncAt(syncedAt);
 				pulled = res.pulled;
+				pushed = res.pushed;
 				if (pulled > 0) changed = true;
 			} catch (err) {
 				this.lastError = toSyncErrorInfo(err, this.#events.failures, Date.now());
@@ -279,17 +281,17 @@ class SyncEngine {
 				console.warn('[sync] image sync failed (will retry later)', err);
 			}
 
-			// Cache-scoping sweep (MRQ-211): drop reference data + images for ids that dropped off
-			// every list since the last cycle. Purely local (reads the tracking/episodeWatches state
-			// the event channel above just brought current) and independent of the media/image
-			// channels' own success — a removal is reflected within this cycle, not just at the next
-			// app boot's sweep (`+layout.svelte`, which also covers the fully-offline case).
-			try {
-				const keepIds = new Set(await getReferencedMediaIds());
-				await pruneStaleMedia(keepIds);
-				await pruneMediaImages(keepIds);
-			} catch (err) {
-				console.warn('[sync] cache sweep failed (will retry next cycle)', err);
+			// Drop cached media + images for titles that left every list. Local-only, and gated on the
+			// cycle having moved events — a removal is either pushed from here or pulled from another
+			// device, so an idle tab never rescans the stores.
+			if (pushed > 0 || pulled > 0) {
+				try {
+					const keepIds = new Set(await getReferencedMediaIds());
+					await pruneStaleMedia(keepIds);
+					await pruneMediaImages(keepIds);
+				} catch (err) {
+					console.warn('[sync] cache sweep failed (will retry next cycle)', err);
+				}
 			}
 
 			if (changed) this.revision++;

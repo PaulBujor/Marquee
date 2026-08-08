@@ -255,7 +255,7 @@ describe('pruneStaleMedia', () => {
 	});
 });
 
-describe('removal-then-eviction (MRQ-211)', () => {
+describe('removal-then-eviction', () => {
 	beforeEach(async () => {
 		const db = await openDb();
 		await db.clear('tracking');
