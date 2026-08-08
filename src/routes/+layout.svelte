@@ -10,10 +10,11 @@
 	import { Toaster } from '$lib/components/ui/sonner';
 	import { goto } from '$app/navigation';
 	import { theme } from '$lib/state/theme.svelte.js';
-	import { getTracking, setActiveUser } from '$lib/client/idb';
+	import { getReferencedMediaIds, setActiveUser } from '$lib/client/idb';
 	import { library } from '$lib/tracking/library.svelte';
 	import { flushPendingLogout } from '$lib/client/logout';
 	import { pruneMediaImages } from '$lib/client/idb/images';
+	import { pruneStaleMedia } from '$lib/client/idb/media';
 	import { requestPersistentStorage } from '$lib/client/storage';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import { navigation } from '$lib/state/navigation.svelte.js';
@@ -41,12 +42,14 @@
 		window.addEventListener('online', () => void flushPendingLogout(data.user?.id ?? null));
 	}
 
-	// Ask the browser to keep our IndexedDB from being evicted, and bound the image blob cache to the
-	// titles we still track (untracked/removed titles' posters are dropped). Best-effort; all guarded.
+	// Ask the browser to keep our IndexedDB from being evicted, and bound the media + image cache to
+	// titles still on a list. Boot-time backstop for a removal made offline — the sync engine sweeps
+	// again on any cycle that moves events. Best-effort; all guarded.
 	async function initOfflineStorage() {
 		await requestPersistentStorage();
-		const tracked = await getTracking();
-		await pruneMediaImages(new Set(tracked.map((t) => t.mediaId)));
+		const keepIds = new Set(await getReferencedMediaIds());
+		await pruneStaleMedia(keepIds);
+		await pruneMediaImages(keepIds);
 	}
 
 	// Drive background event sync while signed in; tear down (and detach the store) on logout.

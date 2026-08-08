@@ -38,7 +38,8 @@ export {
 	getLinkedMediaRefs,
 	getMediaVersions,
 	getReferencedMediaIds,
-	getUnsyncedMediaIds
+	getUnsyncedMediaIds,
+	pruneStaleMedia
 } from './media';
 export {
 	getDeviceId,
