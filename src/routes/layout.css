@@ -23,6 +23,10 @@
 :root {
 	--tab-bar-space: calc(4.875rem + max(0.75rem, env(safe-area-inset-bottom)));
 	--tab-bar-live: var(--tab-bar-space);
+	/* How far the bar is shifted down to meet the true bottom of the screen — see tab-bar.svelte. Zero
+	   everywhere the layout viewport is honest; the overlays that ride above the bar subtract it so
+	   they follow. */
+	--viewport-shift: 0px;
 }
 @media (min-width: 40rem) {
 	:root {
