@@ -1,6 +1,5 @@
 <script lang="ts">
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import ErrorState from '$lib/components/error-state.svelte';
 	import PersonAvatar from './person-avatar.svelte';
@@ -54,6 +53,9 @@
 		totalPages = 1;
 		errored = false;
 		bioOpen = false;
+		// Drop the previous person's measured height so the skeleton doesn't render one frame at
+		// their size before `measure()` catches up.
+		bodyHeight = null;
 		void load(id, 1);
 	});
 
@@ -96,6 +98,26 @@
 		if (personId !== null) void load(personId, page + 1);
 	}
 
+	// Pull the next page as the end of the list comes into view, the same sentinel + observer the
+	// dashboard grid uses. The root is the dialog's own scroller rather than the viewport, and the
+	// observer is rebuilt per page so a sentinel still in range after an append fires again — a
+	// live observer only reports intersection *changes*.
+	let sentinel = $state<HTMLElement | null>(null);
+	$effect(() => {
+		const el = sentinel;
+		const root = scroller;
+		void page;
+		if (!el || !root || typeof IntersectionObserver === 'undefined') return;
+		const io = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting && !loadingMore && !errored) loadMore();
+			},
+			{ root, rootMargin: '400px' }
+		);
+		io.observe(el);
+		return () => io.disconnect();
+	});
+
 	// "Directing · 1970–2001" / "Acting · b. 1963" — whichever parts TMDB actually has.
 	const lifespan = $derived.by(() => {
 		const born = person?.birthday?.slice(0, 4);
@@ -108,6 +130,50 @@
 	const subtitle = $derived(
 		[person?.knownForDepartment, lifespan].filter((part) => Boolean(part)).join(' · ')
 	);
+
+	/** A credit's one-line caption under the title — "2010 · Cobb". */
+	function creditMeta(credit: PersonCredit): string {
+		return [credit.year, credit.role].filter((part) => Boolean(part)).join(' · ');
+	}
+
+	// Only offer the bio toggle when the text is actually cut off — a short biography fits inside the
+	// clamp, and a "Read more" that reveals nothing is worse than no control at all. Measured while
+	// collapsed; expanding removes the clamp, so skip re-measuring then or the control would vanish
+	// the moment it was used.
+	let bio = $state<HTMLParagraphElement | null>(null);
+	let bioClamped = $state(false);
+	$effect(() => {
+		const el = bio;
+		if (!el || bioOpen) return;
+		bioClamped = el.scrollHeight > el.clientHeight + 1;
+	});
+
+	// The body grows a long way when the skeleton is replaced by a real filmography. Left alone the
+	// dialog snaps to its new size; instead the measured content height is written back and CSS
+	// transitions it. Measured rather than transitioning `height: auto` because that only animates
+	// where `interpolate-size` is supported, which excludes Safari — and this ships as an iOS PWA.
+	let scroller = $state<HTMLDivElement | null>(null);
+	let content = $state<HTMLDivElement | null>(null);
+	let bodyHeight = $state<number | null>(null);
+
+	$effect(() => {
+		const outer = scroller;
+		const inner = content;
+		if (!outer || !inner) return;
+
+		const measure = () => {
+			// The cap lives in CSS (see the scroller's `max-h`); clamp here too, or the transition
+			// would run against a height the element can never reach and appear to finish instantly.
+			const cap = Number.parseFloat(getComputedStyle(outer).maxHeight);
+			const natural = inner.getBoundingClientRect().height;
+			bodyHeight = Number.isFinite(cap) ? Math.min(natural, cap) : natural;
+		};
+
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(inner);
+		return () => observer.disconnect();
+	});
 </script>
 
 {#snippet creditGrid(items: PersonCredit[])}
@@ -123,15 +189,14 @@
 						posterUrl={posterUrl(credit.posterPath)}
 						alt={credit.title}
 					/>
-					<p class="mt-1.5 line-clamp-2 text-[0.7rem] leading-tight font-medium">{credit.title}</p>
-					{#if credit.year !== null}
-						<p class="text-[0.65rem] leading-tight text-muted-foreground">{credit.year}</p>
-					{/if}
-					{#if credit.role}
-						<p class="line-clamp-1 text-[0.65rem] leading-tight text-muted-foreground">
-							{credit.role}
-						</p>
-					{/if}
+					<!-- Fixed two-line title box and a single meta line, so the captions across a row line
+					up whether or not a title wraps. -->
+					<p class="mt-1.5 line-clamp-2 h-[2.5em] text-[0.7rem] leading-tight font-medium">
+						{credit.title}
+					</p>
+					<p class="line-clamp-1 h-[1.25em] text-[0.65rem] leading-tight text-muted-foreground">
+						{creditMeta(credit)}
+					</p>
 				</a>
 			</li>
 		{/each}
@@ -175,78 +240,91 @@
 					{errored ? 'This person could not be loaded.' : 'Loading person details.'}
 				</Dialog.Description>
 				<Skeleton class="size-16 shrink-0 rounded-full" />
+				<!-- Mirrors the loaded header's name + subtitle + birthplace, so it doesn't reflow. -->
 				<div class="flex min-w-0 flex-1 flex-col gap-2">
 					<Skeleton class="h-5 w-40 max-w-full" />
 					<Skeleton class="h-3 w-24 max-w-full" />
+					<Skeleton class="h-3 w-32 max-w-full" />
 				</div>
 			{/if}
 		</Dialog.Header>
 
-		<div class="flex flex-col gap-5 overflow-y-auto p-4">
-			{#if errored && !person}
-				<ErrorState message="Couldn't load this person." retry={reload} class="py-6" />
-			{:else if loading}
-				<div class="flex flex-col gap-2">
-					<Skeleton class="h-3 w-full" />
-					<Skeleton class="h-3 w-full" />
-					<Skeleton class="h-3 w-2/3" />
-				</div>
-				<ul class="grid grid-cols-3 gap-3 sm:grid-cols-4">
-					{#each [0, 1, 2, 3, 4, 5] as i (i)}
-						<li class="flex flex-col gap-1.5">
-							<Skeleton class="aspect-[2/3] w-full rounded-[14px]" />
-							<Skeleton class="h-3 w-full" />
-						</li>
-					{/each}
-				</ul>
-			{:else if person}
-				{#if person.biography}
-					<div class="flex flex-col items-start gap-1">
-						<p class="text-sm leading-relaxed {bioOpen ? '' : 'line-clamp-5'}">
-							{person.biography}
-						</p>
-						<button
-							type="button"
-							onclick={() => (bioOpen = !bioOpen)}
-							aria-expanded={bioOpen}
-							class="text-xs font-semibold text-primary hover:underline"
-						>
-							{bioOpen ? 'Show less' : 'Read more'}
-						</button>
+		<!-- The cap is the dialog's 85svh less the header, which is a fixed 6rem (a 4rem avatar plus
+		its padding and border). `measure()` reads it back off this element, so the two stay in step. -->
+		<div
+			bind:this={scroller}
+			class="max-h-[calc(85svh-6rem)] overflow-y-auto transition-[height] duration-200 ease-out motion-reduce:transition-none"
+			style:height={bodyHeight === null ? undefined : `${bodyHeight}px`}
+		>
+			<div bind:this={content} class="flex flex-col gap-5 p-4">
+				{#if errored && !person}
+					<ErrorState message="Couldn't load this person." retry={reload} class="py-6" />
+				{:else if loading}
+					<div class="flex flex-col gap-2">
+						<Skeleton class="h-3 w-full" />
+						<Skeleton class="h-3 w-full" />
+						<Skeleton class="h-3 w-2/3" />
 					</div>
-				{/if}
+					<!-- Two full rows, so the height the dialog animates from is close to the loaded one. -->
+					<ul class="grid grid-cols-3 gap-3 sm:grid-cols-4">
+						{#each [0, 1, 2, 3, 4, 5, 6, 7] as i (i)}
+							<li class="flex flex-col gap-1.5">
+								<Skeleton class="aspect-[2/3] w-full rounded-[14px]" />
+								<Skeleton class="h-3 w-full" />
+								<Skeleton class="h-2.5 w-2/3" />
+							</li>
+						{/each}
+					</ul>
+				{:else if person}
+					{#if person.biography}
+						<div class="flex flex-col items-start gap-1">
+							<p bind:this={bio} class="text-sm leading-relaxed {bioOpen ? '' : 'line-clamp-5'}">
+								{person.biography}
+							</p>
+							{#if bioClamped}
+								<button
+									type="button"
+									onclick={() => (bioOpen = !bioOpen)}
+									aria-expanded={bioOpen}
+									class="text-xs font-semibold text-primary hover:underline"
+								>
+									{bioOpen ? 'Show less' : 'Read more'}
+								</button>
+							{/if}
+						</div>
+					{/if}
 
-				{#if upcoming.length > 0}
-					<section class="flex flex-col gap-3">
-						{@render sectionHeading('Upcoming')}
-						{@render creditGrid(upcoming)}
-					</section>
-				{/if}
+					{#if upcoming.length > 0}
+						<section class="flex flex-col gap-3">
+							{@render sectionHeading('Upcoming')}
+							{@render creditGrid(upcoming)}
+						</section>
+					{/if}
 
-				{#if credits.length > 0}
-					<section class="flex flex-col gap-3">
-						{@render sectionHeading(upcoming.length > 0 ? 'Released' : 'Filmography')}
-						{@render creditGrid(credits)}
+					{#if credits.length > 0}
+						<section class="flex flex-col gap-3">
+							{@render sectionHeading(upcoming.length > 0 ? 'Released' : 'Filmography')}
+							{@render creditGrid(credits)}
 
-						{#if errored}
-							<ErrorState message="Couldn't load more credits." retry={loadMore} class="py-4" />
-						{:else if page < totalPages}
-							<Button
-								variant="outline"
-								class="self-center"
-								disabled={loadingMore}
-								onclick={loadMore}
-							>
-								{loadingMore ? 'Loading…' : 'Load more'}
-							</Button>
-						{/if}
-					</section>
-				{:else if upcoming.length === 0}
-					<p class="py-6 text-center text-sm text-muted-foreground">
-						No credits listed for this person.
-					</p>
+							{#if errored}
+								<ErrorState message="Couldn't load more credits." retry={loadMore} class="py-4" />
+							{:else if page < totalPages}
+								<div
+									bind:this={sentinel}
+									class="py-2 text-center text-sm text-muted-foreground"
+									aria-hidden="true"
+								>
+									Loading more…
+								</div>
+							{/if}
+						</section>
+					{:else if upcoming.length === 0}
+						<p class="py-6 text-center text-sm text-muted-foreground">
+							No credits listed for this person.
+						</p>
+					{/if}
 				{/if}
-			{/if}
+			</div>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
