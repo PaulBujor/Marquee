@@ -87,6 +87,16 @@
 	backdrop-filter: var(--glass-filter);
 }
 
+/* Set on the root for the length of a page transition (see the root layout). A backdrop-filter has
+   nothing coherent to sample against a transition's flat snapshots, and WebKit rebuilds those layers
+   across the animation rather than carrying them, so every frosted surface visibly climbs from
+   transparent to blurred while the page changes. Dropping back to the opaque fallback for those
+   200ms costs one clean step at the end instead. Outranks both `:root` and `.dark` above. */
+html.view-transition {
+	--glass-bg: var(--popover);
+	--glass-filter: none;
+}
+
 /* Cross-fade between pages, driven by the root layout's onNavigate.
  *
  * The whole page transitions as one snapshot. The app chrome is deliberately NOT given a

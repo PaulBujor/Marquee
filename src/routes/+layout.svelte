@@ -71,10 +71,21 @@
 		if (prefersReducedMotion.current) return;
 		if (nav.from?.url.pathname === nav.to?.url.pathname) return;
 		return new Promise((resolve) => {
-			document.startViewTransition(async () => {
+			// Flatten the frosted surfaces for the duration. A `backdrop-filter` has nothing coherent to
+			// sample against a transition's flat snapshots, and WebKit rebuilds those layers across the
+			// animation, so the tab bar and toasts visibly climb from transparent to translucent to
+			// blurred. Held on the root so both snapshots capture the plain opaque fallback instead;
+			// the glass returns in one step when the transition ends.
+			document.documentElement.classList.add('view-transition');
+			const transition = document.startViewTransition(async () => {
 				resolve();
 				await nav.complete;
 			});
+			// `finished` rejects on a skipped transition, which is not an error worth surfacing — but
+			// the class has to come off either way.
+			void transition.finished
+				.catch(() => {})
+				.finally(() => document.documentElement.classList.remove('view-transition'));
 		});
 	});
 
