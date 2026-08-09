@@ -173,7 +173,7 @@ fire a TMDB request on every pass of the cursor. -->
 					aria-current={isSelected ? 'page' : undefined}
 					title={def.label}
 					onclick={(event) => onTabClick(event, def)}
-					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 outline-none transition-[gap] duration-200 focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 {compact
+					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 {compact
 						? 'gap-0'
 						: 'gap-1'} {isSelected
 						? 'text-primary sm:bg-primary/10'
