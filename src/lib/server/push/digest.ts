@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lte, or, type SQL } from 'drizzle-orm';
 import {
 	episodes as episodesTable,
 	media as mediaTable,
@@ -260,7 +260,11 @@ export interface DigestSummary {
 
 /**
  * Send the daily new-release digest. Runs hourly; a user is notified only when it's ~9AM
- * their local time (timezone taken from their most recently used subscription).
+ * their local time (timezone taken from their most recently used subscription among the ones
+ * matching the current hour's due timezones — a user whose most-recently-used device sits in a
+ * timezone that isn't due this run is correctly skipped, but one whose *only* due device is an
+ * older one can be notified off that device's timezone instead; a rare multi-device-across-zones
+ * edge case, traded for not reading every subscription row every hour).
  *
  * `sender` is injectable for tests; by default it's built from the VAPID env (throws if unconfigured,
  * which the cron wrapper catches).
@@ -271,16 +275,38 @@ export async function sendNewReleaseDigest(
 	now: Date,
 	sender: PushSender = createPushSender(env)
 ): Promise<DigestSummary> {
+	// Which timezones are at local hour SEND_HOUR right now — resolved against the distinct set in
+	// use, not every subscription row, since the number of distinct timezones stays small and
+	// roughly constant as the user base grows.
+	const timezonesInUse = await db
+		.selectDistinct({ timezone: pushSubscriptions.timezone })
+		.from(pushSubscriptions);
+	const dueTimezones = timezonesInUse
+		.map((row) => row.timezone)
+		.filter((timezone) => localDateHour(now, timezone).hour === SEND_HOUR);
+	if (dueTimezones.length === 0) return { dueUsers: 0, sent: 0, pruned: 0 };
+
+	const dueNamedTimezones = dueTimezones.filter((tz): tz is string => tz !== null);
+	const dueTimezoneConditions = [
+		dueNamedTimezones.length > 0
+			? inArray(pushSubscriptions.timezone, dueNamedTimezones)
+			: undefined,
+		dueTimezones.includes(null) ? isNull(pushSubscriptions.timezone) : undefined
+	].filter((condition): condition is SQL => condition !== undefined);
+
 	// Two passes, so the hourly run doesn't pull every device's key material to discard 23/24 of it.
-	// The first reads only what the 9AM-local test needs; the encryption keys are loaded in the
-	// second, for due users only.
+	// The first reads only what the 9AM-local test needs, and only for subscriptions whose timezone
+	// is due this hour; the encryption keys are loaded in the second, for due users only.
 	const candidates = await db
 		.select({
 			userId: pushSubscriptions.userId,
 			timezone: pushSubscriptions.timezone,
 			lastUsedAt: pushSubscriptions.lastUsedAt
 		})
-		.from(pushSubscriptions);
+		.from(pushSubscriptions)
+		.where(
+			dueTimezoneConditions.length === 1 ? dueTimezoneConditions[0] : or(...dueTimezoneConditions)
+		);
 	if (candidates.length === 0) return { dueUsers: 0, sent: 0, pruned: 0 };
 
 	// The user's timezone is the one on their most-recently-used subscription.

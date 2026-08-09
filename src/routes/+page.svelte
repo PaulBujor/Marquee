@@ -35,7 +35,7 @@
 	let { data }: { data: PageData } = $props();
 
 	// The home library reads local IndexedDB (works offline); reloads whenever a sync pulls. It's a
-	// module singleton, so navigating back from a detail page finds it already populated (MRQ-147).
+	// module singleton, so navigating back from a detail page finds it already populated.
 	$effect(() => {
 		void sync.revision;
 		library.load();
@@ -43,7 +43,7 @@
 
 	// Suppress the poster intro transition on the first render after (re)mount — otherwise returning
 	// to the dashboard fades the whole grid up from transparent, reading as a blank flash even though
-	// the data is already there (MRQ-147). Real add/remove/status changes still animate.
+	// the data is already there. Real add/remove/status changes still animate.
 	let mounted = $state(false);
 	onMount(() => {
 		mounted = true;
@@ -61,7 +61,7 @@
 	const TABS: TabDef[] = [
 		{ key: 'want_to_watch', label: 'Want to Watch' },
 		{ key: 'watching', label: 'Watching' },
-		{ key: 'completed', label: 'Completed' },
+		{ key: 'completed', label: 'Watched' },
 		{ key: 'favorites', label: 'Favorites' }
 	];
 	const TYPES: TypeDef[] = [
@@ -188,7 +188,7 @@
 	});
 
 	// Preserve pagination depth + scroll across navigation. Opening a title unmounts this route, so
-	// without a snapshot Back would reinitialize visibleCount to PAGE_SIZE and lose scroll (MRQ-156).
+	// without a snapshot Back would reinitialize visibleCount to PAGE_SIZE and lose scroll.
 	// The `library` singleton is already populated on Back, so restoring visibleCount renders the full
 	// grid synchronously; we scroll after a tick so the page is tall enough to reach the saved offset.
 	export const snapshot = {
@@ -408,6 +408,7 @@
 			<div class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5">
 				<!-- flip reflows survivors; fade eases items in/out on sync add/remove or status change -->
 				{#each visible as item (item.mediaId)}
+					{@const dnf = item.status === 'did_not_finish'}
 					<a
 						href={resolve('/title/[type]/[id]', {
 							type: item.type,
@@ -426,7 +427,11 @@
 							alt={item.title}
 						/>
 						<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>
-						{#if item.year}<div class="text-xs text-muted-foreground">{item.year}</div>{/if}
+						{#if item.year || dnf}
+							<div class="truncate text-xs text-muted-foreground">
+								{item.year ?? ''}{item.year && dnf ? ' · ' : ''}{dnf ? "Didn't finish" : ''}
+							</div>
+						{/if}
 					</a>
 				{/each}
 			</div>

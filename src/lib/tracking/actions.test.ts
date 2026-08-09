@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	airedEpisodes,
+	airingState,
 	canRate,
 	episodesToMark,
 	hasSufficientEpisodeData,
@@ -13,6 +14,7 @@ import {
 	nextEpisode,
 	nextFavorite,
 	reconciledStatus,
+	seasonCount,
 	SPECIALS_SEASON,
 	statusEventType,
 	todayIso,
@@ -169,6 +171,31 @@ describe('episode helpers', () => {
 
 	it('todayIso formats an epoch as YYYY-MM-DD (UTC)', () => {
 		expect(todayIso(Date.UTC(2026, 6, 24, 10, 0, 0))).toBe('2026-07-24');
+	});
+});
+
+describe('seasonCount', () => {
+	it('counts main seasons, excluding Specials', () => {
+		expect(seasonCount([{ seasonNumber: 0 }, { seasonNumber: 1 }, { seasonNumber: 2 }])).toBe(2);
+	});
+
+	it('is zero for a movie (no seasons) or a Specials-only list', () => {
+		expect(seasonCount([])).toBe(0);
+		expect(seasonCount([{ seasonNumber: 0 }])).toBe(0);
+	});
+});
+
+describe('airingState', () => {
+	it('is airing when inProduction is true', () => {
+		expect(airingState(true)).toBe('airing');
+	});
+
+	it('is ended when inProduction is false', () => {
+		expect(airingState(false)).toBe('ended');
+	});
+
+	it('is unknown — never ended — when inProduction is null', () => {
+		expect(airingState(null)).toBe('unknown');
 	});
 });
 
@@ -342,6 +369,33 @@ describe('episodesToMark', () => {
 		// but precise per-episode data still works for an airing show
 		const dated: DatedEpisode[] = [ep(1, 1, '2026-06-01'), ep(1, 2, '2026-12-01')];
 		expect(episodesToMark(airing, dated, true, TODAY)).toEqual([{ season: 1, episode: 1 }]);
+	});
+
+	// A weekly show that premiered two months ago with only 5 of 10 episodes actually out.
+	// `inProduction` reads `null` (unknown/not yet synced) rather than confirmed `true` — the count
+	// fallback must not treat "unknown" the same as "confirmed finished", or it synthesizes episodes
+	// that haven't aired. Mirrors `hasSufficientEpisodeData`'s equivalent null-vs-false fix — the two
+	// must never disagree about whether a show is markable.
+	it('marks nothing by count when production status is unknown, not just when confirmed in production', () => {
+		const unairedWeekly: SeasonSummary[] = [
+			{ seasonNumber: 1, episodeCount: 10, airDate: '2026-05-24' } // premiered ~2 months before TODAY
+		];
+		expect(episodesToMark(unairedWeekly, [], null, TODAY)).toEqual([]);
+	});
+
+	// TMDB is trusted as accurate once it reports a show finished, even when it never backfilled
+	// per-episode rows for a season — a real, permanent data gap, not sync lag. The fallback only
+	// fires for an *explicit* `false`, never `null`, so it stays distinct from the unknown-status
+	// case above.
+	it('still marks a confirmed-finished show by count when it has no per-episode records at all', () => {
+		const finishedNoEpisodeData: SeasonSummary[] = [
+			{ seasonNumber: 1, episodeCount: 3, airDate: '2018-01-01' }
+		];
+		expect(episodesToMark(finishedNoEpisodeData, [], false, TODAY)).toEqual([
+			{ season: 1, episode: 1 },
+			{ season: 1, episode: 2 },
+			{ season: 1, episode: 3 }
+		]);
 	});
 
 	it('skips a season that has not aired yet (future or unknown season air date)', () => {

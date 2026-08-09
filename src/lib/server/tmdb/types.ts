@@ -362,5 +362,7 @@ export interface Episode {
 export interface SeasonDetail {
 	seasonNumber: number;
 	name: string;
+	/** Richer than the show-detail season summary's overview. */
+	overview: string;
 	episodes: Episode[];
 }

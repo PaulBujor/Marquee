@@ -4,7 +4,7 @@ import { searchLinkedMedia } from '$lib/server/media/search';
 import type { RequestHandler } from './$types';
 
 /**
- * Live TMDB search driven by `?q=` (no cache — MRQ-36), auth-gated. When TMDB is unreachable,
+ * Live TMDB search driven by `?q=` (no cache), auth-gated. When TMDB is unreachable,
  * degrade to a substring search over the shared `linked` catalog we already hold (`degraded: true`)
  * so the screen still returns results. Called by the search page's universal load; **offline** the
  * client falls back to its own IndexedDB catalog instead (this endpoint is never reached).

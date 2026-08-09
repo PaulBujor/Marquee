@@ -6,6 +6,7 @@
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
+	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
@@ -16,7 +17,7 @@
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { posterUrl } from '$lib/media.js';
+	import { hasDescription, posterUrl } from '$lib/media.js';
 	import { formatExactDateTime, formatRelativeDay } from '$lib/date.js';
 	import {
 		tmdbMediaId,
@@ -24,7 +25,14 @@
 		type MediaRecord,
 		type TrackingStatus
 	} from '$lib/sync/events';
-	import { isAired, todayIso, watchedKey, type DatedEpisode } from '$lib/tracking/actions';
+	import {
+		airingState,
+		isAired,
+		seasonCount,
+		todayIso,
+		watchedKey,
+		type DatedEpisode
+	} from '$lib/tracking/actions';
 	import { deriveStatus } from '$lib/tracking/derive-status';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
 	import { getTracking, getEpisodes, getAllMedia, getEpisodeWatches } from '$lib/client/idb';
@@ -68,6 +76,8 @@
 	const formatDate = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
 	// Our own media id for the tracking event pipeline (provider-agnostic).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
+	const seasons = $derived(detail.type === 'show' ? seasonCount(detail.seasons) : 0);
+	const airing = $derived(detail.type === 'show' ? airingState(detail.inProduction) : 'unknown');
 	// Today (YYYY-MM-DD) for the per-episode aired check — an episode is watchable once it's aired.
 	const today = todayIso();
 
@@ -189,6 +199,10 @@
 		selectedSeason !== null
 			? (detail.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
 			: null
+	);
+	// The loaded season carries the real synopsis; the summary stands in until it resolves.
+	const selectedSeasonOverview = $derived(
+		[currentSeason?.overview, selectedSeasonSummary?.overview].find(hasDescription) ?? null
 	);
 	// Whether a bulk mark of the selected season right now would under-seed — see
 	// `TrackingState.readyToMarkSeason`.
@@ -322,6 +336,7 @@
 			seasonCache[seasonNumber] = offlineSeason(
 				seasonNumber,
 				summary?.name ?? `Season ${seasonNumber}`,
+				summary?.overview ?? '',
 				await getEpisodes(mediaId)
 			);
 			return;
@@ -460,9 +475,14 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 					{detail.title}
 				</h1>
 				<div class="flex flex-wrap items-center gap-2">
-					<MediaBadge>
-						{detail.type === 'movie' ? 'Movie' : 'Show'}{detail.year ? ` · ${detail.year}` : ''}
-					</MediaBadge>
+					<MediaTypeLabel type={detail.type} year={detail.year} {seasons} />
+					{#if airing === 'airing'}
+						<MediaBadge variant="airing">
+							<span class="size-1.5 rounded-full bg-primary"></span>Airing
+						</MediaBadge>
+					{:else if airing === 'ended'}
+						<MediaBadge variant="status">Ended</MediaBadge>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -731,6 +751,10 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						</button>
 					{/each}
 				</div>
+
+				{#if selectedSeasonOverview}
+					<p class="text-sm leading-relaxed text-muted-foreground">{selectedSeasonOverview}</p>
+				{/if}
 
 				{#if tracking.view.tracked && selectedSeasonSummary && !tracking.isSeasonWatched(selectedSeasonSummary.seasonNumber)}
 					<Button

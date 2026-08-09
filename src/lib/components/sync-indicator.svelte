@@ -5,7 +5,7 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
-	// Sync status light (MRQ-95). Dashboard-cluster-light model: nothing renders on the happy path
+	// Sync status light. Dashboard-cluster-light model: nothing renders on the happy path
 	// (online + idle). It only lights up for an exception worth knowing about — offline, an in-flight
 	// sync, or a failure — and disappears the moment things settle. Offline takes priority (the whole
 	// channel is paused); then a hard error; then a transient in-flight sync.

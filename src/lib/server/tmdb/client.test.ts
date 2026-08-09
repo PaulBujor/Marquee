@@ -659,6 +659,7 @@ describe('createTmdbClient.getSeason', () => {
 		expect(season).toEqual({
 			seasonNumber: 1,
 			name: 'Season 1',
+			overview: 'The beginning.',
 			episodes: [
 				{
 					episodeNumber: 1,
@@ -692,7 +693,13 @@ describe('createTmdbClient.getSeason', () => {
 	it('handles a season with no episodes', async () => {
 		mockFetch({ season_number: 3, name: 'Season 3' });
 		const season = await createTmdbClient('key').getSeason(1396, 3);
-		expect(season).toEqual({ seasonNumber: 3, name: 'Season 3', episodes: [] });
+		expect(season).toEqual({ seasonNumber: 3, name: 'Season 3', overview: '', episodes: [] });
+	});
+
+	it('normalizes a missing overview to an empty string, not undefined', async () => {
+		mockFetch({ season_number: 4, name: 'Season 4', overview: '' });
+		const season = await createTmdbClient('key').getSeason(1396, 4);
+		expect(season.overview).toBe('');
 	});
 
 	it('throws TmdbError on a non-2xx response', async () => {

@@ -17,7 +17,15 @@ import { runMediaSync } from './media-sync';
 import { runImageSync } from './image-sync';
 import { isFullMediaCheckDue, nextFullMediaCheckStamp, shouldRunMediaSync } from './media-gate';
 import { CircuitBreaker, withRetry, type RetryOptions } from '$lib/resilience';
-import { getLastSyncAt, setLastSyncAt } from '$lib/client/idb';
+import {
+	getLastSyncAt,
+	setLastSyncAt,
+	getLastFullMediaCheck,
+	setLastFullMediaCheck,
+	getReferencedMediaIds,
+	pruneStaleMedia
+} from '$lib/client/idb';
+import { pruneMediaImages } from '$lib/client/idb/images';
 import { reportClientError } from '$lib/client/report-error';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
@@ -108,8 +116,15 @@ class SyncEngine {
 			);
 		}
 
-		this.#interval = setInterval(() => this.requestSync(), INTERVAL_MS);
-		this.requestSync();
+		// Load the persisted full-check watermark before the first cycle can run, so a relaunch
+		// resumes the cadence instead of restarting it at 0 (see media-gate.ts). The `#started`
+		// guard drops this if `stop()` ran before the (local, near-instant) read resolved.
+		void getLastFullMediaCheck().then((at) => {
+			if (!this.#started) return;
+			this.#lastFullMediaCheck = at;
+			this.#interval = setInterval(() => this.requestSync(), INTERVAL_MS);
+			this.requestSync();
+		});
 	}
 
 	/** Remove triggers and cancel pending timers (call on logout / teardown). */
@@ -184,6 +199,7 @@ class SyncEngine {
 		try {
 			let changed = false;
 			let pulled = 0; // events pulled this cycle — the sequence-watermark signal for the media gate below
+			let pushed = 0; // events pushed this cycle — with `pulled`, gates the cache sweep below
 
 			// Event channel — authoritative; drives the visible status.
 			try {
@@ -200,6 +216,7 @@ class SyncEngine {
 				this.lastSyncAt = syncedAt;
 				void setLastSyncAt(syncedAt);
 				pulled = res.pulled;
+				pushed = res.pushed;
 				if (pulled > 0) changed = true;
 			} catch (err) {
 				this.lastError = toSyncErrorInfo(err, this.#events.failures, Date.now());
@@ -231,12 +248,16 @@ class SyncEngine {
 						this.status = 'error';
 						return;
 					}
-					this.#lastFullMediaCheck = nextFullMediaCheckStamp(
+					const nextCheck = nextFullMediaCheckStamp(
 						dueForFullCheck,
 						true,
 						Date.now(),
 						this.#lastFullMediaCheck
 					);
+					if (nextCheck !== this.#lastFullMediaCheck) {
+						this.#lastFullMediaCheck = nextCheck;
+						void setLastFullMediaCheck(nextCheck);
+					}
 					if (mediaRes.applied > 0) changed = true;
 				} catch (err) {
 					this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
@@ -258,6 +279,19 @@ class SyncEngine {
 				if (res && res.stored > 0) changed = true;
 			} catch (err) {
 				console.warn('[sync] image sync failed (will retry later)', err);
+			}
+
+			// Drop cached media + images for titles that left every list. Local-only, and gated on the
+			// cycle having moved events — a removal is either pushed from here or pulled from another
+			// device, so an idle tab never rescans the stores.
+			if (pushed > 0 || pulled > 0) {
+				try {
+					const keepIds = new Set(await getReferencedMediaIds());
+					await pruneStaleMedia(keepIds);
+					await pruneMediaImages(keepIds);
+				} catch (err) {
+					console.warn('[sync] cache sweep failed (will retry next cycle)', err);
+				}
 			}
 
 			if (changed) this.revision++;
