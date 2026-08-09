@@ -3,6 +3,7 @@ import { createTmdbClient, TmdbError } from './client';
 import type {
 	TmdbMovieDetailsResponse,
 	TmdbMultiSearchResponse,
+	TmdbPersonResponse,
 	TmdbSeasonDetailResponse,
 	TmdbTvDetailsResponse
 } from './types';
@@ -250,9 +251,9 @@ describe('createTmdbClient.getDetails', () => {
 				{ id: 1, name: 'Leonardo DiCaprio', character: 'Cobb', profilePath: '/leo.jpg' },
 				{ id: 2, name: 'Elliot Page', character: 'Ariadne', profilePath: null }
 			],
-			director: 'Christopher Nolan',
-			writers: ['Christopher Nolan'],
-			producers: ['Emma Thomas'],
+			director: { id: 10, name: 'Christopher Nolan' },
+			writers: [{ id: 10, name: 'Christopher Nolan' }],
+			producers: [{ id: 11, name: 'Emma Thomas' }],
 			creators: [],
 			trailer: { key: 'yt-trailer', name: 'Official Trailer' },
 			releaseDate: '2010-07-16',
@@ -285,7 +286,7 @@ describe('createTmdbClient.getDetails', () => {
 			director: null,
 			writers: [],
 			producers: [],
-			creators: ['Vince Gilligan']
+			creators: [{ id: 20, name: 'Vince Gilligan' }]
 		});
 		expect(detail.cast).toEqual([
 			{ id: 3, name: 'Bryan Cranston', character: 'Walter White', profilePath: '/bc.jpg' }
@@ -456,6 +457,194 @@ describe('createTmdbClient.getDetails', () => {
 	it('throws TmdbError on a non-2xx response', async () => {
 		mockFetch({}, { status: 404 });
 		await expect(createTmdbClient('key').getDetails('movie', 999)).rejects.toMatchObject({
+			name: 'TmdbError',
+			status: 404
+		});
+	});
+});
+
+/** A representative `/person/{id}?append_to_response=combined_credits` payload. */
+const PERSON: TmdbPersonResponse = {
+	id: 10,
+	name: 'Christopher Nolan',
+	biography: 'A director.',
+	birthday: '1970-07-30',
+	deathday: null,
+	place_of_birth: 'London, England, UK',
+	known_for_department: 'Directing',
+	profile_path: '/nolan.jpg',
+	combined_credits: {
+		cast: [
+			{
+				id: 27205,
+				media_type: 'movie',
+				title: 'Inception',
+				release_date: '2010-07-16',
+				poster_path: '/inception.jpg',
+				character: 'Man on beach'
+			}
+		],
+		crew: [
+			// Same title as the cast row above — merges into one credit carrying both roles.
+			{
+				id: 27205,
+				media_type: 'movie',
+				title: 'Inception',
+				release_date: '2010-07-16',
+				poster_path: '/inception.jpg',
+				job: 'Director'
+			},
+			{
+				id: 155,
+				media_type: 'movie',
+				title: 'The Dark Knight',
+				release_date: '2008-07-14',
+				poster_path: '/tdk.jpg',
+				job: 'Director'
+			}
+		]
+	}
+};
+
+describe('createTmdbClient.getPerson', () => {
+	it('normalizes the person and their released credits, newest first', async () => {
+		mockFetch(PERSON);
+		const result = await createTmdbClient('key').getPerson(10);
+
+		expect(result.person).toEqual({
+			tmdbId: 10,
+			name: 'Christopher Nolan',
+			biography: 'A director.',
+			birthday: '1970-07-30',
+			deathday: null,
+			placeOfBirth: 'London, England, UK',
+			knownForDepartment: 'Directing',
+			profilePath: '/nolan.jpg'
+		});
+		expect(result.credits).toEqual([
+			{
+				tmdbId: 27205,
+				type: 'movie',
+				title: 'Inception',
+				year: 2010,
+				date: '2010-07-16',
+				posterPath: '/inception.jpg',
+				role: 'Man on beach, Director'
+			},
+			{
+				tmdbId: 155,
+				type: 'movie',
+				title: 'The Dark Knight',
+				year: 2008,
+				date: '2008-07-14',
+				posterPath: '/tdk.jpg',
+				role: 'Director'
+			}
+		]);
+		expect(result).toMatchObject({ upcoming: [], page: 1, totalPages: 1, total: 2 });
+	});
+
+	it('requests /person/{id} with combined_credits appended', async () => {
+		const spy = mockFetch(PERSON);
+		await createTmdbClient('secret-key').getPerson(10);
+
+		const [firstArg] = spy.mock.calls[0] as unknown as [URL | string];
+		const url = new URL(String(firstArg));
+		expect(url.origin + url.pathname).toBe('https://api.themoviedb.org/3/person/10');
+		expect(url.searchParams.get('api_key')).toBe('secret-key');
+		expect(url.searchParams.get('append_to_response')).toBe('combined_credits');
+	});
+
+	it('splits future and undated work into upcoming, soonest first and undated last', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2020-06-15T00:00:00Z'));
+		try {
+			mockFetch({
+				id: 1,
+				combined_credits: {
+					crew: [
+						{ id: 3, media_type: 'movie', title: 'Later', release_date: '2021-01-01' },
+						{ id: 1, media_type: 'movie', title: 'Unannounced' },
+						{ id: 2, media_type: 'tv', name: 'Soon', first_air_date: '2020-09-01' },
+						{ id: 4, media_type: 'movie', title: 'Out already', release_date: '2019-01-01' }
+					]
+				}
+			});
+			const result = await createTmdbClient('key').getPerson(1);
+
+			expect(result.upcoming.map((c) => c.title)).toEqual(['Soon', 'Later', 'Unannounced']);
+			expect(result.credits.map((c) => c.title)).toEqual(['Out already']);
+			expect(result.total).toBe(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('treats a title released today as released, not upcoming', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2020-06-15T12:00:00Z'));
+		try {
+			mockFetch({
+				id: 1,
+				combined_credits: {
+					cast: [{ id: 9, media_type: 'movie', title: 'Out today', release_date: '2020-06-15' }]
+				}
+			});
+			const result = await createTmdbClient('key').getPerson(1);
+			expect(result.upcoming).toEqual([]);
+			expect(result.credits).toHaveLength(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('pages released credits, clamping a page beyond the end', async () => {
+		const crew = Array.from({ length: 45 }, (_, i) => ({
+			id: i,
+			media_type: 'movie' as const,
+			title: `Film ${i}`,
+			release_date: `19${String(99 - i).padStart(2, '0')}-01-01`,
+			job: 'Director'
+		}));
+		mockFetch({ id: 1, combined_credits: { crew } });
+		const client = createTmdbClient('key');
+
+		const first = await client.getPerson(1, 1);
+		expect(first).toMatchObject({ page: 1, totalPages: 3, total: 45 });
+		expect(first.credits).toHaveLength(20);
+		expect(first.credits[0].title).toBe('Film 0');
+
+		const last = await client.getPerson(1, 3);
+		expect(last.credits).toHaveLength(5);
+		expect(last.credits[0].title).toBe('Film 40');
+
+		const beyond = await client.getPerson(1, 99);
+		expect(beyond).toMatchObject({ page: 3, totalPages: 3 });
+	});
+
+	it('handles a person with no credits at all', async () => {
+		mockFetch({ id: 1 });
+		const result = await createTmdbClient('key').getPerson(1);
+
+		expect(result.person).toMatchObject({ name: '', biography: '', profilePath: null });
+		expect(result).toMatchObject({ upcoming: [], credits: [], page: 1, totalPages: 1, total: 0 });
+	});
+
+	it('drops rows whose media_type is neither movie nor tv', async () => {
+		mockFetch({
+			id: 1,
+			combined_credits: {
+				cast: [{ id: 5, media_type: 'person', name: 'Nonsense', character: 'Self' }]
+			}
+		});
+		const result = await createTmdbClient('key').getPerson(1);
+		expect(result.credits).toEqual([]);
+		expect(result.upcoming).toEqual([]);
+	});
+
+	it('throws TmdbError on a non-2xx response', async () => {
+		mockFetch({}, { status: 404 });
+		await expect(createTmdbClient('key').getPerson(999)).rejects.toMatchObject({
 			name: 'TmdbError',
 			status: 404
 		});

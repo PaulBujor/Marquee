@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
-	import { afterNavigate, goto } from '$app/navigation';
+	import { afterNavigate, goto, pushState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
@@ -12,6 +12,8 @@
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import MediaImage from '$lib/components/media/media-image.svelte';
+	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
+	import PersonModal from '$lib/components/media/person-modal.svelte';
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -45,7 +47,7 @@
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import StarIcon from '@lucide/svelte/icons/star';
-	import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
+	import type { CrewMember, MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 
 	// `detail` is always present — the cached IndexedDB copy first, upgraded in place to the full
 	// network copy. `enrichState` says how to render the network-only sections (cast, trailer,
@@ -362,20 +364,31 @@
 		}
 	}
 
-	/** First-letter initials for a cast avatar with no profile image. */
-	function initials(name: string): string {
-		return name
-			.split(/\s+/)
-			.slice(0, 2)
-			.map((part) => part[0] ?? '')
-			.join('')
-			.toUpperCase();
+	// The person modal lives in shallow-routing state rather than a local variable, so the phone's
+	// Back gesture closes it instead of leaving the title page. `afterNavigate` needs no reset: page
+	// state is per-history-entry, so a title → title hop arrives with it already cleared.
+	const openPersonId = $derived(page.state.person ?? null);
+	function openPerson(id: number) {
+		pushState('', { person: id });
 	}
 </script>
 
 <svelte:head>
 	<title>{detail.title} · Marquee</title>
 </svelte:head>
+
+<!-- A comma-separated crew list where each name opens that person's modal. The separator's space is
+an entity because Svelte trims a literal trailing space at the end of an element. -->
+{#snippet crewNames(members: CrewMember[])}
+	{#each members as member, i (member.id)}
+		{#if i > 0}<span>,&#32;</span>{/if}<button
+			type="button"
+			onclick={() => openPerson(member.id)}
+			class="text-left underline decoration-dotted underline-offset-4 hover:decoration-solid"
+			>{member.name}</button
+		>
+	{/each}
+{/snippet}
 
 <!-- Fixed header over the hero: the back control is always reachable, but the blur backing + title
 fade in together only once the in-content <h1> scrolls out of view — over the hero the header is
@@ -538,25 +551,25 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 							{/if}
 							{#if detail.director}
 								<dt class="text-muted-foreground">Director</dt>
-								<dd>{detail.director}</dd>
+								<dd>{@render crewNames([detail.director])}</dd>
 							{/if}
 							{#if detail.creators.length > 0}
 								<dt class="text-muted-foreground">
 									{detail.creators.length > 1 ? 'Creators' : 'Creator'}
 								</dt>
-								<dd>{detail.creators.join(', ')}</dd>
+								<dd>{@render crewNames(detail.creators)}</dd>
 							{/if}
 							{#if detail.writers.length > 0}
 								<dt class="text-muted-foreground">
 									{detail.writers.length > 1 ? 'Writers' : 'Writer'}
 								</dt>
-								<dd>{detail.writers.join(', ')}</dd>
+								<dd>{@render crewNames(detail.writers)}</dd>
 							{/if}
 							{#if detail.producers.length > 0}
 								<dt class="text-muted-foreground">
 									{detail.producers.length > 1 ? 'Producers' : 'Producer'}
 								</dt>
-								<dd>{detail.producers.join(', ')}</dd>
+								<dd>{@render crewNames(detail.producers)}</dd>
 							{/if}
 						</dl>
 					{/if}
@@ -589,31 +602,26 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 							</h2>
 							<ul class="no-scrollbar flex gap-3.5 overflow-x-auto pb-1">
 								{#each detail.cast as member (member.id)}
-									{@const avatar = posterUrl(member.profilePath, 'w185')}
-									<li class="flex w-16 shrink-0 flex-col items-center text-center">
-										{#if avatar}
-											<img
-												src={avatar}
-												alt={member.name}
-												loading="lazy"
-												decoding="async"
-												class="size-14 rounded-full object-cover"
-											/>
-										{:else}
-											<div
-												class="flex size-14 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-muted-foreground"
-												aria-hidden="true"
-											>
-												{initials(member.name)}
-											</div>
-										{/if}
-										<span class="mt-1.5 text-[0.7rem] leading-tight font-medium">{member.name}</span
+									<li class="w-16 shrink-0">
+										<button
+											type="button"
+											onclick={() => openPerson(member.id)}
+											class="flex w-full flex-col items-center rounded-lg text-center focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 										>
-										{#if member.character}
-											<span class="text-[0.65rem] leading-tight text-muted-foreground"
-												>{member.character}</span
+											<PersonAvatar
+												name={member.name}
+												profilePath={member.profilePath}
+												class="size-14"
+											/>
+											<span class="mt-1.5 text-[0.7rem] leading-tight font-medium"
+												>{member.name}</span
 											>
-										{/if}
+											{#if member.character}
+												<span class="text-[0.65rem] leading-tight text-muted-foreground"
+													>{member.character}</span
+												>
+											{/if}
+										</button>
 									</li>
 								{/each}
 							</ul>
@@ -881,3 +889,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 		{/if}
 	</div>
 </main>
+
+<!-- Credits reuse `similarHref`, so a title opened from a person joins the same suggestion chain as
+one opened from the "Similar" row — Back still steps one title at a time. -->
+<PersonModal personId={openPersonId} href={similarHref} onclose={() => history.back()} />

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	movieDetailsResponseSchema,
 	multiSearchResponseSchema,
+	personResponseSchema,
 	seasonDetailResponseSchema
 } from './schemas';
 
@@ -40,6 +41,17 @@ describe('TMDB response schemas', () => {
 		expect(movieDetailsResponseSchema.safeParse({ id: 603 }).success).toBe(true);
 		expect(movieDetailsResponseSchema.safeParse({ id: '603' }).success).toBe(false);
 		expect(movieDetailsResponseSchema.safeParse({}).success).toBe(false);
+	});
+
+	it('requires a numeric id on a person, and keeps the appended credits', () => {
+		const parsed = personResponseSchema.safeParse({
+			id: 10,
+			name: 'Christopher Nolan',
+			combined_credits: { crew: [{ id: 27205, media_type: 'movie', job: 'Director' }] }
+		});
+		expect(parsed.success).toBe(true);
+		expect(parsed.success && parsed.data.combined_credits).toBeDefined();
+		expect(personResponseSchema.safeParse({ name: 'no id' }).success).toBe(false);
 	});
 
 	it('requires season_number and well-formed episodes', () => {

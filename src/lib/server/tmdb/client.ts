@@ -3,17 +3,25 @@ import { CircuitBreaker, fetchWithTimeout, withRetry } from '$lib/resilience';
 import {
 	movieDetailsResponseSchema,
 	multiSearchResponseSchema,
+	personResponseSchema,
 	seasonDetailResponseSchema,
 	tvDetailsResponseSchema
 } from './schemas';
 import type {
+	CrewMember,
 	MediaDetail,
 	MediaSearchResult,
+	PersonCredit,
+	PersonCreditsPage,
+	PersonDetail,
 	SeasonDetail,
+	TmdbCombinedCreditItem,
+	TmdbCombinedCredits,
 	TmdbCrewMember,
 	TmdbMovieDetailsResponse,
 	TmdbMultiSearchItem,
 	TmdbMultiSearchResponse,
+	TmdbPersonResponse,
 	TmdbSeasonDetailResponse,
 	TmdbSimilarItem,
 	TmdbTvDetailsResponse
@@ -42,18 +50,27 @@ const SIMILAR_LIMIT = 20;
 
 /** How many names to keep per crew role (writers / producers / creators) — the detail page lists a few. */
 const CREW_LIMIT = 3;
+const DIRECTOR_JOBS = new Set(['Director']);
 const WRITER_JOBS = new Set(['Writer', 'Screenplay', 'Story', 'Teleplay']);
 const PRODUCER_JOBS = new Set(['Producer', 'Executive Producer']);
 
-/** Unique crew names whose `job` is in `jobs`, in TMDB order, capped at {@link CREW_LIMIT}. */
-function crewByJob(crew: TmdbCrewMember[], jobs: Set<string>): string[] {
-	const names: string[] = [];
+/**
+ * Unique crew whose `job` is in `jobs`, in TMDB order, capped at {@link CREW_LIMIT}. Deduped by
+ * name — TMDB lists the same person once per job they held, and the detail page wants them once.
+ */
+function crewByJob(crew: TmdbCrewMember[], jobs: Set<string>): CrewMember[] {
+	const members: CrewMember[] = [];
 	for (const c of crew) {
-		if (jobs.has(c.job ?? '') && !names.includes(c.name)) names.push(c.name);
-		if (names.length >= CREW_LIMIT) break;
+		if (jobs.has(c.job ?? '') && !members.some((m) => m.name === c.name)) {
+			members.push({ id: c.id, name: c.name });
+		}
+		if (members.length >= CREW_LIMIT) break;
 	}
-	return names;
+	return members;
 }
+
+/** How many released credits one page of a person's filmography carries. */
+const PERSON_CREDITS_PAGE_SIZE = 20;
 
 /** Thrown when TMDB responds with a non-2xx status, so callers can map it to a clean HTTP error. */
 export class TmdbError extends Error {
@@ -188,10 +205,12 @@ function normalizeDetails(
 			character: c.character ?? '',
 			profilePath: c.profile_path ?? null
 		})),
-		director: isMovie ? (crew.find((c) => c.job === 'Director')?.name ?? null) : null,
+		director: isMovie ? (crewByJob(crew, DIRECTOR_JOBS)[0] ?? null) : null,
 		writers: isMovie ? crewByJob(crew, WRITER_JOBS) : [],
 		producers: crewByJob(crew, PRODUCER_JOBS),
-		creators: isMovie ? [] : (tv.created_by ?? []).slice(0, CREW_LIMIT).map((c) => c.name),
+		creators: isMovie
+			? []
+			: (tv.created_by ?? []).slice(0, CREW_LIMIT).map((c) => ({ id: c.id, name: c.name })),
 		trailer: trailer ? { key: trailer.key, name: trailer.name } : null,
 		releaseDate: isMovie ? (movie.release_date ?? null) : null,
 		status: isMovie ? null : (tv.status ?? null),
@@ -232,6 +251,75 @@ function normalizeSeason(data: TmdbSeasonDetailResponse): SeasonDetail {
 			runtime: e.runtime ?? null
 		}))
 	};
+}
+
+/** Normalize the biographical half of a `/person/{id}` response. */
+function normalizePerson(data: TmdbPersonResponse): PersonDetail {
+	return {
+		tmdbId: data.id,
+		name: data.name ?? '',
+		biography: data.biography ?? '',
+		birthday: data.birthday ?? null,
+		deathday: data.deathday ?? null,
+		placeOfBirth: data.place_of_birth ?? null,
+		knownForDepartment: data.known_for_department ?? null,
+		profilePath: data.profile_path ?? null
+	};
+}
+
+/** Normalize one `combined_credits` row; `role` is the character (cast) or the job (crew). */
+function normalizeCredit(item: TmdbCombinedCreditItem): PersonCredit {
+	const isMovie = item.media_type === 'movie';
+	const date = (isMovie ? item.release_date : item.first_air_date) || null;
+	return {
+		tmdbId: item.id,
+		type: isMovie ? 'movie' : 'show',
+		title: (isMovie ? item.title : item.name) ?? '',
+		year: parseYear(date ?? undefined),
+		date,
+		posterPath: item.poster_path ?? null,
+		// Cast rows carry `character`, crew rows `job`; an empty character falls through to the job.
+		role: item.character || item.job || ''
+	};
+}
+
+/**
+ * Flatten a person's `combined_credits` into the two lists the modal renders, split on `today`
+ * (`YYYY-MM-DD`) into work that's out and work that isn't yet.
+ *
+ * A person is often credited several times on the same title — as an actor *and* a producer, or
+ * under two crew jobs — so rows are deduped by `(media_type, id)` with their roles merged into one
+ * label. Released work sorts newest-first (the filmography reading order); upcoming work sorts
+ * soonest-first with undated (unannounced) titles last, since those are the least concrete.
+ */
+function normalizePersonCredits(
+	credits: TmdbCombinedCredits,
+	today: string
+): { upcoming: PersonCredit[]; released: PersonCredit[] } {
+	const byTitle = new Map<string, PersonCredit>();
+	for (const item of [...(credits.cast ?? []), ...(credits.crew ?? [])]) {
+		if (item.media_type !== 'movie' && item.media_type !== 'tv') continue;
+		const credit = normalizeCredit(item);
+		const key = `${item.media_type}:${item.id}`;
+		const existing = byTitle.get(key);
+		if (!existing) {
+			byTitle.set(key, credit);
+		} else if (credit.role && !existing.role.split(', ').includes(credit.role)) {
+			existing.role = existing.role ? `${existing.role}, ${credit.role}` : credit.role;
+		}
+	}
+
+	const upcoming: PersonCredit[] = [];
+	const released: PersonCredit[] = [];
+	for (const credit of byTitle.values()) {
+		if (credit.date === null || credit.date > today) upcoming.push(credit);
+		else released.push(credit);
+	}
+
+	// Undated rows sort to the end of `upcoming`; `released` is dated by construction.
+	upcoming.sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999'));
+	released.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+	return { upcoming, released };
 }
 
 /**
@@ -309,6 +397,34 @@ export function createTmdbClient(apiKey: string) {
 				TmdbMovieDetailsResponse | TmdbTvDetailsResponse;
 
 			return normalizeDetails(type, data);
+		},
+
+		/**
+		 * Fetch a person with everything they've worked on, as one page of credits.
+		 *
+		 * TMDB has no paged filmography endpoint — `combined_credits` comes back whole (hundreds of
+		 * rows for a prolific actor), so the paging is ours: the caller asks for a page and only that
+		 * slice crosses the wire to the client.
+		 */
+		async getPerson(id: number, page = 1): Promise<PersonCreditsPage> {
+			const raw = await request(`/person/${id}`, { append_to_response: 'combined_credits' });
+			const data = parseTmdb(personResponseSchema, raw, 'person') as unknown as TmdbPersonResponse;
+
+			const today = new Date().toISOString().slice(0, 10);
+			const { upcoming, released } = normalizePersonCredits(data.combined_credits ?? {}, today);
+
+			const totalPages = Math.max(1, Math.ceil(released.length / PERSON_CREDITS_PAGE_SIZE));
+			const current = Math.min(Math.max(1, Math.trunc(page)), totalPages);
+			const start = (current - 1) * PERSON_CREDITS_PAGE_SIZE;
+
+			return {
+				person: normalizePerson(data),
+				upcoming,
+				credits: released.slice(start, start + PERSON_CREDITS_PAGE_SIZE),
+				page: current,
+				totalPages,
+				total: released.length
+			};
 		},
 
 		/** Fetch a single TV season with its episodes, normalized. */
