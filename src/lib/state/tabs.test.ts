@@ -139,10 +139,9 @@ describe('isKeyboardOpen', () => {
 });
 
 describe('viewportShift', () => {
-	// Measured on an iPhone 15 Pro running the installed app: a 393x852 screen laying the page out
-	// from the top of the display but reporting a 793-tall viewport — short by the 59px status bar.
+	// Measured on an iPhone 15 Pro running the installed app: a 393x852 screen that paints only 793
+	// until the first touch — short by the 59px status bar — then re-lays-out to the full height.
 	const iphone = {
-		layoutHeight: 793,
 		screenWidth: 393,
 		screenHeight: 852,
 		innerWidth: 393,
@@ -150,48 +149,33 @@ describe('viewportShift', () => {
 		standalone: true
 	};
 
-	it('corrects the standalone shortfall at first paint, when even the visual viewport is short', () => {
+	it('fills the strip left unpainted before the first touch', () => {
 		expect(viewportShift({ ...iphone, visualBottom: 793 })).toBe(59);
 	});
 
-	it('reports the same shift once the visual viewport catches up, so nothing jumps', () => {
-		expect(viewportShift({ ...iphone, visualBottom: 852, innerHeight: 852 })).toBe(59);
+	it('drops to zero once the page re-lays-out to the full screen', () => {
+		// The regression this replaced: holding the shift here pushed the bar off the bottom, because
+		// `bottom: 0` has already corrected itself by this point.
+		expect(viewportShift({ ...iphone, visualBottom: 852, innerHeight: 852 })).toBe(0);
 	});
 
-	it('is zero on a device that reports its viewport honestly', () => {
-		expect(
-			viewportShift({ ...iphone, layoutHeight: 852, visualBottom: 852, innerHeight: 852 })
-		).toBe(0);
-	});
-
-	it('ignores the screen in a browser tab, where bottom: 0 is already correct', () => {
-		// Same short viewport, but not installed: the screen must not be consulted, or the bar would
-		// be pushed down over the browser's own toolbar.
+	it('never consults the screen in a browser tab, where the window is not the screen', () => {
+		// A tab is usually far shorter than the display; treating the difference as a shift would
+		// throw the bar way past the bottom of the window.
 		expect(viewportShift({ ...iphone, visualBottom: 793, standalone: false })).toBe(0);
-	});
-
-	it('still follows the visual viewport in a browser tab when it is the taller of the two', () => {
-		expect(
-			viewportShift({ ...iphone, layoutHeight: 700, visualBottom: 760, standalone: false })
-		).toBe(60);
+		expect(viewportShift({ ...iphone, visualBottom: 400, standalone: false })).toBe(0);
 	});
 
 	it('picks the screen edge matching the current orientation', () => {
-		// Landscape: the screen object keeps reporting 852 as its height, which would otherwise be
-		// read as the viewport height and fling the bar far off the bottom.
-		expect(
-			viewportShift({
-				...iphone,
-				layoutHeight: 393,
-				visualBottom: 393,
-				innerWidth: 852,
-				innerHeight: 393
-			})
-		).toBe(0);
+		// Landscape: `screen` still calls 852 its height, which would otherwise read as a 459px
+		// shortfall and fling the bar far below the screen.
+		expect(viewportShift({ ...iphone, visualBottom: 393, innerWidth: 852, innerHeight: 393 })).toBe(
+			0
+		);
 	});
 
 	it('never returns a negative shift', () => {
-		expect(viewportShift({ ...iphone, layoutHeight: 900, visualBottom: 900 })).toBe(0);
+		expect(viewportShift({ ...iphone, visualBottom: 900, innerHeight: 900 })).toBe(0);
 	});
 });
 

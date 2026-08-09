@@ -94,7 +94,6 @@
 			viewportShift = keyboard
 				? 0
 				: shiftForViewport({
-						layoutHeight: document.documentElement.clientHeight,
 						visualBottom: viewport.height + viewport.offsetTop,
 						screenWidth: window.screen.width,
 						screenHeight: window.screen.height,

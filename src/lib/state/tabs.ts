@@ -93,9 +93,7 @@ export function isKeyboardOpen(innerHeight: number, viewportHeight: number | nul
 }
 
 export interface ViewportMetrics {
-	/** `document.documentElement.clientHeight`. */
-	layoutHeight: number;
-	/** `visualViewport.height + visualViewport.offsetTop`. */
+	/** `visualViewport.height + visualViewport.offsetTop` — where `bottom: 0` actually lands. */
 	visualBottom: number;
 	screenWidth: number;
 	screenHeight: number;
@@ -109,28 +107,28 @@ export interface ViewportMetrics {
  * How far the fixed bottom bar must be pushed down to reach the real bottom of the screen.
  *
  * An installed iOS PWA lays the page out from the very top — it covers the status bar, because of
- * `viewport-fit=cover` — but reports a viewport short by that bar's height, so `bottom: 0` lands
- * that far above the bottom of the screen. Measured on an iPhone 15 Pro: an 852-tall screen reports
- * a 793 layout viewport, and keeps reporting 793 for the life of the page; `visualViewport` also
- * says 793 until the first touch and only then corrects to 852.
+ * `viewport-fit=cover` — but sizes it short by that bar's height, leaving a strip of unpainted
+ * screen below where `bottom: 0` lands. On the first touch it re-lays-out to the full height and
+ * `bottom: 0` becomes correct on its own. Measured on an iPhone 15 Pro: an 852-tall screen paints
+ * 793 until touched, then 852.
  *
- * So in standalone the screen's own height is the one honest number available at first paint. This
- * measures rather than assumes: where the viewport is reported correctly the two agree and the shift
- * is zero, and in a browser tab the screen is not consulted at all — there `bottom: 0` already sits
- * correctly above any toolbar, which the clamp at zero protects.
+ * `visualViewport` is what tracks that (793 → 852) and so is the only usable reference:
+ * `documentElement.clientHeight` reports 793 in *both* states — it never catches up — and using it
+ * kept the shift at 59 after the relayout had already fixed itself, pushing the bar off the bottom.
+ *
+ * The screen's height is the true target, so the shift is simply the strip left unpainted. Zero
+ * once the page fills the screen, and zero in a browser tab, where the window is not the screen and
+ * `bottom: 0` already sits correctly above whatever chrome is showing.
  */
 export function viewportShift(m: ViewportMetrics): number {
-	let visibleBottom = m.visualBottom;
-	if (m.standalone) {
-		// `screen` keeps the device's own orientation, so pick the edge matching ours rather than
-		// trusting `screenHeight` to be the tall one.
-		const portrait = m.innerWidth <= m.innerHeight;
-		const height = portrait
-			? Math.max(m.screenWidth, m.screenHeight)
-			: Math.min(m.screenWidth, m.screenHeight);
-		visibleBottom = Math.max(visibleBottom, height);
-	}
-	return Math.max(0, visibleBottom - m.layoutHeight);
+	if (!m.standalone) return 0;
+	// `screen` keeps the device's own orientation, so pick the edge matching ours rather than
+	// trusting `screenHeight` to be the tall one.
+	const portrait = m.innerWidth <= m.innerHeight;
+	const screenHeight = portrait
+		? Math.max(m.screenWidth, m.screenHeight)
+		: Math.min(m.screenWidth, m.screenHeight);
+	return Math.max(0, screenHeight - m.visualBottom);
 }
 
 /** Scroll offset below which the bar is always expanded. */
