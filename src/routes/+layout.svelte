@@ -1,8 +1,7 @@
 <script lang="ts">
 	import './layout.css';
 	import { tick, untrack } from 'svelte';
-	import { afterNavigate, beforeNavigate, onNavigate } from '$app/navigation';
-	import { prefersReducedMotion } from 'svelte/motion';
+	import { afterNavigate, beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import AppHeader from '$lib/components/app-header.svelte';
 	import InstallPrompt from '$lib/components/install-prompt.svelte';
@@ -61,33 +60,6 @@
 			await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 		}
 	}
-
-	// Cross-fade between pages. Skipped when the pathname is unchanged: the dashboard's filter
-	// mirroring and the search page's `?q=` push are same-page `goto`s that would otherwise fade the
-	// whole screen on every keystroke. Back/forward are deliberately included, and browsers without
-	// the API just navigate as before.
-	onNavigate((nav) => {
-		if (!document.startViewTransition) return;
-		if (prefersReducedMotion.current) return;
-		if (nav.from?.url.pathname === nav.to?.url.pathname) return;
-		return new Promise((resolve) => {
-			// Flatten the frosted surfaces for the duration. A `backdrop-filter` has nothing coherent to
-			// sample against a transition's flat snapshots, and WebKit rebuilds those layers across the
-			// animation, so the tab bar and toasts visibly climb from transparent to translucent to
-			// blurred. Held on the root so both snapshots capture the plain opaque fallback instead;
-			// the glass returns in one step when the transition ends.
-			document.documentElement.classList.add('view-transition');
-			const transition = document.startViewTransition(async () => {
-				resolve();
-				await nav.complete;
-			});
-			// `finished` rejects on a skipped transition, which is not an error worth surfacing — but
-			// the class has to come off either way.
-			void transition.finished
-				.catch(() => {})
-				.finally(() => document.documentElement.classList.remove('view-transition'));
-		});
-	});
 
 	// Scope the local store to the signed-in user *before* any tracking UI opens it (the layout
 	// script runs before child pages mount). Per-user database (`marquee-<id>`) — a wrong-account

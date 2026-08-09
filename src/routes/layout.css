@@ -87,46 +87,6 @@
 	backdrop-filter: var(--glass-filter);
 }
 
-/* Set on the root for the length of a page transition (see the root layout). A backdrop-filter has
-   nothing coherent to sample against a transition's flat snapshots, and WebKit rebuilds those layers
-   across the animation rather than carrying them, so every frosted surface visibly climbs from
-   transparent to blurred while the page changes. Dropping back to the opaque fallback for those
-   200ms costs one clean step at the end instead. Outranks both `:root` and `.dark` above. */
-html.view-transition {
-	--glass-bg: var(--popover);
-	--glass-filter: none;
-}
-
-/* Cross-fade between pages, driven by the root layout's onNavigate.
- *
- * The whole page transitions as one snapshot. The app chrome is deliberately NOT given a
- * `view-transition-name` to hold it still: a named element becomes a **backdrop root**, which
- * silently kills `backdrop-filter` in everything beneath it — the tab bar and every HeaderScrim
- * still computed their blur but had nothing left to sample, leaving flat translucent panels you
- * couldn't read through. Naming also punches the chrome out of the root snapshot, so its scrim
- * gradient renders over nothing mid-transition. The chrome is near-identical either side of a
- * navigation, so cross-fading it with the page costs nothing visually.
- *
- * `mix-blend-mode: normal` overrides the UA's `plus-lighter` pairing: it needs both snapshots fully
- * opaque, and where they aren't it washes the page out instead of cross-fading it. */
-@media (prefers-reduced-motion: no-preference) {
-	::view-transition-old(root),
-	::view-transition-new(root) {
-		animation-duration: 200ms;
-		animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-		mix-blend-mode: normal;
-	}
-}
-
-/* Backstop for the JS guard, in case the preference flips between the read and the transition. */
-@media (prefers-reduced-motion: reduce) {
-	::view-transition-group(*),
-	::view-transition-old(*),
-	::view-transition-new(*) {
-		animation: none !important;
-	}
-}
-
 /*
  * Design tokens. Colors are oklch(Lightness Chroma Hue), each with its sRGB hex
  * alongside — the hex is the value the palette was specified in, the oklch is
@@ -242,8 +202,8 @@ html.view-transition {
 		@apply border-border outline-ring/50;
 	}
 
-	/* Both, not just body: a view transition snapshots the root, and any region the page background
-	   doesn't actually paint comes through transparent and blends badly mid-fade. */
+	/* Both, not just body: the root is what shows through when a page is rubber-banded past its end,
+	   and in an installed PWA it is also taller than the content by the safe-area inset added below. */
 	html,
 	body {
 		@apply bg-background text-foreground;
