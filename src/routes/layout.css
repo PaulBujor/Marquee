@@ -34,6 +34,49 @@
 	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
 }
 
+/* The app's frosted-glass material, shared by every surface that floats over scrolling content (the
+ * tab bar, the scroll-undo pill). Blur alone is not enough: over a poster or a full-bleed backdrop
+ * the artwork reads straight through and the labels lose contrast. So the backdrop is also pushed
+ * toward the surface's own tone — `contrast()` compresses it toward mid-grey, then `brightness()`
+ * carries it up in light mode and down in dark — which is what makes a native material read as a
+ * tinted plate rather than a window.
+ *
+ * The values were picked by measuring contrast against every backdrop the app can put behind the
+ * bar — the page background, a dark or bright poster, and dark or bright title artwork — and taking
+ * the most see-through setting that still reads. Over the page background, which is most of the
+ * app, both labels clear WCAG AA (5.5:1+). Over artwork the wash can't fully win without turning
+ * the surface into an opaque plate, so the floor there is the 3:1 AA-large / non-text threshold:
+ * worst case is light mode over dark artwork at 3.88:1 for the label and 3.55:1 for the teal active
+ * label. That relaxation is deliberate — holding 4.5:1 everywhere meant a near-solid panel with no
+ * glass left. Re-measure against those five backdrops before changing anything here; the binding
+ * constraint is the 11px teal active label in light mode. Both prefixes: iOS Safari needs
+ * `-webkit-`.
+ *
+ * Without backdrop-filter the surface stays fully opaque — a translucent panel with no wash behind
+ * it would be the unreadable case this exists to prevent.
+ *
+ * Plain CSS rather than an `@utility`, deliberately: unlayered rules beat Tailwind's utility layer,
+ * so applying `.glass` to a component that already sets its own background (the search input's
+ * `bg-transparent` / `dark:bg-input/30`) works without per-call-site overrides. */
+.glass {
+	border: 1px solid var(--border);
+	background-color: var(--popover);
+	box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	.glass {
+		background-color: color-mix(in oklab, var(--popover) 70%, transparent);
+		-webkit-backdrop-filter: blur(40px) saturate(1.8) contrast(0.6) brightness(1.6);
+		backdrop-filter: blur(40px) saturate(1.8) contrast(0.6) brightness(1.6);
+	}
+	.dark .glass {
+		background-color: color-mix(in oklab, var(--popover) 45%, transparent);
+		-webkit-backdrop-filter: blur(40px) saturate(1.8) contrast(0.9) brightness(0.55);
+		backdrop-filter: blur(40px) saturate(1.8) contrast(0.9) brightness(0.55);
+	}
+}
+
 /* Cross-fade between pages, driven by the root layout's onNavigate.
  *
  * The whole page transitions as one snapshot. The app chrome is deliberately NOT given a

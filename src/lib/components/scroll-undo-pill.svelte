@@ -32,14 +32,14 @@
 
 <div
 	aria-live="polite"
-	class="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-live)+0.75rem)] z-40 flex justify-center px-4"
+	class="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-live)+1.5rem)] z-40 flex justify-center px-4"
 >
 	{#if offer !== null}
 		<button
 			type="button"
 			onclick={() => undo(offer)}
 			transition:fly={{ y: 8, duration: motionMs }}
-			class="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-popover px-4 py-2 text-sm font-medium text-popover-foreground shadow-[0_4px_12px_rgb(0_0_0/0.1)] transition-colors hover:bg-accent hover:text-accent-foreground"
+			class="glass pointer-events-auto flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-popover-foreground"
 		>
 			<Undo2Icon class="size-4 text-muted-foreground" />
 			Back to where you were

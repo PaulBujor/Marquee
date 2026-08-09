@@ -160,11 +160,12 @@ fire a TMDB request on every pass of the cursor. -->
 		? 'translate-y-full opacity-0'
 		: ''}"
 >
-	<!-- Surface deliberately matches a Sonner toast — same popover background, border and shadow — so
-	the two floating layers at the bottom of the screen read as one material. -->
+	<!-- `glass` is the shared frosted material (see layout.css) — it carries the tint, blur and the
+	luminance wash that keeps these labels legible over artwork, and the same class is on the
+	scroll-undo pill so the two read as one surface. -->
 	<ul
 		bind:this={card}
-		class="pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border bg-popover/95 p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] supports-backdrop-filter:bg-popover/60 supports-backdrop-filter:backdrop-blur-2xl supports-backdrop-filter:backdrop-saturate-150 sm:max-w-fit sm:gap-0.5"
+		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full p-1.5 sm:max-w-fit sm:gap-0.5"
 	>
 		{#each TABS as def (def.id)}
 			{@const Icon = ICONS[def.id]}
@@ -209,8 +210,11 @@ fire a TMDB request on every pass of the cursor. -->
 							? 'grid-rows-[0fr] opacity-0'
 							: 'grid-rows-[1fr] opacity-100'}"
 					>
+						<!-- `leading-none` would put the line box exactly at the font size, so `overflow-hidden`
+						above clips the descenders off "Upcoming" and "Settings". Unitless, so it holds at the
+						larger `sm:` size too. -->
 						<span
-							class="overflow-hidden text-[0.6875rem] leading-none font-medium sm:text-sm {isSelected
+							class="overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
 								? 'font-semibold'
 								: ''}"
 						>

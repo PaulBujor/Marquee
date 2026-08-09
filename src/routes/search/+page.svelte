@@ -237,6 +237,8 @@ h-10 holds the header at the same height as the other pages'. -->
 <PageHeader>
 	<div class="flex items-center gap-3">
 		<div class="relative flex-1">
+			<!-- `glass`: the same frosted material as the tab bar. The field sits in a sticky header that
+			results scroll beneath, so it needs the tint and wash for the same reason the bar does. -->
 			<Input
 				bind:ref={searchInput}
 				type="search"
@@ -248,7 +250,7 @@ h-10 holds the header at the same height as the other pages'. -->
 				aria-label="Search movies and shows"
 				autocomplete="off"
 				autocapitalize="none"
-				class="appearance-none pr-11 [&::-webkit-search-cancel-button]:appearance-none"
+				class="glass appearance-none pr-11 [&::-webkit-search-cancel-button]:appearance-none"
 			/>
 			{#if query}
 				<button

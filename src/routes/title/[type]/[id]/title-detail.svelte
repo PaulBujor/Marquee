@@ -386,16 +386,14 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 	<div
 		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
 	>
-		<!-- Ghost rather than a solid chip, so it sits lightly on the artwork. It still needs to read
-		over an unpredictable backdrop, so it keeps a faint blurred plate: `background`/`foreground` are
-		opposite ends of the ramp in either theme, so the chevron contrasts with its own plate whichever
-		way the artwork behind goes. `icon-lg` is 44px — a full touch target. -->
+		<!-- Ghost: no plate, so it sits as lightly as possible on the hero artwork. `icon-lg` is 44px —
+		a full touch target even though nothing is drawn around it. -->
 		<Button
 			onclick={goBack}
 			variant="ghost"
 			size="icon-lg"
 			shape="round"
-			class="shrink-0 bg-background/40 backdrop-blur-md"
+			class="shrink-0"
 			aria-label="Go back"
 		>
 			<ChevronLeftIcon class="size-5" />

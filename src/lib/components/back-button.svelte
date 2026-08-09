@@ -31,14 +31,14 @@
 	}
 </script>
 
-<!-- Ghost with a faint blurred plate, matching the title page's own control: it sits over artwork,
-where a solid chip is heavy but a bare icon can vanish. 44px is a full touch target. -->
+<!-- Ghost, matching the title page's own control (this stands in for it on the skeleton and error
+states, so the two must not differ). 44px is a full touch target. -->
 <Button
 	onclick={goBack}
 	variant="ghost"
 	size="icon-lg"
 	shape="round"
-	class={cn('shrink-0 bg-background/40 backdrop-blur-md', className)}
+	class={cn('shrink-0', className)}
 	aria-label={label}
 >
 	<ChevronLeftIcon class="size-5" />
