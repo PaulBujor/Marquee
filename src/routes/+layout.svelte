@@ -51,6 +51,10 @@
 	 * list so the next frame can reach deeper. Bounded, so it can never spin.
 	 */
 	async function restoreScroll(y: number) {
+		// Unconditional first: the loop below only ever scrolls *down* to reach a saved offset, and a
+		// tab being opened for the first time has none. Tab links carry `data-sveltekit-noscroll`, so
+		// without this the new page would simply keep the outgoing page's scroll position.
+		window.scrollTo(0, y);
 		for (let i = 0; i < 5 && window.scrollY < y - 1; i++) {
 			await tick();
 			window.scrollTo(0, y);

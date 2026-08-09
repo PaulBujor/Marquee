@@ -60,7 +60,12 @@
  * so applying `.glass` to a component that already sets its own background (the search input's
  * `bg-transparent` / `dark:bg-input/30`) works without per-call-site overrides. The recipe is held
  * in two variables as well as the class, because Sonner styles its own toast element and can only be
- * reached through the custom properties it reads — those toasts must not drift from this. */
+ * reached through the custom properties it reads — those toasts must not drift from this.
+ *
+ * The class is strictly the *material* — background and filter, nothing else. It used to carry the
+ * border and shadow too, which beat `focus-visible:ring-3` and `focus-visible:border-ring` on the
+ * search field (Tailwind's ring is a box-shadow) and left it with no visible focus indicator at all.
+ * Border and shadow belong to each call site. */
 :root {
 	--glass-bg: var(--popover);
 	--glass-filter: none;
@@ -78,9 +83,7 @@
 }
 
 .glass {
-	border: 1px solid var(--border);
 	background-color: var(--glass-bg);
-	box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
 	-webkit-backdrop-filter: var(--glass-filter);
 	backdrop-filter: var(--glass-filter);
 }

@@ -39,7 +39,7 @@
 			type="button"
 			onclick={() => undo(offer)}
 			transition:fly={{ y: 8, duration: motionMs }}
-			class="glass pointer-events-auto flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-popover-foreground"
+			class="glass pointer-events-auto flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium text-popover-foreground shadow-[0_4px_12px_rgb(0_0_0/0.1)]"
 		>
 			<Undo2Icon class="size-4 text-muted-foreground" />
 			Back to where you were

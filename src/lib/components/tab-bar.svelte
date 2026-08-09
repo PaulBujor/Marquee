@@ -88,9 +88,11 @@
 	// Publish the bar's height, as two properties with different jobs — font scaling means the CSS
 	// baselines in layout.css are only estimates.
 	//
-	// `--tab-bar-space` is what pages pad by, and it tracks the EXPANDED height only. Letting the
-	// collapsed height through would shrink every page's bottom padding mid-scroll, shift the scroll
-	// position, and feed the compaction fold above — the two would oscillate.
+	// `--tab-bar-space` is what pages pad by, and a collapsed height is never published to it. That
+	// padding must not SHRINK mid-scroll: doing so moves the scroll position, which feeds the
+	// compaction fold above, and the two oscillate. (On the way back up it does ease along with the
+	// bar for a frame or two, since `compact` clears before the height animation finishes — growing
+	// padding below the fold is harmless and can't drive that loop.)
 	//
 	// `--tab-bar-live` tracks the height right now, collapsed or not, and positions the things that
 	// float directly above the bar (toasts, the undo pill). They're fixed overlays, so following the
@@ -165,7 +167,7 @@ fire a TMDB request on every pass of the cursor. -->
 	scroll-undo pill so the two read as one surface. -->
 	<ul
 		bind:this={card}
-		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full p-1.5 sm:max-w-fit sm:gap-0.5"
+		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5"
 	>
 		{#each TABS as def (def.id)}
 			{@const Icon = ICONS[def.id]}
@@ -174,11 +176,13 @@ fire a TMDB request on every pass of the cursor. -->
 				<!-- eslint-disable svelte/no-navigation-without-resolve -- a remembered destination
 				carries a query string, which drops resolve()'s branded type; `tabHref` has already
 				validated the value as an own-tab, same-origin path. -->
+				<!-- `aria-current` follows the route we're actually on, not the tinted tab: on a title
+				page the owning tab stays lit, but claiming it is the current page would be a lie to a
+				screen reader. -->
 				<a
 					href={tabs.href(def.id)}
 					data-sveltekit-noscroll
-					aria-current={isSelected ? 'page' : undefined}
-					title={def.label}
+					aria-current={current === def.id ? 'page' : undefined}
 					onclick={(event) => onTabClick(event, def)}
 					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 {compact
 						? 'gap-0'
@@ -222,6 +226,7 @@ fire a TMDB request on every pass of the cursor. -->
 						</span>
 					</span>
 				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</li>
 		{/each}
 	</ul>
