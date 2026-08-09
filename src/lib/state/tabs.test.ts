@@ -10,7 +10,6 @@ import {
 	isKeyboardOpen,
 	tabAction,
 	tabHref,
-	viewportShift,
 	type ScrollPhase
 } from './tabs';
 
@@ -135,47 +134,6 @@ describe('isKeyboardOpen', () => {
 		expect(isKeyboardOpen(800, 660)).toBe(false);
 		expect(isKeyboardOpen(800, 650)).toBe(true);
 		expect(isKeyboardOpen(800, 400)).toBe(true);
-	});
-});
-
-describe('viewportShift', () => {
-	// Measured on an iPhone 15 Pro running the installed app: a 393x852 screen that paints only 793
-	// until the first touch — short by the 59px status bar — then re-lays-out to the full height.
-	const iphone = {
-		screenWidth: 393,
-		screenHeight: 852,
-		innerWidth: 393,
-		innerHeight: 793,
-		standalone: true
-	};
-
-	it('fills the strip left unpainted before the first touch', () => {
-		expect(viewportShift({ ...iphone, visualBottom: 793 })).toBe(59);
-	});
-
-	it('drops to zero once the page re-lays-out to the full screen', () => {
-		// The regression this replaced: holding the shift here pushed the bar off the bottom, because
-		// `bottom: 0` has already corrected itself by this point.
-		expect(viewportShift({ ...iphone, visualBottom: 852, innerHeight: 852 })).toBe(0);
-	});
-
-	it('never consults the screen in a browser tab, where the window is not the screen', () => {
-		// A tab is usually far shorter than the display; treating the difference as a shift would
-		// throw the bar way past the bottom of the window.
-		expect(viewportShift({ ...iphone, visualBottom: 793, standalone: false })).toBe(0);
-		expect(viewportShift({ ...iphone, visualBottom: 400, standalone: false })).toBe(0);
-	});
-
-	it('picks the screen edge matching the current orientation', () => {
-		// Landscape: `screen` still calls 852 its height, which would otherwise read as a 459px
-		// shortfall and fling the bar far below the screen.
-		expect(viewportShift({ ...iphone, visualBottom: 393, innerWidth: 852, innerHeight: 393 })).toBe(
-			0
-		);
-	});
-
-	it('never returns a negative shift', () => {
-		expect(viewportShift({ ...iphone, visualBottom: 900, innerHeight: 900 })).toBe(0);
 	});
 });
 

@@ -19,7 +19,6 @@
 		initialScrollPhase,
 		isKeyboardOpen,
 		tabAction,
-		viewportShift as shiftForViewport,
 		type ScrollPhase,
 		type TabDef,
 		type TabId
@@ -72,51 +71,18 @@
 		compact = false;
 	});
 
-	// Two things read from the visual viewport, because the layout viewport can't be trusted for
-	// either.
-	//
-	// `keyboard`: iOS floats a fixed bottom element above the soft keyboard, covering the field being
-	// typed into, so the bar gets out of the way.
-	//
-	// `viewportShift`: how far `bottom: 0` falls short of the real bottom of the screen — see
-	// `viewportShift` in $lib/state/tabs for what iOS reports and why. Best-effort: a browser without
-	// visualViewport keeps the plain `bottom: 0` behaviour.
+	// Get out of the way of the soft keyboard: iOS floats a fixed bottom element above it, covering
+	// the field being typed into. Best-effort — browsers without visualViewport just keep the bar.
 	let keyboard = $state(false);
-	let viewportShift = $state(0);
 	$effect(() => {
 		const viewport = window.visualViewport;
 		if (!viewport) return;
-		const standalone = window.matchMedia('(display-mode: standalone)').matches;
-		let frame = 0;
-		const measure = () => {
-			frame = 0;
+		const update = () => {
 			keyboard = isKeyboardOpen(window.innerHeight, viewport.height);
-			viewportShift = keyboard
-				? 0
-				: shiftForViewport({
-						visualBottom: viewport.height + viewport.offsetTop,
-						screenWidth: window.screen.width,
-						screenHeight: window.screen.height,
-						innerWidth: window.innerWidth,
-						innerHeight: window.innerHeight,
-						standalone
-					});
-			document.documentElement.style.setProperty('--viewport-shift', `${viewportShift}px`);
 		};
-		const schedule = () => {
-			if (!frame) frame = requestAnimationFrame(measure);
-		};
-		schedule();
-		viewport.addEventListener('resize', schedule);
-		viewport.addEventListener('scroll', schedule);
-		window.addEventListener('orientationchange', schedule);
-		return () => {
-			if (frame) cancelAnimationFrame(frame);
-			viewport.removeEventListener('resize', schedule);
-			viewport.removeEventListener('scroll', schedule);
-			window.removeEventListener('orientationchange', schedule);
-			document.documentElement.style.removeProperty('--viewport-shift');
-		};
+		update();
+		viewport.addEventListener('resize', update);
+		return () => viewport.removeEventListener('resize', update);
 	});
 
 	// Publish the bar's height, as two properties with different jobs — font scaling means the CSS
@@ -192,9 +158,8 @@ fire a TMDB request on every pass of the cursor. -->
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
-	style="transform: translateY({keyboard ? '100%' : `${viewportShift}px`})"
 	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none {keyboard
-		? 'opacity-0'
+		? 'translate-y-full opacity-0'
 		: ''}"
 >
 	<!-- `glass` is the shared frosted material (see layout.css) — it carries the tint, blur and the

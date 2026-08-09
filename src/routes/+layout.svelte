@@ -176,9 +176,7 @@
 	// Lift bottom-anchored toasts clear of the bar, tracking its *live* height so the gap stays put
 	// when the bar collapses on scroll. Sonner uses the mobile set below 600px, so both must be given.
 	const toastOffset = $derived(
-		showTabBar
-			? { bottom: 'calc(var(--tab-bar-live) + 1.5rem - var(--viewport-shift))' }
-			: undefined
+		showTabBar ? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)' } : undefined
 	);
 </script>
 
