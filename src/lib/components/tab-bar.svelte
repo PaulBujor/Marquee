@@ -19,6 +19,7 @@
 		initialScrollPhase,
 		isKeyboardOpen,
 		tabAction,
+		viewportShift as shiftForViewport,
 		type ScrollPhase,
 		type TabDef,
 		type TabId
@@ -77,27 +78,30 @@
 	// `keyboard`: iOS floats a fixed bottom element above the soft keyboard, covering the field being
 	// typed into, so the bar gets out of the way.
 	//
-	// `viewportShift`: an installed iOS PWA reports a layout viewport roughly the safe areas short on
-	// first paint — the status bar plus the home indicator, which `viewport-fit=cover` has already
-	// extended the page over — and only corrects it once the user interacts. `bottom: 0` therefore
-	// landed that far above the bottom of the screen and settled on the first scroll. Shifting by the
-	// gap between the layout viewport and what is actually visible fixes it at paint, and keeps
-	// correcting through rotation. Clamped at zero: in a browser tab `bottom: 0` already sits above
-	// the toolbar and must never be pushed down over it.
-	//
-	// Best-effort — a browser without visualViewport keeps the plain `bottom: 0` behaviour.
+	// `viewportShift`: how far `bottom: 0` falls short of the real bottom of the screen — see
+	// `viewportShift` in $lib/state/tabs for what iOS reports and why. Best-effort: a browser without
+	// visualViewport keeps the plain `bottom: 0` behaviour.
 	let keyboard = $state(false);
 	let viewportShift = $state(0);
 	$effect(() => {
 		const viewport = window.visualViewport;
 		if (!viewport) return;
+		const standalone = window.matchMedia('(display-mode: standalone)').matches;
 		let frame = 0;
 		const measure = () => {
 			frame = 0;
 			keyboard = isKeyboardOpen(window.innerHeight, viewport.height);
-			const visibleBottom = viewport.height + viewport.offsetTop;
-			const shift = visibleBottom - document.documentElement.clientHeight;
-			viewportShift = keyboard ? 0 : Math.max(0, shift);
+			viewportShift = keyboard
+				? 0
+				: shiftForViewport({
+						layoutHeight: document.documentElement.clientHeight,
+						visualBottom: viewport.height + viewport.offsetTop,
+						screenWidth: window.screen.width,
+						screenHeight: window.screen.height,
+						innerWidth: window.innerWidth,
+						innerHeight: window.innerHeight,
+						standalone
+					});
 			document.documentElement.style.setProperty('--viewport-shift', `${viewportShift}px`);
 		};
 		const schedule = () => {

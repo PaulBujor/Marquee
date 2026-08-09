@@ -29,8 +29,6 @@
 		type ReleaseFilter
 	} from '$lib/tracking/library';
 	import { canRate } from '$lib/tracking/actions';
-	// TEMPORARY: viewport diagnostic. Remove before merge.
-	import ViewportDebug from '$lib/components/viewport-debug.svelte';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import type { PageData } from './$types';
 
@@ -243,8 +241,6 @@
 {#if data.user}
 	<!-- No top padding: the header owns the gap below itself, so it stays equal to the column inset. -->
 	<main class="mx-auto w-full max-w-3xl px-5 pb-tab-bar">
-		<!-- TEMPORARY: viewport diagnostic for the standalone tab-bar position. Remove before merge. -->
-		<ViewportDebug />
 		<!-- Continue watching — in-progress shows only (movies have no next episode) -->
 		{#if inProgress.length > 0}
 			<!-- Slide the whole section (heading + row) so the rest of the page eases up when the last

@@ -92,6 +92,47 @@ export function isKeyboardOpen(innerHeight: number, viewportHeight: number | nul
 	return innerHeight - viewportHeight >= KEYBOARD_MIN_DELTA;
 }
 
+export interface ViewportMetrics {
+	/** `document.documentElement.clientHeight`. */
+	layoutHeight: number;
+	/** `visualViewport.height + visualViewport.offsetTop`. */
+	visualBottom: number;
+	screenWidth: number;
+	screenHeight: number;
+	innerWidth: number;
+	innerHeight: number;
+	/** Whether the app is running as an installed PWA. */
+	standalone: boolean;
+}
+
+/**
+ * How far the fixed bottom bar must be pushed down to reach the real bottom of the screen.
+ *
+ * An installed iOS PWA lays the page out from the very top — it covers the status bar, because of
+ * `viewport-fit=cover` — but reports a viewport short by that bar's height, so `bottom: 0` lands
+ * that far above the bottom of the screen. Measured on an iPhone 15 Pro: an 852-tall screen reports
+ * a 793 layout viewport, and keeps reporting 793 for the life of the page; `visualViewport` also
+ * says 793 until the first touch and only then corrects to 852.
+ *
+ * So in standalone the screen's own height is the one honest number available at first paint. This
+ * measures rather than assumes: where the viewport is reported correctly the two agree and the shift
+ * is zero, and in a browser tab the screen is not consulted at all — there `bottom: 0` already sits
+ * correctly above any toolbar, which the clamp at zero protects.
+ */
+export function viewportShift(m: ViewportMetrics): number {
+	let visibleBottom = m.visualBottom;
+	if (m.standalone) {
+		// `screen` keeps the device's own orientation, so pick the edge matching ours rather than
+		// trusting `screenHeight` to be the tall one.
+		const portrait = m.innerWidth <= m.innerHeight;
+		const height = portrait
+			? Math.max(m.screenWidth, m.screenHeight)
+			: Math.min(m.screenWidth, m.screenHeight);
+		visibleBottom = Math.max(visibleBottom, height);
+	}
+	return Math.max(0, visibleBottom - m.layoutHeight);
+}
+
 /** Scroll offset below which the bar is always expanded. */
 export const COMPACT_ANCHOR = 80;
 /** Downward travel that collapses the labels. */
