@@ -34,8 +34,9 @@
 	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
 }
 
-/* The app's frosted-glass material, shared by every surface that floats over scrolling content (the
- * tab bar, the scroll-undo pill). Blur alone is not enough: over a poster or a full-bleed backdrop
+/* The app's frosted-glass material, shared by every surface that floats over scrolling content: the
+ * tab bar, the scroll-undo pill, the search field, and Sonner's toasts. Blur alone is not enough:
+ * over a poster or a full-bleed backdrop
  * the artwork reads straight through and the labels lose contrast. So the backdrop is also pushed
  * toward the surface's own tone — `contrast()` compresses it toward mid-grey, then `brightness()`
  * carries it up in light mode and down in dark — which is what makes a native material read as a
@@ -57,24 +58,31 @@
  *
  * Plain CSS rather than an `@utility`, deliberately: unlayered rules beat Tailwind's utility layer,
  * so applying `.glass` to a component that already sets its own background (the search input's
- * `bg-transparent` / `dark:bg-input/30`) works without per-call-site overrides. */
-.glass {
-	border: 1px solid var(--border);
-	background-color: var(--popover);
-	box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
+ * `bg-transparent` / `dark:bg-input/30`) works without per-call-site overrides. The recipe is held
+ * in two variables as well as the class, because Sonner styles its own toast element and can only be
+ * reached through the custom properties it reads — those toasts must not drift from this. */
+:root {
+	--glass-bg: var(--popover);
+	--glass-filter: none;
 }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-	.glass {
-		background-color: color-mix(in oklab, var(--popover) 70%, transparent);
-		-webkit-backdrop-filter: blur(40px) saturate(1.8) contrast(0.6) brightness(1.6);
-		backdrop-filter: blur(40px) saturate(1.8) contrast(0.6) brightness(1.6);
+	:root {
+		--glass-bg: color-mix(in oklab, var(--popover) 70%, transparent);
+		--glass-filter: blur(40px) saturate(1.8) contrast(0.6) brightness(1.6);
 	}
-	.dark .glass {
-		background-color: color-mix(in oklab, var(--popover) 45%, transparent);
-		-webkit-backdrop-filter: blur(40px) saturate(1.8) contrast(0.9) brightness(0.55);
-		backdrop-filter: blur(40px) saturate(1.8) contrast(0.9) brightness(0.55);
+	.dark {
+		--glass-bg: color-mix(in oklab, var(--popover) 45%, transparent);
+		--glass-filter: blur(40px) saturate(1.8) contrast(0.9) brightness(0.55);
 	}
+}
+
+.glass {
+	border: 1px solid var(--border);
+	background-color: var(--glass-bg);
+	box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
+	-webkit-backdrop-filter: var(--glass-filter);
+	backdrop-filter: var(--glass-filter);
 }
 
 /* Cross-fade between pages, driven by the root layout's onNavigate.
