@@ -237,6 +237,16 @@
 		@apply bg-background text-foreground;
 	}
 
+	/* Never let the document be shorter than the viewport. An installed iOS PWA anchors a
+	   `position: fixed; bottom: 0` element to the document rather than the viewport when the document
+	   is the shorter of the two, which floated the tab bar well above the bottom of the screen on any
+	   page that didn't fill it — a dashboard holding one title, or search before you've typed —
+	   while long, scrolled pages looked right. `dvh` rather than `vh` so browser chrome that
+	   collapses on scroll doesn't leave a gap instead. */
+	body {
+		min-height: 100dvh;
+	}
+
 	/* Kill the mobile double-tap-to-zoom gesture (and the legacy ~300ms click delay) on buttons and
 	   inputs, so a quick double-tap registers as taps rather than zooming the page. `manipulation`
 	   still allows scrolling and pinch-zoom, so page zoom stays available (we don't disable it via the
