@@ -85,19 +85,25 @@
 		return () => viewport.removeEventListener('resize', update);
 	});
 
-	// Publish the bar's real height so pages can clear it (`pb-tab-bar`) and toasts can sit above it.
-	// Font scaling makes the CSS baseline in layout.css only an estimate.
+	// Publish the bar's height, as two properties with different jobs — font scaling means the CSS
+	// baselines in layout.css are only estimates.
+	//
+	// `--tab-bar-space` is what pages pad by, and it tracks the EXPANDED height only. Letting the
+	// collapsed height through would shrink every page's bottom padding mid-scroll, shift the scroll
+	// position, and feed the compaction fold above — the two would oscillate.
+	//
+	// `--tab-bar-live` tracks the height right now, collapsed or not, and positions the things that
+	// float directly above the bar (toasts, the undo pill). They're fixed overlays, so following the
+	// bar down costs no reflow and can't feed that loop — whereas leaving them on the pinned value
+	// would visibly open a gap every time the bar collapsed.
 	let card = $state<HTMLElement | null>(null);
 	$effect(() => {
 		const el = card;
 		if (!el) return;
-		// Only ever publish the EXPANDED height. Letting the collapsed one through would shrink every
-		// page's bottom padding mid-scroll, shifting the scroll position and feeding the compaction
-		// fold above — the two would oscillate.
 		const publish = (height: number) => {
-			if (compact) return;
 			const space = `calc(${height}px + max(0.75rem, env(safe-area-inset-bottom)))`;
-			document.documentElement.style.setProperty('--tab-bar-space', space);
+			document.documentElement.style.setProperty('--tab-bar-live', space);
+			if (!compact) document.documentElement.style.setProperty('--tab-bar-space', space);
 		};
 		// Measure once up front: a ResizeObserver's first callback isn't guaranteed to arrive (and the
 		// API isn't guaranteed to exist), and the CSS baseline is only an estimate.
@@ -110,6 +116,7 @@
 		return () => {
 			observer?.disconnect();
 			document.documentElement.style.removeProperty('--tab-bar-space');
+			document.documentElement.style.removeProperty('--tab-bar-live');
 		};
 	});
 
@@ -149,7 +156,6 @@ fire a TMDB request on every pass of the cursor. -->
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
-	style="view-transition-name: marquee-tab-bar"
 	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none {keyboard
 		? 'translate-y-full opacity-0'
 		: ''}"

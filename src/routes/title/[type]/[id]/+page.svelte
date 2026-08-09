@@ -102,7 +102,7 @@
 </script>
 
 {#snippet backHeader()}
-	<header class="fixed inset-x-0 top-0 z-40" style="view-transition-name: marquee-title-header">
+	<header class="fixed inset-x-0 top-0 z-40">
 		<div
 			class="mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
 		>

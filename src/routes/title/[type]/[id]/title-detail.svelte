@@ -380,7 +380,7 @@ an entity because Svelte trims a literal trailing space at the end of an element
 <!-- Fixed header over the hero: the back control is always reachable, but the blur backing + title
 fade in together only once the in-content <h1> scrolls out of view — over the hero the header is
 fully transparent. Blur is stronger here (over artwork) than the other headers. -->
-<header class="fixed inset-x-0 top-0 z-40" style="view-transition-name: marquee-title-header">
+<header class="fixed inset-x-0 top-0 z-40">
 	<HeaderScrim strong show={!titleInView} />
 	<!-- Inset equally on all three sides that frame the control, matching the app header. -->
 	<div

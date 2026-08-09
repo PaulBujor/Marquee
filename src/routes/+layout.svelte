@@ -169,10 +169,10 @@
 	// title page, which stays inside the stack of whichever tab opened it. The two signed-out
 	// surfaces have nothing to navigate between.
 	const showTabBar = $derived(!!data.user && page.url.pathname !== '/login');
-	// Lift bottom-anchored toasts clear of the bar. Sonner uses the mobile set below 600px, so both
-	// have to be given; the variable already tracks the bar's measured height.
+	// Lift bottom-anchored toasts clear of the bar, tracking its *live* height so the gap stays put
+	// when the bar collapses on scroll. Sonner uses the mobile set below 600px, so both must be given.
 	const toastOffset = $derived(
-		showTabBar ? { bottom: 'calc(var(--tab-bar-space) + 1.5rem)' } : undefined
+		showTabBar ? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)' } : undefined
 	);
 </script>
 

@@ -7,7 +7,7 @@
 <!-- Sticky app header: content scrolls blurred beneath it, faded out by a top→transparent
 gradient. Aligned to the dashboard's max-w-3xl content column; clears the iOS status bar.
 Branding only — the destinations live in the bottom tab bar. -->
-<header class="sticky top-0 z-40" style="view-transition-name: marquee-app-header">
+<header class="sticky top-0 z-40">
 	<HeaderScrim />
 	<!-- The inset is the same on all three sides that frame the wordmark — above it, to its left, and
 	below it down to the first control — so the header reads as evenly set into the content column

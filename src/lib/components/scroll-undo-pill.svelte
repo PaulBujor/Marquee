@@ -32,7 +32,7 @@
 
 <div
 	aria-live="polite"
-	class="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-space)+0.75rem)] z-40 flex justify-center px-4"
+	class="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-live)+0.75rem)] z-40 flex justify-center px-4"
 >
 	{#if offer !== null}
 		<button
