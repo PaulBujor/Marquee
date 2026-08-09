@@ -1,6 +1,7 @@
 <script lang="ts">
-	// Shared back control for secondary pages (search, settings, timeline, the title skeleton/error
-	// headers). When we arrived from within the app it pops browser history (`history.back()`), so
+	// Shared back control for the title page's skeleton/error headers — the tab destinations don't
+	// carry one, since they're roots. When we arrived from within the app it pops browser history
+	// (`history.back()`), so
 	// Back unwinds the existing stack instead of pushing a fresh entry; when the page was opened cold
 	// (deep link / new tab) there's nothing in-app to pop, so it navigates to a fallback (home by
 	// default). "Came from within the app" is read from the shared `navigation` state (fed by the root
@@ -30,13 +31,15 @@
 	}
 </script>
 
+<!-- Ghost with a faint blurred plate, matching the title page's own control: it sits over artwork,
+where a solid chip is heavy but a bare icon can vanish. 44px is a full touch target. -->
 <Button
 	onclick={goBack}
-	variant="outline"
-	size="icon"
+	variant="ghost"
+	size="icon-lg"
 	shape="round"
-	class={cn('shrink-0 text-muted-foreground', className)}
+	class={cn('shrink-0 bg-background/40 backdrop-blur-md', className)}
 	aria-label={label}
 >
-	<ChevronLeftIcon class="size-4" />
+	<ChevronLeftIcon class="size-5" />
 </Button>

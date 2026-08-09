@@ -269,7 +269,7 @@
 					<ul class="grid grid-cols-3 gap-3 sm:grid-cols-4">
 						{#each [0, 1, 2, 3, 4, 5, 6, 7] as i (i)}
 							<li class="flex flex-col gap-1.5">
-								<Skeleton class="aspect-[2/3] w-full rounded-[14px]" />
+								<Skeleton class="aspect-[2/3] w-full rounded-md" />
 								<Skeleton class="h-3 w-full" />
 								<Skeleton class="h-2.5 w-2/3" />
 							</li>

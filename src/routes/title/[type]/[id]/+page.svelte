@@ -102,9 +102,9 @@
 </script>
 
 {#snippet backHeader()}
-	<header class="fixed inset-x-0 top-0 z-40">
+	<header class="fixed inset-x-0 top-0 z-40" style="view-transition-name: marquee-title-header">
 		<div
-			class="mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
+			class="mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
 		>
 			<BackButton />
 		</div>
@@ -115,12 +115,12 @@
 	<TitleDetail {detail} season={seasonData} {enrichState} />
 {:else if pageState === 'notfound'}
 	{@render backHeader()}
-	<main class="mx-auto w-full max-w-2xl px-5 pt-[calc(4.5rem+env(safe-area-inset-top))]">
+	<main class="mx-auto w-full max-w-2xl px-5 pt-[calc(5.5rem+env(safe-area-inset-top))] pb-tab-bar">
 		<ErrorState message="We couldn't find this title." />
 	</main>
 {:else if pageState === 'unavailable'}
 	{@render backHeader()}
-	<main class="mx-auto w-full max-w-2xl px-5 pt-[calc(4.5rem+env(safe-area-inset-top))]">
+	<main class="mx-auto w-full max-w-2xl px-5 pt-[calc(5.5rem+env(safe-area-inset-top))] pb-tab-bar">
 		<ErrorState message="This title isn't available offline yet." />
 	</main>
 {:else}

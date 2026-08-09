@@ -2,7 +2,6 @@
 	import { resolve } from '$app/paths';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import PageHeader from '$lib/components/page-header.svelte';
-	import BackButton from '$lib/components/back-button.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { LibraryState } from '$lib/tracking/library.svelte';
 	import { filterUpcoming, groupUpcomingByYear } from '$lib/tracking/library';
@@ -37,14 +36,15 @@
 
 <svelte:head><title>Upcoming · Marquee</title></svelte:head>
 
+<!-- No back control: this is a tab root. `min-h-10` keeps the header the height the sticky year
+divider below is positioned against. -->
 <PageHeader>
-	<div class="flex items-center gap-3">
-		<BackButton label="Back to home" />
-		<h1 class="text-lg font-semibold">Upcoming</h1>
+	<div class="flex min-h-10 items-center gap-3">
+		<h1 class="font-serif text-xl font-semibold">Upcoming</h1>
 	</div>
 </PageHeader>
 
-<main class="mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 pt-3 pb-16">
+<main class="mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 pt-3 pb-tab-bar">
 	{#if !data.user}
 		<div class="flex flex-col items-start gap-4 py-16">
 			<p class="text-muted-foreground">Sign in to see your upcoming releases.</p>
@@ -75,7 +75,7 @@
 											type: entry.type,
 											id: entry.externalId?.split('/')[1] ?? ''
 										})}
-										class="-mx-2 flex items-center gap-3 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-secondary"
+										class="-mx-2 flex items-center gap-3 rounded-sm px-2 py-1.5 transition-colors hover:bg-secondary"
 									>
 										<div class="w-12 shrink-0">
 											<PosterTile

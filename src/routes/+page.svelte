@@ -239,7 +239,8 @@
 <svelte:head><title>Marquee</title></svelte:head>
 
 {#if data.user}
-	<main class="mx-auto w-full max-w-3xl px-5 pt-2 pb-16">
+	<!-- No top padding: the header owns the gap below itself, so it stays equal to the column inset. -->
+	<main class="mx-auto w-full max-w-3xl px-5 pb-tab-bar">
 		<!-- Continue watching — in-progress shows only (movies have no next episode) -->
 		{#if inProgress.length > 0}
 			<!-- Slide the whole section (heading + row) so the rest of the page eases up when the last

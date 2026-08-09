@@ -1,15 +1,20 @@
 <script lang="ts">
 	import './layout.css';
-	import { untrack } from 'svelte';
-	import { afterNavigate } from '$app/navigation';
+	import { tick, untrack } from 'svelte';
+	import { afterNavigate, beforeNavigate, onNavigate } from '$app/navigation';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import { page } from '$app/state';
 	import AppHeader from '$lib/components/app-header.svelte';
 	import InstallPrompt from '$lib/components/install-prompt.svelte';
 	import NotificationPrompt from '$lib/components/notification-prompt.svelte';
 	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
+	import ScrollUndoPill from '$lib/components/scroll-undo-pill.svelte';
+	import TabBar from '$lib/components/tab-bar.svelte';
 	import { Toaster } from '$lib/components/ui/sonner';
 	import { goto } from '$app/navigation';
 	import { theme } from '$lib/state/theme.svelte.js';
+	import { activeTab } from '$lib/state/tabs';
+	import { tabs } from '$lib/state/tabs.svelte.js';
 	import { getReferencedMediaIds, setActiveUser } from '$lib/client/idb';
 	import { library } from '$lib/tracking/library.svelte';
 	import { flushPendingLogout } from '$lib/client/logout';
@@ -23,8 +28,51 @@
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
 	// Track in-app navigation once, here in the persistent root layout, so the shared back-navigation
-	// state reliably sees every navigation regardless of when a per-page back control mounts.
-	afterNavigate((nav) => navigation.record(nav.from?.url));
+	// state reliably sees every navigation regardless of when a per-page back control mounts. The
+	// same pass feeds the tab bar's memory of where you were on each destination — the dashboard and
+	// search both mirror their state into the URL with `goto`, so their filters and query land here
+	// for free, with no per-page hook.
+	afterNavigate((nav) => {
+		navigation.record(nav.from?.url);
+		const to = nav.to?.url ?? page.url;
+		tabs.record(to);
+		const restore = tabs.takeRestore(activeTab(to.pathname));
+		if (restore !== null) void restoreScroll(restore);
+	});
+
+	// Remember the scroll offset of the destination being left.
+	beforeNavigate(() => tabs.captureScroll(page.url.pathname, window.scrollY));
+
+	/**
+	 * Scroll a freshly-entered tab back to where it was. Only ever called for a tab-bar navigation
+	 * (the arm/consume ticket above) — every other arrival keeps SvelteKit's own scroll handling.
+	 * Runs as a short convergence loop because a lazily-paginated page (the dashboard) remounts
+	 * shorter than it was: each clamped scroll pulls its load-more sentinel into range, growing the
+	 * list so the next frame can reach deeper. Bounded, so it can never spin.
+	 */
+	async function restoreScroll(y: number) {
+		for (let i = 0; i < 5 && window.scrollY < y - 1; i++) {
+			await tick();
+			window.scrollTo(0, y);
+			await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+		}
+	}
+
+	// Cross-fade between pages. Skipped when the pathname is unchanged: the dashboard's filter
+	// mirroring and the search page's `?q=` push are same-page `goto`s that would otherwise fade the
+	// whole screen on every keystroke. Back/forward are deliberately included, and browsers without
+	// the API just navigate as before.
+	onNavigate((nav) => {
+		if (!document.startViewTransition) return;
+		if (prefersReducedMotion.current) return;
+		if (nav.from?.url.pathname === nav.to?.url.pathname) return;
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve();
+				await nav.complete;
+			});
+		});
+	});
 
 	// Scope the local store to the signed-in user *before* any tracking UI opens it (the layout
 	// script runs before child pages mount). Per-user database (`marquee-<id>`) — a wrong-account
@@ -75,6 +123,7 @@
 		if (uid !== cachedForUser) {
 			navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PAGES' });
 			library.reset(); // the previous user's titles must not carry into the new session
+			tabs.reset(); // nor their per-destination filters, query and scroll offsets
 
 			// Drop the previous user's "last synced" timestamp on the actual account change (not on
 			// every sync teardown, which invalidateAll() would trigger) so it can't briefly show for
@@ -115,6 +164,16 @@
 
 	// OS chrome matches the app background (not the accent); hex mirror `--background`.
 	const themeColor = $derived(theme.isDark ? '#000000' : '#ffffff');
+
+	// The tab bar is the app's primary navigation, so it rides every signed-in page — including a
+	// title page, which stays inside the stack of whichever tab opened it. The two signed-out
+	// surfaces have nothing to navigate between.
+	const showTabBar = $derived(!!data.user && page.url.pathname !== '/login');
+	// Lift bottom-anchored toasts clear of the bar. Sonner uses the mobile set below 600px, so both
+	// have to be given; the variable already tracks the bar's measured height.
+	const toastOffset = $derived(
+		showTabBar ? { bottom: 'calc(var(--tab-bar-space) + 1.5rem)' } : undefined
+	);
 </script>
 
 <svelte:head>
@@ -208,13 +267,18 @@
 		href="/splash/ipadair-landscape-dark.png"
 	/>
 </svelte:head>
-<!-- The header (branding + nav) rides on the home page only; other pages carry their own
-back navigation, keeping the movie/show page's immersive layout uncluttered. -->
+<!-- The branding header rides on the home page only; other pages carry their own title, keeping the
+movie/show page's immersive layout uncluttered. Navigation itself lives in the bottom bar below. -->
 {#if data.user && page.url.pathname === '/'}
 	<AppHeader />
 {/if}
 {@render children()}
-<Toaster />
+<!-- After the content, so the bar comes last in tab order — matching where it sits on screen. -->
+{#if showTabBar}
+	<ScrollUndoPill />
+	<TabBar />
+{/if}
+<Toaster offset={toastOffset} mobileOffset={toastOffset} />
 <InstallPrompt />
 <NotificationPrompt />
 <PwaUpdatePrompt />

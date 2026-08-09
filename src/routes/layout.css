@@ -13,6 +13,66 @@
 	scrollbar-width: none;
 }
 
+/* Vertical space the floating tab bar occupies: card height + the gap below it + the home-indicator
+ * inset. The bar overwrites this at runtime with its measured height (user font scaling changes it);
+ * these are the SSR / no-JS baselines. Pages clear the bar with `pb-tab-bar`, and bottom-anchored
+ * toasts are offset by the same variable. Unconditional — the two pages without a bar (login, the
+ * signed-out landing) are viewport-centred and never apply the utility. */
+:root {
+	--tab-bar-space: calc(4.875rem + max(0.75rem, env(safe-area-inset-bottom)));
+}
+@media (min-width: 40rem) {
+	:root {
+		--tab-bar-space: calc(3.5rem + 1rem);
+	}
+}
+
+@utility pb-tab-bar {
+	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
+}
+
+/* Cross-fade between pages, driven by the root layout's onNavigate. The app chrome is named so it's
+ * lifted out of the root snapshot and held still: naming alone isn't enough (each name still
+ * cross-fades its own snapshot), and a backdrop-filter surface snapshots as flat pixels, so fading
+ * the tab bar over changing content ghosts visibly. Names must be unique per document — only one of
+ * the three header names is ever mounted at a time. */
+@media (prefers-reduced-motion: no-preference) {
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation-duration: 200ms;
+		animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+	}
+}
+
+::view-transition-group(marquee-tab-bar),
+::view-transition-group(marquee-app-header),
+::view-transition-group(marquee-page-header),
+::view-transition-group(marquee-title-header) {
+	animation: none;
+}
+::view-transition-old(marquee-tab-bar),
+::view-transition-old(marquee-app-header),
+::view-transition-old(marquee-page-header),
+::view-transition-old(marquee-title-header) {
+	display: none;
+}
+::view-transition-new(marquee-tab-bar),
+::view-transition-new(marquee-app-header),
+::view-transition-new(marquee-page-header),
+::view-transition-new(marquee-title-header) {
+	animation: none;
+	opacity: 1;
+}
+
+/* Backstop for the JS guard, in case the preference flips between the read and the transition. */
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-group(*),
+	::view-transition-old(*),
+	::view-transition-new(*) {
+		animation: none !important;
+	}
+}
+
 /*
  * Design tokens. Colors are oklch(Lightness Chroma Hue), each with its sRGB hex
  * alongside — the hex is the value the palette was specified in, the oklch is
@@ -85,8 +145,18 @@
 }
 
 @theme inline {
-	--radius-sm: calc(var(--radius) - 4px);
-	--radius-md: calc(var(--radius) - 2px);
+	/* Corner radii, as four rungs the app actually distinguishes between — they were previously
+	 * 2px apart (20/22/24/28), a ladder too fine to design with, which is why the values below had
+	 * been open-coded as `rounded-[10px]` / `rounded-[14px]` all over the app instead. Each rung has
+	 * a job:
+	 *   sm  list rows, inline chips, banners, compact controls
+	 *   md  artwork and media tiles (posters, avatars), menu/select items, tooltips, skeletons
+	 *   lg  menus, popovers and select panels (= --radius)
+	 *   xl  cards and dialogs — the largest surfaces
+	 * Anything a finger presses is a capsule (`rounded-full`) instead: buttons, badges, toggles,
+	 * toasts and the bottom tab bar. Reach for a rung, not a pixel value. */
+	--radius-sm: 10px;
+	--radius-md: 14px;
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) + 4px);
 

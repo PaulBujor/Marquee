@@ -18,10 +18,14 @@
      button on the right. Toasts render in a portal, so these are global + scoped under `.toaster`
      (higher specificity than Sonner's own `[data-sonner-toast]` rules). -->
 <style>
+	/* Fully rounded, to match the bottom tab bar it stacks above — the two floating surfaces at the
+	   bottom of the screen share a background, border and shadow, so they must share a silhouette
+	   too. The inline layout below (round dismiss left, pill action right) is built for a capsule;
+	   the extra inline padding keeps both clear of the curved ends. */
 	:global(.toaster [data-sonner-toast][data-styled='true']) {
 		gap: 0.625rem;
-		padding: 0.75rem;
-		border-radius: calc(var(--radius) + 4px);
+		padding: 0.75rem 1rem;
+		border-radius: 9999px;
 	}
 
 	:global(.toaster [data-sonner-toast][data-styled='true']) :global([data-title]) {
