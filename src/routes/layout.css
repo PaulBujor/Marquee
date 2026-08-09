@@ -239,6 +239,20 @@
 		@apply bg-background text-foreground;
 	}
 
+	/* Installed iOS PWAs hit an open WebKit bug where viewport units come back missing a safe-area
+	   inset under `viewport-fit=cover`, so the page stops short of the bottom of the screen: iOS
+	   fills the remainder itself (the dark band below the content) and a `position: fixed; bottom: 0`
+	   element lands on the short edge rather than the real one. Handing the document that height back
+	   is the fix WebKit's own bug thread recommends.
+	   Scoped to installed apps — in a browser tab the window is not the screen, and adding the inset
+	   there would only buy a strip of dead scrollable space. It resolves to plain `100dvh` wherever
+	   the inset is zero, and stops doing anything at all once the bug is fixed. */
+	@media (display-mode: standalone) {
+		html {
+			min-height: calc(100dvh + env(safe-area-inset-bottom));
+		}
+	}
+
 	/* Kill the mobile double-tap-to-zoom gesture (and the legacy ~300ms click delay) on buttons and
 	   inputs, so a quick double-tap registers as taps rather than zooming the page. `manipulation`
 	   still allows scrolling and pinch-zoom, so page zoom stays available (we don't disable it via the
