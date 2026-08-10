@@ -5,6 +5,7 @@
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import BackButton from '$lib/components/back-button.svelte';
+	import ExpandableText from '$lib/components/expandable-text.svelte';
 	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { posterUrl } from '$lib/media.js';
@@ -27,7 +28,6 @@
 	let totalPages = $state(initial?.totalPages ?? 1);
 	let loadingMore = $state(false);
 	let errored = $state(false);
-	let bioOpen = $state(false);
 
 	// Bumped on every load so a slow response for a person the user has already navigated away from
 	// can't append to the current one — the same guard the season switcher and MediaImage use.
@@ -43,7 +43,6 @@
 		totalPages = data.initial?.totalPages ?? 1;
 		loadingMore = false;
 		errored = false;
-		bioOpen = false;
 		seq++;
 	});
 
@@ -106,18 +105,6 @@
 	function creditMeta(credit: PersonCredit): string {
 		return [credit.year, credit.role].filter((part) => Boolean(part)).join(' · ');
 	}
-
-	// Only offer the bio toggle when the text is actually cut off — a short biography fits inside the
-	// clamp, and a "Read more" that reveals nothing is worse than no control at all. Measured while
-	// collapsed; expanding removes the clamp, so skip re-measuring then or the control would vanish
-	// the moment it was used.
-	let bio = $state<HTMLParagraphElement | null>(null);
-	let bioClamped = $state(false);
-	$effect(() => {
-		const el = bio;
-		if (!el || bioOpen) return;
-		bioClamped = el.scrollHeight > el.clientHeight + 1;
-	});
 </script>
 
 <svelte:head><title>{person ? `${person.name} · Marquee` : 'Marquee'}</title></svelte:head>
@@ -182,21 +169,9 @@
 		{/if}
 
 		{#if person.biography}
-			<div class="flex flex-col items-start gap-1">
-				<p bind:this={bio} class="text-sm leading-relaxed {bioOpen ? '' : 'line-clamp-5'}">
-					{person.biography}
-				</p>
-				{#if bioClamped}
-					<button
-						type="button"
-						onclick={() => (bioOpen = !bioOpen)}
-						aria-expanded={bioOpen}
-						class="text-xs font-semibold text-primary hover:underline"
-					>
-						{bioOpen ? 'Show less' : 'Read more'}
-					</button>
-				{/if}
-			</div>
+			{#key person.tmdbId}
+				<ExpandableText text={person.biography} class="text-sm leading-relaxed" />
+			{/key}
 		{/if}
 
 		{#if upcoming.length > 0}

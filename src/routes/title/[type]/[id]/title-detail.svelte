@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
+	import ExpandableText from '$lib/components/expandable-text.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
@@ -725,7 +726,13 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				</div>
 
 				{#if selectedSeasonOverview}
-					<p class="text-sm leading-relaxed text-muted-foreground">{selectedSeasonOverview}</p>
+					{#key selectedSeason}
+						<ExpandableText
+							text={selectedSeasonOverview}
+							lines={4}
+							class="text-sm leading-relaxed text-muted-foreground"
+						/>
+					{/key}
 				{/if}
 
 				{#if tracking.view.tracked && selectedSeasonSummary && !tracking.isSeasonWatched(selectedSeasonSummary.seasonNumber)}
