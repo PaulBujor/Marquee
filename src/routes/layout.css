@@ -41,21 +41,26 @@
  * it toward mid-grey, then `brightness()` carries it up in light mode and down in dark — which is
  * what makes a native material read as a tinted plate rather than a window.
  *
- * The values were picked by measuring contrast against every backdrop the app can put behind the
- * bar — the page background, a dark or bright poster, and dark or bright title artwork — and taking
- * the most see-through setting that still reads. Over the page background, which is most of the
- * app, both labels clear WCAG AA (5.5:1+). Over artwork the wash can't fully win without turning
- * the surface into an opaque plate, so the floor there is the 3:1 AA-large / non-text threshold:
- * worst case is light mode over dark artwork at 3.88:1 for the label and 3.55:1 for the teal active
- * label. That relaxation is deliberate — holding 4.5:1 everywhere meant a near-solid panel with no
- * glass left. Re-measure against those five backdrops before changing anything here; the binding
- * constraint is the 11px teal active label in light mode. Both prefixes: iOS Safari needs
- * `-webkit-`.
+ * The values sit at the edge of what stays legible. Over the page background, which is most of the
+ * app, both labels clear WCAG AA comfortably. Over artwork the wash can't fully win without turning
+ * the surface into an opaque plate, so the floor there is the 3:1 AA-large / non-text threshold,
+ * measured against the hardest case there is — a pure-black or pure-white pixel landing directly
+ * behind a glyph. Worst case is the 11px teal active label: 3.37:1 in light over black, 3.39:1 in
+ * dark over white. That relaxation is deliberate — holding 4.5:1 everywhere meant a near-solid
+ * panel with no glass left. Both prefixes: iOS Safari needs `-webkit-`.
  *
- * The wash, not the blur, is what holds that floor — the compression bounds how far a backdrop
- * pixel can travel, so even a pure-white or pure-black one behind a glyph still clears 3:1. The
- * radius is therefore free to be small enough to keep the backdrop's shapes legible through the
- * surface, the way a native material does, rather than smearing them flat.
+ * Two things to know before touching this. The blur holds none of that floor — the compression
+ * bounds how far a backdrop pixel can travel, so the extremes above are what they are with no blur
+ * at all. The radius is purely how legible the backdrop's shapes stay through the surface, and a
+ * native material keeps them legible rather than smearing them flat.
+ *
+ * And the tint and the wash are the same knob. Thinning the tint while pushing `contrast()` harder
+ * to compensate holds the identical floor and lets through an identical amount of backdrop — it
+ * only moves where the flattening happens. There is no free transparency here: seeing more of what
+ * is behind the surface costs contrast and nothing else, so the tints below are set by the floor
+ * rather than by taste. They differ per theme because the floor does — the dark wash crushes the
+ * backdrop down and a bright teal sits on it comfortably, so dark can stay far thinner than light
+ * at the same legibility.
  *
  * Without backdrop-filter the surface stays fully opaque — a translucent panel with no wash behind
  * it would be the unreadable case this exists to prevent.
@@ -78,11 +83,11 @@
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
 	:root {
 		--glass-bg: color-mix(in oklab, var(--popover) 70%, transparent);
-		--glass-filter: blur(12px) saturate(1.8) contrast(0.6) brightness(1.6);
+		--glass-filter: blur(10px) saturate(1.8) contrast(0.6) brightness(1.6);
 	}
 	.dark {
-		--glass-bg: color-mix(in oklab, var(--popover) 45%, transparent);
-		--glass-filter: blur(12px) saturate(1.8) contrast(0.9) brightness(0.55);
+		--glass-bg: color-mix(in oklab, var(--popover) 35%, transparent);
+		--glass-filter: blur(10px) saturate(1.8) contrast(0.9) brightness(0.55);
 	}
 }
 
