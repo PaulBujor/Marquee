@@ -52,6 +52,11 @@
  * constraint is the 11px teal active label in light mode. Both prefixes: iOS Safari needs
  * `-webkit-`.
  *
+ * The wash, not the blur, is what holds that floor — the compression bounds how far a backdrop
+ * pixel can travel, so even a pure-white or pure-black one behind a glyph still clears 3:1. The
+ * radius is therefore free to be small enough to keep the backdrop's shapes legible through the
+ * surface, the way a native material does, rather than smearing them flat.
+ *
  * Without backdrop-filter the surface stays fully opaque — a translucent panel with no wash behind
  * it would be the unreadable case this exists to prevent.
  *
@@ -73,11 +78,11 @@
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
 	:root {
 		--glass-bg: color-mix(in oklab, var(--popover) 70%, transparent);
-		--glass-filter: blur(40px) saturate(1.8) contrast(0.6) brightness(1.6);
+		--glass-filter: blur(12px) saturate(1.8) contrast(0.6) brightness(1.6);
 	}
 	.dark {
 		--glass-bg: color-mix(in oklab, var(--popover) 45%, transparent);
-		--glass-filter: blur(40px) saturate(1.8) contrast(0.9) brightness(0.55);
+		--glass-filter: blur(12px) saturate(1.8) contrast(0.9) brightness(0.55);
 	}
 }
 
