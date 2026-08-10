@@ -133,6 +133,17 @@ describe('selectNotifiableEpisodes', () => {
 		expect(selectNotifiableEpisodes([row], new Set(), LONG_RUNNING)).toEqual([row]);
 	});
 
+	it('never notifies an abandoned show, even one watched and still running', () => {
+		// A started-then-abandoned show is the case watch records would otherwise wave through, and a
+		// new season doesn't override an explicit opt-out. The query excludes these too — this asserts
+		// the rule holds in the function itself, so widening that filter can't resurrect them.
+		const row = { mediaId: 'm1', airDate: '2026-07-27', status: 'did_not_finish' };
+		expect(selectNotifiableEpisodes([row], new Set(['m1']), LONG_RUNNING)).toEqual([]);
+		expect(
+			selectNotifiableEpisodes([row], new Set(['m1']), new Map([['m1', '2026-07-27']]))
+		).toEqual([]);
+	});
+
 	it('drops a mid-run episode of a want-to-watch show nothing has been watched of', () => {
 		expect(selectNotifiableEpisodes([wanted('2026-07-27')], new Set(), LONG_RUNNING)).toEqual([]);
 	});

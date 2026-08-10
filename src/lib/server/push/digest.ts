@@ -98,6 +98,11 @@ interface ReleaseGroup {
 /**
  * Which of the candidate episodes are worth a push.
  *
+ * `did_not_finish` never qualifies — a deliberate "stop telling me about this", which a new season
+ * doesn't override. The query already excludes it, but the rule belongs here rather than resting on
+ * that: this function is the one place the policy is stated, and a caller that widened its status
+ * filter shouldn't quietly start notifying shows someone abandoned.
+ *
  * `watching` and `completed` pass straight through — both say you follow this show. `completed`
  * matters as much as `watching` here: a show you finished keeps that status when it returns for
  * another season, and that new season is exactly the notification worth having.
@@ -124,6 +129,7 @@ export function selectNotifiableEpisodes<
 	premiereAirDate: ReadonlyMap<string, string>
 ): T[] {
 	return rows.filter((row) => {
+		if (row.status === 'did_not_finish') return false;
 		if (row.status !== 'want_to_watch') return true;
 		return (
 			watchedMediaIds.has(row.mediaId) ||
