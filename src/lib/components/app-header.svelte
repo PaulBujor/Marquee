@@ -21,9 +21,12 @@ Branding only — the destinations live in the bottom tab bar. -->
 			non-reactive read of the system preference and is true during SSR, so it would render the
 			wrong mark and never update in "auto" mode. The `.dark` class is already correct before first
 			paint (see the inline script in app.html), so let CSS choose. The favicon art is used, not the
-			PWA icons — those are padded for masking and would sit visibly inset beside the wordmark. -->
+			PWA icons — those are padded for masking and would sit visibly inset beside the wordmark.
+			The mark draws at 24px, so a 3x phone needs 144: without the srcset it upscaled 48 and read
+			visibly soft. -->
 			<img
 				src="/icons/favicon-48.png"
+				srcset="/icons/favicon-48.png 1x, /icons/favicon-96.png 2x, /icons/favicon-144.png 3x"
 				alt=""
 				aria-hidden="true"
 				width="48"
@@ -32,6 +35,7 @@ Branding only — the destinations live in the bottom tab bar. -->
 			/>
 			<img
 				src="/icons/favicon-48-dark.png"
+				srcset="/icons/favicon-48-dark.png 1x, /icons/favicon-96-dark.png 2x, /icons/favicon-144-dark.png 3x"
 				alt=""
 				aria-hidden="true"
 				width="48"
