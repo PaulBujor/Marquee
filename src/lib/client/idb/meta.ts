@@ -49,7 +49,7 @@ export async function setLastFullMediaCheck(at: number): Promise<void> {
 	await setMeta('lastFullMediaCheck', at);
 }
 
-const RECENT_SEARCHES_LIMIT = 5;
+const RECENT_SEARCHES_LIMIT = 25;
 
 /** Last committed searches, most recent first — empty if none recorded on this device. */
 export async function getRecentSearches(): Promise<string[]> {

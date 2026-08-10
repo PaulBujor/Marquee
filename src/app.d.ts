@@ -36,12 +36,7 @@ declare global {
 			user: User | null;
 		}
 		// interface PageData {}
-		interface PageState {
-			// The person whose modal is open on the title page. Held in shallow-routing state
-			// (`pushState`) rather than a component variable so Back closes the modal instead of
-			// leaving the page — the primary gesture on Android and in the installed PWA.
-			person?: number;
-		}
+		// interface PageState {}
 	}
 }
 
