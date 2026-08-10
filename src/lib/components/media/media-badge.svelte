@@ -8,7 +8,7 @@
 		children,
 		...restProps
 	}: {
-		variant?: 'default' | 'status' | 'genre' | 'custom' | 'airing';
+		variant?: 'default' | 'status' | 'genre' | 'custom' | 'production';
 		dashed?: boolean;
 		class?: string;
 		children?: import('svelte').Snippet;
@@ -22,7 +22,7 @@
 		variant === 'status' && 'border border-border text-muted-foreground',
 		variant === 'genre' && 'bg-secondary text-secondary-foreground',
 		variant === 'custom' && 'border border-dashed border-border text-muted-foreground',
-		variant === 'airing' && 'border border-primary/40 bg-primary/10 text-primary',
+		variant === 'production' && 'border border-primary/40 bg-primary/10 text-primary',
 		dashed && 'border-dashed',
 		className
 	)}

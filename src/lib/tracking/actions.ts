@@ -102,13 +102,16 @@ export function seasonCount(seasons: { seasonNumber: number }[]): number {
 }
 
 /**
- * A show's production state. `ended` — TMDB's own term for `in_production: false` — rather than
- * "finished", which would collide with the user's unrelated `did_not_finish` status.
+ * A show's production state, straight off TMDB's `in_production`. `ended` is TMDB's own term,
+ * rather than "finished", which would collide with the user's unrelated `did_not_finish` status.
+ * `in_production` is deliberately not "airing": it's true for a renewed show between seasons as
+ * well as one releasing weekly, and telling those apart needs a scheduled next episode we don't
+ * currently fetch.
  */
-export type AiringState = 'airing' | 'ended' | 'unknown';
+export type ProductionState = 'in_production' | 'ended' | 'unknown';
 
-export function airingState(inProduction: boolean | null): AiringState {
-	if (inProduction === true) return 'airing';
+export function productionState(inProduction: boolean | null): ProductionState {
+	if (inProduction === true) return 'in_production';
 	if (inProduction === false) return 'ended';
 	return 'unknown';
 }
