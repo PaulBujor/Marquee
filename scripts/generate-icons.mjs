@@ -89,9 +89,8 @@ await rm(SPLASH, { recursive: true, force: true });
 await mkdir(ICONS, { recursive: true });
 await mkdir(SPLASH, { recursive: true });
 
-// 1. Browser favicons (PNG), light + dark, from the full-bleed sources. 16/32/48 are the
-//    favicon proper; 96 and 144 back the 2x and 3x steps of the header mark, which is the
-//    same art at 24 CSS px and was visibly soft on a 3x phone when 48 was the largest size.
+// 1. Browser favicons (PNG), light + dark, from the full-bleed sources. 96 and 144 are for
+//    the header mark's 2x/3x steps, not for any favicon slot.
 for (const [input, suffix] of [
 	[src.favicon, ''],
 	[src.faviconDark, '-dark']
