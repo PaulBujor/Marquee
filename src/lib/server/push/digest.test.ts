@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
 import {
 	episodes,
+	episodeWatches,
 	media,
 	notificationLog,
 	pushSubscriptions,
@@ -11,7 +12,7 @@ import {
 } from '$lib/server/db/schema';
 import type { TrackingStatus } from '$lib/sync/events';
 import type { PushPayload, PushResult, PushSender, PushTarget } from './index';
-import { localDateHour, sendNewReleaseDigest } from './digest';
+import { localDateHour, selectNotifiableEpisodes, sendNewReleaseDigest } from './digest';
 
 type Db = ReturnType<typeof createTestDb>;
 
@@ -88,6 +89,18 @@ async function seedShow(
 	await db.insert(tracking).values({ id: `${USER}::${mediaId}`, userId: USER, mediaId, status });
 }
 
+/** Mark an episode watched for the user. */
+async function seedWatch(db: Db, mediaId: string, season: number, episode: number): Promise<void> {
+	await db.insert(episodeWatches).values({
+		id: `${USER}::${mediaId}::s${season}e${episode}`,
+		userId: USER,
+		mediaId,
+		season,
+		episode,
+		watched: true
+	});
+}
+
 let db: Db;
 beforeEach(async () => {
 	db = createTestDb();
@@ -106,6 +119,58 @@ describe('localDateHour', () => {
 	});
 });
 
+describe('selectNotifiableEpisodes', () => {
+	const wanted = (airDate: string | null) => ({ mediaId: 'm1', airDate, status: 'want_to_watch' });
+	const LONG_RUNNING = new Map([['m1', '2020-01-01']]);
+
+	it('passes a show being watched straight through', () => {
+		const row = { mediaId: 'm1', airDate: '2026-07-27', status: 'watching' };
+		expect(selectNotifiableEpisodes([row], new Set(), LONG_RUNNING)).toEqual([row]);
+	});
+
+	it('passes a completed show through, so a returning season still notifies', () => {
+		const row = { mediaId: 'm1', airDate: '2026-07-27', status: 'completed' };
+		expect(selectNotifiableEpisodes([row], new Set(), LONG_RUNNING)).toEqual([row]);
+	});
+
+	it('never notifies an abandoned show, even one watched and still running', () => {
+		// Watch records would otherwise wave this through; the query excludes it too, so this pins the
+		// rule to the function rather than the caller.
+		const row = { mediaId: 'm1', airDate: '2026-07-27', status: 'did_not_finish' };
+		expect(selectNotifiableEpisodes([row], new Set(['m1']), LONG_RUNNING)).toEqual([]);
+		expect(
+			selectNotifiableEpisodes([row], new Set(['m1']), new Map([['m1', '2026-07-27']]))
+		).toEqual([]);
+	});
+
+	it('drops a mid-run episode of a want-to-watch show nothing has been watched of', () => {
+		expect(selectNotifiableEpisodes([wanted('2026-07-27')], new Set(), LONG_RUNNING)).toEqual([]);
+	});
+
+	it('keeps a want-to-watch show once an episode has been watched, despite the stale status', () => {
+		const row = wanted('2026-07-27');
+		expect(selectNotifiableEpisodes([row], new Set(['m1']), LONG_RUNNING)).toEqual([row]);
+	});
+
+	it('keeps the premiere of a want-to-watch show added before it aired', () => {
+		const row = wanted('2026-07-27');
+		expect(selectNotifiableEpisodes([row], new Set(), new Map([['m1', '2026-07-27']]))).toEqual([
+			row
+		]);
+	});
+
+	it("drops a want-to-watch episode whose premiere can't be resolved", () => {
+		expect(selectNotifiableEpisodes([wanted('2026-07-27')], new Set(), new Map())).toEqual([]);
+	});
+
+	it('drops an undated want-to-watch episode unless something has been watched', () => {
+		expect(
+			selectNotifiableEpisodes([wanted(null)], new Set(), new Map([['m1', '2026-07-27']]))
+		).toEqual([]);
+		expect(selectNotifiableEpisodes([wanted(null)], new Set(['m1']), new Map())).toHaveLength(1);
+	});
+});
+
 describe('sendNewReleaseDigest', () => {
 	it('pushes a newly-aired episode to a due user once, and logs it', async () => {
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
@@ -120,6 +185,69 @@ describe('sendNewReleaseDigest', () => {
 		// Ledger dedupe: a second run at the same hour sends nothing more.
 		const second = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
 		expect(second).toEqual({ dueUsers: 1, sent: 0, pruned: 0 });
+		expect(calls).toHaveLength(1);
+	});
+
+	it('stays silent for a new episode of a long-running show nothing has been watched of', async () => {
+		// The complaint: an unwatched show pushing an episode every week.
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'want_to_watch');
+		await seedEpisode(db, SHOW, 1, 1, '2020-01-20'); // the premiere, long past
+		await seedEpisode(db, SHOW, 5, 11, '2026-07-27'); // airing now
+		const { sender, calls } = fakeSender();
+
+		expect(await sendNewReleaseDigest(db, {} as Env, NOW, sender)).toEqual({
+			dueUsers: 1,
+			sent: 0,
+			pruned: 0
+		});
+		expect(calls).toHaveLength(0);
+	});
+
+	it('pushes the premiere of a show added before it existed', async () => {
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'want_to_watch');
+		await seedEpisode(db, SHOW, 1, 1, '2026-07-27');
+		const { sender, calls } = fakeSender();
+
+		expect(await sendNewReleaseDigest(db, {} as Env, NOW, sender)).toMatchObject({ sent: 1 });
+		expect(calls).toHaveLength(1);
+	});
+
+	it('pushes a mid-run episode once an episode has actually been watched', async () => {
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'want_to_watch');
+		await seedEpisode(db, SHOW, 1, 1, '2020-01-20');
+		await seedEpisode(db, SHOW, 5, 11, '2026-07-27');
+		await seedWatch(db, SHOW, 1, 1);
+		const { sender, calls } = fakeSender();
+
+		// Status is still `want_to_watch` — the watch record is what qualifies it.
+		expect(await sendNewReleaseDigest(db, {} as Env, NOW, sender)).toMatchObject({ sent: 1 });
+		expect(calls).toHaveLength(1);
+	});
+
+	it('pushes a new season of a show marked completed', async () => {
+		// `completed` is stale by design once a show returns; no watch rows needed.
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'completed');
+		await seedEpisode(db, SHOW, 1, 1, '2020-01-20');
+		await seedEpisode(db, SHOW, 6, 1, '2026-07-27');
+		const { sender, calls } = fakeSender();
+
+		expect(await sendNewReleaseDigest(db, {} as Env, NOW, sender)).toMatchObject({ sent: 1 });
+		expect(calls).toHaveLength(1);
+	});
+
+	it('pushes a mid-run episode of a show marked watching without ticking episodes', async () => {
+		// Status is an intent signal in its own right.
+		await seedSub(db, 'https://push.example/ep-1', MADRID);
+		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'watching');
+		await seedEpisode(db, SHOW, 1, 1, '2020-01-20');
+		await seedEpisode(db, SHOW, 5, 11, '2026-07-27');
+		const { sender, calls } = fakeSender();
+
+		expect(await sendNewReleaseDigest(db, {} as Env, NOW, sender)).toMatchObject({ sent: 1 });
 		expect(calls).toHaveLength(1);
 	});
 

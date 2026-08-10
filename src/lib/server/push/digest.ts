@@ -1,6 +1,7 @@
-import { and, eq, gte, inArray, isNull, lte, or, type SQL } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lte, min, or, type SQL } from 'drizzle-orm';
 import {
 	episodes as episodesTable,
+	episodeWatches as episodeWatchesTable,
 	media as mediaTable,
 	notificationLog,
 	pushSubscriptions,
@@ -22,16 +23,7 @@ export const GRACE_DAYS = 2;
 const SPECIALS_SEASON = 0;
 /** Movie statuses we notify for (not `completed` / `did_not_finish`). */
 const ACTIVE_STATUSES = ['want_to_watch', 'watching'] as const;
-/**
- * Show statuses we notify for. Includes `completed`, unlike movies: this query already scopes to
- * episodes whose air date falls in the last `GRACE_DAYS` days, so any row it returns for a show
- * stored `completed` is guaranteed genuinely new — the user couldn't have completed the show
- * before that episode existed. This is what lets a show demoted by a new season (`tracking.status`
- * is user-intent only; nothing corrects it server-side, see `deriveStatus` for the client-side
- * read-time correction) still surface a release notification without the stored column ever being
- * fixed up. `did_not_finish` stays excluded — that's a deliberate "stop notifying me" signal, not
- * a data-staleness question.
- */
+/** Show statuses eligible to notify; {@link selectNotifiableEpisodes} then decides per row. */
 const ACTIVE_SHOW_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
 
 /**
@@ -94,6 +86,63 @@ interface ReleaseGroup {
 	items: ReleaseItem[];
 }
 
+/**
+ * Which candidate episodes are worth a push.
+ *
+ * `did_not_finish` never qualifies, not even for a new season. Stated here rather than left to the
+ * caller's status filter, so widening that filter can't resurrect abandoned shows. `watching` and
+ * `completed` always qualify — a finished show keeps `completed` when it returns.
+ *
+ * `want_to_watch` must earn it: an episode already watched, or the show's first-ever episode (a
+ * title added before it aired). `tracking.status` lags — the reconciler skips `status_changed`
+ * until episode metadata lands — so a watch record is what rescues an actively-watched show still
+ * reading `want_to_watch`. A later season's premiere doesn't count, nor does an unresolvable one.
+ */
+export function selectNotifiableEpisodes<
+	T extends { mediaId: string; airDate: string | null; status: string }
+>(
+	rows: T[],
+	watchedMediaIds: ReadonlySet<string>,
+	premiereAirDate: ReadonlyMap<string, string>
+): T[] {
+	return rows.filter((row) => {
+		if (row.status === 'did_not_finish') return false;
+		if (row.status !== 'want_to_watch') return true;
+		return (
+			watchedMediaIds.has(row.mediaId) ||
+			(row.airDate !== null && premiereAirDate.get(row.mediaId) === row.airDate)
+		);
+	});
+}
+
+/** Media ids for which this user has at least one episode marked watched. */
+async function findWatchedShows(db: Db, userId: string): Promise<Set<string>> {
+	const rows = await db
+		.selectDistinct({ mediaId: episodeWatchesTable.mediaId })
+		.from(episodeWatchesTable)
+		.where(and(eq(episodeWatchesTable.userId, userId), eq(episodeWatchesTable.watched, true)));
+	return new Set(rows.map((r) => r.mediaId));
+}
+
+/** Earliest air date per show, ignoring specials (one can precede the real premiere). */
+async function findPremiereAirDates(db: Db, mediaIds: string[]): Promise<Map<string, string>> {
+	const premieres = new Map<string, string>();
+	for (const chunk of chunkIds(mediaIds)) {
+		const rows = await db
+			.select({ mediaId: episodesTable.mediaId, airDate: min(episodesTable.airDate) })
+			.from(episodesTable)
+			.where(
+				and(
+					inArray(episodesTable.mediaId, chunk),
+					gte(episodesTable.seasonNumber, SPECIALS_SEASON + 1)
+				)
+			)
+			.groupBy(episodesTable.mediaId);
+		for (const r of rows) if (r.airDate !== null) premieres.set(r.mediaId, r.airDate);
+	}
+	return premieres;
+}
+
 /** Newly-aired episodes + newly-released movies for a user within `[from, to]`, as notifiable items. */
 async function findReleases(
 	db: Db,
@@ -109,6 +158,8 @@ async function findReleases(
 			season: episodesTable.seasonNumber,
 			episode: episodesTable.episodeNumber,
 			epName: episodesTable.name,
+			airDate: episodesTable.airDate,
+			status: trackingTable.status,
 			title: mediaTable.title,
 			externalId: mediaTable.externalId
 		})
@@ -126,7 +177,19 @@ async function findReleases(
 			)
 		);
 
-	for (const r of episodeRows) {
+	// Only `want_to_watch` rows need the extra facts — skip both reads when none are in play.
+	const undecided = [
+		...new Set(episodeRows.filter((r) => r.status === 'want_to_watch').map((r) => r.mediaId))
+	];
+	const notifiableEpisodes = undecided.length
+		? selectNotifiableEpisodes(
+				episodeRows,
+				await findWatchedShows(db, userId),
+				await findPremiereAirDates(db, undecided)
+			)
+		: episodeRows;
+
+	for (const r of notifiableEpisodes) {
 		items.push({
 			key: `${userId}::${r.mediaId}::s${r.season}e${r.episode}`,
 			mediaId: r.mediaId,
