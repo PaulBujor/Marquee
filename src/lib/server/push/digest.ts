@@ -1,6 +1,7 @@
-import { and, eq, gte, inArray, isNull, lte, or, type SQL } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lte, min, or, type SQL } from 'drizzle-orm';
 import {
 	episodes as episodesTable,
+	episodeWatches as episodeWatchesTable,
 	media as mediaTable,
 	notificationLog,
 	pushSubscriptions,
@@ -23,14 +24,14 @@ const SPECIALS_SEASON = 0;
 /** Movie statuses we notify for (not `completed` / `did_not_finish`). */
 const ACTIVE_STATUSES = ['want_to_watch', 'watching'] as const;
 /**
- * Show statuses we notify for. Includes `completed`, unlike movies: this query already scopes to
- * episodes whose air date falls in the last `GRACE_DAYS` days, so any row it returns for a show
- * stored `completed` is guaranteed genuinely new — the user couldn't have completed the show
- * before that episode existed. This is what lets a show demoted by a new season (`tracking.status`
- * is user-intent only; nothing corrects it server-side, see `deriveStatus` for the client-side
- * read-time correction) still surface a release notification without the stored column ever being
- * fixed up. `did_not_finish` stays excluded — that's a deliberate "stop notifying me" signal, not
- * a data-staleness question.
+ * Show statuses that can notify at all. Everything except `did_not_finish`, which is a deliberate
+ * "stop telling me about this" signal.
+ *
+ * Passing this filter is necessary but not sufficient — {@link selectNotifiableEpisodes} then
+ * decides per row. `tracking.status` is user intent, LWW from the event log, and nothing corrects
+ * it server-side, so it can't carry the decision alone: a show you are genuinely watching may still
+ * read `want_to_watch` when the reconciler declined to write a `status_changed` (it needs episode
+ * metadata that may not have arrived yet).
  */
 const ACTIVE_SHOW_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
 
@@ -94,6 +95,74 @@ interface ReleaseGroup {
 	items: ReleaseItem[];
 }
 
+/**
+ * Which of the candidate episodes are worth a push.
+ *
+ * `watching` and `completed` pass straight through — both say you follow this show. `completed`
+ * matters as much as `watching` here: a show you finished keeps that status when it returns for
+ * another season, and that new season is exactly the notification worth having.
+ *
+ * `want_to_watch` is the one that spams, and it's what this issue is about: a long-running show
+ * added to the list and never started, pushing an episode a week nobody will watch. It only
+ * qualifies two ways:
+ *
+ * - **Something has been watched.** The status column lags — the reconciler declines to write
+ *   `status_changed` when episode metadata hasn't arrived — so a show you are genuinely watching
+ *   can still read `want_to_watch`. A watched episode is the fact that settles it.
+ * - **It's the show's premiere**, the first episode of it ever to air. That's a title added before
+ *   it existed: you added it precisely to be told when it landed, and you can't have watched an
+ *   episode of something that hadn't aired. A *later* season's premiere doesn't qualify — if you
+ *   never started the show, season 5 arriving isn't news you asked for.
+ *
+ * A media id missing from `premiereAirDate` can't be resolved, so it isn't treated as a premiere.
+ */
+export function selectNotifiableEpisodes<
+	T extends { mediaId: string; airDate: string | null; status: string }
+>(
+	rows: T[],
+	watchedMediaIds: ReadonlySet<string>,
+	premiereAirDate: ReadonlyMap<string, string>
+): T[] {
+	return rows.filter((row) => {
+		if (row.status !== 'want_to_watch') return true;
+		return (
+			watchedMediaIds.has(row.mediaId) ||
+			(row.airDate !== null && premiereAirDate.get(row.mediaId) === row.airDate)
+		);
+	});
+}
+
+/** Media ids for which this user has at least one episode marked watched. */
+async function findWatchedShows(db: Db, userId: string): Promise<Set<string>> {
+	const rows = await db
+		.selectDistinct({ mediaId: episodeWatchesTable.mediaId })
+		.from(episodeWatchesTable)
+		.where(and(eq(episodeWatchesTable.userId, userId), eq(episodeWatchesTable.watched, true)));
+	return new Set(rows.map((r) => r.mediaId));
+}
+
+/**
+ * Earliest air date per show, ignoring specials — a special can air before the real premiere and
+ * would otherwise stand in for it. Chunked: the id list goes into an `IN (...)`.
+ */
+async function findPremiereAirDates(db: Db, mediaIds: string[]): Promise<Map<string, string>> {
+	const premieres = new Map<string, string>();
+	for (const chunk of chunkIds(mediaIds)) {
+		const rows = await db
+			.select({ mediaId: episodesTable.mediaId, airDate: min(episodesTable.airDate) })
+			.from(episodesTable)
+			.where(
+				and(
+					inArray(episodesTable.mediaId, chunk),
+					gte(episodesTable.seasonNumber, SPECIALS_SEASON + 1)
+				)
+			)
+			.groupBy(episodesTable.mediaId);
+		for (const r of rows) if (r.airDate !== null) premieres.set(r.mediaId, r.airDate);
+	}
+	return premieres;
+}
+
 /** Newly-aired episodes + newly-released movies for a user within `[from, to]`, as notifiable items. */
 async function findReleases(
 	db: Db,
@@ -109,6 +178,8 @@ async function findReleases(
 			season: episodesTable.seasonNumber,
 			episode: episodesTable.episodeNumber,
 			epName: episodesTable.name,
+			airDate: episodesTable.airDate,
+			status: trackingTable.status,
 			title: mediaTable.title,
 			externalId: mediaTable.externalId
 		})
@@ -126,7 +197,20 @@ async function findReleases(
 			)
 		);
 
-	for (const r of episodeRows) {
+	// Only `want_to_watch` rows need the extra facts, so skip both reads when none are in play —
+	// which is the common case for a user who keeps their statuses current.
+	const undecided = [
+		...new Set(episodeRows.filter((r) => r.status === 'want_to_watch').map((r) => r.mediaId))
+	];
+	const notifiableEpisodes = undecided.length
+		? selectNotifiableEpisodes(
+				episodeRows,
+				await findWatchedShows(db, userId),
+				await findPremiereAirDates(db, undecided)
+			)
+		: episodeRows;
+
+	for (const r of notifiableEpisodes) {
 		items.push({
 			key: `${userId}::${r.mediaId}::s${r.season}e${r.episode}`,
 			mediaId: r.mediaId,
