@@ -14,6 +14,7 @@ import type {
 	PersonCredit,
 	PersonCreditsPage,
 	PersonDetail,
+	SearchResult,
 	SeasonDetail,
 	TmdbCombinedCreditItem,
 	TmdbCombinedCredits,
@@ -104,10 +105,11 @@ function parseYear(date: string | undefined): number | null {
 	return Number.isFinite(year) && year > 0 ? year : null;
 }
 
-/** Normalize a raw multi-search row to the app shape, or null if it isn't a movie/show. */
-function normalize(item: TmdbMultiSearchItem): MediaSearchResult | null {
+/** Normalize a raw multi-search row to the app shape, or null for a media_type we don't render. */
+function normalize(item: TmdbMultiSearchItem): SearchResult | null {
 	if (item.media_type === 'movie') {
 		return {
+			kind: 'media',
 			tmdbId: item.id,
 			type: 'movie',
 			title: item.title ?? '',
@@ -118,6 +120,7 @@ function normalize(item: TmdbMultiSearchItem): MediaSearchResult | null {
 	}
 	if (item.media_type === 'tv') {
 		return {
+			kind: 'media',
 			tmdbId: item.id,
 			type: 'show',
 			title: item.name ?? '',
@@ -126,7 +129,20 @@ function normalize(item: TmdbMultiSearchItem): MediaSearchResult | null {
 			overview: item.overview ?? ''
 		};
 	}
-	// `person` (and any future media_type) are dropped.
+	if (item.media_type === 'person') {
+		// Every department, not just the three the ticket names: dropping a writer or a composer the
+		// user searched by name would look like the app simply doesn't know them.
+		return {
+			kind: 'person',
+			tmdbId: item.id,
+			name: item.name ?? '',
+			profilePath: item.profile_path ?? null,
+			department: item.known_for_department ?? null,
+			knownFor: (item.known_for ?? [])
+				.map((credit) => credit.title ?? credit.name ?? '')
+				.filter((title) => title !== '')
+		};
+	}
 	return null;
 }
 
@@ -371,8 +387,11 @@ export function createTmdbClient(apiKey: string) {
 	}
 
 	return {
-		/** Live multi-search for movies & shows. Returns normalized results (people filtered out). */
-		async search(query: string): Promise<MediaSearchResult[]> {
+		/**
+		 * Live multi-search for movies, shows and people, in TMDB's own relevance order — the UI
+		 * filters that one list rather than issuing a request per kind.
+		 */
+		async search(query: string): Promise<SearchResult[]> {
 			const trimmed = query.trim();
 			if (!trimmed) return [];
 
@@ -383,7 +402,7 @@ export function createTmdbClient(apiKey: string) {
 				'search'
 			) as unknown as TmdbMultiSearchResponse;
 
-			return (data.results ?? []).map(normalize).filter((r): r is MediaSearchResult => r !== null);
+			return (data.results ?? []).map(normalize).filter((r): r is SearchResult => r !== null);
 		},
 
 		/** Fetch a single movie/show with credits, images, videos, and similar titles appended. */

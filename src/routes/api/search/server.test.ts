@@ -67,7 +67,7 @@ describe('GET /api/search', () => {
 		expect(err.status).toBe(503);
 	});
 
-	it('returns normalized results on success', async () => {
+	it('returns normalized titles and people on success, each tagged with its kind', async () => {
 		vi.stubGlobal(
 			'fetch',
 			tmdbResponse({
@@ -79,6 +79,14 @@ describe('GET /api/search', () => {
 						release_date: '2010-07-16',
 						poster_path: '/i.jpg',
 						overview: 'x'
+					},
+					{
+						id: 525,
+						media_type: 'person',
+						name: 'Christopher Nolan',
+						profile_path: '/n.jpg',
+						known_for_department: 'Directing',
+						known_for: [{ title: 'Inception' }]
 					}
 				]
 			})
@@ -88,12 +96,21 @@ describe('GET /api/search', () => {
 		expect(data.degraded).toBe(false);
 		expect(data.results).toEqual([
 			{
+				kind: 'media',
 				tmdbId: 27205,
 				type: 'movie',
 				title: 'Inception',
 				year: 2010,
 				posterPath: '/i.jpg',
 				overview: 'x'
+			},
+			{
+				kind: 'person',
+				tmdbId: 525,
+				name: 'Christopher Nolan',
+				profilePath: '/n.jpg',
+				department: 'Directing',
+				knownFor: ['Inception']
 			}
 		]);
 	});

@@ -7,6 +7,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
+	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -22,6 +24,7 @@
 	} from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
+	import type { SearchResult } from '$lib/server/tmdb';
 	import { tabs } from '$lib/state/tabs.svelte.js';
 	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
 	import ClockIcon from '@lucide/svelte/icons/clock';
@@ -164,8 +167,35 @@
 			void commit();
 		wasOnline = nowOnline;
 	});
-	// The active result set + the query/mode that drive the list and the degraded/offline banner.
-	const results = $derived<SearchLikeMedia[]>(online ? data.results : offlineResults);
+	// One relevance-ordered list whatever the source. Offline rows come from the local catalog, which
+	// holds titles only, so they're tagged `media` to sit in the same list as the online results.
+	const results = $derived<SearchResult[]>(
+		online
+			? data.results
+			: offlineResults.map((media) => ({
+					kind: 'media' as const,
+					...media,
+					// `overview` is optional on a local row but required on a search result; keep the real
+					// one where there is one, or a quick-add from offline would store a blank overview.
+					overview: media.overview ?? ''
+				}))
+	);
+
+	// All / Titles / People is a filter over that one list rather than three requests, so it stays in
+	// local state: putting it in the URL would re-run the load and re-hit TMDB just to hide rows.
+	type ResultTab = 'all' | 'titles' | 'people';
+	const RESULT_TABS: { key: ResultTab; label: string }[] = [
+		{ key: 'all', label: 'All' },
+		{ key: 'titles', label: 'Titles' },
+		{ key: 'people', label: 'People' }
+	];
+	let resultTab = $state<ResultTab>('all');
+
+	const mediaResults = $derived(results.filter((r) => r.kind === 'media'));
+	const peopleResults = $derived(results.filter((r) => r.kind === 'person'));
+	const visibleResults = $derived(
+		resultTab === 'titles' ? mediaResults : resultTab === 'people' ? peopleResults : results
+	);
 	// Loading = the online commit is in flight, or the offline local search is still running.
 	const loading = $derived(searching || offlineSearching);
 	const activeQuery = $derived(online ? data.q : query.trim());
@@ -315,45 +345,90 @@ h-10 holds the header at the same height as the other pages'. -->
 		{/if}
 		{#if activeQuery && results.length === 0}
 			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
-				No movies or shows found for “{activeQuery}”.
+				Nothing found for “{activeQuery}”.
 			</p>
 		{/if}
 	{/if}
+
 	{#if !loading && results.length > 0}
-		<ul class="flex flex-col gap-1">
-			{#each results as item (item.type + item.tmdbId)}
-				{@const id = tmdbMediaId(item.type, item.tmdbId)}
-				<li class="flex items-center gap-1">
-					<a
-						href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
-						class="-ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors hover:bg-secondary"
-					>
-						<div class="w-12 shrink-0">
-							<PosterTile
-								type={item.type}
-								posterUrl={posterUrl(item.posterPath)}
-								alt={item.title}
+		<!-- One request, three views of it. Shown only once there's something to split. -->
+		<Tabs.Root bind:value={resultTab}>
+			<Tabs.List class="w-full">
+				{#each RESULT_TABS as t (t.key)}
+					<Tabs.Trigger value={t.key}>{t.label}</Tabs.Trigger>
+				{/each}
+			</Tabs.List>
+		</Tabs.Root>
+
+		{#if visibleResults.length === 0}
+			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
+				{#if resultTab === 'people' && networkMode !== 'up'}
+					People need a connection — only your own titles are searchable right now.
+				{:else if resultTab === 'people'}
+					No people found for “{activeQuery}”.
+				{:else}
+					No movies or shows found for “{activeQuery}”.
+				{/if}
+			</p>
+		{:else}
+			<ul class="flex flex-col gap-1">
+				{#each visibleResults as item (item.kind === 'person' ? `p${item.tmdbId}` : `${item.type}${item.tmdbId}`)}
+					{#if item.kind === 'person'}
+						<li>
+							<a
+								href={resolve('/person/[id]', { id: String(item.tmdbId) })}
+								class="-mx-2 flex min-w-0 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors hover:bg-secondary"
+							>
+								<PersonAvatar
+									name={item.name}
+									profilePath={item.profilePath}
+									class="size-12 shrink-0"
+								/>
+								<div class="flex min-w-0 flex-1 flex-col gap-1">
+									<span class="truncate font-medium">{item.name}</span>
+									<span class="truncate text-sm text-muted-foreground">
+										{[item.department, item.knownFor.slice(0, 2).join(', ')]
+											.filter(Boolean)
+											.join(' · ') || 'Person'}
+									</span>
+								</div>
+							</a>
+						</li>
+					{:else}
+						{@const id = tmdbMediaId(item.type, item.tmdbId)}
+						<li class="flex items-center gap-1">
+							<a
+								href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
+								class="-ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors hover:bg-secondary"
+							>
+								<div class="w-12 shrink-0">
+									<PosterTile
+										type={item.type}
+										posterUrl={posterUrl(item.posterPath)}
+										alt={item.title}
+									/>
+								</div>
+								<div class="flex min-w-0 flex-1 flex-col gap-1">
+									<span class="truncate font-medium">{item.title}</span>
+									<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+										<MediaTypeLabel type={item.type} year={item.year} />
+										{#if tracked.get(id) === 'did_not_finish'}
+											<span class="text-xs">Didn't finish</span>
+										{/if}
+									</div>
+								</div>
+							</a>
+							<SearchQuickAdd
+								title={item.title}
+								status={tracked.get(id)}
+								busy={writing.has(id)}
+								onadd={() => quickAdd(item)}
+								onremove={() => quickRemove(item)}
 							/>
-						</div>
-						<div class="flex min-w-0 flex-1 flex-col gap-1">
-							<span class="truncate font-medium">{item.title}</span>
-							<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-								<MediaTypeLabel type={item.type} year={item.year} />
-								{#if tracked.get(id) === 'did_not_finish'}
-									<span class="text-xs">Didn't finish</span>
-								{/if}
-							</div>
-						</div>
-					</a>
-					<SearchQuickAdd
-						title={item.title}
-						status={tracked.get(id)}
-						busy={writing.has(id)}
-						onadd={() => quickAdd(item)}
-						onremove={() => quickRemove(item)}
-					/>
-				</li>
-			{/each}
-		</ul>
+						</li>
+					{/if}
+				{/each}
+			</ul>
+		{/if}
 	{/if}
 </main>

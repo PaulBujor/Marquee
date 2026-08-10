@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
-	import { afterNavigate, goto, pushState } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
@@ -13,7 +13,6 @@
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import MediaImage from '$lib/components/media/media-image.svelte';
 	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
-	import PersonModal from '$lib/components/media/person-modal.svelte';
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -351,12 +350,10 @@
 		}
 	}
 
-	// The person modal lives in shallow-routing state rather than a local variable, so the phone's
-	// Back gesture closes it instead of leaving the title page. `afterNavigate` needs no reset: page
-	// state is per-history-entry, so a title → title hop arrives with it already cleared.
-	const openPersonId = $derived(page.state.person ?? null);
-	function openPerson(id: number) {
-		pushState('', { person: id });
+	/** A cast or crew member's own page. Un-annotated so `resolve()`'s branded type survives — the
+	 * lint rule that requires resolved hrefs keys on it. */
+	function personHref(id: number) {
+		return resolve('/person/[id]', { id: String(id) });
 	}
 </script>
 
@@ -364,15 +361,14 @@
 	<title>{detail.title} · Marquee</title>
 </svelte:head>
 
-<!-- A comma-separated crew list where each name opens that person's modal. The separator's space is
+<!-- A comma-separated crew list where each name links to that person. The separator's space is
 an entity because Svelte trims a literal trailing space at the end of an element. -->
 {#snippet crewNames(members: CrewMember[])}
 	{#each members as member, i (member.id)}
-		{#if i > 0}<span>,&#32;</span>{/if}<button
-			type="button"
-			onclick={() => openPerson(member.id)}
+		{#if i > 0}<span>,&#32;</span>{/if}<a
+			href={personHref(member.id)}
 			class="text-left underline decoration-dotted underline-offset-4 hover:decoration-solid"
-			>{member.name}</button
+			>{member.name}</a
 		>
 	{/each}
 {/snippet}
@@ -579,9 +575,8 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 							<ul class="no-scrollbar flex gap-3.5 overflow-x-auto pb-1">
 								{#each detail.cast as member (member.id)}
 									<li class="w-16 shrink-0">
-										<button
-											type="button"
-											onclick={() => openPerson(member.id)}
+										<a
+											href={personHref(member.id)}
 											class="flex w-full flex-col items-center rounded-lg text-center focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 										>
 											<PersonAvatar
@@ -597,7 +592,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 													>{member.character}</span
 												>
 											{/if}
-										</button>
+										</a>
 									</li>
 								{/each}
 							</ul>
@@ -865,7 +860,3 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 		{/if}
 	</div>
 </main>
-
-<!-- Credits reuse `similarHref`, so a title opened from a person joins the same suggestion chain as
-one opened from the "Similar" row — Back still steps one title at a time. -->
-<PersonModal personId={openPersonId} href={similarHref} onclose={() => history.back()} />

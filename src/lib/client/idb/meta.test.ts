@@ -62,10 +62,15 @@ describe('recent searches', () => {
 		expect(await getRecentSearches()).toEqual(['arrival', 'dune']);
 	});
 
-	it('caps the list at 5 entries, dropping the oldest', async () => {
+	it('caps the list at 25 entries, dropping the oldest', async () => {
 		await clearRecentSearches();
-		for (const q of ['a', 'b', 'c', 'd', 'e', 'f']) await addRecentSearch(q);
-		expect(await getRecentSearches()).toEqual(['f', 'e', 'd', 'c', 'b']);
+		const queries = Array.from({ length: 30 }, (_, i) => `q${i}`);
+		for (const q of queries) await addRecentSearch(q);
+		const recent = await getRecentSearches();
+		expect(recent).toHaveLength(25);
+		expect(recent[0]).toBe('q29');
+		expect(recent.at(-1)).toBe('q5');
+		expect(recent).not.toContain('q4');
 	});
 
 	it('bumps a repeated query to the top instead of duplicating it', async () => {

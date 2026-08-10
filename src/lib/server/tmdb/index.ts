@@ -9,6 +9,8 @@ export type {
 	PersonCredit,
 	PersonCreditsPage,
 	PersonDetail,
+	PersonSearchResult,
+	SearchResult,
 	Season,
 	SeasonDetail
 } from './types';

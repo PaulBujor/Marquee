@@ -8,7 +8,7 @@ import type {
 	TmdbTvDetailsResponse
 } from './types';
 
-/** A representative `/search/multi` payload: a movie, a show, and a person to be filtered out. */
+/** A representative `/search/multi` payload: a movie, a show, and a person. */
 const SAMPLE: TmdbMultiSearchResponse = {
 	page: 1,
 	total_pages: 1,
@@ -33,7 +33,10 @@ const SAMPLE: TmdbMultiSearchResponse = {
 		{
 			id: 500,
 			media_type: 'person',
-			name: 'Tom Cruise'
+			name: 'Tom Cruise',
+			profile_path: '/cruise.jpg',
+			known_for_department: 'Acting',
+			known_for: [{ title: 'Top Gun' }, { name: 'The Last Samurai' }]
 		}
 	]
 };
@@ -55,12 +58,13 @@ afterEach(() => {
 });
 
 describe('createTmdbClient.search', () => {
-	it('normalizes movies and shows and drops people', async () => {
+	it('normalizes movies, shows and people, keeping TMDB relevance order', async () => {
 		mockFetch(SAMPLE);
 		const results = await createTmdbClient('key').search('anything');
 
 		expect(results).toEqual([
 			{
+				kind: 'media',
 				tmdbId: 27205,
 				type: 'movie',
 				title: 'Inception',
@@ -69,14 +73,59 @@ describe('createTmdbClient.search', () => {
 				overview: 'A thief who steals corporate secrets.'
 			},
 			{
+				kind: 'media',
 				tmdbId: 1396,
 				type: 'show',
 				title: 'Breaking Bad',
 				year: 2008,
 				posterPath: null,
 				overview: 'A chemistry teacher turned meth cook.'
+			},
+			{
+				kind: 'person',
+				tmdbId: 500,
+				name: 'Tom Cruise',
+				profilePath: '/cruise.jpg',
+				department: 'Acting',
+				knownFor: ['Top Gun', 'The Last Samurai']
 			}
 		]);
+	});
+
+	it('keeps people from every department, not just acting', async () => {
+		mockFetch({
+			page: 1,
+			total_pages: 1,
+			total_results: 1,
+			results: [
+				{
+					id: 525,
+					media_type: 'person',
+					name: 'Christopher Nolan',
+					known_for_department: 'Directing'
+				}
+			]
+		});
+		expect(await createTmdbClient('key').search('nolan')).toEqual([
+			{
+				kind: 'person',
+				tmdbId: 525,
+				name: 'Christopher Nolan',
+				profilePath: null,
+				department: 'Directing',
+				knownFor: []
+			}
+		]);
+	});
+
+	it('drops a media_type it has no way to render', async () => {
+		mockFetch({
+			page: 1,
+			total_pages: 1,
+			total_results: 1,
+			results: [{ id: 9, media_type: 'collection', name: 'The Matrix Collection' }]
+		});
+		expect(await createTmdbClient('key').search('matrix')).toEqual([]);
 	});
 
 	it('sends the api key, query, and adult filter on the request URL', async () => {
@@ -105,7 +154,7 @@ describe('createTmdbClient.search', () => {
 			results: [{ id: 1, media_type: 'movie', title: 'Untitled' }]
 		});
 		const [result] = await createTmdbClient('key').search('x');
-		expect(result.year).toBeNull();
+		expect(result).toMatchObject({ kind: 'media', year: null });
 	});
 
 	it('throws TmdbError on a non-2xx response', async () => {

@@ -7,11 +7,16 @@ export interface TmdbMultiSearchItem {
 	// movie titles
 	title?: string;
 	release_date?: string;
-	// tv titles
+	// tv titles (`name` is also the person's name)
 	name?: string;
 	first_air_date?: string;
 	poster_path?: string | null;
 	overview?: string;
+	// people
+	profile_path?: string | null;
+	known_for_department?: string;
+	/** The few titles TMDB considers this person best known for. Shape matches a multi-search row. */
+	known_for?: Array<{ title?: string; name?: string }>;
 }
 
 export interface TmdbMultiSearchResponse {
@@ -31,6 +36,25 @@ export interface MediaSearchResult {
 	posterPath: string | null;
 	overview: string;
 }
+
+/** Normalized person row from a multi-search. */
+export interface PersonSearchResult {
+	tmdbId: number;
+	name: string;
+	profilePath: string | null;
+	/** What TMDB considers their main line of work — "Acting", "Directing", "Production"… */
+	department: string | null;
+	/** Titles TMDB considers them best known for, for a one-line subtitle. */
+	knownFor: string[];
+}
+
+/**
+ * One row of a search, tagged so the UI can render and filter a single relevance-ordered list.
+ * People are kept in the same list rather than a parallel one because TMDB's multi-search ranks
+ * everything together — searching a director should be able to put them above their films.
+ */
+export type SearchResult =
+	({ kind: 'media' } & MediaSearchResult) | ({ kind: 'person' } & PersonSearchResult);
 
 /**
  * A single row from an appended `recommendations` / `similar` list. Same shape as a multi-search
