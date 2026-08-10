@@ -1,14 +1,16 @@
 <script lang="ts">
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import SyncLogDialog from '$lib/components/sync-log-dialog.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { syncLog } from '$lib/client/sync/log.svelte';
 	import CloudOffIcon from '@lucide/svelte/icons/cloud-off';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
-	// Sync status light. Dashboard-cluster-light model: nothing renders on the happy path
+	// Sync status light. Dashboard-cluster-light model: nothing is *drawn* on the happy path
 	// (online + idle). It only lights up for an exception worth knowing about — offline, an in-flight
-	// sync, or a failure — and disappears the moment things settle. Offline takes priority (the whole
-	// channel is paused); then a hard error; then a transient in-flight sync.
+	// sync, or a failure. Offline takes priority (the whole channel is paused); then a hard error;
+	// then a transient in-flight sync.
 	const indicator = $derived.by(() => {
 		if (!sync.online)
 			return {
@@ -33,25 +35,31 @@
 			};
 		return null;
 	});
+
+	syncLog.load();
+
+	let logOpen = $state(false);
 </script>
 
-{#if indicator}
-	{@const Icon = indicator.icon}
-	<!-- Hover/focus tooltip (touch is a known browser gap — expected to be handled natively in time).
-	aria-label carries the state for screen readers regardless. -->
-	<Tooltip.Provider delayDuration={200}>
-		<Tooltip.Root>
-			<!-- Sized to match the logo mark beside it, so lighting up never makes the header row taller
-			than it already is — at 36px it grew the header and shifted the whole page down. It's a
-			status light rather than a control (its only affordance is the tooltip), so the smaller box
-			costs nothing; the state is on `aria-label` either way. -->
-			<Tooltip.Trigger
-				aria-label={indicator.label}
-				class="flex size-6 shrink-0 items-center justify-center rounded-full {indicator.tone}"
-			>
+<!-- Always rendered, empty when idle: the hidden double-tap has to work in every sync state.
+`touch-manipulation` keeps it from zooming the page. -->
+<Tooltip.Provider delayDuration={200}>
+	<Tooltip.Root>
+		<Tooltip.Trigger
+			aria-label={indicator?.label ?? 'Sync details'}
+			ondblclick={() => (logOpen = true)}
+			class="flex size-6 shrink-0 touch-manipulation items-center justify-center rounded-full {indicator?.tone ??
+				''}"
+		>
+			{#if indicator}
+				{@const Icon = indicator.icon}
 				<Icon class="size-4 {indicator.spin ? 'animate-spin' : ''}" />
-			</Tooltip.Trigger>
+			{/if}
+		</Tooltip.Trigger>
+		{#if indicator}
 			<Tooltip.Content>{indicator.label}</Tooltip.Content>
-		</Tooltip.Root>
-	</Tooltip.Provider>
-{/if}
+		{/if}
+	</Tooltip.Root>
+</Tooltip.Provider>
+
+<SyncLogDialog bind:open={logOpen} />
