@@ -9,8 +9,7 @@
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 
-	// Ticks while a cycle is in flight so a stall shows its own duration growing — the symptom this
-	// panel exists to make visible.
+	// Ticks while a cycle is in flight, so a stall shows its duration growing.
 	let now = $state(Date.now());
 	$effect(() => {
 		if (!open || sync.cycleStartedAt === null) return;

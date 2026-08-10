@@ -41,10 +41,8 @@
 	let logOpen = $state(false);
 </script>
 
-<!-- The button is always rendered, even with no icon in it: the hidden double-tap has to work in
-every sync state, including the idle one where nothing is drawn. Sized to match the logo beside it
-so lighting up never changes the header's height. `touch-manipulation` keeps a double-tap from
-zooming the page. -->
+<!-- Always rendered, empty when idle: the hidden double-tap has to work in every sync state.
+`touch-manipulation` keeps it from zooming the page. -->
 <Tooltip.Provider delayDuration={200}>
 	<Tooltip.Root>
 		<Tooltip.Trigger

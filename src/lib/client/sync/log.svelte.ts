@@ -1,8 +1,5 @@
-// Client-only sync log — a rune singleton, like theme/navigation/tabs.
-//
-// Exists to answer "what is sync doing right now", a hanging cycle in particular: each phase logs
-// when it starts as well as when it finishes, so a stall shows up as a start with no end. Mirrored
-// to sessionStorage so the log survives a reload as well as navigation.
+// Client-only sync log — a rune singleton, like theme/navigation/tabs. Mirrored to sessionStorage
+// so it survives a reload as well as navigation, and dies with the tab.
 
 import {
 	appendEntry,
@@ -23,7 +20,7 @@ class SyncLog {
 	#persistTimer: ReturnType<typeof setTimeout> | null = null;
 	#loaded = false;
 
-	/** Restore the session's entries. Idempotent; browser-only. */
+	/** Idempotent; browser-only. */
 	load(): void {
 		if (this.#loaded || typeof sessionStorage === 'undefined') return;
 		this.#loaded = true;

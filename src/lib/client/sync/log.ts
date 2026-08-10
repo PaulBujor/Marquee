@@ -11,7 +11,7 @@ export interface SyncLogEntry {
 	message: string;
 }
 
-/** Entries kept in memory. A sync cycle writes a handful, so this holds a long session's worth. */
+/** Entries kept in memory — a cycle writes a handful, so this holds a long session. */
 export const SYNC_LOG_MAX = 200;
 
 /** Append, newest first, dropping the oldest past `max`. */
@@ -23,7 +23,7 @@ export function appendEntry(
 	return [entry, ...entries].slice(0, max);
 }
 
-/** `14:22:31` in local time — the log is read next to a clock, not across timezones. */
+/** `14:22:31`, local. */
 export function formatTime(at: number): string {
 	return new Date(at).toLocaleTimeString(undefined, { hour12: false });
 }
@@ -39,7 +39,7 @@ export function formatLogText(entries: SyncLogEntry[]): string {
 		.join('\n');
 }
 
-/** Parse entries recovered from session storage, dropping anything malformed. */
+/** Entries recovered from session storage, dropping anything malformed. */
 export function parseEntries(raw: string | null): SyncLogEntry[] {
 	if (!raw) return [];
 	try {
