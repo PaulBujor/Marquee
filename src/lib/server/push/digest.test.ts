@@ -89,7 +89,7 @@ async function seedShow(
 	await db.insert(tracking).values({ id: `${USER}::${mediaId}`, userId: USER, mediaId, status });
 }
 
-/** Mark an episode watched for the user — what makes a show count as "engaged". */
+/** Mark an episode watched for the user. */
 async function seedWatch(db: Db, mediaId: string, season: number, episode: number): Promise<void> {
 	await db.insert(episodeWatches).values({
 		id: `${USER}::${mediaId}::s${season}e${episode}`,
@@ -134,9 +134,8 @@ describe('selectNotifiableEpisodes', () => {
 	});
 
 	it('never notifies an abandoned show, even one watched and still running', () => {
-		// A started-then-abandoned show is the case watch records would otherwise wave through, and a
-		// new season doesn't override an explicit opt-out. The query excludes these too — this asserts
-		// the rule holds in the function itself, so widening that filter can't resurrect them.
+		// Watch records would otherwise wave this through; the query excludes it too, so this pins the
+		// rule to the function rather than the caller.
 		const row = { mediaId: 'm1', airDate: '2026-07-27', status: 'did_not_finish' };
 		expect(selectNotifiableEpisodes([row], new Set(['m1']), LONG_RUNNING)).toEqual([]);
 		expect(
@@ -190,7 +189,7 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('stays silent for a new episode of a long-running show nothing has been watched of', async () => {
-		// The complaint: a show sitting on the list unwatched, pushing an episode every week.
+		// The complaint: an unwatched show pushing an episode every week.
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'want_to_watch');
 		await seedEpisode(db, SHOW, 1, 1, '2020-01-20'); // the premiere, long past
@@ -206,7 +205,6 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('pushes the premiere of a show added before it existed', async () => {
-		// You added it precisely to be told when it landed, and can't have watched it yet.
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'want_to_watch');
 		await seedEpisode(db, SHOW, 1, 1, '2026-07-27');
@@ -224,14 +222,13 @@ describe('sendNewReleaseDigest', () => {
 		await seedWatch(db, SHOW, 1, 1);
 		const { sender, calls } = fakeSender();
 
-		// Note the status is still `want_to_watch` — engagement comes from the watch, not the column.
+		// Status is still `want_to_watch` — the watch record is what qualifies it.
 		expect(await sendNewReleaseDigest(db, {} as Env, NOW, sender)).toMatchObject({ sent: 1 });
 		expect(calls).toHaveLength(1);
 	});
 
 	it('pushes a new season of a show marked completed', async () => {
-		// `completed` is stale by design once a show returns — that new season is the notification
-		// worth having, and no watch rows are needed to earn it.
+		// `completed` is stale by design once a show returns; no watch rows needed.
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'completed');
 		await seedEpisode(db, SHOW, 1, 1, '2020-01-20');
@@ -243,8 +240,7 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('pushes a mid-run episode of a show marked watching without ticking episodes', async () => {
-		// Status is an intent signal in its own right — someone who tracks the show but not each
-		// episode must still be notified.
+		// Status is an intent signal in its own right.
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'watching');
 		await seedEpisode(db, SHOW, 1, 1, '2020-01-20');

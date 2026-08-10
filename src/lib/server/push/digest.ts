@@ -23,16 +23,7 @@ export const GRACE_DAYS = 2;
 const SPECIALS_SEASON = 0;
 /** Movie statuses we notify for (not `completed` / `did_not_finish`). */
 const ACTIVE_STATUSES = ['want_to_watch', 'watching'] as const;
-/**
- * Show statuses that can notify at all. Everything except `did_not_finish`, which is a deliberate
- * "stop telling me about this" signal.
- *
- * Passing this filter is necessary but not sufficient — {@link selectNotifiableEpisodes} then
- * decides per row. `tracking.status` is user intent, LWW from the event log, and nothing corrects
- * it server-side, so it can't carry the decision alone: a show you are genuinely watching may still
- * read `want_to_watch` when the reconciler declined to write a `status_changed` (it needs episode
- * metadata that may not have arrived yet).
- */
+/** Show statuses eligible to notify; {@link selectNotifiableEpisodes} then decides per row. */
 const ACTIVE_SHOW_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
 
 /**
@@ -96,30 +87,16 @@ interface ReleaseGroup {
 }
 
 /**
- * Which of the candidate episodes are worth a push.
+ * Which candidate episodes are worth a push.
  *
- * `did_not_finish` never qualifies — a deliberate "stop telling me about this", which a new season
- * doesn't override. The query already excludes it, but the rule belongs here rather than resting on
- * that: this function is the one place the policy is stated, and a caller that widened its status
- * filter shouldn't quietly start notifying shows someone abandoned.
+ * `did_not_finish` never qualifies, not even for a new season. Stated here rather than left to the
+ * caller's status filter, so widening that filter can't resurrect abandoned shows. `watching` and
+ * `completed` always qualify — a finished show keeps `completed` when it returns.
  *
- * `watching` and `completed` pass straight through — both say you follow this show. `completed`
- * matters as much as `watching` here: a show you finished keeps that status when it returns for
- * another season, and that new season is exactly the notification worth having.
- *
- * `want_to_watch` is the one that spams, and it's what this issue is about: a long-running show
- * added to the list and never started, pushing an episode a week nobody will watch. It only
- * qualifies two ways:
- *
- * - **Something has been watched.** The status column lags — the reconciler declines to write
- *   `status_changed` when episode metadata hasn't arrived — so a show you are genuinely watching
- *   can still read `want_to_watch`. A watched episode is the fact that settles it.
- * - **It's the show's premiere**, the first episode of it ever to air. That's a title added before
- *   it existed: you added it precisely to be told when it landed, and you can't have watched an
- *   episode of something that hadn't aired. A *later* season's premiere doesn't qualify — if you
- *   never started the show, season 5 arriving isn't news you asked for.
- *
- * A media id missing from `premiereAirDate` can't be resolved, so it isn't treated as a premiere.
+ * `want_to_watch` must earn it: an episode already watched, or the show's first-ever episode (a
+ * title added before it aired). `tracking.status` lags — the reconciler skips `status_changed`
+ * until episode metadata lands — so a watch record is what rescues an actively-watched show still
+ * reading `want_to_watch`. A later season's premiere doesn't count, nor does an unresolvable one.
  */
 export function selectNotifiableEpisodes<
 	T extends { mediaId: string; airDate: string | null; status: string }
@@ -147,10 +124,7 @@ async function findWatchedShows(db: Db, userId: string): Promise<Set<string>> {
 	return new Set(rows.map((r) => r.mediaId));
 }
 
-/**
- * Earliest air date per show, ignoring specials — a special can air before the real premiere and
- * would otherwise stand in for it. Chunked: the id list goes into an `IN (...)`.
- */
+/** Earliest air date per show, ignoring specials (one can precede the real premiere). */
 async function findPremiereAirDates(db: Db, mediaIds: string[]): Promise<Map<string, string>> {
 	const premieres = new Map<string, string>();
 	for (const chunk of chunkIds(mediaIds)) {
@@ -203,8 +177,7 @@ async function findReleases(
 			)
 		);
 
-	// Only `want_to_watch` rows need the extra facts, so skip both reads when none are in play —
-	// which is the common case for a user who keeps their statuses current.
+	// Only `want_to_watch` rows need the extra facts — skip both reads when none are in play.
 	const undecided = [
 		...new Set(episodeRows.filter((r) => r.status === 'want_to_watch').map((r) => r.mediaId))
 	];
