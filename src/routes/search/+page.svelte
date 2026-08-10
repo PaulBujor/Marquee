@@ -6,7 +6,6 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import PageHeader from '$lib/components/page-header.svelte';
-	import BackButton from '$lib/components/back-button.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
@@ -23,6 +22,7 @@
 	} from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
+	import { tabs } from '$lib/state/tabs.svelte.js';
 	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -101,6 +101,21 @@
 	let query = $state(untrack(() => data.q));
 	let searching = $state(false);
 	let searchInput = $state<HTMLInputElement | null>(null);
+
+	// The Search tab focuses this field — on arrival from another destination, and immediately when
+	// it's tapped while already here. The request is a counter rather than a flag so repeated taps
+	// re-fire and it doesn't matter whether it was raised before or after this page mounted; tracking
+	// the one we served means reaching /search any other way (a deep link, Back from a title) never
+	// steals focus or pops the soft keyboard.
+	let servedFocus = 0;
+	$effect(() => {
+		const request = tabs.searchFocusRequest;
+		const el = searchInput;
+		if (!el || request === servedFocus) return;
+		servedFocus = request;
+		el.focus();
+		el.select();
+	});
 
 	let debounce: ReturnType<typeof setTimeout> | undefined;
 	// Guards the loading flag against overlapping commits — only the latest clears it.
@@ -217,11 +232,13 @@
 	<title>Search · Marquee</title>
 </svelte:head>
 
+<!-- No back control: this is a tab root. The search field sits where a page title would, and its
+h-10 holds the header at the same height as the other pages'. -->
 <PageHeader>
 	<div class="flex items-center gap-3">
-		<BackButton />
-		<!-- The search field sits where a page title would; back button + input share one row + size. -->
 		<div class="relative flex-1">
+			<!-- `glass`: the same frosted material as the tab bar. The field sits in a sticky header that
+			results scroll beneath, so it needs the tint and wash for the same reason the bar does. -->
 			<Input
 				bind:ref={searchInput}
 				type="search"
@@ -233,7 +250,7 @@
 				aria-label="Search movies and shows"
 				autocomplete="off"
 				autocapitalize="none"
-				class="appearance-none pr-11 [&::-webkit-search-cancel-button]:appearance-none"
+				class="glass appearance-none pr-11 [&::-webkit-search-cancel-button]:appearance-none"
 			/>
 			{#if query}
 				<button
@@ -249,12 +266,12 @@
 	</div>
 </PageHeader>
 
-<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-16">
+<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-tab-bar">
 	{#if loading}
 		<ul class="flex flex-col gap-3">
 			{#each [0, 1, 2, 3] as i (i)}
 				<li class="flex items-center gap-3">
-					<Skeleton class="aspect-[2/3] w-12 rounded-[10px]" />
+					<Skeleton class="aspect-[2/3] w-12 rounded-sm" />
 					<div class="flex flex-1 flex-col gap-2">
 						<Skeleton class="h-4 w-1/2" />
 						<Skeleton class="h-3 w-1/4" />
@@ -275,7 +292,7 @@
 							<button
 								type="button"
 								onclick={() => selectRecentSearch(q)}
-								class="flex w-full items-center gap-3 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-secondary"
+								class="flex w-full items-center gap-3 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary"
 							>
 								<ClockIcon class="size-4 shrink-0 text-muted-foreground" />
 								<span class="truncate">{q}</span>
@@ -289,7 +306,7 @@
 			<!-- Degraded/offline banner: TMDB unreachable → shared library; offline → your own titles. -->
 			<p
 				data-spec-ref="search-degraded-offline-banner"
-				class="rounded-[10px] bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
+				class="rounded-sm bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
 			>
 				{networkMode === 'offline'
 					? "You're offline — showing titles from your own list only."
@@ -309,7 +326,7 @@
 				<li class="flex items-center gap-1">
 					<a
 						href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
-						class="-ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-secondary"
+						class="-ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors hover:bg-secondary"
 					>
 						<div class="w-12 shrink-0">
 							<PosterTile

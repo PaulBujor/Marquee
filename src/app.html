@@ -2,7 +2,10 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- viewport-fit=cover: without it iOS resolves every env(safe-area-inset-*) to 0, so the
+		headers wouldn't clear the Dynamic Island and the bottom bar would sit under the home
+		indicator. -->
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="text-scale" content="scale" />
 		<!-- Apply the theme before first paint to avoid a light-mode flash. Mirrors
 		theme.svelte.ts; the layout's $effect takes over after hydration. -->

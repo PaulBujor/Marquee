@@ -9,7 +9,7 @@
 	<Skeleton class="aspect-video w-full rounded-none" />
 	<div class="-mt-14 flex flex-col gap-4 px-5 pb-10">
 		<div class="flex items-end gap-4">
-			<Skeleton class="aspect-[2/3] w-24 shrink-0 rounded-[14px] ring-4 ring-background" />
+			<Skeleton class="aspect-[2/3] w-24 shrink-0 rounded-md ring-4 ring-background" />
 			<div class="flex min-w-0 flex-1 flex-col gap-2 pb-1">
 				<Skeleton class="h-7 w-3/4" />
 				<Skeleton class="h-5 w-24 rounded-full" />

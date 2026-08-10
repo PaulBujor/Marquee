@@ -42,7 +42,6 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
-	import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
@@ -274,22 +273,19 @@
 		}
 	});
 
-	// Suggestion-chain origin + depth. Normal navigation still pushes one entry per hop (so browser
-	// Back steps back one title at a time), but each "Similar" link carries the chain's origin forward
-	// in `?from=` plus a `hops` counter — so a few hops deep we can also offer a jump straight back to
-	// where the chain started (home, or the search that began it).
+	// Suggestion-chain origin. Each "Similar" link carries the chain's origin forward in `?from=`, so
+	// however deep the chain runs, a cold-opened title still knows where the chain began (home, or
+	// the search that started it) and the back control has somewhere sensible to land. Rewinding the
+	// whole chain in one go no longer needs its own control — the tab bar is always on screen.
 	const originParam = $derived(page.url.searchParams.get('from'));
-	const hops = $derived(Math.max(0, Number(page.url.searchParams.get('hops')) || 0));
 	// The origin to return to: the carried `?from` param, else where this title was entered from (home
 	// or a search, tracked in the shared navigation state), else home.
 	const origin = $derived(originParam ?? navigation.entryOrigin);
-	// Offer the jump-to-origin control once the chain is a few hops deep.
-	const showBackToOrigin = $derived(hops >= 3);
 
-	/** A "Similar" card's href: the same route carrying the origin + an incremented hop count. */
+	/** A "Similar" card's href: the same route, carrying the chain's origin forward. */
 	function similarHref(type: 'movie' | 'show', id: number): string {
 		const path = resolve('/title/[type]/[id]', { type, id: String(id) });
-		return `${path}?from=${encodeURIComponent(origin)}&hops=${hops + 1}`;
+		return `${path}?from=${encodeURIComponent(origin)}`;
 	}
 
 	// Reset the per-title view state whenever the media changes — a title → title hop via a "Similar"
@@ -310,15 +306,6 @@
 		// branded resolve() result — same shape as the search/home query-string navigations.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		goto(origin);
-	}
-
-	function popToOrigin() {
-		// Pop back through the entries the chain pushed — the initial title entry plus one per hop —
-		// so the origin is reached by rewinding history, not by pushing a fresh entry on top. When the
-		// back stack isn't there (e.g. a deep-linked chain URL) fall back to navigating to the origin.
-		const steps = hops + 1;
-		if (steps < history.length) history.go(-steps);
-		else goToOrigin();
 	}
 
 	function goBack() {
@@ -395,33 +382,22 @@ fade in together only once the in-content <h1> scrolls out of view — over the 
 fully transparent. Blur is stronger here (over artwork) than the other headers. -->
 <header class="fixed inset-x-0 top-0 z-40">
 	<HeaderScrim strong show={!titleInView} />
+	<!-- Inset equally on all three sides that frame the control, matching the app header. -->
 	<div
-		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
+		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
 	>
+		<!-- Ghost: no plate, so it sits as lightly as possible on the hero artwork. `icon-lg` is 44px —
+		a full touch target even though nothing is drawn around it. -->
 		<Button
 			onclick={goBack}
-			variant="outline"
-			size="icon"
+			variant="ghost"
+			size="icon-lg"
 			shape="round"
-			class="shrink-0 text-muted-foreground"
+			class="shrink-0"
 			aria-label="Go back"
 		>
-			<ChevronLeftIcon class="size-4" />
+			<ChevronLeftIcon class="size-5" />
 		</Button>
-		{#if showBackToOrigin}
-			<!-- A few suggestions deep: rewind straight back to where the chain started (home / search). -->
-			<Button
-				onclick={popToOrigin}
-				variant="outline"
-				size="icon"
-				shape="round"
-				class="shrink-0 text-muted-foreground"
-				aria-label="Back to start"
-				title="Back to start"
-			>
-				<ChevronsLeftIcon class="size-4" />
-			</Button>
-		{/if}
 		{#if !titleInView}
 			<h2
 				class="min-w-0 flex-1 truncate font-serif text-lg font-semibold"
@@ -451,9 +427,9 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 	{/if}
 
 	<div
-		class="flex flex-col gap-4 px-5 pb-10 {detail.backdropPath
+		class="flex flex-col gap-4 px-5 pb-tab-bar {detail.backdropPath
 			? '-mt-14'
-			: 'pt-[calc(3.5rem+env(safe-area-inset-top))]'}"
+			: 'pt-[calc(4.75rem+env(safe-area-inset-top))]'}"
 	>
 		<!-- Poster overlaps the bottom of the backdrop; title/badges sit alongside it. -->
 		<div class="flex items-end gap-4">
@@ -585,7 +561,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 									</li>
 								{/each}
 							</ul>
-							<Skeleton class="aspect-video w-full rounded-[14px]" />
+							<Skeleton class="aspect-video w-full rounded-md" />
 						</div>
 					{:else if offline}
 						<!-- Cast, trailer, and similar come from TMDB and aren't cached for offline. -->
@@ -634,7 +610,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 								Trailer
 							</h2>
 							{#if showTrailer}
-								<div class="aspect-video w-full overflow-hidden rounded-[14px]">
+								<div class="aspect-video w-full overflow-hidden rounded-md">
 									<iframe
 										src={`https://www.youtube-nocookie.com/embed/${detail.trailer.key}?autoplay=1`}
 										title={detail.trailer.name}
@@ -647,7 +623,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 								<button
 									type="button"
 									onclick={() => (showTrailer = true)}
-									class="group relative aspect-video w-full overflow-hidden rounded-[14px] bg-secondary"
+									class="group relative aspect-video w-full overflow-hidden rounded-md bg-secondary"
 									aria-label={`Play trailer: ${detail.trailer.name}`}
 								>
 									<img
@@ -680,7 +656,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				<div class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Similar</div>
 				<div class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
 					{#each [0, 1, 2, 3, 4] as i (i)}
-						<div class="w-24 shrink-0"><Skeleton class="aspect-[2/3] w-full rounded-[14px]" /></div>
+						<div class="w-24 shrink-0"><Skeleton class="aspect-[2/3] w-full rounded-md" /></div>
 					{/each}
 				</div>
 			</section>
