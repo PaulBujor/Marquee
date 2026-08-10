@@ -169,7 +169,6 @@
 		{/if}
 
 		{#if person.biography}
-			<!-- Keyed on the person so navigating to another one starts collapsed. -->
 			{#key person.tmdbId}
 				<ExpandableText text={person.biography} class="text-sm leading-relaxed" />
 			{/key}

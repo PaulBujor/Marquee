@@ -726,7 +726,6 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				</div>
 
 				{#if selectedSeasonOverview}
-					<!-- Keyed on the season so switching to another one starts collapsed. -->
 					{#key selectedSeason}
 						<ExpandableText
 							text={selectedSeasonOverview}
