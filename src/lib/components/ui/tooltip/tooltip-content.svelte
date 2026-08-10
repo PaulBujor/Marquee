@@ -1,3 +1,10 @@
+<!--
+	The pinned bits-ui@2.18 gives a tooltip three states — `closed`, `delayed-open`, `instant-open` —
+	and never the `open` the registry's `data-open:` waits for, so only a delayed open animated and a
+	tooltip shown straight away appeared with a snap. Entering is keyed off "not closed" to cover
+	both open states. Transform-origin is the floating layer's real variable, so the zoom grows from
+	the trigger. See `dialog-content.svelte` for why not to re-run `shadcn-svelte add tooltip`.
+-->
 <script lang="ts">
 	import { Tooltip as TooltipPrimitive } from 'bits-ui';
 	import { cn } from '$lib/utils.js';
@@ -27,7 +34,7 @@
 		{sideOffset}
 		{side}
 		class={cn(
-			'z-50 inline-flex w-fit max-w-xs origin-(--bits-tooltip-content-transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95',
+			'z-50 inline-flex w-fit max-w-xs origin-(--bits-floating-transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background duration-100 not-data-[state=closed]:animate-in not-data-[state=closed]:fade-in-0 not-data-[state=closed]:zoom-in-95 has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none',
 			className
 		)}
 		{...restProps}
