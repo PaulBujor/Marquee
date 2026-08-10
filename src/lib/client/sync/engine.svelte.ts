@@ -17,6 +17,7 @@ import { runMediaSync } from './media-sync';
 import { runImageSync } from './image-sync';
 import { isFullMediaCheckDue, nextFullMediaCheckStamp, shouldRunMediaSync } from './media-gate';
 import { CircuitBreaker, withRetry, type RetryOptions } from '$lib/resilience';
+import { syncLog } from './log.svelte';
 import {
 	getLastSyncAt,
 	setLastSyncAt,
@@ -61,6 +62,8 @@ class SyncEngine {
 	revision = $state(0);
 	/** Epoch ms of the last successful event sync (persisted), or null — shown in settings. */
 	lastSyncAt = $state<number | null>(null);
+	/** Epoch ms the in-flight cycle began, or null when idle — lets the log show a stall's duration. */
+	cycleStartedAt = $state<number | null>(null);
 
 	#running = false;
 	#rerun = false;
@@ -187,15 +190,20 @@ class SyncEngine {
 		if (typeof navigator !== 'undefined' && !navigator.onLine) {
 			this.online = false;
 			this.status = 'offline';
+			syncLog.add('cycle', 'offline — deferred until reconnect', 'warn');
 			this.#registerBackgroundSync(); // flush on reconnect, even if the tab closes first
 			return;
 		}
 		if (this.#running) {
 			this.#rerun = true; // fold this request into a follow-up pass
+			syncLog.add('cycle', 'already running — folded into a follow-up pass');
 			return;
 		}
 		this.#running = true;
 		this.status = 'syncing';
+		const cycleStart = Date.now();
+		this.cycleStartedAt = cycleStart;
+		syncLog.add('cycle', 'started');
 		try {
 			let changed = false;
 			let pulled = 0; // events pulled this cycle — the sequence-watermark signal for the media gate below
@@ -203,14 +211,21 @@ class SyncEngine {
 
 			// Event channel — authoritative; drives the visible status.
 			try {
+				syncLog.add('events', 'push + pull…');
+				const startedAt = Date.now();
 				const res = await this.#runChannel(this.#events, () => runSync(), {
 					shouldRetry: retriableSync,
 					retryDelay: syncRetryDelay
 				});
 				if (res === null) {
 					this.status = 'error'; // breaker open — keep the error state, skip the rest
+					syncLog.add('events', 'skipped — circuit open after repeated failures', 'error');
 					return;
 				}
+				syncLog.add(
+					'events',
+					`pushed ${res.pushed}, pulled ${res.pulled} in ${Date.now() - startedAt}ms`
+				);
 				this.lastError = null;
 				const syncedAt = Date.now();
 				this.lastSyncAt = syncedAt;
@@ -220,6 +235,7 @@ class SyncEngine {
 				if (pulled > 0) changed = true;
 			} catch (err) {
 				this.lastError = toSyncErrorInfo(err, this.#events.failures, Date.now());
+				syncLog.add('events', `failed — ${this.lastError.message}`, 'error');
 				// Browser-visible; also forward to the observability sink — client-side
 				// failures never reach the server `handleError` hook on their own.
 				console.error('[sync] event sync failed', this.lastError);
@@ -236,18 +252,24 @@ class SyncEngine {
 			// Media channel — gated on the event channel's watermark; see `media-gate.ts` for why.
 			const cycleNow = Date.now();
 			const dueForFullCheck = isFullMediaCheckDue(this.#lastFullMediaCheck, cycleNow);
-			if (shouldRunMediaSync(pulled, this.#lastFullMediaCheck, cycleNow)) {
+			const runMedia = shouldRunMediaSync(pulled, this.#lastFullMediaCheck, cycleNow);
+			if (!runMedia) syncLog.add('media', 'skipped — nothing new to ask about');
+			if (runMedia) {
 				// Also surfaces in the sync indicator (a failing media sync, e.g. a large library,
 				// should be visible, not silent). Same shape as the event channel: a breaker-open
 				// skip or a throw flips the status to error and skips images for this cycle.
 				try {
+					syncLog.add('media', `${dueForFullCheck ? 'full version-diff' : 'light'} pass…`);
+					const startedAt = Date.now();
 					const mediaRes = await this.#runChannel(this.#media, () =>
 						runMediaSync({ fullCheck: dueForFullCheck })
 					);
 					if (mediaRes === null) {
 						this.status = 'error';
+						syncLog.add('media', 'skipped — circuit open after repeated failures', 'error');
 						return;
 					}
+					syncLog.add('media', `applied ${mediaRes.applied} in ${Date.now() - startedAt}ms`);
 					const nextCheck = nextFullMediaCheckStamp(
 						dueForFullCheck,
 						true,
@@ -261,6 +283,7 @@ class SyncEngine {
 					if (mediaRes.applied > 0) changed = true;
 				} catch (err) {
 					this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
+					syncLog.add('media', `failed — ${this.lastError.message}`, 'error');
 					console.error('[sync] media sync failed', this.lastError);
 					reportClientError({
 						message: this.lastError.message,
@@ -275,9 +298,13 @@ class SyncEngine {
 
 			// Image channel — best-effort (blobs for already-known media); never flips the status.
 			try {
+				syncLog.add('images', 'caching posters…');
+				const startedAt = Date.now();
 				const res = await this.#runChannel(this.#images, () => runImageSync());
 				if (res && res.stored > 0) changed = true;
+				syncLog.add('images', `stored ${res?.stored ?? 0} in ${Date.now() - startedAt}ms`);
 			} catch (err) {
+				syncLog.add('images', `failed — ${String(err)}`, 'warn');
 				console.warn('[sync] image sync failed (will retry later)', err);
 			}
 
@@ -289,7 +316,9 @@ class SyncEngine {
 					const keepIds = new Set(await getReferencedMediaIds());
 					await pruneStaleMedia(keepIds);
 					await pruneMediaImages(keepIds);
+					syncLog.add('cache', `swept, keeping ${keepIds.size} titles`);
 				} catch (err) {
+					syncLog.add('cache', `sweep failed — ${String(err)}`, 'warn');
 					console.warn('[sync] cache sweep failed (will retry next cycle)', err);
 				}
 			}
@@ -297,6 +326,8 @@ class SyncEngine {
 			if (changed) this.revision++;
 			this.status = 'idle';
 		} finally {
+			syncLog.add('cycle', `finished (${this.status}) in ${Date.now() - cycleStart}ms`);
+			this.cycleStartedAt = null;
 			this.#running = false;
 			if (this.#rerun) {
 				this.#rerun = false;
