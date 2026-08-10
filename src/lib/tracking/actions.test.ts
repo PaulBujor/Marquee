@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	airedEpisodes,
-	airingState,
+	productionState,
 	canRate,
 	episodesToMark,
 	hasSufficientEpisodeData,
@@ -185,17 +185,17 @@ describe('seasonCount', () => {
 	});
 });
 
-describe('airingState', () => {
-	it('is airing when inProduction is true', () => {
-		expect(airingState(true)).toBe('airing');
+describe('productionState', () => {
+	it('is in production when inProduction is true', () => {
+		expect(productionState(true)).toBe('in_production');
 	});
 
 	it('is ended when inProduction is false', () => {
-		expect(airingState(false)).toBe('ended');
+		expect(productionState(false)).toBe('ended');
 	});
 
 	it('is unknown — never ended — when inProduction is null', () => {
-		expect(airingState(null)).toBe('unknown');
+		expect(productionState(null)).toBe('unknown');
 	});
 });
 

@@ -25,7 +25,7 @@
 		type TrackingStatus
 	} from '$lib/sync/events';
 	import {
-		airingState,
+		productionState,
 		isAired,
 		seasonCount,
 		todayIso,
@@ -75,7 +75,9 @@
 	// Our own media id for the tracking event pipeline (provider-agnostic).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
 	const seasons = $derived(detail.type === 'show' ? seasonCount(detail.seasons) : 0);
-	const airing = $derived(detail.type === 'show' ? airingState(detail.inProduction) : 'unknown');
+	const production = $derived(
+		detail.type === 'show' ? productionState(detail.inProduction) : 'unknown'
+	);
 	// Today (YYYY-MM-DD) for the per-episode aired check — an episode is watchable once it's aired.
 	const today = todayIso();
 
@@ -447,11 +449,11 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				</h1>
 				<div class="flex flex-wrap items-center gap-2">
 					<MediaTypeLabel type={detail.type} year={detail.year} {seasons} />
-					{#if airing === 'airing'}
-						<MediaBadge variant="airing">
-							<span class="size-1.5 rounded-full bg-primary"></span>Airing
+					{#if production === 'in_production'}
+						<MediaBadge variant="production">
+							<span class="size-1.5 rounded-full bg-primary"></span>In production
 						</MediaBadge>
-					{:else if airing === 'ended'}
+					{:else if production === 'ended'}
 						<MediaBadge variant="status">Ended</MediaBadge>
 					{/if}
 				</div>
