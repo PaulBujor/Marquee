@@ -367,8 +367,7 @@ an entity because Svelte trims a literal trailing space at the end of an element
 	{#each members as member, i (member.id)}
 		{#if i > 0}<span>,&#32;</span>{/if}<a
 			href={personHref(member.id)}
-			class="text-left underline decoration-dotted underline-offset-4 hover:decoration-solid"
-			>{member.name}</a
+			class="underline decoration-dotted underline-offset-4 hover:decoration-solid">{member.name}</a
 		>
 	{/each}
 {/snippet}

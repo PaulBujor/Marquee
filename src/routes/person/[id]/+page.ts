@@ -1,4 +1,4 @@
-import { error, redirect } from '@sveltejs/kit';
+import { error, isHttpError, redirect } from '@sveltejs/kit';
 import type { PersonCreditsPage } from '$lib/server/tmdb';
 import type { PageLoad } from './$types';
 
@@ -24,8 +24,9 @@ export const load: PageLoad = async ({ params, fetch, parent }) => {
 		if (!res.ok) return { id, reachable: false as const, initial: null };
 		return { id, reachable: true as const, initial: (await res.json()) as PersonCreditsPage };
 	} catch (err) {
-		// A thrown 404 from `error()` above must not be swallowed by this catch.
-		if (err && typeof err === 'object' && 'status' in err) throw err;
+		// The 404 thrown above is an HttpError, not a fetch failure — it must not be swallowed here
+		// and turned into "needs a connection".
+		if (isHttpError(err)) throw err;
 		// Network failure — offline, or the API is unreachable.
 		return { id, reachable: false as const, initial: null };
 	}

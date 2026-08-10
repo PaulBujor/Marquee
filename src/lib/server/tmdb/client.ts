@@ -300,7 +300,7 @@ function normalizeCredit(item: TmdbCombinedCreditItem): PersonCredit {
 }
 
 /**
- * Flatten a person's `combined_credits` into the two lists the modal renders, split on `today`
+ * Flatten a person's `combined_credits` into the two lists the person page renders, split on `today`
  * (`YYYY-MM-DD`) into work that's out and work that isn't yet.
  *
  * A person is often credited several times on the same title — as an actor *and* a producer, or

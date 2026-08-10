@@ -245,7 +245,7 @@ export interface TmdbPersonResponse {
 	combined_credits?: TmdbCombinedCredits;
 }
 
-/** One title a person worked on, as the person modal lists it. */
+/** One title a person worked on, as the person page lists it. */
 export interface PersonCredit {
 	tmdbId: number;
 	type: 'movie' | 'show';
@@ -259,7 +259,7 @@ export interface PersonCredit {
 	role: string;
 }
 
-/** Normalized, app-facing person detail — the biographical half of the person modal. */
+/** Normalized, app-facing person detail — the biographical half of the person page. */
 export interface PersonDetail {
 	tmdbId: number;
 	name: string;
@@ -302,7 +302,7 @@ export interface CastMember {
 
 /**
  * A normalized crew member for the detail UI. Carries the TMDB person id (not just the name) so a
- * crew credit can open the person modal, same as a cast avatar.
+ * crew credit links to that person's page, same as a cast avatar.
  */
 export interface CrewMember {
 	id: number;

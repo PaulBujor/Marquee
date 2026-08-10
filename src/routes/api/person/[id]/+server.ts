@@ -3,7 +3,7 @@ import { createTmdbClient, TmdbError } from '$lib/server/tmdb';
 import type { RequestHandler } from './$types';
 
 /**
- * A person (cast or crew) with one page of their filmography, for the title page's person modal.
+ * A person (cast or crew) with one page of their filmography, for the person page.
  * Auth-gated so the TMDB key stays server-side. `?page=N` walks the credits — TMDB returns them
  * unpaginated, so the client asks for a page rather than pulling a prolific actor's whole history.
  * Not cached and not available offline: like cast and trailers, this is a live TMDB-only surface.

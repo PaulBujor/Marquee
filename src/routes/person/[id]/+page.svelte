@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { Skeleton } from '$lib/components/ui/skeleton';
 	import ErrorState from '$lib/components/error-state.svelte';
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import PageHeader from '$lib/components/page-header.svelte';
@@ -9,7 +8,7 @@
 	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { posterUrl } from '$lib/media.js';
-	import type { PersonCredit } from '$lib/server/tmdb';
+	import type { PersonCredit, PersonCreditsPage } from '$lib/server/tmdb';
 	import type { PageData } from './$types';
 
 	/**
@@ -30,6 +29,10 @@
 	let errored = $state(false);
 	let bioOpen = $state(false);
 
+	// Bumped on every load so a slow response for a person the user has already navigated away from
+	// can't append to the current one — the same guard the season switcher and MediaImage use.
+	let seq = 0;
+
 	// Re-seed when the route changes to another person — this component is reused across those
 	// navigations, so leaving the previous filmography on screen would be wrong.
 	$effect(() => {
@@ -44,27 +47,24 @@
 		seq++;
 	});
 
-	// Bumped on every load so a slow response for a person the user has already navigated away from
-	// can't append to the current one — the same guard the season switcher and MediaImage use.
-	let seq = 0;
-
 	/** Append the next page of released credits (also the retry for a failed append). */
 	async function loadMore() {
 		const mine = ++seq;
+		const wanted = page + 1;
 		loadingMore = true;
 		errored = false;
 		try {
-			const res = await fetch(`/api/person/${data.id}?page=${page + 1}`);
+			const res = await fetch(`/api/person/${data.id}?page=${wanted}`);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const next = (await res.json()) as typeof data.initial;
-			if (mine !== seq || !next) return;
+			const next = (await res.json()) as PersonCreditsPage;
+			if (mine !== seq) return;
 			credits = [...credits, ...next.credits];
 			page = next.page;
 			totalPages = next.totalPages;
 		} catch (err) {
 			if (mine !== seq) return;
 			errored = true;
-			console.error(`person page: failed to load person ${data.id} page ${page + 1}`, err);
+			console.error(`person page: failed to load person ${data.id} page ${wanted}`, err);
 		} finally {
 			if (mine === seq) loadingMore = false;
 		}
@@ -229,11 +229,8 @@
 			</p>
 		{/if}
 	{:else}
-		<!-- Reached only on a hard reload where the load ran but returned nothing renderable. -->
-		<div class="flex flex-col gap-2">
-			<Skeleton class="h-3 w-full" />
-			<Skeleton class="h-3 w-full" />
-			<Skeleton class="h-3 w-2/3" />
-		</div>
+		<!-- The load reported success but sent nothing renderable, so there is nothing to wait for —
+		say so rather than leaving a skeleton pulsing forever. -->
+		<ErrorState message="Couldn't load this person." class="py-6" />
 	{/if}
 </main>
