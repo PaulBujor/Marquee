@@ -10,6 +10,7 @@ import {
 // Relative (not `$lib`) so drizzle-kit's esbuild bundler resolves it outside Vite.
 import {
 	MEDIA_PROVIDERS,
+	CREDIT_ROLES,
 	MEDIA_SOURCES,
 	SYNC_EVENT_TYPES,
 	TRACKING_STATUSES,
@@ -348,6 +349,59 @@ export const episodes = sqliteTable(
 );
 
 /**
+ * A person who can be credited on a title. Identity follows the same rule as media: our own id,
+ * derived (v5) from `(provider, 'person/<id>')` for a provider-backed person, random for one a user
+ * typed into their own entry. `owner_user_id` scopes those private rows exactly as it does on
+ * `media` — a name someone entered on a custom entry is theirs, not catalog data.
+ */
+export const people = sqliteTable(
+	'people',
+	{
+		id: text('id').primaryKey(),
+		provider: text('provider', { enum: MEDIA_PROVIDERS }).notNull().default('tmdb'),
+		// e.g. `person/287`; null for a user-authored person.
+		externalId: text('external_id'),
+		ownerUserId: text('owner_user_id').references(() => users.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		profilePath: text('profile_path')
+	},
+	// Same NULL-distinctness reliance as `media`: many owned rows can share a null external id.
+	(table) => [
+		uniqueIndex('people_provider_external_idx').on(table.provider, table.externalId),
+		index('people_owner_idx').on(table.ownerUserId)
+	]
+);
+
+/**
+ * A person's credit on a title. Cascades from both sides, so removing either end cleans up.
+ *
+ * The PK is `(media_id, person_id, role)` — the same person can legitimately hold two roles on one
+ * title (writer *and* director is common), but not the same role twice. `credits_person_idx` serves
+ * the reverse lookup — everything this person worked on — which is the whole reason this is
+ * relational rather than a JSON blob on `media`.
+ */
+export const credits = sqliteTable(
+	'credits',
+	{
+		mediaId: text('media_id')
+			.notNull()
+			.references(() => media.id, { onDelete: 'cascade' }),
+		personId: text('person_id')
+			.notNull()
+			.references(() => people.id, { onDelete: 'cascade' }),
+		role: text('role', { enum: CREDIT_ROLES }).notNull(),
+		// Who they played; cast only.
+		character: text('character'),
+		// Billing order within the role, so a rebuilt list keeps the provider's ranking.
+		sortOrder: integer('sort_order').notNull().default(0)
+	},
+	(table) => [
+		primaryKey({ columns: [table.mediaId, table.personId, table.role] }),
+		index('credits_person_idx').on(table.personId)
+	]
+);
+
+/**
  * A user's tracking row for a title. `mediaId` intentionally has **no FK** to
  * `media`: a `tracking.status_changed` can arrive from another device before this
  * server has seen the corresponding `tracking.added`, so decoupling avoids FK
@@ -408,6 +462,8 @@ export type Event = typeof events.$inferSelect;
 export type SyncState = typeof syncState.$inferSelect;
 export type Media = typeof media.$inferSelect;
 export type SeasonRow = typeof seasons.$inferSelect;
+export type Person = typeof people.$inferSelect;
+export type CreditRow = typeof credits.$inferSelect;
 export type EpisodeRow = typeof episodes.$inferSelect;
 export type Tracking = typeof tracking.$inferSelect;
 export type EpisodeWatch = typeof episodeWatches.$inferSelect;

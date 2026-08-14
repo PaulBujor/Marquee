@@ -15,6 +15,7 @@
  */
 import { and, eq, or, sql } from 'drizzle-orm';
 import {
+	credits,
 	episodes,
 	media,
 	seasons,
@@ -22,6 +23,7 @@ import {
 	type Media,
 	type SeasonRow
 } from '$lib/server/db/schema';
+import { creditRowsFromDetail, creditSignature, syncCredits } from './credits';
 import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '$lib/server/db/chunk';
 import { hasDescription } from '$lib/media';
 import { mediaId, type MediaProvider } from '$lib/sync/events';
@@ -362,6 +364,10 @@ export async function refreshMedia(
 		);
 	}
 
+	// Cast and crew arrive on the same detail response the scalars come from, so persisting them
+	// costs no extra request — this data was previously fetched and thrown away.
+	const { personRows, creditRows } = creditRowsFromDetail(id, detail);
+
 	if (!existing) {
 		await db
 			.insert(media)
@@ -371,6 +377,7 @@ export async function refreshMedia(
 			await syncSeasons(db, id, [], seasonRows);
 			await syncEpisodes(db, id, [], episodeRows);
 		}
+		await syncCredits(db, id, personRows, creditRows);
 	} else {
 		const oldSeasons: SeasonRow[] =
 			detail.type === 'show' ? await db.select().from(seasons).where(eq(seasons.mediaId, id)) : [];
@@ -378,6 +385,7 @@ export async function refreshMedia(
 			detail.type === 'show'
 				? await db.select().from(episodes).where(eq(episodes.mediaId, id))
 				: [];
+		const oldCredits = await db.select().from(credits).where(eq(credits.mediaId, id));
 		const changed =
 			existing.title !== scalars.title ||
 			existing.status !== scalars.status ||
@@ -385,13 +393,15 @@ export async function refreshMedia(
 			existing.lastAirDate !== scalars.lastAirDate ||
 			existing.releaseDate !== scalars.releaseDate ||
 			seasonSignature(oldSeasons) !== seasonSignature(seasonRows) ||
-			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows);
+			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows) ||
+			creditSignature(oldCredits) !== creditSignature(creditRows);
 		// Write the children first: if that throws, the media row keeps its old `refreshedAt`, so the
 		// next sync retries — rather than being stamped fresh-but-empty and never refreshing again.
 		if (detail.type === 'show') {
 			await syncSeasons(db, id, oldSeasons, seasonRows);
 			await syncEpisodes(db, id, oldEpisodes, episodeRows);
 		}
+		await syncCredits(db, id, personRows, creditRows);
 		await db
 			.update(media)
 			.set({
