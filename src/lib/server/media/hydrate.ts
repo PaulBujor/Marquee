@@ -23,7 +23,7 @@ import {
 	type Media,
 	type SeasonRow
 } from '$lib/server/db/schema';
-import { creditRowsFromDetail, creditSignature, syncCredits } from './credits';
+import { creditRowsFromDetail, creditSignature, syncCredits, syncProviderPeople } from './credits';
 import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '$lib/server/db/chunk';
 import { hasDescription } from '$lib/media';
 import { mediaId, type MediaProvider } from '$lib/sync/events';
@@ -369,6 +369,7 @@ export async function refreshMedia(
 
 	// Cast/crew arrive on the same detail response — no extra request needed.
 	const { personRows, creditRows } = creditRowsFromDetail(id, detail);
+	await syncProviderPeople(db, personRows);
 
 	if (!existing) {
 		await db
@@ -379,7 +380,7 @@ export async function refreshMedia(
 			await syncSeasons(db, id, [], seasonRows);
 			await syncEpisodes(db, id, [], episodeRows);
 		}
-		await syncCredits(db, id, personRows, creditRows);
+		await syncCredits(db, id, creditRows);
 	} else {
 		const oldSeasons: SeasonRow[] =
 			detail.type === 'show' ? await db.select().from(seasons).where(eq(seasons.mediaId, id)) : [];
@@ -403,7 +404,7 @@ export async function refreshMedia(
 			await syncSeasons(db, id, oldSeasons, seasonRows);
 			await syncEpisodes(db, id, oldEpisodes, episodeRows);
 		}
-		await syncCredits(db, id, personRows, creditRows);
+		await syncCredits(db, id, creditRows);
 		// Compare-and-set on refreshedAt: two concurrent consumers can read the same snapshot, and the
 		// loser's write would overwrite the winner's version bump — clients never re-download the changed
 		// content. Whoever writes first moves refreshedAt, so the loser's WHERE matches no row and is

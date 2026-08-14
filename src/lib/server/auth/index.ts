@@ -7,6 +7,7 @@ import {
 	loginTokens,
 	media,
 	notificationLog,
+	people,
 	pushSubscriptions,
 	sessions,
 	syncState,
@@ -294,11 +295,11 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
 /**
  * Permanently delete a user and everything they own — sessions, sign-in and email-change tokens,
  * the event log and sync cursor, the tracking + episode-watch projections, push subscriptions, the
- * notification ledger, and any media rows they authored — as one atomic D1 batch. The *shared*
- * media cache (provider-backed rows, `owner_user_id IS NULL`) is not user-scoped and is
- * intentionally left intact; only rows this user owns go, taking their seasons/episodes with them
- * by cascade. Delete children before the `users` row so nothing is orphaned even where D1 doesn't
- * enforce the cascade.
+ * notification ledger, and any media and people rows they authored — as one atomic D1 batch. The
+ * *shared* media and people catalogs (provider-backed rows, `owner_user_id IS NULL`) are not
+ * user-scoped and are intentionally left intact; only rows this user owns go, taking their
+ * seasons/episodes/credits with them by cascade. Delete children before the `users` row so nothing
+ * is orphaned even where D1 doesn't enforce the cascade.
  */
 export async function deleteAccount(db: Db, user: User): Promise<void> {
 	await db.batch([
@@ -312,6 +313,7 @@ export async function deleteAccount(db: Db, user: User): Promise<void> {
 		db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, user.id)),
 		db.delete(notificationLog).where(eq(notificationLog.userId, user.id)),
 		db.delete(media).where(eq(media.ownerUserId, user.id)),
+		db.delete(people).where(eq(people.ownerUserId, user.id)),
 		db.delete(users).where(eq(users.id, user.id))
 	]);
 }

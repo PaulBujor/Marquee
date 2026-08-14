@@ -73,4 +73,35 @@ describe('openDb upgrade', () => {
 		// The upgrade is additive — existing projections survive it.
 		expect(await db.get('tracking', 'keep-me')).toMatchObject({ status: 'watching' });
 	});
+
+	it('adds the credits store to a database created before it existed', async () => {
+		const user = 'db-upgrade-credits-user';
+		const name = `marquee-${user}`;
+
+		// A v4 database: everything the store held before cast and crew were cached.
+		const v4 = await openDB(name, 4, {
+			upgrade(db) {
+				db.createObjectStore('events', { keyPath: 'id' }).createIndex('by_synced', 'synced');
+				db.createObjectStore('tracking', { keyPath: 'mediaId' });
+				db.createObjectStore('media', { keyPath: 'id' });
+				db.createObjectStore('seasons', { keyPath: 'id' });
+				db.createObjectStore('episodes', { keyPath: 'id' });
+				db.createObjectStore('mediaImages', { keyPath: 'id' });
+				db.createObjectStore('mediaLinks', { keyPath: 'mediaId' });
+				db.createObjectStore('episodeWatches', { keyPath: 'id' });
+				db.createObjectStore('meta', { keyPath: 'key' });
+			}
+		});
+		await v4.put('media', { id: 'keep-me', title: 'Cached Before Credits', version: 3 });
+		v4.close();
+
+		setActiveUser(user);
+		const db = await openDb();
+
+		expect(db.objectStoreNames.contains('credits')).toBe(true);
+		// A cached title predating the store has no credits, not a broken read — the media channel
+		// backfills them on the next version diff.
+		expect(await db.getAllFromIndex('credits', 'by_media', 'keep-me')).toEqual([]);
+		expect(await db.get('media', 'keep-me')).toMatchObject({ title: 'Cached Before Credits' });
+	});
 });

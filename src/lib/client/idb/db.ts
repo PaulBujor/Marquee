@@ -1,15 +1,23 @@
 /**
- * Client-side IndexedDB: offline store for the sync pipeline. Holds an `events` outbox,
- * materialized `tracking` / `episodeWatches` stores (client projection of the event log),
- * a `media` reference cache with `seasons`/`episodes` children, and `mediaLinks` for
- * `media.*` identity decisions. `meta` holds `deviceId` and sync `cursor`. Database is
- * namespaced per user (`marquee-<userId>`). Client-safe only.
+ * Client-side IndexedDB: the offline store backing the sync pipeline. It holds an
+ * `events` outbox (local events awaiting push) plus materialized `tracking` /
+ * `episodeWatches` stores (the client-side projection of the same event log the
+ * server materializes) and a `media` reference cache with its `seasons` / `episodes`
+ * child stores (populated off a separate channel, not derived from events; episodes
+ * carry air dates for watchability + the upcoming calendar; `credits` holds cast and crew).
+ * `mediaLinks` materializes the
+ * `media.*` events — which of the user's own entries have been matched to a provider-backed
+ * title. `meta` holds the `deviceId` and sync `cursor`. The database itself is namespaced per
+ * user (`marquee-<userId>`, see {@link setActiveUser}).
+ *
+ * Client-safe (browser only) — never imported from server code.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { reportClientError } from '$lib/client/report-error';
 import type {
 	EventEnvelope,
 	HydratableProvider,
+	MediaCredit,
 	MediaEpisode,
 	MediaRecord,
 	MediaSeason,
@@ -17,22 +25,31 @@ import type {
 } from '$lib/sync/events';
 
 /**
- * Outbox event: the envelope plus a `synced` flag. `0 | 1` (not boolean) because IndexedDB
- * index keys must be number/string/Date/array.
+ * An outbox event: the envelope plus a `synced` flag (0 = pending push, 1 = acked).
+ * It's `0 | 1`, not a boolean, because the `by_synced` index queries unsynced rows and
+ * IndexedDB keys must be number/string/Date/array — a boolean can't be an index key.
  */
 export interface OutboxEvent extends EventEnvelope {
 	synced: 0 | 1;
 }
 
-/** A media record's scalar fields; its seasons/episodes live in their own stores. */
-export type MediaScalars = Omit<MediaRecord, 'seasons' | 'episodes'>;
+/** A media record's scalar fields; its seasons/episodes/credits live in their own stores. */
+export type MediaScalars = Omit<MediaRecord, 'seasons' | 'episodes' | 'credits'>;
 
 /** `updatedAt` is the LWW clock (epoch ms). */
 export interface ClientMedia extends MediaScalars {
 	updatedAt: number;
-	/** Custom only: 1 while the author's edit still needs backing up to the server. */
+	/**
+	 * Custom media only: 1 while the author's latest edit still needs backing up to the server.
+	 * Absent on provider-backed rows, which the server holds authoritatively and the client only
+	 * ever reads. Cleared once the media channel reports the record stored.
+	 */
 	pendingPush?: 0 | 1;
-	/** Custom only: epoch ms of the author's last local edit (the LWW clock for two-device edits). */
+	/**
+	 * Custom media only: epoch ms of the author's last local edit. Distinct from `updatedAt`, which
+	 * is stamped on every local write including a channel pull — this one is the LWW clock the
+	 * server compares two devices' edits by, so it must move only when the *user* changes something.
+	 */
 	editedAt?: number;
 }
 
@@ -42,8 +59,18 @@ export interface ClientSeason extends MediaSeason {
 	mediaId: string;
 }
 
-/** `id` = `${mediaId}::s{S}e{E}`. A null `airDate` excludes it from the `by_airDate` index. */
+/** `id` = `${mediaId}::s{S}e{E}`. A null `airDate` is absent from the `by_airDate` index. */
 export interface ClientEpisode extends MediaEpisode {
+	id: string;
+	mediaId: string;
+}
+
+/**
+ * A cached credit. `id` = `${mediaId}::{role}::{personId}` — the same `(media, person, role)`
+ * uniqueness the server enforces, flattened into a key. `by_person` serves the reverse lookup
+ * offline, the same way the server's `credits_person_idx` does.
+ */
+export interface ClientCredit extends MediaCredit {
 	id: string;
 	mediaId: string;
 }
@@ -65,7 +92,10 @@ export interface ClientTracking {
 
 /**
  * Materialized identity decision for one media reference: the provider-backed title the user
- * matched it to, and whether they've dismissed the suggestion. Keyed by source id (a custom entry).
+ * matched it to, and whether they've dismissed the suggestion. Keyed by the *source* id (a custom
+ * entry), with per-field LWW clocks like a tracking row, so a link and a dismissal from different
+ * devices merge independently. Client-only — the server stores the `media.*` events but
+ * materializes nothing from them (see `server/sync/projection.ts`).
  */
 export interface ClientMediaLink {
 	mediaId: string;
@@ -88,7 +118,10 @@ export interface ClientEpisodeWatch {
 	updatedAt: number;
 }
 
-/** Cached poster + backdrop image bytes, keyed by media id. */
+/**
+ * Cached artwork for a title — poster + backdrop **image bytes** as Blobs, keyed by our media
+ * id, so tracked titles render with zero network and an offline export carries the artwork.
+ */
 export interface MediaImages {
 	id: string;
 	poster: Blob | null;
@@ -96,7 +129,7 @@ export interface MediaImages {
 	updatedAt: number;
 }
 
-/** The `meta` key/value store's known keys. */
+/** The `meta` key/value store's known keys and the type each maps to. */
 export interface MetaValues {
 	deviceId: string;
 	cursor: number;
@@ -125,6 +158,11 @@ export interface MarqueeDB extends DBSchema {
 		value: ClientEpisode;
 		indexes: { by_media: string; by_airDate: string };
 	};
+	credits: {
+		key: string;
+		value: ClientCredit;
+		indexes: { by_media: string; by_person: string };
+	};
 	mediaImages: { key: string; value: MediaImages };
 	mediaLinks: { key: string; value: ClientMediaLink };
 	episodeWatches: { key: string; value: ClientEpisodeWatch; indexes: { by_media: string } };
@@ -134,15 +172,17 @@ export interface MarqueeDB extends DBSchema {
 export type MarqueeDatabase = IDBPDatabase<MarqueeDB>;
 
 const DB_NAME = 'marquee';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let dbPromise: Promise<MarqueeDatabase> | null = null;
 let activeUserId: string | null = null;
 
 /**
- * Scope the local store to a signed-in user (`marquee-<userId>`). Call once on login before any
- * store access. Passing `null` (logout) detaches; the next {@link openDb} will throw until a user
- * is set again.
+ * Scope the local store to a signed-in user. The database is **namespaced per user**
+ * (`marquee-<userId>`), so switching accounts opens a *different* database — the prior
+ * user's data (including unsynced events) is never cleared or exposed to another account.
+ * Call once on login (from the root layout) before any store access. Passing `null` (logout)
+ * detaches; the next {@link openDb} will throw until a user is set again.
  */
 export function setActiveUser(userId: string | null): void {
 	if (userId === activeUserId) return;
@@ -152,7 +192,9 @@ export function setActiveUser(userId: string | null): void {
 
 /**
  * Delete the active user's local database (offline replica + outbox + cursor). The next
- * {@link openDb} recreates it empty. Caller should flush pending events first and reload after.
+ * {@link openDb} recreates it empty, so a fresh sync re-pulls everything from the server — used by
+ * the "clear local data" reset. Caller should flush pending events first (unsynced edits are lost)
+ * and reload afterwards. No-op when no user is active.
  */
 export async function wipeLocalData(): Promise<void> {
 	if (!activeUserId || typeof indexedDB === 'undefined') return;
@@ -198,6 +240,11 @@ export function openDb(): Promise<MarqueeDatabase> {
 					const episodes = db.createObjectStore('episodes', { keyPath: 'id' });
 					episodes.createIndex('by_media', 'mediaId');
 					episodes.createIndex('by_airDate', 'airDate');
+				}
+				if (!db.objectStoreNames.contains('credits')) {
+					const credits = db.createObjectStore('credits', { keyPath: 'id' });
+					credits.createIndex('by_media', 'mediaId');
+					credits.createIndex('by_person', 'personId');
 				}
 				if (!db.objectStoreNames.contains('mediaImages'))
 					db.createObjectStore('mediaImages', { keyPath: 'id' });

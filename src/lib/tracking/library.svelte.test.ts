@@ -26,7 +26,8 @@ const baseMedia: Omit<MediaRecord, 'episodes' | 'seasons'> = {
 	inProduction: false,
 	firstAirDate: '2020-01-01',
 	lastAirDate: '2020-01-08',
-	version: 1
+	version: 1,
+	credits: null
 };
 
 /**
@@ -141,7 +142,8 @@ describe('LibraryState.load — a custom entry', () => {
 				airDate: '1986-01-01',
 				runtime: null,
 				stillPath: null
-			}))
+			})),
+			credits: []
 		});
 		await recordEvent('tracking.added', CUSTOM_ID, { status: 'watching' });
 

@@ -1,13 +1,13 @@
 /**
- * Server side of custom (user-authored) media. A custom row is **owned** (`owner_user_id`),
- * never returned to anyone else, and can never overwrite a shared `linked` row. Conflicts resolve
- * by LWW on `editedAt` against `updated_at`.
+ * Server side of custom media: writes `media` rows from client-supplied content rather than
+ * hydrating from a provider. Custom rows are owner-scoped and never overwritten by shared data.
  */
 import { and, eq, inArray } from 'drizzle-orm';
-import { episodes, media, seasons, type Media } from '$lib/server/db/schema';
+import { credits, episodes, media, seasons, type Media } from '$lib/server/db/schema';
 import { chunkIds } from '$lib/server/db/chunk';
 import type { createDb } from '$lib/server/db';
 import type { ValidatedCustomMedia } from '$lib/sync/media-protocol';
+import { creditRowsFromCustom, creditSignature, syncCredits, syncOwnedPeople } from './credits';
 import {
 	episodeSignature,
 	seasonSignature,
@@ -64,16 +64,23 @@ function toRows(record: ValidatedCustomMedia) {
 	return { scalars, seasonRows, episodeRows };
 }
 
-/** Whether this user may write `record`'s id — existing rows are only writable by their owner. */
+/**
+ * Whether this user may write `record`'s id. A brand-new id is fine; an existing row is only
+ * writable when it is that user's own custom row. This is what stops a request from overwriting the
+ * shared catalog, or another account's private entry, with attacker-chosen metadata — the id alone
+ * proves nothing, since a client mints it.
+ */
 function mayWrite(existing: Media | undefined, userId: string): boolean {
 	if (!existing) return true;
 	return existing.source === 'custom' && existing.ownerUserId === userId;
 }
 
 /**
- * Store custom records a user pushed. `allowedIds` is the caller's anti-abuse gate — only ids the
- * user's own tracking references pass through. Skipped ids are absent from the result; the client
- * retries them.
+ * Store the custom records a user pushed and return the ids actually written. `allowedIds` is the
+ * caller's anti-abuse gate (ids the user's own tracking references) — an id outside it is dropped
+ * before any write, so the endpoint can't be used as free storage for rows nothing points at.
+ *
+ * Skipped ids are simply absent from the result; the client keeps them queued and tries again.
  */
 export async function storeCustomMedia(
 	db: Db,
@@ -105,6 +112,12 @@ export async function storeCustomMedia(
 		}
 
 		const { scalars, seasonRows, episodeRows } = toRows(record);
+		const { personRows, creditRows } = creditRowsFromCustom(record.id, userId, record.credits);
+		// People first — a credit is a foreign key onto one. A person id this user may not write (it
+		// already belongs to someone else, or to the shared catalog) takes its credit down with it
+		// rather than pointing at a row that says someone else's name.
+		const writablePeople = await syncOwnedPeople(db, userId, personRows);
+		const ownCreditRows = creditRows.filter((c) => writablePeople.has(c.personId));
 
 		if (!existing) {
 			await db
@@ -121,13 +134,15 @@ export async function storeCustomMedia(
 				.onConflictDoNothing();
 			await syncSeasons(db, record.id, [], seasonRows);
 			await syncEpisodes(db, record.id, [], episodeRows);
+			await syncCredits(db, record.id, ownCreditRows);
 			stored.push(record.id);
 			continue;
 		}
 
-		const [oldSeasons, oldEpisodes] = await Promise.all([
+		const [oldSeasons, oldEpisodes, oldCredits] = await Promise.all([
 			db.select().from(seasons).where(eq(seasons.mediaId, record.id)),
-			db.select().from(episodes).where(eq(episodes.mediaId, record.id))
+			db.select().from(episodes).where(eq(episodes.mediaId, record.id)),
+			db.select().from(credits).where(eq(credits.mediaId, record.id))
 		]);
 		const changed =
 			existing.title !== scalars.title ||
@@ -135,12 +150,14 @@ export async function storeCustomMedia(
 			existing.overview !== scalars.overview ||
 			existing.type !== scalars.type ||
 			seasonSignature(oldSeasons) !== seasonSignature(seasonRows) ||
-			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows);
+			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows) ||
+			creditSignature(oldCredits) !== creditSignature(ownCreditRows);
 
 		// Children first: if that throws, the row keeps its old clock and version, so the next push
 		// retries rather than being recorded as up to date with half its episodes written.
 		await syncSeasons(db, record.id, oldSeasons, seasonRows);
 		await syncEpisodes(db, record.id, oldEpisodes, episodeRows);
+		await syncCredits(db, record.id, ownCreditRows);
 		await db
 			.update(media)
 			.set({
