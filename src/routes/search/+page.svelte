@@ -9,8 +9,10 @@
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
 	import * as Tabs from '$lib/components/ui/tabs';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
+	import CustomMediaForm from '$lib/components/media/custom-media-form.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
 	import {
@@ -18,16 +20,22 @@
 		clearRecentSearches,
 		getRecentSearches,
 		getTracking,
+		putCustomMedia,
 		putMedia,
 		recordEvent,
-		searchLocalMedia
+		searchCustomMedia,
+		searchLocalMedia,
+		type ClientMedia
 	} from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { createCustomMedia } from '$lib/custom-media';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
+	import type { CustomMediaInput } from '$lib/validation/custom-media';
 	import type { SearchResult } from '$lib/server/tmdb';
 	import { tabs } from '$lib/state/tabs.svelte.js';
 	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
 	import ClockIcon from '@lucide/svelte/icons/clock';
+	import Link2Icon from '@lucide/svelte/icons/link-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { PageData } from './$types';
 
@@ -75,6 +83,47 @@
 			await refreshTracked();
 		} finally {
 			writing.delete(id);
+		}
+	}
+
+	// The user's own entries. Searched locally in every network mode: nothing upstream has ever
+	// heard of them, so this is the only route to one — and a custom entry is exactly the kind of
+	// title someone reaches for when the database came up empty.
+	let customResults = $state<ClientMedia[]>([]);
+	let customSeq = 0;
+	$effect(() => {
+		const q = query.trim();
+		void sync.revision;
+		if (!q) {
+			customResults = [];
+			return;
+		}
+		const seq = ++customSeq;
+		void searchCustomMedia(q).then((r) => {
+			if (seq === customSeq) customResults = r;
+		});
+	});
+
+	// Creating an entry: the type chips prefill the form, which is where the real choice is made.
+	let createOpen = $state(false);
+	let createType = $state<'movie' | 'show'>('movie');
+	let creating = $state(false);
+
+	async function createCustom(input: CustomMediaInput) {
+		if (creating) return;
+		creating = true;
+		try {
+			const record = createCustomMedia(input);
+			// Mirrors `quickAdd`'s pipeline, but through the authoring write: it stamps the edit clock
+			// and queues the record for backup, since no server can hydrate this one.
+			await putCustomMedia(record);
+			await recordEvent('tracking.added', record.id, { status: 'want_to_watch' });
+			sync.requestSync();
+			await refreshTracked();
+			createOpen = false;
+			await goto(resolve('/custom/[id]', { id: record.id }));
+		} finally {
+			creating = false;
 		}
 	}
 
@@ -196,6 +245,10 @@
 	const visibleResults = $derived(
 		resultTab === 'titles' ? mediaResults : resultTab === 'people' ? peopleResults : results
 	);
+	// The user's own entries sit above the database results under All and Titles — they're the
+	// smaller, more specific set, and they're the ones only this person can find.
+	const visibleCustom = $derived(resultTab === 'people' ? [] : customResults);
+	const nothingFound = $derived(results.length === 0 && customResults.length === 0);
 	// Loading = the online commit is in flight, or the offline local search is still running.
 	const loading = $derived(searching || offlineSearching);
 	const activeQuery = $derived(online ? data.q : query.trim());
@@ -343,14 +396,14 @@ h-10 holds the header at the same height as the other pages'. -->
 					: 'TMDB is unreachable — showing results from the shared library only.'}
 			</p>
 		{/if}
-		{#if activeQuery && results.length === 0}
+		{#if activeQuery && nothingFound}
 			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
 				Nothing found for “{activeQuery}”.
 			</p>
 		{/if}
 	{/if}
 
-	{#if !loading && results.length > 0}
+	{#if !loading && !nothingFound}
 		<!-- One request, three views of it. Shown only once there's something to split. -->
 		<Tabs.Root bind:value={resultTab}>
 			<Tabs.List class="w-full">
@@ -360,7 +413,36 @@ h-10 holds the header at the same height as the other pages'. -->
 			</Tabs.List>
 		</Tabs.Root>
 
-		{#if visibleResults.length === 0}
+		{#if visibleCustom.length > 0}
+			<div class="flex flex-col gap-2">
+				<h2 class="text-sm font-medium text-muted-foreground">Your entries</h2>
+				<ul class="flex flex-col gap-1">
+					{#each visibleCustom as entry (entry.id)}
+						<li>
+							<a
+								href={resolve('/custom/[id]', { id: entry.id })}
+								class="-mx-2 flex min-w-0 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors hover:bg-secondary"
+							>
+								<div class="w-12 shrink-0">
+									<PosterTile type={entry.type} posterUrl={null} alt={entry.title} isCustom />
+								</div>
+								<div class="flex min-w-0 flex-1 flex-col gap-1">
+									<span class="truncate font-medium">{entry.title}</span>
+									<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+										<MediaTypeLabel type={entry.type} year={entry.year} />
+										{#if tracked.get(entry.id) === undefined}
+											<span class="text-xs">Not on a list</span>
+										{/if}
+									</div>
+								</div>
+							</a>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
+
+		{#if visibleResults.length === 0 && visibleCustom.length === 0}
 			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
 				{#if resultTab === 'people' && networkMode !== 'up'}
 					People need a connection — only your own titles are searchable right now.
@@ -370,7 +452,7 @@ h-10 holds the header at the same height as the other pages'. -->
 					No movies or shows found for “{activeQuery}”.
 				{/if}
 			</p>
-		{:else}
+		{:else if visibleResults.length > 0}
 			<ul class="flex flex-col gap-1">
 				{#each visibleResults as item (item.kind === 'person' ? `p${item.tmdbId}` : `${item.type}${item.tmdbId}`)}
 					{#if item.kind === 'person'}
@@ -431,4 +513,35 @@ h-10 holds the header at the same height as the other pages'. -->
 			</ul>
 		{/if}
 	{/if}
+
+	{#if !loading && activeQuery}
+		<!-- The escape hatch for a title no database carries. Offered whatever the results look like:
+		a near-miss is the most common reason someone reaches for it, not an empty list. -->
+		<div class="mt-2 flex flex-col gap-3 border-t border-dashed border-border pt-4">
+			<p class="text-sm text-muted-foreground">Can't find it?</p>
+			<ToggleGroup.Root
+				type="single"
+				value={createType}
+				onValueChange={(v) => (createType = ((v as string) || createType) as 'movie' | 'show')}
+				variant="outline"
+				size="sm"
+				class="self-start"
+			>
+				<ToggleGroup.Item value="movie" class="rounded-l-full!">Movie</ToggleGroup.Item>
+				<ToggleGroup.Item value="show" class="rounded-r-full!">Show</ToggleGroup.Item>
+			</ToggleGroup.Root>
+			<Button variant="outline" class="w-full" onclick={() => (createOpen = true)}>
+				<Link2Icon class="size-4" />
+				Add “{activeQuery}” manually
+			</Button>
+		</div>
+	{/if}
 </main>
+
+<CustomMediaForm
+	bind:open={createOpen}
+	initialTitle={activeQuery}
+	initialType={createType}
+	busy={creating}
+	onsubmit={createCustom}
+/>
