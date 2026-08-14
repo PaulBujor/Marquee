@@ -10,11 +10,17 @@
  *  - **Full** (a slower cadence): every referenced id's version, so a title the nightly cron
  *    refreshed server-side gets pulled down even though the client already had *a* copy.
  *
+ * The channel also carries the one thing that travels *up* it: user-authored media, which no server
+ * can hydrate, so this client is the only place it exists until it is pushed. That makes a pending
+ * record reason enough to make a request even when the pull side has nothing to ask about.
+ *
  * Runs after the event sync (media is heavier, so it's a separate call). Testable core.
  */
 import {
+	clearPendingPush,
 	getLinkedMediaRefs,
 	getMediaVersions,
+	getPendingCustomMedia,
 	getReferencedMediaIds,
 	getUnsyncedMediaIds,
 	putMedia
@@ -22,10 +28,33 @@ import {
 import { reportClientError } from '$lib/client/report-error';
 import { fetchWithTimeout } from '$lib/resilience';
 import {
+	customMediaPushSchema,
+	MEDIA_SYNC_CUSTOM_MAX,
 	MEDIA_SYNC_MAX,
 	type MediaSyncRequest,
-	type MediaSyncResponse
+	type MediaSyncResponse,
+	type ValidatedCustomMedia
 } from '$lib/sync/media-protocol';
+
+/**
+ * Narrow the local rows to what the contract accepts. The server re-validates and would simply
+ * reject a malformed record, but catching it here keeps one bad row from failing nothing visibly
+ * and re-queueing forever — it's reported once and the rest of the batch still goes.
+ */
+function toWirePushes(records: { id: string }[]): ValidatedCustomMedia[] {
+	const out: ValidatedCustomMedia[] = [];
+	for (const record of records) {
+		const parsed = customMediaPushSchema.safeParse(record);
+		if (parsed.success) {
+			out.push(parsed.data);
+			continue;
+		}
+		const message = `media sync: skipping malformed custom record ${record.id}`;
+		console.warn(message, parsed.error.issues);
+		reportClientError({ message, source: 'media-sync-custom-invalid', at: Date.now() });
+	}
+	return out;
+}
 
 /**
  * Hard cap on total requests per `runMediaSync` call. `targetIds` is chunked into
@@ -50,15 +79,27 @@ function chunk<T>(items: T[], size: number): T[][] {
 export async function runMediaSync(
 	opts: { fullCheck: boolean } = { fullCheck: false },
 	fetchFn: typeof fetch = fetch
-): Promise<{ applied: number; truncated: boolean }> {
+): Promise<{ applied: number; pushed: number; truncated: boolean }> {
 	const referencedIds = await getReferencedMediaIds();
-	if (referencedIds.length === 0) return { applied: 0, truncated: false };
+	const pendingCustom = toWirePushes(await getPendingCustomMedia(MEDIA_SYNC_CUSTOM_MAX));
 
-	const targetIds = opts.fullCheck ? referencedIds : await getUnsyncedMediaIds(referencedIds);
-	if (targetIds.length === 0) return { applied: 0, truncated: false };
+	const targetIds =
+		referencedIds.length === 0
+			? []
+			: opts.fullCheck
+				? referencedIds
+				: await getUnsyncedMediaIds(referencedIds);
 
-	const queue = chunk(targetIds, MEDIA_SYNC_MAX);
+	if (targetIds.length === 0 && pendingCustom.length === 0) {
+		return { applied: 0, pushed: 0, truncated: false };
+	}
+
+	// One empty chunk when there is nothing to diff, so a pure backup still makes its request.
+	const queue = targetIds.length > 0 ? chunk(targetIds, MEDIA_SYNC_MAX) : [[]];
 	let applied = 0;
+	let pushed = 0;
+	// Rides the first request only — the push is a fixed set, not something to repeat per chunk.
+	let toPush: ValidatedCustomMedia[] = pendingCustom;
 
 	for (let i = 0; i < MAX_DRAIN_ITERATIONS && queue.length > 0; i++) {
 		const idsChunk = queue.shift()!;
@@ -66,7 +107,13 @@ export async function runMediaSync(
 			getLinkedMediaRefs(idsChunk),
 			getMediaVersions(idsChunk)
 		]);
-		const body: MediaSyncRequest = { refs, have };
+		const body: MediaSyncRequest = {
+			refs,
+			have,
+			...(toPush.length > 0 ? { custom: toPush } : {})
+		};
+		const sentCustom = toPush;
+		toPush = [];
 		const res = await fetchWithTimeout(
 			'/api/media/sync',
 			{
@@ -80,6 +127,13 @@ export async function runMediaSync(
 		if (!res.ok) throw new Error(`media sync failed: HTTP ${res.status}`);
 
 		const data = (await res.json()) as MediaSyncResponse;
+		// Clear the backup markers *before* applying the response: a record the server just stored
+		// comes back in `media`, and `putMedia` refuses to overwrite a row still marked pending.
+		// Only the ids the server reported are cleared — the rest stay queued for another attempt.
+		const storedCustom = data.storedCustom ?? [];
+		if (storedCustom.length > 0) await clearPendingPush(storedCustom);
+		pushed += sentCustom.length > 0 ? storedCustom.length : 0;
+
 		for (const record of data.media) await putMedia(record);
 		applied += data.media.length;
 
@@ -93,5 +147,5 @@ export async function runMediaSync(
 		reportClientError({ message, source: 'media-sync-truncated', at: Date.now() });
 	}
 
-	return { applied, truncated };
+	return { applied, pushed, truncated };
 }

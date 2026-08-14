@@ -4,6 +4,7 @@
  */
 import { openDb, type ClientEpisode, type ClientMedia, type ClientSeason } from './db';
 import { isHydratableProvider, type HydratableProvider, type MediaRecord } from '$lib/sync/events';
+import type { CustomMediaPush } from '$lib/sync/media-protocol';
 import { parseTmdbExternalId, type SearchLikeMedia } from '$lib/tracking/media-record';
 
 function seasonKey(mediaId: string, seasonNumber: number): string {
@@ -18,12 +19,38 @@ function episodeKey(mediaId: string, season: number, episode: number): string {
  * Upsert a media record. A null `seasons`/`episodes` (a scalar-only track-time snapshot) leaves any
  * existing child rows untouched; a non-null one (a full channel pull) replaces them — so a snapshot
  * never wipes synced episode data.
+ *
+ * A locally-authored row with an edit still queued for backup is left alone: the incoming copy is
+ * by definition the server's, and the server has not seen that edit yet, so applying it would
+ * silently discard what the user just typed. The pending copy wins and is pushed on the next cycle.
  */
 export async function putMedia(record: MediaRecord): Promise<void> {
+	return writeMedia(record, { respectPending: true });
+}
+
+/**
+ * The write `putMedia` guards. `respectPending: false` is the author's own path — an edit must be
+ * able to overwrite an earlier edit that hasn't been pushed yet, which the guard would otherwise
+ * block. `pending` carries the backup marker + edit clock through in the same transaction.
+ */
+async function writeMedia(
+	record: MediaRecord,
+	opts: { respectPending: boolean; pending?: { editedAt: number } }
+): Promise<void> {
 	const { seasons, episodes, ...scalars } = record;
 	const db = await openDb();
 	const tx = db.transaction(['media', 'seasons', 'episodes'], 'readwrite');
-	await tx.objectStore('media').put({ ...scalars, updatedAt: Date.now() });
+	const mediaStore = tx.objectStore('media');
+	const existing = await mediaStore.get(record.id);
+	if (opts.respectPending && existing?.source === 'custom' && existing.pendingPush === 1) {
+		await tx.done;
+		return;
+	}
+	await mediaStore.put({
+		...scalars,
+		updatedAt: Date.now(),
+		...(opts.pending ? { pendingPush: 1 as const, editedAt: opts.pending.editedAt } : {})
+	});
 
 	if (seasons) {
 		const store = tx.objectStore('seasons');
@@ -152,6 +179,11 @@ export async function getReferencedMediaIds(): Promise<string[]> {
  * Drop `media` rows and their `seasons`/`episodes` children for ids outside `keepIds`. No
  * storage-pressure gate like `pruneMediaImages` has — reference data is small and re-fetched from
  * the channel on re-add, so leaving every list is reason enough. Returns how many rows were deleted.
+ *
+ * **Except custom rows, which are never evicted.** That reasoning rests on the row being
+ * re-fetchable, and a user-authored entry isn't: dropping it is the only copy on this device gone,
+ * and nothing on the server would bring it back, since recovery is keyed off ids the client can
+ * still name. Keeping them also means a removed entry stays findable in search and can be re-added.
  */
 export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
 	const db = await openDb();
@@ -164,7 +196,7 @@ export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
 	let deleted = 0;
 
 	for (let cursor = await mediaStore.openCursor(); cursor; cursor = await cursor.continue()) {
-		if (keepIds.has(cursor.value.id)) continue;
+		if (keepIds.has(cursor.value.id) || cursor.value.source === 'custom') continue;
 		const id = cursor.value.id;
 		await cursor.delete();
 		deleted++;
@@ -180,10 +212,108 @@ export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
  * Referenced ids the client has no synced copy of yet — no local row at all, or the `version: 0`
  * placeholder a quick-add snapshot seeds (see `mediaRecordFromSearch`). These are what the media
  * channel needs to ask the server about; everything else stays local until the next full check.
+ *
+ * A custom row is excluded: nothing on the server can be pulled for a title it has never seen, and
+ * asking every cycle for one would keep the light pass permanently non-empty. Backing it up is the
+ * push side's job ({@link getPendingCustomMedia}), not the diff's.
  */
 export async function getUnsyncedMediaIds(referencedIds: string[]): Promise<string[]> {
 	const rows = await Promise.all(referencedIds.map((id) => getMedia(id)));
-	return referencedIds.filter((_, i) => !rows[i] || rows[i]?.version === 0);
+	return referencedIds.filter((_, i) => {
+		const row = rows[i];
+		if (row?.source === 'custom') return false;
+		return !row || row.version === 0;
+	});
+}
+
+/**
+ * Locally-authored records whose latest edit still needs backing up, as complete push payloads,
+ * oldest edit first so a backlog drains in the order it was written.
+ *
+ * A full scan of `media` rather than an index: the store holds scalars for a bounded library, the
+ * sync cycle already scans `tracking` and `episodeWatches` whole, and an index would cost a schema
+ * version bump to buy nothing measurable.
+ */
+export async function getPendingCustomMedia(limit: number): Promise<CustomMediaPush[]> {
+	const db = await openDb();
+	const rows = (await db.getAll('media'))
+		.filter((m) => m.source === 'custom' && m.pendingPush === 1)
+		.sort((a, b) => (a.editedAt ?? 0) - (b.editedAt ?? 0))
+		.slice(0, limit);
+
+	return Promise.all(
+		rows.map(async (row) => {
+			const isShow = row.type === 'show';
+			return {
+				id: row.id,
+				provider: row.provider,
+				externalId: row.externalId,
+				source: row.source,
+				type: row.type,
+				title: row.title,
+				year: row.year,
+				posterPath: row.posterPath,
+				backdropPath: row.backdropPath,
+				overview: row.overview,
+				genres: row.genres,
+				releaseDate: row.releaseDate,
+				status: row.status,
+				inProduction: row.inProduction,
+				firstAirDate: row.firstAirDate,
+				lastAirDate: row.lastAirDate,
+				version: row.version,
+				// The child stores add a composite key and a back-reference; the wire shape has neither.
+				seasons: isShow
+					? (await getSeasons(row.id)).map((s) => ({
+							seasonNumber: s.seasonNumber,
+							name: s.name,
+							overview: s.overview,
+							airDate: s.airDate,
+							posterPath: s.posterPath,
+							episodeCount: s.episodeCount
+						}))
+					: null,
+				episodes: isShow
+					? (await getEpisodes(row.id)).map((e) => ({
+							season: e.season,
+							episode: e.episode,
+							name: e.name,
+							overview: e.overview,
+							airDate: e.airDate,
+							runtime: e.runtime,
+							stillPath: e.stillPath
+						}))
+					: null,
+				// A row can only be pending because an edit stamped the clock, but fall back rather
+				// than push a record the server's schema would reject outright.
+				editedAt: row.editedAt ?? row.updatedAt
+			};
+		})
+	);
+}
+
+/**
+ * Write a locally-authored record and mark it for backup, stamping the edit clock the server orders
+ * two devices' edits by. The one write path for creating or editing a custom entry.
+ */
+export async function putCustomMedia(
+	record: MediaRecord,
+	editedAt: number = Date.now()
+): Promise<void> {
+	await writeMedia(record, { respectPending: false, pending: { editedAt } });
+}
+
+/** Clear the backup marker for records the server reported stored. */
+export async function clearPendingPush(ids: string[]): Promise<void> {
+	if (ids.length === 0) return;
+	const db = await openDb();
+	const tx = db.transaction('media', 'readwrite');
+	const store = tx.objectStore('media');
+	for (const id of ids) {
+		const row = await store.get(id);
+		if (row?.pendingPush === 1) await store.put({ ...row, pendingPush: 0 });
+	}
+	await tx.done;
 }
 
 /** Identity of locally-known provider-backed media among `ids`, to push to the channel for server

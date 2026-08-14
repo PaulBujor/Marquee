@@ -36,6 +36,18 @@ export type MediaScalars = Omit<MediaRecord, 'seasons' | 'episodes'>;
 /** `updatedAt` is the LWW clock (epoch ms). */
 export interface ClientMedia extends MediaScalars {
 	updatedAt: number;
+	/**
+	 * Custom media only: 1 while the author's latest edit still needs backing up to the server.
+	 * Absent on provider-backed rows, which the server holds authoritatively and the client only
+	 * ever reads. Cleared once the media channel reports the record stored.
+	 */
+	pendingPush?: 0 | 1;
+	/**
+	 * Custom media only: epoch ms of the author's last local edit. Distinct from `updatedAt`, which
+	 * is stamped on every local write including a channel pull — this one is the LWW clock the
+	 * server compares two devices' edits by, so it must move only when the *user* changes something.
+	 */
+	editedAt?: number;
 }
 
 /** `id` = `${mediaId}::s{seasonNumber}`. */

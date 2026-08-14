@@ -269,7 +269,10 @@ class SyncEngine {
 						syncLog.add('media', 'skipped — circuit open after repeated failures', 'error');
 						return;
 					}
-					syncLog.add('media', `applied ${mediaRes.applied} in ${Date.now() - startedAt}ms`);
+					syncLog.add(
+						'media',
+						`applied ${mediaRes.applied}${mediaRes.pushed > 0 ? `, backed up ${mediaRes.pushed}` : ''} in ${Date.now() - startedAt}ms`
+					);
 					const nextCheck = nextFullMediaCheckStamp(
 						dueForFullCheck,
 						true,
@@ -280,7 +283,7 @@ class SyncEngine {
 						this.#lastFullMediaCheck = nextCheck;
 						void setLastFullMediaCheck(nextCheck);
 					}
-					if (mediaRes.applied > 0) changed = true;
+					if (mediaRes.applied > 0 || mediaRes.pushed > 0) changed = true;
 				} catch (err) {
 					this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
 					syncLog.add('media', `failed — ${this.lastError.message}`, 'error');
