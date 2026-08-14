@@ -2,12 +2,15 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openDb, setActiveUser } from './db';
 import {
+	clearPendingPush,
 	getLinkedMediaRefs,
 	getMedia,
 	getMediaVersions,
+	getPendingCustomMedia,
 	getReferencedMediaIds,
 	getUnsyncedMediaIds,
 	pruneStaleMedia,
+	putCustomMedia,
 	putMedia,
 	searchLocalMedia
 } from './media';
@@ -252,6 +255,130 @@ describe('pruneStaleMedia', () => {
 
 	it('is a no-op on an empty media store', async () => {
 		expect(await pruneStaleMedia(new Set())).toBe(0);
+	});
+});
+
+describe('custom media backup', () => {
+	const CUSTOM_ID = '44444444-4444-4444-8444-444444444444';
+
+	function customRecord(over: Partial<MediaRecord> = {}): MediaRecord {
+		return record({
+			id: CUSTOM_ID,
+			provider: 'local',
+			externalId: null,
+			source: 'custom',
+			type: 'movie',
+			title: 'Midnight Cassette Club',
+			version: 0,
+			...over
+		});
+	}
+
+	beforeEach(async () => {
+		const db = await openDb();
+		await db.clear('media');
+	});
+
+	it('queues a newly authored record with its edit clock', async () => {
+		await putCustomMedia(customRecord(), 5000);
+		const pending = await getPendingCustomMedia(10);
+		expect(pending).toHaveLength(1);
+		expect(pending[0]).toMatchObject({ id: CUSTOM_ID, source: 'custom', editedAt: 5000 });
+		// The push carries the wire shape, not the local composite keys the child stores add.
+		expect(pending[0].seasons).toBeNull();
+	});
+
+	it('carries a show as its seasons and episodes, without the local key columns', async () => {
+		await putCustomMedia(
+			customRecord({
+				type: 'show',
+				seasons: [
+					{
+						seasonNumber: 1,
+						name: 'Season 1',
+						overview: '',
+						airDate: '1986-01-01',
+						posterPath: null,
+						episodeCount: 1
+					}
+				],
+				episodes: [
+					{
+						season: 1,
+						episode: 1,
+						name: '',
+						overview: '',
+						airDate: '1986-01-01',
+						runtime: null,
+						stillPath: null
+					}
+				]
+			}),
+			5000
+		);
+		const [pushed] = await getPendingCustomMedia(10);
+		expect(pushed.seasons).toEqual([
+			{
+				seasonNumber: 1,
+				name: 'Season 1',
+				overview: '',
+				airDate: '1986-01-01',
+				posterPath: null,
+				episodeCount: 1
+			}
+		]);
+		expect(pushed.episodes?.[0]).not.toHaveProperty('mediaId');
+	});
+
+	it('drains oldest edit first', async () => {
+		const second = '55555555-5555-4555-8555-555555555555';
+		await putCustomMedia(customRecord({ id: second, title: 'Later' }), 9000);
+		await putCustomMedia(customRecord({ title: 'Earlier' }), 1000);
+		expect((await getPendingCustomMedia(10)).map((r) => r.title)).toEqual(['Earlier', 'Later']);
+	});
+
+	it('stops queueing a record once the server reports it stored', async () => {
+		await putCustomMedia(customRecord(), 5000);
+		await clearPendingPush([CUSTOM_ID]);
+		expect(await getPendingCustomMedia(10)).toEqual([]);
+	});
+
+	it('lets a second local edit overwrite one that has not been pushed yet', async () => {
+		await putCustomMedia(customRecord({ title: 'First draft' }), 5000);
+		await putCustomMedia(customRecord({ title: 'Corrected' }), 6000);
+		const pending = await getPendingCustomMedia(10);
+		expect(pending).toHaveLength(1);
+		expect(pending[0]).toMatchObject({ title: 'Corrected', editedAt: 6000 });
+	});
+
+	it('refuses to let a server copy clobber an edit still waiting to be pushed', async () => {
+		await putCustomMedia(customRecord({ title: 'Just typed' }), 6000);
+		// The response to an *earlier* push arrives carrying the pre-edit copy.
+		await putMedia(customRecord({ title: 'Stale server copy', version: 1 }));
+		expect((await getMedia(CUSTOM_ID))?.title).toBe('Just typed');
+	});
+
+	it('applies a server copy once nothing is queued for it', async () => {
+		await putCustomMedia(customRecord({ title: 'Mine' }), 6000);
+		await clearPendingPush([CUSTOM_ID]);
+		await putMedia(customRecord({ title: 'From another device', version: 2 }));
+		expect(await getMedia(CUSTOM_ID)).toMatchObject({
+			title: 'From another device',
+			version: 2
+		});
+	});
+
+	it('never asks the pull side about a custom title — nothing upstream has one', async () => {
+		await putCustomMedia(customRecord(), 5000);
+		// It sits at version 0, which for a provider-backed row means "ask the server about this".
+		expect(await getUnsyncedMediaIds([CUSTOM_ID])).toEqual([]);
+	});
+
+	it('is never evicted, even once it has left every list', async () => {
+		await putCustomMedia(customRecord(), 5000);
+		// The only copy of a user-authored entry; nothing could re-fetch it.
+		expect(await pruneStaleMedia(new Set())).toBe(0);
+		expect(await getMedia(CUSTOM_ID)).toBeDefined();
 	});
 });
 

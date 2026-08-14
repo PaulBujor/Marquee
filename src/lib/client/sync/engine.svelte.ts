@@ -1,16 +1,6 @@
 /**
- * The client sync engine: a browser-only singleton that drives the sync channels on the right
- * triggers (app open/foreground, reconnect, a light interval, and a write-nudge), coalesces
- * overlapping requests, and exposes a reactive {@link SyncEngine.status} (plus
- * {@link SyncEngine.lastError} detail) for a future sync-pending / error-reporting UI.
- *
- * Resilience: each channel (event, media) runs through {@link withRetry} for in-cycle backoff and
- * its own {@link CircuitBreaker} so a persistently-failing channel **stops** hammering rather than
- * retrying forever — it pauses until the cooldown lets a trigger probe it again. The shared
- * helpers live in `$lib/resilience` (also used by the server TMDB client).
- *
- * Mirrors the `theme`/`pwa` rune singletons. Start it from the root layout when a user is
- * signed in; the store must already be scoped to that user (`setActiveUser`).
+ * Client sync engine: drives event + media channels on triggers (open/foreground/reconnect/interval),
+ * coalesces overlapping requests, exposes a reactive status. Each channel has retry + circuit breaker.
  */
 import { runSync, SyncError, toSyncErrorInfo, type SyncErrorInfo } from './sync';
 import { runMediaSync } from './media-sync';
@@ -269,7 +259,10 @@ class SyncEngine {
 						syncLog.add('media', 'skipped — circuit open after repeated failures', 'error');
 						return;
 					}
-					syncLog.add('media', `applied ${mediaRes.applied} in ${Date.now() - startedAt}ms`);
+					syncLog.add(
+						'media',
+						`applied ${mediaRes.applied}${mediaRes.pushed > 0 ? `, backed up ${mediaRes.pushed}` : ''} in ${Date.now() - startedAt}ms`
+					);
 					const nextCheck = nextFullMediaCheckStamp(
 						dueForFullCheck,
 						true,
@@ -280,7 +273,7 @@ class SyncEngine {
 						this.#lastFullMediaCheck = nextCheck;
 						void setLastFullMediaCheck(nextCheck);
 					}
-					if (mediaRes.applied > 0) changed = true;
+					if (mediaRes.applied > 0 || mediaRes.pushed > 0) changed = true;
 				} catch (err) {
 					this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
 					syncLog.add('media', `failed — ${this.lastError.message}`, 'error');

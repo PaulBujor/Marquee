@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyEventToIdb, applyEventsToIdb } from '$lib/client/idb';
 import { createEvent, mediaId, type EventEnvelope, type MediaRecord } from '$lib/sync/events';
 import { openDb, setActiveUser } from '$lib/client/idb/db';
-import { getEpisodes, getMedia, putMedia } from '$lib/client/idb/media';
+import {
+	getEpisodes,
+	getMedia,
+	getPendingCustomMedia,
+	putCustomMedia,
+	putMedia
+} from '$lib/client/idb/media';
 import { reportClientError } from '$lib/client/report-error';
 import {
 	MEDIA_SYNC_MAX,
@@ -111,12 +117,124 @@ function haveIdsSent(sent: MediaSyncRequest[]): Set<string> {
 	return new Set(sent.flatMap((req) => req.have.map((h) => h.id)));
 }
 
+describe('custom media backup', () => {
+	const CUSTOM_ID = '66666666-6666-4666-8666-666666666666';
+
+	function customRecord(over: Partial<MediaRecord> = {}): MediaRecord {
+		return {
+			id: CUSTOM_ID,
+			provider: 'local',
+			externalId: null,
+			source: 'custom',
+			type: 'movie',
+			title: 'Midnight Cassette Club',
+			year: 1986,
+			posterPath: null,
+			backdropPath: null,
+			overview: '',
+			genres: [],
+			releaseDate: null,
+			status: null,
+			inProduction: null,
+			firstAirDate: null,
+			lastAirDate: null,
+			version: 0,
+			seasons: null,
+			episodes: null,
+			...over
+		};
+	}
+
+	/** Track a custom id directly — it has no external id to derive one from. */
+	async function trackCustom(id: string): Promise<void> {
+		await applyEventToIdb(createEvent('tracking.added', id, { status: 'want_to_watch' }, DEVICE));
+	}
+
+	it('pushes a pending record and clears it once the server reports it stored', async () => {
+		await trackCustom(CUSTOM_ID);
+		await putCustomMedia(customRecord(), 5000);
+
+		const sent: MediaSyncRequest[] = [];
+		const result = await runMediaSync(
+			{ fullCheck: false },
+			stubResponses([{ media: [customRecord({ version: 1 })], storedCustom: [CUSTOM_ID] }], sent)
+		);
+
+		expect(sent[0].custom?.map((c) => c.id)).toEqual([CUSTOM_ID]);
+		expect(sent[0].custom?.[0].editedAt).toBe(5000);
+		expect(result.pushed).toBe(1);
+		expect(await getPendingCustomMedia(10)).toEqual([]);
+		// Cleared before the response is applied, so the server's echo lands rather than being
+		// refused by `putMedia`'s pending guard.
+		expect((await getMedia(CUSTOM_ID))?.version).toBe(1);
+	});
+
+	it('keeps a record queued when the server does not report it stored', async () => {
+		await trackCustom(CUSTOM_ID);
+		await putCustomMedia(customRecord(), 5000);
+
+		const sent: MediaSyncRequest[] = [];
+		const result = await runMediaSync({ fullCheck: false }, stubResponses([{ media: [] }], sent));
+
+		expect(sent).toHaveLength(1);
+		expect(result.pushed).toBe(0);
+		expect((await getPendingCustomMedia(10)).map((r) => r.id)).toEqual([CUSTOM_ID]);
+	});
+
+	it('makes a request for a pending record even when the pull side has nothing to ask about', async () => {
+		// The whole library is synced, so the light pass would normally skip the cycle entirely —
+		// but the only copy of this entry is on this device until it is pushed.
+		await track('movie/1');
+		await putMedia(record('movie/1', { version: 1 }));
+		await trackCustom(CUSTOM_ID);
+		await putCustomMedia(customRecord(), 5000);
+
+		const sent: MediaSyncRequest[] = [];
+		await runMediaSync(
+			{ fullCheck: false },
+			stubResponses([{ media: [], storedCustom: [CUSTOM_ID] }], sent)
+		);
+
+		expect(sent).toHaveLength(1);
+		expect(sent[0].have).toEqual([]);
+		expect(sent[0].custom).toHaveLength(1);
+	});
+
+	it('sends the push on the first request only, never once per chunk', async () => {
+		await trackCustom(CUSTOM_ID);
+		await putCustomMedia(customRecord(), 5000);
+		await trackMany(MEDIA_SYNC_MAX + 10, 'chunked');
+
+		const sent: MediaSyncRequest[] = [];
+		await runMediaSync({ fullCheck: true }, stubCaughtUp(sent));
+
+		expect(sent.length).toBeGreaterThan(1);
+		expect(sent.filter((req) => req.custom !== undefined)).toHaveLength(1);
+	});
+
+	it('drops a malformed local record rather than failing the whole cycle', async () => {
+		await trackCustom(CUSTOM_ID);
+		// A poster path is a provider artwork path; a custom entry has none, and the contract says so.
+		await putCustomMedia(customRecord({ posterPath: '/not-ours.jpg' }), 5000);
+		await track('movie/2');
+
+		const sent: MediaSyncRequest[] = [];
+		const result = await runMediaSync({ fullCheck: false }, stubCaughtUp(sent));
+
+		expect(sent[0].custom).toBeUndefined();
+		expect(result.truncated).toBe(false);
+		expect(reportClientError).toHaveBeenCalledWith(
+			expect.objectContaining({ source: 'media-sync-custom-invalid' })
+		);
+	});
+});
+
 describe('runMediaSync', () => {
 	it('makes no request when nothing is tracked', async () => {
 		const sent: MediaSyncRequest[] = [];
 		const result = await runMediaSync({ fullCheck: true }, stubFetch([], sent));
 		expect(sent).toHaveLength(0);
-		expect(result).toEqual({ applied: 0, truncated: false });
+		expect(result).toEqual({ applied: 0, pushed: 0, truncated: false });
 	});
 
 	it('light pass: makes no request when every tracked title already has a synced copy', async () => {
@@ -125,7 +243,7 @@ describe('runMediaSync', () => {
 		const sent: MediaSyncRequest[] = [];
 		const result = await runMediaSync({ fullCheck: false }, stubFetch([], sent));
 		expect(sent).toHaveLength(0);
-		expect(result).toEqual({ applied: 0, truncated: false });
+		expect(result).toEqual({ applied: 0, pushed: 0, truncated: false });
 	});
 
 	it('light pass: asks about a tracked title with no synced copy yet', async () => {
@@ -220,7 +338,7 @@ describe('runMediaSync', () => {
 			)
 		);
 		expect(sent).toHaveLength(3); // drained across three passes
-		expect(result).toEqual({ applied: 3, truncated: false });
+		expect(result).toEqual({ applied: 3, pushed: 0, truncated: false });
 	});
 
 	it('bounds the drain loop when the server never clears `pending`, and reports the leftover', async () => {
