@@ -4,7 +4,7 @@
  * import seeds is re-validated server-side by `eventEnvelopeSchema`.
  */
 import { z } from 'zod';
-import { MEDIA_PROVIDERS, TRACKING_STATUSES } from '$lib/sync/events';
+import { MEDIA_PROVIDERS, MEDIA_SOURCES, TRACKING_STATUSES } from '$lib/sync/events';
 import { EXPORT_FORMAT, EXPORT_SCHEMA_VERSION, type MarqueeExport } from './schema';
 
 /** Why a file couldn't be read, mapped to a message in the UI. */
@@ -28,6 +28,18 @@ const titleSchema = z.object({
 	type: z.enum(['movie', 'show']).nullable(),
 	title: z.string().nullable(),
 	year: z.number().int().nullable(),
+	// v2 additions, optional so a v1 file still reads (see EXPORT_SCHEMA_VERSION).
+	source: z.enum(MEDIA_SOURCES).nullable().optional(),
+	overview: z.string().nullable().optional(),
+	seasons: z
+		.array(
+			z.object({
+				seasonNumber: z.number().int().nonnegative(),
+				episodeCount: z.number().int().nonnegative()
+			})
+		)
+		.nullable()
+		.optional(),
 	status: z.enum(TRACKING_STATUSES),
 	favorite: z.boolean(),
 	rating: z.number().int().min(1).max(5).nullable(),
@@ -36,8 +48,7 @@ const titleSchema = z.object({
 	watchedEpisodes: z.array(episodeSchema)
 });
 
-// Non-strict by design: an older client should still read a file a newer one wrote, as long as the
-// fields it knows about are intact.
+/** Non-strict: an older client reads a newer file as long as the fields it knows about are intact. */
 const documentSchema = z.object({
 	format: z.literal(EXPORT_FORMAT),
 	schemaVersion: z.number().int().positive(),

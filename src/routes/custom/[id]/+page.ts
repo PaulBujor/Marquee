@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
-import { getEpisodes, getMedia, getSeasons } from '$lib/client/idb';
+import { getEpisodes, getMedia, getMediaLink, getSeasons } from '$lib/client/idb';
 import type { PageLoad } from './$types';
 
 /**
@@ -13,21 +13,23 @@ export const load: PageLoad = async ({ params, parent, depends }) => {
 
 	depends('app:custom-media'); // re-read after an edit, or once a sync brings the record down
 
-	if (!browser) return { id: params.id, entry: null, seasons: [], episodes: [] };
+	if (!browser) return { id: params.id, entry: null, seasons: [], episodes: [], link: null };
 
 	const entry = (await getMedia(params.id)) ?? null;
 	if (!entry || entry.source !== 'custom') {
-		return { id: params.id, entry: null, seasons: [], episodes: [] };
+		return { id: params.id, entry: null, seasons: [], episodes: [], link: null };
 	}
-	const [seasons, episodes] =
-		entry.type === 'show'
-			? await Promise.all([getSeasons(params.id), getEpisodes(params.id)])
-			: [[], []];
+	const [seasons, episodes, link] = await Promise.all([
+		entry.type === 'show' ? getSeasons(params.id) : Promise.resolve([]),
+		entry.type === 'show' ? getEpisodes(params.id) : Promise.resolve([]),
+		getMediaLink(params.id).then((l) => l ?? null)
+	]);
 
 	return {
 		id: params.id,
 		entry,
 		seasons: seasons.sort((a, b) => a.seasonNumber - b.seasonNumber),
-		episodes: episodes.sort((a, b) => a.season - b.season || a.episode - b.episode)
+		episodes: episodes.sort((a, b) => a.season - b.season || a.episode - b.episode),
+		link
 	};
 };

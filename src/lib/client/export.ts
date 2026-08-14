@@ -1,14 +1,11 @@
-/**
- * Data export: read the device's offline replica and hand the user a JSON file.
- *
- * Deliberately network-free — IndexedDB is a full replica, so the export is complete without the
- * server. That's the point: it works offline, and it works if the service disappears.
- *
- * Client-safe (browser only).
- */
-import { getAllEpisodeWatches, getAllMedia, getTracking } from '$lib/client/idb';
+/** Data export: read the device's offline replica and produce a JSON file. Network-free. */
+import { getAllEpisodeWatches, getAllMedia, getSeasons, getTracking } from '$lib/client/idb';
 import { buildExport } from '$lib/portability/build';
-import { EXPORT_FILENAME_PREFIX, type MarqueeExport } from '$lib/portability/schema';
+import {
+	EXPORT_FILENAME_PREFIX,
+	type ExportedSeason,
+	type MarqueeExport
+} from '$lib/portability/schema';
 
 /** Gather local state into an export document. `now` is injectable so callers can pin the stamp. */
 export async function collectExport(now: Date = new Date()): Promise<MarqueeExport> {
@@ -17,7 +14,21 @@ export async function collectExport(now: Date = new Date()): Promise<MarqueeExpo
 		getAllMedia(),
 		getAllEpisodeWatches()
 	]);
-	return buildExport({ tracking, media, watches, exportedAt: now });
+
+	// Custom show seasons must travel in the file — they have no other source on import.
+	const customShows = media.filter((m) => m.source === 'custom' && m.type === 'show');
+	const customSeasons = new Map<string, ExportedSeason[]>(
+		await Promise.all(
+			customShows.map(async (m): Promise<[string, ExportedSeason[]]> => [
+				m.id,
+				(await getSeasons(m.id))
+					.map((s) => ({ seasonNumber: s.seasonNumber, episodeCount: s.episodeCount }))
+					.sort((a, b) => a.seasonNumber - b.seasonNumber)
+			])
+		)
+	);
+
+	return buildExport({ tracking, media, watches, customSeasons, exportedAt: now });
 }
 
 /**

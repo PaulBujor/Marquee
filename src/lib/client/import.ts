@@ -1,13 +1,14 @@
 /**
- * Data import: rebuild a library from an export file.
- *
- * Writes **events**, not state — they land in the outbox and the local projection, then ordinary
- * sync pushes them. Hence no import endpoint and no server-side import code: restoring an account
- * is an unusually large sync, and it works offline for the same reason.
- *
- * Client-safe (browser only).
+ * Data import: rebuild a library from an export file. Writes events (not state), which land in the
+ * outbox and sync normally. Works offline. Client-safe.
  */
-import { applyEventsToIdb, enqueueEvents, getDeviceId, putMediaBatch } from '$lib/client/idb';
+import {
+	applyEventsToIdb,
+	enqueueEvents,
+	getDeviceId,
+	putCustomMedia,
+	putMediaBatch
+} from '$lib/client/idb';
 import { reportClientError } from '$lib/client/report-error';
 import { sync } from '$lib/client/sync/engine.svelte';
 import { parseExport, type ParseFailure } from '$lib/portability/parse';
@@ -31,10 +32,7 @@ export function parseFailureMessage(reason: ParseFailure): string {
 
 export type ReadResult = { ok: true; plan: ImportPlan } | { ok: false; reason: ParseFailure };
 
-/**
- * Read and validate a file, returning what an import *would* do. Writes nothing — the caller shows
- * the counts and asks the user to confirm before {@link applyImport}.
- */
+/** Dry-run: parse a file and return what an import would do, without writing anything. */
 export async function readImportFile(file: File): Promise<ReadResult> {
 	const parsed = parseExport(await file.text());
 	if (!parsed.ok) {
@@ -53,27 +51,21 @@ export async function readImportFile(file: File): Promise<ReadResult> {
 }
 
 /**
- * Apply a plan: seed the media stubs, queue the events, and project them locally so the library
- * updates immediately. Then nudge sync to start pushing.
- *
- * Additive — nothing local is cleared. Every event carries its recorded clock, so importing into
- * an account that already has data merges by last-write-wins.
- *
- * A part-way failure leaves what already landed; every write is an idempotent upsert, so
- * re-running converges. `plan` must be **plain data** — a Svelte `$state` value hands IndexedDB a
- * Proxy, which structured clone refuses.
+ * Apply a plan: seed media, queue events, and project locally. Additive — nothing local is cleared.
+ * `plan` must be plain data (not `$state`).
  */
 export async function applyImport(plan: ImportPlan): Promise<void> {
-	// Report and rethrow — the UI still shows the failure, but a silent one on someone else's
-	// device is exactly what we can't debug without a log line.
+	// Report and rethrow — UI shows the failure; this log covers silent ones on other devices.
 	try {
-		// Media first, so the channel can start hydrating the real rows while events sync. Batched
-		// for the same reason the events below are: one transaction, not one per record.
-		await putMediaBatch(plan.media);
+		// Media first — batched so the channel hydrates while events sync.
+		await putMediaBatch(plan.media.filter((m) => m.source !== 'custom'));
+
+		// Custom entries through the authoring write — each queued for backup.
+		for (const record of plan.media.filter((m) => m.source === 'custom')) {
+			await putCustomMedia(record);
+		}
 
 		await enqueueEvents(plan.events);
-		// One transaction for the whole batch — a library's worth of events applied one at a time
-		// would be thousands of round trips with the UI blocked behind them.
 		await applyEventsToIdb(plan.events);
 	} catch (err) {
 		reportClientError({

@@ -8,6 +8,7 @@ import {
 	EXPORT_FORMAT,
 	EXPORT_SCHEMA_VERSION,
 	type ExportedEpisode,
+	type ExportedSeason,
 	type ExportedTitle,
 	type MarqueeExport
 } from './schema';
@@ -18,6 +19,8 @@ export interface ExportInput {
 	media: ClientMedia[];
 	/** Every watch row, watched or not — this filters them. */
 	watches: ClientEpisodeWatch[];
+	/** Season rows for custom shows. Provider-backed titles re-fetch theirs; custom ones have no other source. */
+	customSeasons?: Map<string, ExportedSeason[]>;
 	exportedAt: Date;
 }
 
@@ -43,11 +46,8 @@ function compareEpisodes(a: ExportedEpisode, b: ExportedEpisode): number {
 }
 
 /**
- * An epoch-ms clock as an ISO string, falling back when the value isn't a usable date.
- *
- * `new Date(x).toISOString()` throws a `RangeError` on `NaN` or `undefined`, so a single corrupt
- * or missing clock — a row written by an older schema version, say — would otherwise abort the
- * whole export. Losing one date is recoverable; losing the ability to get your data out is not.
+ * An epoch-ms clock as an ISO string, falling back when the value isn't a usable date. A corrupt
+ * clock must not abort the whole export — losing one date is recoverable.
  */
 function isoClock(value: number | undefined, fallback: Date): string {
 	if (typeof value !== 'number' || !Number.isFinite(value)) return fallback.toISOString();
@@ -61,7 +61,7 @@ export function buildExport(input: ExportInput): MarqueeExport {
 
 	const watchedByMedia = new Map<string, ExportedEpisode[]>();
 	for (const w of input.watches) {
-		// `watched: false` rows are retained locally as last-write-wins tombstones, not history.
+		// `watched: false` rows are tombstones retained for LWW, not history.
 		if (!w.watched) continue;
 		const list = watchedByMedia.get(w.mediaId);
 		// The row's LWW clock is the clock of the `episode.watched` event — i.e. when it was marked.
@@ -76,6 +76,7 @@ export function buildExport(input: ExportInput): MarqueeExport {
 
 	const titles = input.tracking.map((t): ExportedTitle => {
 		const m = mediaById.get(t.mediaId);
+		const isCustom = m?.source === 'custom';
 		const addedAt = isoClock(t.addedAt, input.exportedAt);
 		// A row that only ever saw a favorite/rating event keeps the initial 0 clock, which would
 		// export as 1970. Nothing changes status before it was added, so the add is the floor.
@@ -87,6 +88,11 @@ export function buildExport(input: ExportInput): MarqueeExport {
 			type: m?.type ?? null,
 			title: m?.title ?? null,
 			year: m?.year ?? null,
+			source: m?.source ?? null,
+			// Only for a user-authored entry: a provider's text is re-fetched, but this is the user's
+			// own writing and exists nowhere else.
+			overview: isCustom ? (m?.overview ?? '') : null,
+			seasons: isCustom && m?.type === 'show' ? (input.customSeasons?.get(t.mediaId) ?? []) : null,
 			status: t.status,
 			favorite: t.favorite,
 			rating: t.rating,

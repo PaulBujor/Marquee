@@ -75,9 +75,20 @@ export async function recordEvent<T extends SyncEventType>(
 	await applyEventToIdb(event);
 }
 
-/** One event to record, for {@link recordEvents}. */
+/**
+ * One event to record, for {@link recordEvents}.
+ *
+ * `clock` overrides the stamp, and should be passed only when replaying something that genuinely
+ * happened earlier — carrying a title's history onto the entry it was matched to, say. Left off,
+ * the event is stamped now, which is what a live user action wants.
+ */
 export type EventSpec = {
-	[T in SyncEventType]: { type: T; entityId: string; payload: EventPayloadMap[T] };
+	[T in SyncEventType]: {
+		type: T;
+		entityId: string;
+		payload: EventPayloadMap[T];
+		clock?: number;
+	};
 }[SyncEventType];
 
 /**
@@ -92,7 +103,7 @@ export type EventSpec = {
 export async function recordEvents(specs: EventSpec[]): Promise<void> {
 	if (specs.length === 0) return;
 	const deviceId = await getDeviceId();
-	const events = specs.map((s) => createEvent(s.type, s.entityId, s.payload, deviceId));
+	const events = specs.map((s) => createEvent(s.type, s.entityId, s.payload, deviceId, s.clock));
 	await enqueueEvents(events);
 	await applyEventsToIdb(events);
 }

@@ -264,3 +264,145 @@ describe('export → import round trip', () => {
 		expect(plan.events.filter((e) => e.type === 'episode.unwatched')).toHaveLength(0);
 	});
 });
+
+describe('a user-authored entry survives the round trip', () => {
+	const CUSTOM_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+	const CUSTOM_ADDED_AT = Date.UTC(2025, 3, 2, 10, 0, 0);
+	const CUSTOM_WATCHED_AT = Date.UTC(2025, 3, 9, 21, 0, 0);
+
+	/** As `createCustomMedia` would have written it: `local` provider, no external id, past dates. */
+	const customMedia: ClientMedia = {
+		id: CUSTOM_ID,
+		provider: 'local',
+		externalId: null,
+		source: 'custom',
+		type: 'show',
+		title: 'Midnight Cassette Club',
+		year: 1986,
+		posterPath: null,
+		backdropPath: null,
+		overview: 'Two seasons nobody catalogued.',
+		genres: [],
+		releaseDate: null,
+		status: null,
+		inProduction: false,
+		firstAirDate: null,
+		lastAirDate: null,
+		version: 1,
+		updatedAt: 0
+	};
+
+	const customTracking: ClientTracking = {
+		mediaId: CUSTOM_ID,
+		status: 'watching',
+		favorite: true,
+		rating: 3,
+		removed: false,
+		statusUpdatedAt: CUSTOM_WATCHED_AT,
+		favoriteUpdatedAt: CUSTOM_WATCHED_AT,
+		ratingUpdatedAt: CUSTOM_WATCHED_AT,
+		removedUpdatedAt: 0,
+		addedAt: CUSTOM_ADDED_AT
+	};
+
+	const customWatch: ClientEpisodeWatch = {
+		id: `${CUSTOM_ID}::s1e1`,
+		mediaId: CUSTOM_ID,
+		season: 1,
+		episode: 1,
+		watched: true,
+		updatedAt: CUSTOM_WATCHED_AT
+	};
+
+	function exportDoc() {
+		return buildExport({
+			tracking: [customTracking],
+			media: [customMedia],
+			watches: [customWatch],
+			customSeasons: new Map([
+				[
+					CUSTOM_ID,
+					[
+						{ seasonNumber: 1, episodeCount: 2 },
+						{ seasonNumber: 2, episodeCount: 3 }
+					]
+				]
+			]),
+			exportedAt: EXPORTED_AT
+		});
+	}
+
+	it('carries what nothing else could supply: the title, its description and its seasons', () => {
+		// A provider-backed title only needs its identity in the file — the metadata is re-fetched.
+		// Nothing will ever re-fetch this one, so the file has to be the source.
+		const [entry] = exportDoc().titles;
+		expect(entry).toMatchObject({
+			mediaId: CUSTOM_ID,
+			source: 'custom',
+			externalId: null,
+			title: 'Midnight Cassette Club',
+			overview: 'Two seasons nobody catalogued.',
+			year: 1986,
+			seasons: [
+				{ seasonNumber: 1, episodeCount: 2 },
+				{ seasonNumber: 2, episodeCount: 3 }
+			]
+		});
+	});
+
+	it('rebuilds the entry whole, keeping the id the events name it by', () => {
+		const parsed = parseExport(JSON.stringify(exportDoc()));
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) return;
+
+		const plan = planImport(parsed.doc, DEVICE);
+		const [record] = plan.media;
+		expect(record).toMatchObject({
+			id: CUSTOM_ID,
+			provider: 'local',
+			source: 'custom',
+			externalId: null,
+			type: 'show',
+			title: 'Midnight Cassette Club',
+			overview: 'Two seasons nobody catalogued.',
+			year: 1986,
+			inProduction: false
+		});
+		// Seasons and their episodes are regenerated from the counts, with dates in the past so the
+		// restored watch history lands on episodes that read as aired.
+		expect(record.seasons).toHaveLength(2);
+		expect(record.episodes).toHaveLength(5);
+		expect(record.episodes?.every((e) => e.airDate !== null)).toBe(true);
+		// Every event names the entry by the exported id, which is the only identity it has.
+		expect(plan.events.every((e) => e.entityId === CUSTOM_ID)).toBe(true);
+	});
+
+	it('preserves the dates the entry was added and watched', () => {
+		const parsed = parseExport(JSON.stringify(exportDoc()));
+		if (!parsed.ok) throw new Error('expected the document to parse');
+		const plan = planImport(parsed.doc, DEVICE);
+
+		const added = plan.events.find((e) => e.type === 'tracking.added');
+		const watched = plan.events.find((e) => e.type === 'episode.watched');
+		expect(added?.clientCreatedAt).toBe(CUSTOM_ADDED_AT);
+		expect(watched?.clientCreatedAt).toBe(CUSTOM_WATCHED_AT);
+	});
+
+	it('still reads a v1 file, which had no custom entries to carry', () => {
+		const doc = exportDoc();
+		// A file written before the fields existed: same shape, minus the v2 additions.
+		const v1 = {
+			...doc,
+			schemaVersion: 1,
+			titles: doc.titles.map((title) => {
+				const stripped: Record<string, unknown> = { ...title };
+				delete stripped.source;
+				delete stripped.overview;
+				delete stripped.seasons;
+				return stripped;
+			})
+		};
+		const parsed = parseExport(JSON.stringify(v1));
+		expect(parsed.ok).toBe(true);
+	});
+});

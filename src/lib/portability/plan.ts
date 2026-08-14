@@ -9,6 +9,7 @@ import {
 	type EventEnvelope,
 	type MediaRecord
 } from '$lib/sync/events';
+import { createCustomMedia } from '$lib/custom-media';
 import { mediaRecordFromSearch, parseTmdbExternalId } from '$lib/tracking/media-record';
 import type { ExportedTitle, MarqueeExport } from './schema';
 
@@ -52,9 +53,29 @@ function resolveClock(iso: string, fallback: number): number {
 
 /**
  * A behind-version media stub for the media channel to hydrate, or null when unbuildable.
- * `version: 0` makes the next sync replace it.
+ * Required, not cosmetic: the media channel derives what to hydrate from the local `media` store,
+ * and an event names a title only by an opaque derived id — without a stub carrying
+ * `(provider, externalId)` the server never learns what the title is. `version: 0` makes the next
+ * sync replace it.
+ *
+ * A user-authored entry is the opposite case: nothing will ever hydrate it, so the file *is* the
+ * source and the record is rebuilt whole from what it carries.
  */
-function mediaStub(entry: ExportedTitle): MediaRecord | null {
+function mediaStub(entry: ExportedTitle, id: string, now: number): MediaRecord | null {
+	if (entry.source === 'custom') {
+		return createCustomMedia(
+			{
+				title: entry.title ?? '',
+				type: entry.type ?? 'movie',
+				year: entry.year,
+				overview: entry.overview ?? '',
+				seasons: entry.type === 'show' ? (entry.seasons ?? []) : [],
+				credits: []
+			},
+			// The exported id, so the restored entry is the same title the events already name.
+			{ id, now }
+		);
+	}
 	if (entry.provider !== 'tmdb' || !entry.externalId) return null;
 	const ref = parseTmdbExternalId(entry.externalId);
 	if (!ref) return null;
@@ -122,7 +143,7 @@ export function planImport(
 			episodes += 1;
 		}
 
-		const stub = mediaStub(entry);
+		const stub = mediaStub(entry, id, now);
 		if (stub) media.push(stub);
 	}
 
