@@ -107,6 +107,12 @@ export interface MediaRecord {
 	seasons: MediaSeason[] | null;
 	/** Null for movies. */
 	episodes: MediaEpisode[] | null;
+	/**
+	 * Cast and crew. `null` means *not known* — a scalar-only snapshot that mustn't overwrite
+	 * credits already stored — while `[]` means *known to have none*. Same convention as
+	 * `seasons`/`episodes`, and the reason a quick-add can't blank a synced title's cast.
+	 */
+	credits: MediaCredit[] | null;
 }
 
 /**
@@ -232,6 +238,12 @@ export type CreditRole = (typeof CREDIT_ROLES)[number];
 export interface MediaCredit {
 	/** Our own person id (see {@link personId}). */
 	personId: string;
+	/**
+	 * The provider's id for them (`person/<tmdbId>`), or null for someone the user typed themselves.
+	 * Carried on the wire alongside our own id because our id is a one-way hash — without this a
+	 * cached credit could show a name but never link to that person's page offline.
+	 */
+	externalId: string | null;
 	name: string;
 	profilePath: string | null;
 	role: CreditRole;
@@ -252,6 +264,12 @@ export function personExternalId(tmdbId: number): string {
 /** Our own id for a provider-backed person, derived the same way a title's is. */
 export function personId(provider: HydratableProvider, tmdbId: number): string {
 	return mediaId(provider, personExternalId(tmdbId));
+}
+
+/** Recover the provider's numeric person id from {@link personExternalId}, or null if it isn't one. */
+export function parsePersonExternalId(externalId: string | null): number | null {
+	const match = /^person\/(\d+)$/.exec(externalId ?? '');
+	return match ? Number(match[1]) : null;
 }
 
 /**

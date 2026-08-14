@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { setActiveUser } from '$lib/client/idb/db';
 import { putMedia, type ClientEpisode } from '$lib/client/idb';
-import { tmdbMediaId, type MediaRecord } from '$lib/sync/events';
+import { personExternalId, personId, tmdbMediaId, type MediaRecord } from '$lib/sync/events';
 import { buildOfflineDetail, offlineSeason } from './offline-detail';
 
 setActiveUser('offline-detail-test'); // namespace the store before opening
@@ -74,7 +74,37 @@ const movie: MediaRecord = {
 	lastAirDate: null,
 	version: 1,
 	seasons: null,
-	episodes: null
+	episodes: null,
+	credits: [
+		{
+			personId: personId('tmdb', 6384),
+			externalId: personExternalId(6384),
+			name: 'Keanu Reeves',
+			profilePath: '/keanu.jpg',
+			role: 'cast',
+			character: 'Neo',
+			sortOrder: 0
+		},
+		{
+			personId: personId('tmdb', 9339),
+			externalId: personExternalId(9339),
+			name: 'Lana Wachowski',
+			profilePath: null,
+			role: 'director',
+			character: null,
+			sortOrder: 0
+		},
+		{
+			// Minted locally (a user-typed name), so there's no person page to link to.
+			personId: '99999999-9999-4999-8999-999999999999',
+			externalId: null,
+			name: 'Uncredited Gaffer',
+			profilePath: null,
+			role: 'producer',
+			character: null,
+			sortOrder: 0
+		}
+	]
 };
 
 describe('buildOfflineDetail', () => {
@@ -94,11 +124,21 @@ describe('buildOfflineDetail', () => {
 			releaseDate: '1999-03-31',
 			rating: null,
 			runtime: null,
-			cast: [],
 			trailer: null,
 			similar: []
 		});
 		expect(out?.season).toBeNull();
+	});
+
+	it('rebuilds cast and crew from the cached credits, addressed by TMDB person id', async () => {
+		await putMedia(movie);
+		const detail = (await buildOfflineDetail('movie', 603))?.detail;
+		expect(detail?.cast).toEqual([
+			{ id: 6384, name: 'Keanu Reeves', character: 'Neo', profilePath: '/keanu.jpg' }
+		]);
+		expect(detail?.director).toEqual({ id: 9339, name: 'Lana Wachowski' });
+		// A locally-minted person has no provider id, so there is no page to link them to.
+		expect(detail?.producers).toEqual([]);
 	});
 
 	it('rebuilds a show with its selected season episodes', async () => {
@@ -149,7 +189,8 @@ describe('buildOfflineDetail', () => {
 					runtime: 48,
 					stillPath: null
 				}
-			]
+			],
+			credits: []
 		});
 		const out = await buildOfflineDetail('show', 1396);
 		expect(out?.detail.seasons).toHaveLength(1);

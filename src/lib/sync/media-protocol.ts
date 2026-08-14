@@ -8,12 +8,14 @@
  * travel as **whole records** (`custom`) and the server stores them verbatim, scoped to their owner.
  */
 import { z } from 'zod';
-import { HYDRATABLE_PROVIDERS, type MediaRecord } from './events';
+import { CREDIT_ROLES, HYDRATABLE_PROVIDERS, type MediaRecord } from './events';
 import {
+	CUSTOM_MAX_CREDITS,
 	CUSTOM_MAX_EPISODES_TOTAL,
 	CUSTOM_MAX_SEASONS,
 	CUSTOM_MAX_YEAR,
 	CUSTOM_MIN_YEAR,
+	CUSTOM_NAME_MAX,
 	CUSTOM_OVERVIEW_MAX,
 	CUSTOM_TITLE_MAX
 } from '$lib/validation/custom-media';
@@ -53,6 +55,22 @@ const customEpisodeSchema = z.object({
 });
 
 /**
+ * A credit the author typed themselves. `externalId` and `profilePath` are pinned null because the
+ * person is user-authored too: a custom entry credits names its author wrote, never a claim on a
+ * provider's person row. That keeps every person reachable from a custom entry privately owned, so
+ * a push can't reach the shared people catalog at all.
+ */
+const customCreditSchema = z.object({
+	personId: uuid,
+	externalId: z.null(),
+	name: z.string().min(1).max(CUSTOM_NAME_MAX),
+	profilePath: z.null(),
+	role: z.enum(CREDIT_ROLES),
+	character: z.string().max(CUSTOM_NAME_MAX).nullable(),
+	sortOrder: z.number().int().nonnegative()
+});
+
+/**
  * A user-authored record on the wire. Pinned to exactly the shape our own writer produces — a
  * `local` provider, no external id, no provider artwork paths — so the endpoint can never be talked
  * into stashing something that would later read as a shared, provider-backed row.
@@ -79,6 +97,9 @@ export const customMediaPushSchema = z.object({
 	version: z.number().int().nonnegative(),
 	seasons: z.array(customSeasonSchema).max(CUSTOM_MAX_SEASONS).nullable(),
 	episodes: z.array(customEpisodeSchema).max(CUSTOM_MAX_EPISODES_TOTAL).nullable(),
+	// Non-null unlike the child arrays: the author is the only source, so an absent list means they
+	// credited nobody, never "unknown — keep what's stored".
+	credits: z.array(customCreditSchema).max(CUSTOM_MAX_CREDITS),
 	/** Epoch ms of the author's last local edit — the LWW clock, stored as the row's `updatedAt`. */
 	editedAt: clientClock
 });

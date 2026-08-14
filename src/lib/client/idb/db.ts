@@ -4,7 +4,8 @@
  * `episodeWatches` stores (the client-side projection of the same event log the
  * server materializes) and a `media` reference cache with its `seasons` / `episodes`
  * child stores (populated off a separate channel, not derived from events; episodes
- * carry air dates for watchability + the upcoming calendar). `mediaLinks` materializes the
+ * carry air dates for watchability + the upcoming calendar; `credits` holds cast and crew).
+ * `mediaLinks` materializes the
  * `media.*` events — which of the user's own entries have been matched to a provider-backed
  * title. `meta` holds the `deviceId` and sync `cursor`. The database itself is namespaced per
  * user (`marquee-<userId>`, see {@link setActiveUser}).
@@ -16,6 +17,7 @@ import { reportClientError } from '$lib/client/report-error';
 import type {
 	EventEnvelope,
 	HydratableProvider,
+	MediaCredit,
 	MediaEpisode,
 	MediaRecord,
 	MediaSeason,
@@ -31,8 +33,8 @@ export interface OutboxEvent extends EventEnvelope {
 	synced: 0 | 1;
 }
 
-/** A media record's scalar fields; its seasons/episodes live in their own stores. */
-export type MediaScalars = Omit<MediaRecord, 'seasons' | 'episodes'>;
+/** A media record's scalar fields; its seasons/episodes/credits live in their own stores. */
+export type MediaScalars = Omit<MediaRecord, 'seasons' | 'episodes' | 'credits'>;
 
 /** `updatedAt` is the LWW clock (epoch ms). */
 export interface ClientMedia extends MediaScalars {
@@ -59,6 +61,16 @@ export interface ClientSeason extends MediaSeason {
 
 /** `id` = `${mediaId}::s{S}e{E}`. A null `airDate` is absent from the `by_airDate` index. */
 export interface ClientEpisode extends MediaEpisode {
+	id: string;
+	mediaId: string;
+}
+
+/**
+ * A cached credit. `id` = `${mediaId}::{role}::{personId}` — the same `(media, person, role)`
+ * uniqueness the server enforces, flattened into a key. `by_person` serves the reverse lookup
+ * offline, the same way the server's `credits_person_idx` does.
+ */
+export interface ClientCredit extends MediaCredit {
 	id: string;
 	mediaId: string;
 }
@@ -146,6 +158,11 @@ export interface MarqueeDB extends DBSchema {
 		value: ClientEpisode;
 		indexes: { by_media: string; by_airDate: string };
 	};
+	credits: {
+		key: string;
+		value: ClientCredit;
+		indexes: { by_media: string; by_person: string };
+	};
 	mediaImages: { key: string; value: MediaImages };
 	mediaLinks: { key: string; value: ClientMediaLink };
 	episodeWatches: { key: string; value: ClientEpisodeWatch; indexes: { by_media: string } };
@@ -155,7 +172,7 @@ export interface MarqueeDB extends DBSchema {
 export type MarqueeDatabase = IDBPDatabase<MarqueeDB>;
 
 const DB_NAME = 'marquee';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let dbPromise: Promise<MarqueeDatabase> | null = null;
 let activeUserId: string | null = null;
@@ -223,6 +240,11 @@ export function openDb(): Promise<MarqueeDatabase> {
 					const episodes = db.createObjectStore('episodes', { keyPath: 'id' });
 					episodes.createIndex('by_media', 'mediaId');
 					episodes.createIndex('by_airDate', 'airDate');
+				}
+				if (!db.objectStoreNames.contains('credits')) {
+					const credits = db.createObjectStore('credits', { keyPath: 'id' });
+					credits.createIndex('by_media', 'mediaId');
+					credits.createIndex('by_person', 'personId');
 				}
 				if (!db.objectStoreNames.contains('mediaImages'))
 					db.createObjectStore('mediaImages', { keyPath: 'id' });

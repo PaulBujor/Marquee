@@ -1,15 +1,22 @@
 /**
  * Build the detail-page view model from cached IndexedDB data when the title API is unreachable
- * (offline). We only hold reference data locally — title, overview, artwork, genres, dates, and a
- * show's seasons/episodes — so the degraded {@link MediaDetail} nulls out the fields that only live
- * on TMDB (rating, runtime, cast, crew, trailer, similar); the page shows an offline placeholder for
- * those. Returns null when the title isn't cached at all (never opened / tracked on this device).
+ * (offline). We only hold reference data locally — title, overview, artwork, genres, dates, a
+ * show's seasons/episodes, and cast/crew — so the degraded {@link MediaDetail} nulls out the fields
+ * that only live on TMDB (rating, runtime, trailer, similar); the page shows an offline placeholder
+ * for those. Returns null when the title isn't cached at all (never opened / tracked on this device).
  */
-import { getEpisodes, getMedia, getSeasons } from '$lib/client/idb';
-import type { ClientEpisode } from '$lib/client/idb';
-import { tmdbMediaId } from '$lib/sync/events';
+import { getCredits, getEpisodes, getMedia, getSeasons } from '$lib/client/idb';
+import type { ClientCredit, ClientEpisode } from '$lib/client/idb';
+import { parsePersonExternalId, tmdbMediaId, type CreditRole } from '$lib/sync/events';
 // Type-only import of the API contract shape — erased at build, so no server code reaches the client.
-import type { Episode, MediaDetail, Season, SeasonDetail } from '$lib/server/tmdb';
+import type {
+	CastMember,
+	CrewMember,
+	Episode,
+	MediaDetail,
+	Season,
+	SeasonDetail
+} from '$lib/server/tmdb';
 
 export interface OfflineTitle {
 	detail: MediaDetail;
@@ -35,6 +42,44 @@ export function offlineSeason(
 			runtime: e.runtime
 		}));
 	return { seasonNumber, name, overview, episodes };
+}
+
+/**
+ * Split cached credits into the detail page's cast/crew shape. The page addresses a person by their
+ * TMDB id (that's what `/person/[id]` takes), so a credit whose person we minted ourselves — no
+ * provider id to link to — is left out rather than rendered as a dead link.
+ */
+export function offlineCredits(
+	rows: ClientCredit[]
+): Pick<MediaDetail, 'cast' | 'director' | 'writers' | 'producers' | 'creators'> {
+	const cast: CastMember[] = [];
+	const crew: Record<Exclude<CreditRole, 'cast'>, CrewMember[]> = {
+		director: [],
+		writer: [],
+		producer: [],
+		creator: []
+	};
+	for (const row of [...rows].sort((a, b) => a.sortOrder - b.sortOrder)) {
+		const id = parsePersonExternalId(row.externalId);
+		if (id === null) continue;
+		if (row.role === 'cast') {
+			cast.push({
+				id,
+				name: row.name,
+				character: row.character ?? '',
+				profilePath: row.profilePath
+			});
+		} else {
+			crew[row.role].push({ id, name: row.name });
+		}
+	}
+	return {
+		cast,
+		director: crew.director[0] ?? null,
+		writers: crew.writer,
+		producers: crew.producer,
+		creators: crew.creator
+	};
 }
 
 /**
@@ -88,11 +133,7 @@ async function assembleOfflineDetail(
 		voteCount: 0,
 		runtime: null,
 		genres: m.genres ?? [],
-		cast: [],
-		director: null,
-		writers: [],
-		producers: [],
-		creators: [],
+		...offlineCredits(await getCredits(id)),
 		trailer: null,
 		releaseDate: m.releaseDate,
 		status: m.status,

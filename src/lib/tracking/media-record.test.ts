@@ -49,7 +49,10 @@ describe('mediaRecordFromSearch', () => {
 			lastAirDate: null,
 			version: 0,
 			seasons: null,
-			episodes: null
+			episodes: null,
+			// Unknown, not empty — a search row carries no cast, and blanking one would cost the
+			// title its credits until the next full version diff.
+			credits: null
 		});
 	});
 

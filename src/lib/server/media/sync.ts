@@ -27,11 +27,12 @@ import {
 	tracking,
 	type Media
 } from '$lib/server/db/schema';
-import { mediaId, trackingKey, type MediaRecord } from '$lib/sync/events';
+import { mediaId, trackingKey, type MediaCredit, type MediaRecord } from '$lib/sync/events';
 import type { MediaSyncRequest, MediaSyncResponse } from '$lib/sync/media-protocol';
 import { chunkIds } from '$lib/server/db/chunk';
 import type { createDb } from '$lib/server/db';
 import type { TmdbClient } from '$lib/server/tmdb';
+import { loadCreditsForMedia } from './credits';
 import { storeCustomMedia } from './custom';
 import { refreshMedia } from './hydrate';
 
@@ -89,7 +90,8 @@ async function validateReferencedIds(db: Db, userId: string, ids: string[]): Pro
 function toRecord(
 	row: Media,
 	seasonRows: SeasonRecord[],
-	episodeRows: EpisodeRecord[]
+	episodeRows: EpisodeRecord[],
+	creditRows: MediaCredit[]
 ): MediaRecord {
 	const isShow = row.type === 'show';
 	return {
@@ -111,7 +113,11 @@ function toRecord(
 		lastAirDate: row.lastAirDate ?? null,
 		version: row.version,
 		seasons: isShow ? seasonRows : null,
-		episodes: isShow ? episodeRows : null
+		episodes: isShow ? episodeRows : null,
+		// Always an array, never null: a row we've loaded is authoritative about its own credits, and
+		// null would tell the client "unknown, keep what you have" — which would strand a cast that
+		// was legitimately emptied upstream.
+		credits: creditRows
 	};
 }
 
@@ -119,6 +125,10 @@ function toRecord(
 async function withChildren(db: Db, rows: Media[]): Promise<MediaRecord[]> {
 	if (rows.length === 0) return [];
 	const showIds = rows.filter((r) => r.type === 'show').map((r) => r.id);
+	const creditsByMedia = await loadCreditsForMedia(
+		db,
+		rows.map((r) => r.id)
+	);
 	const [seasonRows, episodeRows] = await Promise.all([
 		Promise.all(
 			chunkIds(showIds).map((ids) => db.select().from(seasons).where(inArray(seasons.mediaId, ids)))
@@ -159,7 +169,12 @@ async function withChildren(db: Db, rows: Media[]): Promise<MediaRecord[]> {
 	}
 
 	return rows.map((r) =>
-		toRecord(r, seasonsByMedia.get(r.id) ?? [], episodesByMedia.get(r.id) ?? [])
+		toRecord(
+			r,
+			seasonsByMedia.get(r.id) ?? [],
+			episodesByMedia.get(r.id) ?? [],
+			creditsByMedia.get(r.id) ?? []
+		)
 	);
 }
 

@@ -54,6 +54,9 @@ export function mediaRecordFromSearch(item: SearchLikeMedia): MediaRecord {
 		lastAirDate: null,
 		version: 0,
 		seasons: null,
-		episodes: null
+		episodes: null,
+		// A search row carries no cast; null (not []) so the snapshot can't blank credits the
+		// channel already synced for this title.
+		credits: null
 	};
 }

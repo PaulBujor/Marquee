@@ -100,7 +100,10 @@ export function createCustomMedia(
 		lastAirDate: null,
 		version: 0,
 		seasons: isShow ? synthesizeSeasons(seasons, airDate) : null,
-		episodes: isShow ? synthesizeEpisodes(seasons, airDate) : null
+		episodes: isShow ? synthesizeEpisodes(seasons, airDate) : null,
+		// The author is authoritative about their own entry, so `[]` (known-empty) rather than null.
+		// Populated once the form collects credits.
+		credits: []
 	};
 }
 

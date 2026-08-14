@@ -23,7 +23,7 @@ import {
 	type Media,
 	type SeasonRow
 } from '$lib/server/db/schema';
-import { creditRowsFromDetail, creditSignature, syncCredits } from './credits';
+import { creditRowsFromDetail, creditSignature, syncCredits, syncProviderPeople } from './credits';
 import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '$lib/server/db/chunk';
 import { hasDescription } from '$lib/media';
 import { mediaId, type MediaProvider } from '$lib/sync/events';
@@ -367,6 +367,7 @@ export async function refreshMedia(
 	// Cast and crew arrive on the same detail response the scalars come from, so persisting them
 	// costs no extra request — this data was previously fetched and thrown away.
 	const { personRows, creditRows } = creditRowsFromDetail(id, detail);
+	await syncProviderPeople(db, personRows);
 
 	if (!existing) {
 		await db
@@ -377,7 +378,7 @@ export async function refreshMedia(
 			await syncSeasons(db, id, [], seasonRows);
 			await syncEpisodes(db, id, [], episodeRows);
 		}
-		await syncCredits(db, id, personRows, creditRows);
+		await syncCredits(db, id, creditRows);
 	} else {
 		const oldSeasons: SeasonRow[] =
 			detail.type === 'show' ? await db.select().from(seasons).where(eq(seasons.mediaId, id)) : [];
@@ -401,7 +402,7 @@ export async function refreshMedia(
 			await syncSeasons(db, id, oldSeasons, seasonRows);
 			await syncEpisodes(db, id, oldEpisodes, episodeRows);
 		}
-		await syncCredits(db, id, personRows, creditRows);
+		await syncCredits(db, id, creditRows);
 		await db
 			.update(media)
 			.set({
