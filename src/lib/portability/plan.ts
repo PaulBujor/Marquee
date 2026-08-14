@@ -1,6 +1,10 @@
 /**
  * Turns an export document into the writes that restore it: media stubs to seed, events to replay.
- * Produces the fewest events that reconstruct the end state, not a plausible history. Pure (no IDB).
+ * Pure (device id injected, clocks from the document), so it tests without IndexedDB.
+ *
+ * Produces **the fewest events that reconstruct the end state**, not a plausible history — no
+ * intermediate statuses are invented. Dates are the exception: each event carries its recorded
+ * clock, since those clocks are the watched dates the app displays.
  */
 import {
 	createEvent,
@@ -30,12 +34,18 @@ export interface ImportPlan {
 /** Matches `crypto.randomUUID()` output — the only ids we'd trust from a file as an entity id. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Upper bound on `clientCreatedAt` (Jan 1 2100 epoch ms) — rejects bogus clocks up front. */
+/**
+ * The upper bound the event schema enforces on `clientCreatedAt` (Jan 1 2100), so a bogus clock
+ * can't win every future merge. Mirrored here to reject a clock before minting it, rather than
+ * having the server drop the event later.
+ */
 const MAX_CLOCK = 4102444800000;
 
 /**
- * Our media id for an entry. Provider-backed titles re-derive from `(provider, externalId)` —
- * the file's `mediaId` is untrusted. Custom entries fall back to the exported id.
+ * Our media id for an entry. Provider-backed titles re-derive it from `(provider, externalId)` —
+ * the file's `mediaId` is untrusted and may be stale or hand-edited, and the derivation is
+ * deterministic, so recomputing always beats copying. An entry with no provider identity (a custom
+ * entry, or one exported before its media synced) falls back to the exported id, which is all it has.
  */
 function resolveMediaId(entry: ExportedTitle): string | null {
 	if (isHydratableProvider(entry.provider) && entry.externalId) {
@@ -52,11 +62,10 @@ function resolveClock(iso: string, fallback: number): number {
 }
 
 /**
- * A behind-version media stub for the media channel to hydrate, or null when unbuildable.
- * Required, not cosmetic: the media channel derives what to hydrate from the local `media` store,
- * and an event names a title only by an opaque derived id — without a stub carrying
- * `(provider, externalId)` the server never learns what the title is. `version: 0` makes the next
- * sync replace it.
+ * A behind-version media stub for an entry, or null when we can't build one. Required, not
+ * cosmetic: the media channel derives what to hydrate from the local `media` store, and an event
+ * names a title only by an opaque derived id — without a stub carrying `(provider, externalId)`
+ * the server never learns what the title is. `version: 0` makes the next sync replace it.
  *
  * A user-authored entry is the opposite case: nothing will ever hydrate it, so the file *is* the
  * source and the record is rebuilt whole from what it carries.
@@ -69,7 +78,14 @@ function mediaStub(entry: ExportedTitle, id: string, now: number): MediaRecord |
 				type: entry.type ?? 'movie',
 				year: entry.year,
 				overview: entry.overview ?? '',
-				seasons: entry.type === 'show' ? (entry.seasons ?? []) : []
+				seasons: entry.type === 'show' ? (entry.seasons ?? []) : [],
+				// No `personId`: the exported ids belong to the account that minted them, so the import
+				// mints its own. The name is the part that carries meaning across accounts.
+				credits: (entry.credits ?? []).map((c) => ({
+					role: c.role,
+					name: c.name,
+					character: c.character ?? ''
+				}))
 			},
 			// The exported id, so the restored entry is the same title the events already name.
 			{ id, now }
@@ -108,18 +124,19 @@ export function planImport(
 		titles += 1;
 
 		const addedAt = resolveClock(entry.addedAt, now);
-		// Status clock can't precede the add.
+		// The status clock can't precede the add — `addedAt` is the earliest clock the projection saw.
 		const statusAt = Math.max(resolveClock(entry.statusChangedAt, addedAt), addedAt);
 
 		events.push(createEvent('tracking.added', id, { status: entry.status }, deviceId, addedAt));
-		// A second event only when the status moved after the add — both carry the final status;
-		// the path taken wasn't exported.
+		// A second event only when the status moved after the add — that separates "added in January"
+		// from "watched in June". Both carry the final status; the path taken wasn't exported.
 		if (statusAt > addedAt) {
 			events.push(
 				createEvent('tracking.status_changed', id, { status: entry.status }, deviceId, statusAt)
 			);
 		}
-		// Use status clock for favorite/rating — not exported separately.
+		// Their own LWW clocks aren't exported (nothing surfaces them), so use the status clock —
+		// the latest the title is known to have moved.
 		if (entry.favorite) {
 			events.push(
 				createEvent('tracking.favorite_toggled', id, { favorite: true }, deviceId, statusAt)
