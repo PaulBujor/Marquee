@@ -14,6 +14,10 @@
  * is **cron-only** now (`enqueueStaleMedia` → the media-refresh queue) — a request-time poll was
  * never a meaningful driver of a 12h TTL, so this path only ever hydrates a title it has *no*
  * stored row for yet.
+ *
+ * The channel also carries user-authored media, which inverts in both directions: the client sends
+ * whole records (nobody else can supply them) and the server stores them owner-scoped (nobody else
+ * may read them). See `./custom`.
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import {
@@ -29,6 +33,7 @@ import type { MediaSyncRequest, MediaSyncResponse } from '$lib/sync/media-protoc
 import { chunkIds } from '$lib/server/db/chunk';
 import type { createDb } from '$lib/server/db';
 import type { TmdbClient } from '$lib/server/tmdb';
+import { storeCustomMedia } from './custom';
 import { refreshMedia } from './hydrate';
 
 type Db = ReturnType<typeof createDb>;
@@ -111,6 +116,54 @@ function toRecord(
 	};
 }
 
+/** Attach each show's seasons/episodes and project the whole set to wire records. */
+async function withChildren(db: Db, rows: Media[]): Promise<MediaRecord[]> {
+	if (rows.length === 0) return [];
+	const showIds = rows.filter((r) => r.type === 'show').map((r) => r.id);
+	const [seasonRows, episodeRows] = await Promise.all([
+		Promise.all(
+			chunkIds(showIds).map((ids) => db.select().from(seasons).where(inArray(seasons.mediaId, ids)))
+		).then((r) => r.flat()),
+		Promise.all(
+			chunkIds(showIds).map((ids) =>
+				db.select().from(episodes).where(inArray(episodes.mediaId, ids))
+			)
+		).then((r) => r.flat())
+	]);
+
+	const seasonsByMedia = new Map<string, SeasonRecord[]>();
+	for (const s of seasonRows) {
+		const list = seasonsByMedia.get(s.mediaId) ?? [];
+		list.push({
+			seasonNumber: s.seasonNumber,
+			name: s.name,
+			overview: s.overview,
+			airDate: s.airDate,
+			posterPath: s.posterPath,
+			episodeCount: s.episodeCount
+		});
+		seasonsByMedia.set(s.mediaId, list);
+	}
+	const episodesByMedia = new Map<string, EpisodeRecord[]>();
+	for (const e of episodeRows) {
+		const list = episodesByMedia.get(e.mediaId) ?? [];
+		list.push({
+			season: e.seasonNumber,
+			episode: e.episodeNumber,
+			name: e.name,
+			overview: e.overview,
+			airDate: e.airDate,
+			runtime: e.runtime,
+			stillPath: e.stillPath
+		});
+		episodesByMedia.set(e.mediaId, list);
+	}
+
+	return rows.map((r) =>
+		toRecord(r, seasonsByMedia.get(r.id) ?? [], episodesByMedia.get(r.id) ?? [])
+	);
+}
+
 export async function resolveMediaSync(
 	db: Db,
 	tmdb: Pick<TmdbClient, 'getDetails' | 'getSeason'>,
@@ -118,15 +171,21 @@ export async function resolveMediaSync(
 	req: MediaSyncRequest,
 	now: number = Date.now()
 ): Promise<MediaSyncResponse> {
-	// Identity refs let us hydrate; `have` reports the client's version per id. The request's
-	// universe is whatever ids appear in either — no independent recomputation from the log.
+	// Identity refs let us hydrate; `have` reports the client's version per id; `custom` carries
+	// whole user-authored records to back up. The request's universe is whatever ids appear in any
+	// of them — no independent recomputation from the log.
 	const refById = new Map(req.refs.map((ref) => [mediaId(ref.provider, ref.externalId), ref]));
 	const haveVersion = new Map(req.have.map((h) => [h.id, h.version]));
-	const requestedIds = [...new Set([...refById.keys(), ...haveVersion.keys()])];
+	const pushedCustom = req.custom ?? [];
+	const requestedIds = [
+		...new Set([...refById.keys(), ...haveVersion.keys(), ...pushedCustom.map((c) => c.id)])
+	];
 	if (requestedIds.length === 0) return { media: [] };
 
 	const validIds = await validateReferencedIds(db, userId, requestedIds);
-	if (validIds.size === 0) return { media: [] };
+	// Writes come before reads: a record stored now should come back in this same response.
+	const storedCustom =
+		pushedCustom.length > 0 ? await storeCustomMedia(db, userId, pushedCustom, validIds) : [];
 
 	// Chunk every `IN (...)` id list under D1's bound-parameter limit (a large tracked library
 	// otherwise overflows it — the media sync 500 this fixes).
@@ -175,57 +234,11 @@ export async function resolveMediaSync(
 	const staleForClient = [...validIds]
 		.map((id) => existingById.get(id))
 		.filter((r): r is Media => r !== undefined)
+		// A private row belongs to exactly one account. The `tracking` gate above proves the *asker*
+		// references the id, not that they may read it — an id can be referenced by minting an event
+		// for it, so ownership is checked separately and is the thing that actually protects the row.
+		.filter((r) => r.ownerUserId === null || r.ownerUserId === userId)
 		.filter((r) => (haveVersion.get(r.id) ?? NO_VERSION) < r.version);
-	if (staleForClient.length === 0) return { media: [], pending };
 
-	const staleShowIds = staleForClient.filter((r) => r.type === 'show').map((r) => r.id);
-	const seasonRows = (
-		await Promise.all(
-			chunkIds(staleShowIds).map((ids) =>
-				db.select().from(seasons).where(inArray(seasons.mediaId, ids))
-			)
-		)
-	).flat();
-	const episodeRows = (
-		await Promise.all(
-			chunkIds(staleShowIds).map((ids) =>
-				db.select().from(episodes).where(inArray(episodes.mediaId, ids))
-			)
-		)
-	).flat();
-
-	const seasonsByMedia = new Map<string, SeasonRecord[]>();
-	for (const s of seasonRows) {
-		const list = seasonsByMedia.get(s.mediaId) ?? [];
-		list.push({
-			seasonNumber: s.seasonNumber,
-			name: s.name,
-			overview: s.overview,
-			airDate: s.airDate,
-			posterPath: s.posterPath,
-			episodeCount: s.episodeCount
-		});
-		seasonsByMedia.set(s.mediaId, list);
-	}
-	const episodesByMedia = new Map<string, EpisodeRecord[]>();
-	for (const e of episodeRows) {
-		const list = episodesByMedia.get(e.mediaId) ?? [];
-		list.push({
-			season: e.seasonNumber,
-			episode: e.episodeNumber,
-			name: e.name,
-			overview: e.overview,
-			airDate: e.airDate,
-			runtime: e.runtime,
-			stillPath: e.stillPath
-		});
-		episodesByMedia.set(e.mediaId, list);
-	}
-
-	return {
-		media: staleForClient.map((r) =>
-			toRecord(r, seasonsByMedia.get(r.id) ?? [], episodesByMedia.get(r.id) ?? [])
-		),
-		pending
-	};
+	return { media: await withChildren(db, staleForClient), pending, storedCustom };
 }

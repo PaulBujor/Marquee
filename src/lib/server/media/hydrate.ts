@@ -8,6 +8,10 @@
  * on a hit it re-pulls only when the row is stale (airing shows past a TTL; movies + finished shows
  * never), diffs the `seasons`/`episodes` child rows against what's stored and writes only what
  * actually changed, and bumps `version` only when content actually changed.
+ *
+ * The child-row reconcilers (`syncSeasons` / `syncEpisodes`) and the content signatures are
+ * exported because they aren't TMDB-specific: storing a user-authored show needs exactly the same
+ * diff-and-write against `seasons`/`episodes` (see `./custom`).
  */
 import { and, eq, or, sql } from 'drizzle-orm';
 import {
@@ -74,8 +78,8 @@ export function needsRefresh(row: Media, now: number): boolean {
 	return row.inProduction === true || AIRING_STATUS_SET.has(row.status ?? '');
 }
 
-type SeasonInsert = typeof seasons.$inferInsert;
-type EpisodeInsert = typeof episodes.$inferInsert;
+export type SeasonInsert = typeof seasons.$inferInsert;
+export type EpisodeInsert = typeof episodes.$inferInsert;
 
 /** Mutable (non-key) columns compared to decide whether a row needs (re)writing. */
 const SEASON_CONTENT_FIELDS = [
@@ -96,7 +100,7 @@ function contentChanged<K extends string>(
 }
 
 /** Stable signature of a season set (coords + every mutable field) to detect content changes. */
-function seasonSignature(
+export function seasonSignature(
 	rows: Pick<SeasonInsert, (typeof SEASON_CONTENT_FIELDS)[number] | 'seasonNumber'>[]
 ): string {
 	return rows
@@ -115,7 +119,7 @@ function seasonSignature(
 }
 
 /** Stable signature of an episode set (coords + every mutable field) to detect content changes. */
-function episodeSignature(
+export function episodeSignature(
 	rows: Pick<
 		EpisodeInsert,
 		(typeof EPISODE_CONTENT_FIELDS)[number] | 'seasonNumber' | 'episodeNumber'
@@ -199,7 +203,7 @@ function toRows(
  * content differs, delete rows that disappeared (or were renumbered away from), and leave every
  * unchanged row untouched — a genuinely unchanged season set issues zero queries.
  */
-async function syncSeasons(
+export async function syncSeasons(
 	db: Db,
 	id: string,
 	oldRows: SeasonRow[],
@@ -243,7 +247,7 @@ async function syncSeasons(
 }
 
 /** Same reconciliation as {@link syncSeasons}, keyed on (seasonNumber, episodeNumber). */
-async function syncEpisodes(
+export async function syncEpisodes(
 	db: Db,
 	id: string,
 	oldRows: EpisodeRow[],

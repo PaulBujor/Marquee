@@ -12,6 +12,8 @@ const REFERENCED = 'movie/603';
 const UNREFERENCED = 'movie/999';
 const REF_ID = mediaId('tmdb', REFERENCED);
 const T0 = 1_000_000_000_000;
+/** A client-minted custom media id (random in production; fixed here for assertions). */
+const CUSTOM_ID = '33333333-3333-4333-8333-333333333333';
 
 function stub() {
 	let calls = 0;
@@ -238,6 +240,42 @@ describe('resolveMediaSync', () => {
 		expect(calls()).toBe(total); // the remaining 5, no re-fetch of the first 25
 		expect(second.pending).toBe(false);
 		expect(new Set(second.media.map((m) => m.id)).size).toBe(total); // all present now
+	});
+
+	it('does not return a private row owned by somebody else, even when asked for by id', async () => {
+		// Referencing an id proves only that the asker minted an event for it — anyone can do that
+		// for any id. Ownership, not the tracking gate, is what keeps a private entry private.
+		const db = await seed();
+		await db.insert(users).values({ id: 'u2', email: 'u2@test.dev', status: 'enabled' });
+		await db.insert(media).values({
+			id: CUSTOM_ID,
+			provider: 'local',
+			externalId: null,
+			source: 'custom',
+			ownerUserId: 'u2',
+			type: 'movie',
+			title: "someone else's private entry",
+			version: 1,
+			refreshedAt: T0
+		});
+		// u1 claims to track it, which the gate accepts — the ownership filter is the real defence.
+		await db.insert(tracking).values({
+			id: `${USER}::${CUSTOM_ID}`,
+			userId: USER,
+			mediaId: CUSTOM_ID,
+			addedAt: new Date(T0),
+			updatedAt: new Date(T0)
+		});
+
+		const { client } = stub();
+		const res = await resolveMediaSync(
+			db,
+			client,
+			USER,
+			{ refs: [], have: [{ id: CUSTOM_ID, version: 0 }] },
+			T0
+		);
+		expect(res.media).toHaveLength(0);
 	});
 
 	it('returns a large stored library across chunked IN queries', async () => {
