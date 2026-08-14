@@ -8,6 +8,7 @@
  */
 import {
 	createEvent,
+	isHydratableProvider,
 	mediaId as deriveMediaId,
 	type EventEnvelope,
 	type MediaRecord
@@ -42,11 +43,13 @@ const MAX_CLOCK = 4102444800000;
 /**
  * Our media id for an entry. Provider-backed titles re-derive it from `(provider, externalId)` —
  * the file's `mediaId` is untrusted and may be stale or hand-edited, and the derivation is
- * deterministic, so recomputing always beats copying. An entry with no provider identity falls
- * back to the exported id, which is all it has.
+ * deterministic, so recomputing always beats copying. An entry with no provider identity (a custom
+ * entry, or one exported before its media synced) falls back to the exported id, which is all it has.
  */
 function resolveMediaId(entry: ExportedTitle): string | null {
-	if (entry.provider && entry.externalId) return deriveMediaId(entry.provider, entry.externalId);
+	if (isHydratableProvider(entry.provider) && entry.externalId) {
+		return deriveMediaId(entry.provider, entry.externalId);
+	}
 	return UUID.test(entry.mediaId) ? entry.mediaId : null;
 }
 

@@ -174,6 +174,15 @@ export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 					})
 			];
 		}
+		case 'media.linked':
+		case 'media.match_declined': {
+			// Media links are resolved on the client. They still travel through the log — that is what
+			// carries a link or a dismissal to the user's other devices — but no server read path
+			// consults one: the media channel gates on `tracking`, and the notification digest joins
+			// `tracking` to `episodes`. So there is nothing to materialize here, and leaving these
+			// unprojected keeps the materialized tables exactly derivable by `rebuildProjection`.
+			return [];
+		}
 	}
 }
 

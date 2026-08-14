@@ -16,6 +16,7 @@ export type {
 	ClientEpisode,
 	ClientTracking,
 	ClientEpisodeWatch,
+	ClientMediaLink,
 	MarqueeDatabase
 } from './db';
 export { getUnsynced, markSynced, enqueueEvent, enqueueEvents } from './outbox';
@@ -24,6 +25,7 @@ export {
 	applyEventsToIdb,
 	getTracking,
 	getTrackingByMediaId,
+	getMediaLink,
 	getEpisodeWatches,
 	getAllEpisodeWatches
 } from './state';
