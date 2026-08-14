@@ -10,13 +10,15 @@ import {
 	type DatedEpisode,
 	type EpisodeCoord
 } from './actions';
-import type { TrackingStatus } from '$lib/sync/events';
+import type { MediaSource, TrackingStatus } from '$lib/sync/events';
 
 /** A tracked title joined with its media reference + episode metadata + episode-watch state. */
 export interface LibraryItem {
 	mediaId: string;
 	/** Provider external id (e.g. `movie/603`) — the detail-page route key; null for custom media. */
 	externalId: string | null;
+	/** How the title is sourced; null while its media row hasn't reached this device. */
+	source: MediaSource | null;
 	status: TrackingStatus;
 	favorite: boolean;
 	rating: number | null;
@@ -83,6 +85,7 @@ export interface UpcomingEntry {
 	date: string;
 	mediaId: string;
 	externalId: string | null;
+	source: MediaSource | null;
 	type: 'movie' | 'show';
 	title: string;
 	posterPath: string | null;
@@ -109,6 +112,7 @@ export function filterUpcoming(items: LibraryItem[], today: string = todayIso())
 					date: ep.airDate,
 					mediaId: item.mediaId,
 					externalId: item.externalId,
+					source: item.source,
 					type: 'show',
 					title: item.title,
 					posterPath: item.posterPath,
@@ -124,6 +128,7 @@ export function filterUpcoming(items: LibraryItem[], today: string = todayIso())
 				date: item.releaseDate,
 				mediaId: item.mediaId,
 				externalId: item.externalId,
+				source: item.source,
 				type: 'movie',
 				title: item.title,
 				posterPath: item.posterPath,
