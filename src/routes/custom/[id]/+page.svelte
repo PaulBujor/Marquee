@@ -24,6 +24,7 @@
 		recordEvents
 	} from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { guardedWrite } from '$lib/client/write-guard';
 	import { createCustomMedia, toCustomMediaInput } from '$lib/custom-media';
 	import { buildLinkEvents } from '$lib/custom-media-link';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
@@ -65,12 +66,19 @@
 		tracking.updateInProduction(entry?.inProduction ?? null);
 	});
 
-	// Season selector, defaulting to wherever the user left off.
+	// Season selector, defaulting to wherever the user left off in this entry.
 	let selectedSeason = $state<number | null>(null);
 	$effect(() => {
 		if (selectedSeason !== null || data.seasons.length === 0) return;
 		const next = tracking.nextEpisode();
 		selectedSeason = next?.season ?? data.seasons[0].seasonNumber;
+	});
+	// A season that no longer exists (the entry was edited down) must not strand the list empty.
+	$effect(() => {
+		if (selectedSeason === null || data.seasons.length === 0) return;
+		if (!data.seasons.some((s) => s.seasonNumber === selectedSeason)) {
+			selectedSeason = data.seasons[0].seasonNumber;
+		}
 	});
 	const seasonEpisodes = $derived(
 		selectedSeason === null ? [] : data.episodes.filter((e) => e.season === selectedSeason)
@@ -87,19 +95,24 @@
 	async function saveEdit(input: CustomMediaInput) {
 		if (!entry || saving) return;
 		saving = true;
-		try {
+		const id = entry.id;
+		const ok = await guardedWrite(
 			// Same id, so this rewrites the entry rather than forking a second one. Seasons and
 			// episodes are rebuilt from the form, and the server reconciles the child rows.
-			await putCustomMedia(createCustomMedia(input, { id: entry.id }));
-			sync.requestSync();
-			editOpen = false;
-			await invalidate('app:custom-media');
-		} finally {
-			saving = false;
-		}
+			() => putCustomMedia(createCustomMedia(input, { id })),
+			{ source: 'custom-media:edit', userMessage: "Couldn't save those changes" }
+		);
+		saving = false;
+		if (!ok) return; // keep the dialog open rather than discarding the user's edits
+
+		sync.requestSync();
+		editOpen = false;
+		await invalidate('app:custom-media');
 	}
 
 	async function removeEntry() {
+		// `TrackingState.remove()` reports and toasts its own failures (see its `#run`), so this only
+		// has to avoid navigating away as though it had worked.
 		await tracking.remove();
 		removeOpen = false;
 		await goto(resolve('/'));
@@ -116,6 +129,23 @@
 	let linking = $state<string | null>(null);
 
 	const declined = $derived(data.link?.declined === true);
+
+	// Every piece of state above is scoped to *this* entry. SvelteKit reuses the component across a
+	// param change, so moving from one custom entry to another keeps the previous entry's state
+	// unless it is explicitly cleared — which left the episode list blank whenever the incoming entry
+	// had no season matching the one still selected, and could show one entry's match candidates
+	// under another's title.
+	let shownEntryId = $state(untrack(() => data.id));
+	$effect(() => {
+		if (data.id === shownEntryId) return;
+		shownEntryId = data.id;
+		selectedSeason = null;
+		editOpen = false;
+		removeOpen = false;
+		matchOpen = false;
+		candidates = [];
+		matchError = false;
+	});
 
 	async function findMatches() {
 		if (!entry) return;
@@ -141,7 +171,12 @@
 
 	async function decline() {
 		if (!entry) return;
-		await recordEvent('media.match_declined', entry.id, {});
+		const id = entry.id;
+		const ok = await guardedWrite(() => recordEvent('media.match_declined', id, {}), {
+			source: 'custom-media:decline',
+			userMessage: "Couldn't record that"
+		});
+		if (!ok) return;
 		sync.requestSync();
 		matchOpen = false;
 		await invalidate('app:custom-media');
@@ -151,47 +186,53 @@
 		if (!entry || linking) return;
 		const targetId = tmdbMediaId(candidate.type, candidate.tmdbId);
 		linking = targetId;
-		try {
-			// Seed the target's media snapshot first, so the channel has identity to hydrate from and
-			// the title renders the moment we land on it.
-			await putMedia($state.snapshot(mediaRecordFromSearch(candidate)));
+		const sourceId = entry.id;
+		const ok = await guardedWrite(
+			async () => {
+				// Seed the target's media snapshot first, so the channel has identity to hydrate from and
+				// the title renders the moment we land on it.
+				await putMedia($state.snapshot(mediaRecordFromSearch(candidate)));
 
-			const [row, watches] = await Promise.all([
-				getTrackingByMediaId(entry.id),
-				getEpisodeWatches(entry.id)
-			]);
-			if (!row) return;
+				const [row, watches] = await Promise.all([
+					getTrackingByMediaId(sourceId),
+					getEpisodeWatches(sourceId)
+				]);
+				// No tracking row means there is no history to carry; linking would assert nothing.
+				if (!row) throw new Error(`no tracking row for ${sourceId}`);
 
-			await recordEvents(
-				buildLinkEvents(
-					{
-						mediaId: entry.id,
-						status: row.status,
-						favorite: row.favorite,
-						rating: row.rating,
-						addedAt: row.addedAt,
-						statusUpdatedAt: row.statusUpdatedAt,
-						favoriteUpdatedAt: row.favoriteUpdatedAt,
-						ratingUpdatedAt: row.ratingUpdatedAt
-					},
-					watches,
-					{
-						targetId,
-						provider: 'tmdb',
-						externalId: tmdbExternalId(candidate.type, candidate.tmdbId)
-					}
-				)
-			);
-			sync.requestSync();
-			await goto(
-				resolve('/title/[type]/[id]', {
-					type: candidate.type,
-					id: String(candidate.tmdbId)
-				})
-			);
-		} finally {
-			linking = null;
-		}
+				await recordEvents(
+					buildLinkEvents(
+						{
+							mediaId: sourceId,
+							status: row.status,
+							favorite: row.favorite,
+							rating: row.rating,
+							addedAt: row.addedAt,
+							statusUpdatedAt: row.statusUpdatedAt,
+							favoriteUpdatedAt: row.favoriteUpdatedAt,
+							ratingUpdatedAt: row.ratingUpdatedAt
+						},
+						watches,
+						{
+							targetId,
+							provider: 'tmdb',
+							externalId: tmdbExternalId(candidate.type, candidate.tmdbId)
+						}
+					)
+				);
+			},
+			{ source: 'custom-media:link', userMessage: "Couldn't link that entry" }
+		);
+		linking = null;
+		if (!ok) return; // stay put: nothing was re-pointed, so the entry is still the live one
+
+		sync.requestSync();
+		await goto(
+			resolve('/title/[type]/[id]', {
+				type: candidate.type,
+				id: String(candidate.tmdbId)
+			})
+		);
 	}
 </script>
 

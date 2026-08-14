@@ -28,6 +28,7 @@
 		type ClientMedia
 	} from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
+	import { guardedWrite } from '$lib/client/write-guard';
 	import { createCustomMedia } from '$lib/custom-media';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
 	import type { CustomMediaInput } from '$lib/validation/custom-media';
@@ -112,19 +113,25 @@
 	async function createCustom(input: CustomMediaInput) {
 		if (creating) return;
 		creating = true;
-		try {
-			const record = createCustomMedia(input);
-			// Mirrors `quickAdd`'s pipeline, but through the authoring write: it stamps the edit clock
-			// and queues the record for backup, since no server can hydrate this one.
-			await putCustomMedia(record);
-			await recordEvent('tracking.added', record.id, { status: 'want_to_watch' });
-			sync.requestSync();
-			await refreshTracked();
-			createOpen = false;
-			await goto(resolve('/custom/[id]', { id: record.id }));
-		} finally {
-			creating = false;
-		}
+		const record = createCustomMedia(input);
+		// Guarded: a local write can fail for reasons the user can't see, and swallowing that leaves
+		// the dialog closing on an entry that was never saved.
+		const ok = await guardedWrite(
+			async () => {
+				// Mirrors `quickAdd`'s pipeline, but through the authoring write: it stamps the edit
+				// clock and queues the record for backup, since no server can hydrate this one.
+				await putCustomMedia(record);
+				await recordEvent('tracking.added', record.id, { status: 'want_to_watch' });
+			},
+			{ source: 'custom-media:create', userMessage: "Couldn't add that entry" }
+		);
+		creating = false;
+		if (!ok) return; // the dialog stays open with the user's input intact
+
+		sync.requestSync();
+		await refreshTracked();
+		createOpen = false;
+		await goto(resolve('/custom/[id]', { id: record.id }));
 	}
 
 	// Local-only search history (device IndexedDB, never synced) — shown before the user types.
