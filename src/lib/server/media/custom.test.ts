@@ -18,13 +18,15 @@ const CUSTOM_ID = '33333333-3333-4333-8333-333333333333';
 const PERSON_A = 'aaaaaaaa-0000-4000-8000-aaaaaaaaaaaa';
 const PERSON_B = 'bbbbbbbb-0000-4000-8000-bbbbbbbbbbbb';
 
+type PushedCredit = ValidatedCustomMedia['credits'][number];
+
 /** A credit as the author's own client sends it: a name they typed, no provider identity. */
 function credit(
 	personId: string,
 	name: string,
 	role: CreditRole,
-	over: Partial<MediaCredit> = {}
-): MediaCredit {
+	over: Partial<Omit<MediaCredit, 'externalId' | 'profilePath'>> = {}
+): PushedCredit {
 	return {
 		personId,
 		externalId: null,

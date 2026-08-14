@@ -6,10 +6,17 @@
  *
  * Client-safe (browser only).
  */
-import { getAllEpisodeWatches, getAllMedia, getSeasons, getTracking } from '$lib/client/idb';
+import {
+	getAllEpisodeWatches,
+	getAllMedia,
+	getCredits,
+	getSeasons,
+	getTracking
+} from '$lib/client/idb';
 import { buildExport } from '$lib/portability/build';
 import {
 	EXPORT_FILENAME_PREFIX,
+	type ExportedCredit,
 	type ExportedSeason,
 	type MarqueeExport
 } from '$lib/portability/schema';
@@ -37,7 +44,23 @@ export async function collectExport(now: Date = new Date()): Promise<MarqueeExpo
 		)
 	);
 
-	return buildExport({ tracking, media, watches, customSeasons, exportedAt: now });
+	// Same reasoning for cast and crew, and for movies too: these are names the user typed.
+	const customCredits = new Map<string, ExportedCredit[]>(
+		await Promise.all(
+			media
+				.filter((m) => m.source === 'custom')
+				.map(async (m): Promise<[string, ExportedCredit[]]> => [
+					m.id,
+					(await getCredits(m.id)).map((c) => ({
+						role: c.role,
+						name: c.name,
+						character: c.character
+					}))
+				])
+		)
+	);
+
+	return buildExport({ tracking, media, watches, customSeasons, customCredits, exportedAt: now });
 }
 
 /**

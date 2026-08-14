@@ -6,6 +6,7 @@
 	import EmptyState from '$lib/components/empty-state.svelte';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
+	import CreditList from '$lib/components/media/credit-list.svelte';
 	import CustomMediaForm from '$lib/components/media/custom-media-form.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
@@ -89,7 +90,7 @@
 	let removeOpen = $state(false);
 
 	const editInitial = $derived<CustomMediaInput | undefined>(
-		entry ? toCustomMediaInput(entry, data.seasons) : undefined
+		entry ? toCustomMediaInput(entry, data.seasons, data.credits) : undefined
 	);
 
 	async function saveEdit(input: CustomMediaInput) {
@@ -287,6 +288,13 @@
 			<p class="text-sm leading-relaxed text-muted-foreground">{entry.overview}</p>
 		{/if}
 
+		{#if data.credits.length > 0}
+			<section class="flex flex-col gap-2">
+				<h2 class="text-sm font-medium">Cast &amp; crew</h2>
+				<CreditList credits={data.credits} />
+			</section>
+		{/if}
+
 		<div class="flex flex-wrap gap-2">
 			<Button variant="outline" size="sm" onclick={() => (editOpen = true)}>
 				<PencilIcon class="size-4" />
@@ -296,9 +304,9 @@
 
 		<section class="flex flex-col gap-3 border-t border-dashed border-border pt-4">
 			<p class="text-sm leading-relaxed text-muted-foreground">
-				No description, cast or artwork yet — you added this one yourself, and it hasn't been
-				matched to a database entry. You can look for a match whenever you like; nothing is matched
-				without you saying so.
+				This is your own entry — everything on it is what you typed, and it hasn't been matched to a
+				database entry. You can look for a match whenever you like; nothing is matched without you
+				saying so.
 			</p>
 
 			{#if !matchOpen}

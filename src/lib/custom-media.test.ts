@@ -19,8 +19,15 @@ function input(over: Partial<CustomMediaInput> = {}): CustomMediaInput {
 		year: 1986,
 		overview: '',
 		seasons: [],
+		credits: [],
 		...over
 	};
+}
+
+/** Deterministic ids for the people a record mints, so assertions can name them. */
+function mintIds(prefix = 'person'): () => string {
+	let n = 0;
+	return () => `${prefix}-${n++}`;
 }
 
 describe('customEpisodeAirDate', () => {
@@ -148,6 +155,71 @@ describe('createCustomMedia', () => {
 		const value = input({ type: 'show', seasons: [{ seasonNumber: 1, episodeCount: 2 }] });
 		expect(customMediaInputSchema.safeParse(value).success).toBe(true);
 	});
+
+	it('mints an id per credited person and numbers billing within each role', () => {
+		const record = createCustomMedia(
+			input({
+				credits: [
+					{ role: 'cast', name: 'Tomas Ilie', character: 'The Courier' },
+					{ role: 'cast', name: 'Renata Voss', character: '' },
+					{ role: 'director', name: 'Ana Petrescu', character: '' }
+				]
+			}),
+			{ now: NOW, mintPersonId: mintIds() }
+		);
+
+		expect(record.credits).toEqual([
+			{
+				personId: 'person-0',
+				externalId: null,
+				name: 'Tomas Ilie',
+				profilePath: null,
+				role: 'cast',
+				character: 'The Courier',
+				sortOrder: 0
+			},
+			{
+				personId: 'person-1',
+				externalId: null,
+				name: 'Renata Voss',
+				profilePath: null,
+				role: 'cast',
+				// Blank means they played nobody named, which is null on the wire, not an empty string.
+				character: null,
+				sortOrder: 1
+			},
+			{
+				personId: 'person-2',
+				externalId: null,
+				name: 'Ana Petrescu',
+				profilePath: null,
+				role: 'director',
+				character: null,
+				// Billing restarts per role, so each section is ordered on its own.
+				sortOrder: 0
+			}
+		]);
+	});
+
+	it('keeps a person id an edit supplies, so re-saving credits the same person', () => {
+		const record = createCustomMedia(
+			input({
+				credits: [{ personId: 'kept', role: 'writer', name: 'Renata Voss', character: '' }]
+			}),
+			{ now: NOW, mintPersonId: mintIds() }
+		);
+		expect(record.credits?.[0].personId).toBe('kept');
+	});
+
+	it('ignores a character typed against a crew role', () => {
+		// The form hides the field for crew, but the input shape allows it — a producer never played
+		// anyone, and storing one would put nonsense on the comparison view.
+		const record = createCustomMedia(
+			input({ credits: [{ role: 'producer', name: 'Renata Voss', character: 'Herself' }] }),
+			{ now: NOW, mintPersonId: mintIds() }
+		);
+		expect(record.credits?.[0].character).toBeNull();
+	});
 });
 
 describe('toCustomMediaInput', () => {
@@ -166,5 +238,29 @@ describe('toCustomMediaInput', () => {
 	it('drops seasons for a movie even if some were somehow stored', () => {
 		const record = createCustomMedia(input(), { now: NOW });
 		expect(toCustomMediaInput(record, [{ seasonNumber: 1, episodeCount: 4 }]).seasons).toEqual([]);
+	});
+
+	it('carries credits back with their person ids, so an edit re-saves the same people', () => {
+		const original = input({
+			credits: [
+				{ role: 'cast', name: 'Tomas Ilie', character: 'The Courier' },
+				{ role: 'director', name: 'Ana Petrescu', character: '' }
+			]
+		});
+		const record = createCustomMedia(original, { now: NOW, mintPersonId: mintIds() });
+
+		const back = toCustomMediaInput(record, [], record.credits ?? []);
+		expect(back.credits).toEqual([
+			{ personId: 'person-0', role: 'cast', name: 'Tomas Ilie', character: 'The Courier' },
+			{ personId: 'person-1', role: 'director', name: 'Ana Petrescu', character: '' }
+		]);
+
+		// And re-saving that input keeps every id rather than minting new rows.
+		const resaved = createCustomMedia(back, {
+			id: record.id,
+			now: NOW,
+			mintPersonId: mintIds('fresh')
+		});
+		expect(resaved.credits?.map((c) => c.personId)).toEqual(['person-0', 'person-1']);
 	});
 });

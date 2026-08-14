@@ -7,6 +7,7 @@
  * Client-safe (no server imports).
  */
 import { z } from 'zod';
+import { CREDIT_ROLES } from '$lib/sync/events';
 
 export const CUSTOM_TITLE_MAX = 200;
 export const CUSTOM_OVERVIEW_MAX = 2000;
@@ -43,6 +44,27 @@ export const customSeasonInputSchema = z.object({
 
 export type CustomSeasonInput = z.infer<typeof customSeasonInputSchema>;
 
+/**
+ * One credited person as the form collects them: a role, a name, and (for cast) who they played.
+ *
+ * `personId` is absent the first time a name is entered and minted on save. It comes *back* on an
+ * edit so re-saving keeps crediting the same person rather than minting a fresh row each time —
+ * which would orphan the old one and break the "everything this person worked on" lookup.
+ */
+export const customCreditInputSchema = z.object({
+	personId: z.uuid().optional(),
+	role: z.enum(CREDIT_ROLES),
+	name: z.string().trim().min(1).max(CUSTOM_NAME_MAX),
+	character: z.string().trim().max(CUSTOM_NAME_MAX)
+});
+
+export type CustomCreditInput = z.infer<typeof customCreditInputSchema>;
+
+/** Case-insensitive `role + name`, the pair a person can only be credited under once. */
+function creditKey(credit: { role: string; name: string }): string {
+	return `${credit.role}:${credit.name.trim().toLowerCase()}`;
+}
+
 /** Everything the create/edit form collects. */
 export const customMediaInputSchema = z
 	.object({
@@ -50,7 +72,8 @@ export const customMediaInputSchema = z
 		type: z.enum(['movie', 'show']),
 		year: z.number().int().min(CUSTOM_MIN_YEAR).max(CUSTOM_MAX_YEAR).nullable(),
 		overview: z.string().max(CUSTOM_OVERVIEW_MAX),
-		seasons: z.array(customSeasonInputSchema).max(CUSTOM_MAX_SEASONS)
+		seasons: z.array(customSeasonInputSchema).max(CUSTOM_MAX_SEASONS),
+		credits: z.array(customCreditInputSchema).max(CUSTOM_MAX_CREDITS)
 	})
 	.refine((v) => v.type === 'show' || v.seasons.length === 0, {
 		message: 'A movie has no seasons.',
@@ -63,6 +86,12 @@ export const customMediaInputSchema = z
 	.refine((v) => totalEpisodes(v.seasons) <= CUSTOM_MAX_EPISODES_TOTAL, {
 		message: `A show can have at most ${CUSTOM_MAX_EPISODES_TOTAL} episodes.`,
 		path: ['seasons']
+	})
+	// `(person, role)` is the primary key on both sides, so a duplicate would silently collapse on
+	// save. Rejecting it here says so instead of quietly dropping a row the user typed.
+	.refine((v) => new Set(v.credits.map(creditKey)).size === v.credits.length, {
+		message: 'Each person can only be credited once per role.',
+		path: ['credits']
 	});
 
 export type CustomMediaInput = z.infer<typeof customMediaInputSchema>;

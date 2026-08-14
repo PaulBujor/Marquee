@@ -4,7 +4,8 @@
  * import seeds is re-validated server-side by `eventEnvelopeSchema`.
  */
 import { z } from 'zod';
-import { MEDIA_PROVIDERS, MEDIA_SOURCES, TRACKING_STATUSES } from '$lib/sync/events';
+import { CREDIT_ROLES, MEDIA_PROVIDERS, MEDIA_SOURCES, TRACKING_STATUSES } from '$lib/sync/events';
+import { CUSTOM_MAX_CREDITS, CUSTOM_NAME_MAX } from '$lib/validation/custom-media';
 import { EXPORT_FORMAT, EXPORT_SCHEMA_VERSION, type MarqueeExport } from './schema';
 
 /** Why a file couldn't be read, mapped to a message in the UI. */
@@ -38,6 +39,17 @@ const titleSchema = z.object({
 				episodeCount: z.number().int().nonnegative()
 			})
 		)
+		.nullable()
+		.optional(),
+	credits: z
+		.array(
+			z.object({
+				role: z.enum(CREDIT_ROLES),
+				name: z.string().min(1).max(CUSTOM_NAME_MAX),
+				character: z.string().max(CUSTOM_NAME_MAX).nullable().optional()
+			})
+		)
+		.max(CUSTOM_MAX_CREDITS)
 		.nullable()
 		.optional(),
 	status: z.enum(TRACKING_STATUSES),

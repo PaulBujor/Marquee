@@ -1,15 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import {
+	CUSTOM_MAX_CREDITS,
 	CUSTOM_MAX_EPISODES_PER_SEASON,
 	CUSTOM_MAX_EPISODES_TOTAL,
 	CUSTOM_MAX_SEASONS,
+	CUSTOM_NAME_MAX,
 	CUSTOM_TITLE_MAX,
 	customMediaInputSchema,
 	totalEpisodes
 } from './custom-media';
 
 function input(over: Record<string, unknown> = {}) {
-	return { title: 'A Title', type: 'movie', year: 1986, overview: '', seasons: [], ...over };
+	return {
+		title: 'A Title',
+		type: 'movie',
+		year: 1986,
+		overview: '',
+		seasons: [],
+		credits: [],
+		...over
+	};
+}
+
+function credit(over: Record<string, unknown> = {}) {
+	return { role: 'cast', name: 'Tomas Ilie', character: '', ...over };
 }
 
 const ok = (value: unknown) => customMediaInputSchema.safeParse(value).success;
@@ -89,6 +103,41 @@ describe('customMediaInputSchema', () => {
 		expect(ok(input({ type: 'show', seasons: [{ seasonNumber: 0, episodeCount: 1 }] }))).toBe(
 			false
 		);
+	});
+
+	it('accepts credits with or without a person id and a character', () => {
+		expect(ok(input({ credits: [credit()] }))).toBe(true);
+		expect(ok(input({ credits: [credit({ character: 'The Courier' })] }))).toBe(true);
+		expect(
+			ok(input({ credits: [credit({ personId: '44444444-4444-4444-8444-444444444444' })] }))
+		).toBe(true);
+		expect(ok(input({ credits: [credit({ role: 'director' })] }))).toBe(true);
+	});
+
+	it('requires a real name and a known role', () => {
+		expect(ok(input({ credits: [credit({ name: '' })] }))).toBe(false);
+		expect(ok(input({ credits: [credit({ name: '   ' })] }))).toBe(false);
+		expect(ok(input({ credits: [credit({ name: 'x'.repeat(CUSTOM_NAME_MAX + 1) })] }))).toBe(false);
+		expect(ok(input({ credits: [credit({ role: 'gaffer' })] }))).toBe(false);
+	});
+
+	it('rejects a supplied person id that is not one we could have minted', () => {
+		expect(ok(input({ credits: [credit({ personId: 'not-a-uuid' })] }))).toBe(false);
+	});
+
+	it('rejects the same person credited twice in one role, but allows two roles', () => {
+		// `(person, role)` is the primary key on both sides, so a duplicate would collapse on save.
+		expect(ok(input({ credits: [credit(), credit()] }))).toBe(false);
+		// Case and surrounding space don't make it a different person.
+		expect(ok(input({ credits: [credit(), credit({ name: '  tomas ilie  ' })] }))).toBe(false);
+		expect(ok(input({ credits: [credit(), credit({ role: 'director' })] }))).toBe(true);
+	});
+
+	it('bounds how many people one entry credits', () => {
+		const many = (n: number) =>
+			Array.from({ length: n }, (_, i) => credit({ name: `Person ${i}` }));
+		expect(ok(input({ credits: many(CUSTOM_MAX_CREDITS) }))).toBe(true);
+		expect(ok(input({ credits: many(CUSTOM_MAX_CREDITS + 1) }))).toBe(false);
 	});
 });
 

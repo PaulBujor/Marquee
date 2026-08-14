@@ -78,7 +78,14 @@ function mediaStub(entry: ExportedTitle, id: string, now: number): MediaRecord |
 				type: entry.type ?? 'movie',
 				year: entry.year,
 				overview: entry.overview ?? '',
-				seasons: entry.type === 'show' ? (entry.seasons ?? []) : []
+				seasons: entry.type === 'show' ? (entry.seasons ?? []) : [],
+				// No `personId`: the exported ids belong to the account that minted them, so the import
+				// mints its own. The name is the part that carries meaning across accounts.
+				credits: (entry.credits ?? []).map((c) => ({
+					role: c.role,
+					name: c.name,
+					character: c.character ?? ''
+				}))
 			},
 			// The exported id, so the restored entry is the same title the events already name.
 			{ id, now }

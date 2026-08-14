@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
-import { getEpisodes, getMedia, getMediaLink, getSeasons } from '$lib/client/idb';
+import { getCredits, getEpisodes, getMedia, getMediaLink, getSeasons } from '$lib/client/idb';
 import type { PageLoad } from './$types';
 
 /**
@@ -18,15 +18,16 @@ export const load: PageLoad = async ({ params, parent, depends }) => {
 
 	depends('app:custom-media'); // re-read after an edit, or once a sync brings the record down
 
-	if (!browser) return { id: params.id, entry: null, seasons: [], episodes: [], link: null };
+	const empty = { id: params.id, entry: null, seasons: [], episodes: [], credits: [], link: null };
+	if (!browser) return empty;
 
 	const entry = (await getMedia(params.id)) ?? null;
-	if (!entry || entry.source !== 'custom') {
-		return { id: params.id, entry: null, seasons: [], episodes: [], link: null };
-	}
-	const [seasons, episodes, link] = await Promise.all([
+	if (!entry || entry.source !== 'custom') return empty;
+
+	const [seasons, episodes, credits, link] = await Promise.all([
 		entry.type === 'show' ? getSeasons(params.id) : Promise.resolve([]),
 		entry.type === 'show' ? getEpisodes(params.id) : Promise.resolve([]),
+		getCredits(params.id),
 		// The user's identity decision for this entry — whether they've dismissed match suggestions.
 		getMediaLink(params.id).then((l) => l ?? null)
 	]);
@@ -36,6 +37,7 @@ export const load: PageLoad = async ({ params, parent, depends }) => {
 		entry,
 		seasons: seasons.sort((a, b) => a.seasonNumber - b.seasonNumber),
 		episodes: episodes.sort((a, b) => a.season - b.season || a.episode - b.episode),
+		credits,
 		link
 	};
 };
