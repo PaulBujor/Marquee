@@ -3,7 +3,7 @@
  * channel (`/api/sync`). Client-safe (shared by the endpoint and the client engine).
  */
 import { z } from 'zod';
-import { MEDIA_PROVIDERS, type MediaRecord } from './events';
+import { HYDRATABLE_PROVIDERS, type MediaRecord } from './events';
 
 /** Max identity refs / have-entries accepted in one media-sync call. */
 export const MEDIA_SYNC_MAX = 500;
@@ -15,10 +15,12 @@ export const MEDIA_SYNC_MAX = 500;
  * own events reference.
  */
 export const mediaSyncRequestSchema = z.object({
+	// A ref exists so the server can hydrate the title, so only external providers belong here —
+	// user-authored (`local`) media has nothing to hydrate from and travels its own way.
 	refs: z
 		.array(
 			z.object({
-				provider: z.enum(MEDIA_PROVIDERS),
+				provider: z.enum(HYDRATABLE_PROVIDERS),
 				externalId: z.string().min(1).max(128)
 			})
 		)

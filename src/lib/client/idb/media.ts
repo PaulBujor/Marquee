@@ -3,7 +3,7 @@
  * server: scalar fields in `media`, and (for shows) the nested arrays in `seasons`/`episodes`.
  */
 import { openDb, type ClientEpisode, type ClientMedia, type ClientSeason } from './db';
-import type { MediaProvider, MediaRecord } from '$lib/sync/events';
+import { isHydratableProvider, type HydratableProvider, type MediaRecord } from '$lib/sync/events';
 import { parseTmdbExternalId, type SearchLikeMedia } from '$lib/tracking/media-record';
 
 function seasonKey(mediaId: string, seasonNumber: number): string {
@@ -187,14 +187,20 @@ export async function getUnsyncedMediaIds(referencedIds: string[]): Promise<stri
 }
 
 /** Identity of locally-known provider-backed media among `ids`, to push to the channel for server
- *  hydration. */
+ *  hydration. A `linked` row always names an external provider, so the narrower type holds. */
 export async function getLinkedMediaRefs(
 	ids: string[]
-): Promise<{ provider: MediaProvider; externalId: string }[]> {
+): Promise<{ provider: HydratableProvider; externalId: string }[]> {
 	const rows = await Promise.all(ids.map((id) => getMedia(id)));
 	return rows
-		.filter((m): m is ClientMedia => !!m && m.source === 'linked' && m.externalId !== null)
-		.map((m) => ({ provider: m.provider, externalId: m.externalId as string }));
+		.filter(
+			(m): m is ClientMedia =>
+				!!m && m.source === 'linked' && m.externalId !== null && isHydratableProvider(m.provider)
+		)
+		.map((m) => ({
+			provider: m.provider as HydratableProvider,
+			externalId: m.externalId as string
+		}));
 }
 
 /** `id` + the version held for each of `ids` (0 when there's no local row) — the version-diff

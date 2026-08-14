@@ -4,15 +4,17 @@
  * `episodeWatches` stores (the client-side projection of the same event log the
  * server materializes) and a `media` reference cache with its `seasons` / `episodes`
  * child stores (populated off a separate channel, not derived from events; episodes
- * carry air dates for watchability + the upcoming calendar). `meta` holds the `deviceId`
- * and sync `cursor`. The database itself is namespaced per user (`marquee-<userId>`,
- * see {@link setActiveUser}).
+ * carry air dates for watchability + the upcoming calendar). `mediaLinks` materializes the
+ * `media.*` events — which of the user's own entries have been matched to a provider-backed
+ * title. `meta` holds the `deviceId` and sync `cursor`. The database itself is namespaced per
+ * user (`marquee-<userId>`, see {@link setActiveUser}).
  *
  * Client-safe (browser only) — never imported from server code.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type {
 	EventEnvelope,
+	HydratableProvider,
 	MediaEpisode,
 	MediaRecord,
 	MediaSeason,
@@ -61,6 +63,24 @@ export interface ClientTracking {
 	ratingUpdatedAt: number;
 	removedUpdatedAt: number;
 	addedAt: number;
+}
+
+/**
+ * Materialized identity decision for one media reference: the provider-backed title the user
+ * matched it to, and whether they've dismissed the suggestion. Keyed by the *source* id (a custom
+ * entry), with per-field LWW clocks like a tracking row, so a link and a dismissal from different
+ * devices merge independently. Client-only — the server stores the `media.*` events but
+ * materializes nothing from them (see `server/sync/projection.ts`).
+ */
+export interface ClientMediaLink {
+	mediaId: string;
+	/** Our media id for the matched title, or null when only a dismissal has been recorded. */
+	targetId: string | null;
+	provider: HydratableProvider | null;
+	externalId: string | null;
+	declined: boolean;
+	linkedUpdatedAt: number;
+	declinedUpdatedAt: number;
 }
 
 /** Materialized per-episode watched state. `id` = `${mediaId}::s{S}e{E}`. */
@@ -114,6 +134,7 @@ export interface MarqueeDB extends DBSchema {
 		indexes: { by_media: string; by_airDate: string };
 	};
 	mediaImages: { key: string; value: MediaImages };
+	mediaLinks: { key: string; value: ClientMediaLink };
 	episodeWatches: { key: string; value: ClientEpisodeWatch; indexes: { by_media: string } };
 	meta: { key: MetaKey; value: MetaEntry };
 }
@@ -121,7 +142,7 @@ export interface MarqueeDB extends DBSchema {
 export type MarqueeDatabase = IDBPDatabase<MarqueeDB>;
 
 const DB_NAME = 'marquee';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise: Promise<MarqueeDatabase> | null = null;
 let activeUserId: string | null = null;
@@ -192,6 +213,8 @@ export function openDb(): Promise<MarqueeDatabase> {
 				}
 				if (!db.objectStoreNames.contains('mediaImages'))
 					db.createObjectStore('mediaImages', { keyPath: 'id' });
+				if (!db.objectStoreNames.contains('mediaLinks'))
+					db.createObjectStore('mediaLinks', { keyPath: 'mediaId' });
 				if (!db.objectStoreNames.contains('episodeWatches')) {
 					const episodeWatches = db.createObjectStore('episodeWatches', { keyPath: 'id' });
 					episodeWatches.createIndex('by_media', 'mediaId');

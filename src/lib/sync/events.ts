@@ -25,7 +25,8 @@ export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
  * The kinds of events the foundation supports. Events record only *what the user did*;
  * media metadata is separate reference data (see {@link MediaRecord}). `tracking.*`
  * are the lifecycle of a watchlist entry, keyed to a title by `entityId` (our media id);
- * `episode.*` are per-episode watched state.
+ * `episode.*` are per-episode watched state; `media.*` record what the user decided about a
+ * title's *identity* — whether their own entry is the same work as a provider-backed one.
  *
  * Episodes keep a `watched`/`unwatched` pair (a binary toggle reads cleaner than a
  * boolean payload), while `status` is an enum, so it's one `status_changed` carrying
@@ -38,7 +39,9 @@ export const SYNC_EVENT_TYPES = [
 	'tracking.rated',
 	'tracking.removed',
 	'episode.watched',
-	'episode.unwatched'
+	'episode.unwatched',
+	'media.linked',
+	'media.match_declined'
 ] as const;
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
 
@@ -76,6 +79,7 @@ export interface MediaEpisode {
  * without diffing every field.
  */
 export interface MediaRecord {
+	/** Derived from `(provider, externalId)` for provider-backed titles; random for custom media. */
 	id: string;
 	provider: MediaProvider;
 	/** The provider's own id, e.g. `movie/603`; null for custom media. */
@@ -124,6 +128,18 @@ export interface EventPayloadMap {
 	'tracking.removed': Record<string, never>;
 	'episode.watched': EpisodeCoord;
 	'episode.unwatched': EpisodeCoord;
+	/**
+	 * The user accepted a provider-backed match for the `entityId` they hold — today, their own
+	 * custom entry and the TMDB title it turns out to be. The target is carried as identity
+	 * (`provider` + `externalId`) alongside `targetId` so a reader can re-derive rather than trust
+	 * it. A link is an association, never a deletion: the source entry and its history stay.
+	 */
+	'media.linked': { targetId: string; provider: HydratableProvider; externalId: string };
+	/**
+	 * The user rejected the matches offered for `entityId`. Suppresses the suggestion until they
+	 * ask for it again, and syncs so the dismissal holds on every device.
+	 */
+	'media.match_declined': Record<string, never>;
 }
 
 /** Any event payload — the union of all per-type shapes (used to type the stored JSON column). */
@@ -154,8 +170,19 @@ export interface ServerEvent<T extends SyncEventType = SyncEventType> extends Ev
 	serverReceivedAt: number;
 }
 
-/** Metadata providers we can hydrate a title from. Custom (user-authored) media is a separate, deferred concern. */
-export const MEDIA_PROVIDERS = ['tmdb'] as const;
+/**
+ * External metadata providers — the ones we can hydrate a title from, and so the only ones a
+ * `refs` identity or a link target may name.
+ */
+export const HYDRATABLE_PROVIDERS = ['tmdb'] as const;
+export type HydratableProvider = (typeof HYDRATABLE_PROVIDERS)[number];
+
+/**
+ * Where a media row's metadata comes from. `local` is user-authored (custom) media: nobody
+ * hydrates it, it carries no `externalId`, and its id is random rather than derived. Keeping it
+ * in the same enum means `provider` never lies about a row's origin.
+ */
+export const MEDIA_PROVIDERS = [...HYDRATABLE_PROVIDERS, 'local'] as const;
 export type MediaProvider = (typeof MEDIA_PROVIDERS)[number];
 
 /**
@@ -175,9 +202,21 @@ const MEDIA_ID_NAMESPACE = 'b7c8e9a0-3f2d-4c1b-9e6a-8d5f4a2b1c0e';
  * Our own, **provider-agnostic** media id: a deterministic UUIDv5 derived from
  * `(provider, externalId)`. Every device derives the same id offline with no
  * coordination, and switching providers (or becoming our own) needs no remap.
+ *
+ * Only external providers derive an id this way. User-authored (`local`) media has no
+ * `externalId` to derive from and mints a random id instead, which is why the parameter is
+ * the narrower {@link HydratableProvider} — deriving one for a private entry would hand every
+ * user who guessed the inputs the same id.
  */
-export function mediaId(provider: MediaProvider, externalId: string): string {
+export function mediaId(provider: HydratableProvider, externalId: string): string {
 	return uuidv5(`${provider}:${externalId}`, MEDIA_ID_NAMESPACE);
+}
+
+/** Narrows an untrusted/stored provider value to one we can hydrate from. */
+export function isHydratableProvider(
+	provider: string | null | undefined
+): provider is HydratableProvider {
+	return HYDRATABLE_PROVIDERS.includes(provider as HydratableProvider);
 }
 
 /**
@@ -250,7 +289,14 @@ const payloadSchemas = {
 	'tracking.rated': z.object({ rating: z.number().int().min(1).max(5).nullable() }),
 	'tracking.removed': z.object({}),
 	'episode.watched': z.object({ season: seasonNumber, episode: episodeNumber }),
-	'episode.unwatched': z.object({ season: seasonNumber, episode: episodeNumber })
+	'episode.unwatched': z.object({ season: seasonNumber, episode: episodeNumber }),
+	// A link target must be a title someone can actually hydrate, so `local` is not accepted here.
+	'media.linked': z.object({
+		targetId: uuid,
+		provider: z.enum(HYDRATABLE_PROVIDERS),
+		externalId: z.string().min(1).max(128)
+	}),
+	'media.match_declined': z.object({})
 } as const;
 
 const envelopeBase = z.object({
@@ -294,6 +340,14 @@ export const eventEnvelopeSchema = z.discriminatedUnion('type', [
 	envelopeBase.extend({
 		type: z.literal('episode.unwatched'),
 		payload: payloadSchemas['episode.unwatched']
+	}),
+	envelopeBase.extend({
+		type: z.literal('media.linked'),
+		payload: payloadSchemas['media.linked']
+	}),
+	envelopeBase.extend({
+		type: z.literal('media.match_declined'),
+		payload: payloadSchemas['media.match_declined']
 	})
 ]);
 

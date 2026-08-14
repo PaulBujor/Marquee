@@ -250,6 +250,11 @@ export const media = sqliteTable(
 		// e.g. `movie/603`; null for custom entries.
 		externalId: text('external_id'),
 		source: text('source', { enum: MEDIA_SOURCES }).notNull().default('linked'),
+		// Owner of a private, user-authored (`custom`) row. Null for the shared `linked` catalog,
+		// which every user reads. Media sync never returns a row owned by somebody else, and deleting
+		// an account drops the rows it owns (cascading to their seasons/episodes) — without this the
+		// only thing standing between a private entry and another account is an unguessable id.
+		ownerUserId: text('owner_user_id').references(() => users.id, { onDelete: 'cascade' }),
 		type: text('type', { enum: ['movie', 'show'] }).notNull(),
 		title: text('title').notNull(),
 		// Case-folded title for the degraded/offline search fallback. SQLite `LIKE` folds
@@ -292,7 +297,10 @@ export const media = sqliteTable(
 		index('media_type_release_date_idx').on(table.type, table.releaseDate),
 		// The nightly sweep also matches shows by TMDB status (a between-seasons show has
 		// `in_production` false but an airing status), so that branch needs its own index.
-		index('media_type_status_idx').on(table.type, table.status)
+		index('media_type_status_idx').on(table.type, table.status),
+		// Serves both owner-scoped reads (recovering a user's custom entries on a fresh device) and
+		// the account-deletion sweep.
+		index('media_owner_idx').on(table.ownerUserId)
 	]
 );
 
