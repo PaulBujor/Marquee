@@ -8,6 +8,7 @@
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { buttonVariants } from '$lib/components/ui/button';
+	import DetailLink from '$lib/components/media/detail-link.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import ProgressRing from '$lib/components/media/progress-ring.svelte';
 	import * as Tabs from '$lib/components/ui/tabs';
@@ -259,21 +260,16 @@
 						>
 							{#if progress?.next}
 								<div class="relative">
-									<a
-										href={resolve('/title/[type]/[id]', {
-											type: item.type,
-											id: item.externalId?.split('/')[1] ?? ''
-										})}
-										aria-label={item.title}
-									>
+									<DetailLink {item} ariaLabel={item.title}>
 										<PosterTile
 											type="show"
 											mediaId={item.mediaId}
 											posterPath={item.posterPath}
 											isFavorite={item.favorite}
+											isCustom={item.source === 'custom'}
 											alt={item.title}
 										/>
-									</a>
+									</DetailLink>
 									<button
 										type="button"
 										onclick={() => markNextSoon(item)}
@@ -410,30 +406,28 @@
 				<!-- flip reflows survivors; fade eases items in/out on sync add/remove or status change -->
 				{#each visible as item (item.mediaId)}
 					{@const dnf = item.status === 'did_not_finish'}
-					<a
-						href={resolve('/title/[type]/[id]', {
-							type: item.type,
-							id: item.externalId?.split('/')[1] ?? ''
-						})}
-						class="block"
-						animate:flip={{ duration: motionMs }}
-						transition:fade={{ duration: introMs }}
-					>
-						<PosterTile
-							type={item.type}
-							mediaId={item.mediaId}
-							posterPath={item.posterPath}
-							isFavorite={item.favorite}
-							rating={canRate(item.type, item.status) ? item.rating : null}
-							alt={item.title}
-						/>
-						<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>
-						{#if item.year || dnf}
-							<div class="truncate text-xs text-muted-foreground">
-								{item.year ?? ''}{item.year && dnf ? ' · ' : ''}{dnf ? "Didn't finish" : ''}
-							</div>
-						{/if}
-					</a>
+					<!-- The animate/transition directives live on this wrapper because they have to be on an
+					element; the link itself is a component so every surface resolves a detail route the
+					same way. -->
+					<div animate:flip={{ duration: motionMs }} transition:fade={{ duration: introMs }}>
+						<DetailLink {item} class="block">
+							<PosterTile
+								type={item.type}
+								mediaId={item.mediaId}
+								posterPath={item.posterPath}
+								isFavorite={item.favorite}
+								isCustom={item.source === 'custom'}
+								rating={canRate(item.type, item.status) ? item.rating : null}
+								alt={item.title}
+							/>
+							<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>
+							{#if item.year || dnf}
+								<div class="truncate text-xs text-muted-foreground">
+									{item.year ?? ''}{item.year && dnf ? ' · ' : ''}{dnf ? "Didn't finish" : ''}
+								</div>
+							{/if}
+						</DetailLink>
+					</div>
 				{/each}
 			</div>
 			{#if hasMore}

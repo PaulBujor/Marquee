@@ -24,6 +24,7 @@ function item(over: Partial<LibraryItem> = {}): LibraryItem {
 	return {
 		mediaId: over.mediaId ?? 'm',
 		externalId: 'movie/1',
+		source: 'linked',
 		status: 'want_to_watch',
 		favorite: false,
 		rating: null,
@@ -361,6 +362,7 @@ describe('groupUpcomingByYear', () => {
 		date,
 		mediaId: `${title}-${date}`,
 		externalId: null,
+		source: 'linked',
 		type: 'movie',
 		title,
 		posterPath: null,
