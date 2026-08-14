@@ -8,6 +8,7 @@
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import CreditList from '$lib/components/media/credit-list.svelte';
 	import CustomMediaForm from '$lib/components/media/custom-media-form.svelte';
+	import MatchComparison from '$lib/components/media/match-comparison.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
@@ -32,7 +33,7 @@
 	import { isAired, todayIso } from '$lib/tracking/actions';
 	import { mediaRecordFromSearch } from '$lib/tracking/media-record';
 	import { tmdbExternalId, tmdbMediaId } from '$lib/sync/events';
-	import type { MediaSearchResult, SearchResult } from '$lib/server/tmdb';
+	import type { MediaDetail, MediaSearchResult, SearchResult } from '$lib/server/tmdb';
 	import type { CustomMediaInput } from '$lib/validation/custom-media';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import FileQuestionIcon from '@lucide/svelte/icons/file-question';
@@ -129,6 +130,14 @@
 	let matchError = $state(false);
 	let linking = $state<string | null>(null);
 
+	// A candidate under review, with its full detail — the comparison needs the candidate's cast and
+	// crew, which a search row doesn't carry. Fetched only for the one the user opens: hydrating all
+	// eight would be eight TMDB calls for titles they're about to reject.
+	let comparing = $state<MediaSearchResult | null>(null);
+	let comparingDetail = $state<MediaDetail | null>(null);
+	let loadingDetail = $state(false);
+	let detailFailed = $state(false);
+
 	const declined = $derived(data.link?.declined === true);
 
 	// Every piece of state above is scoped to *this* entry. SvelteKit reuses the component across a
@@ -146,7 +155,38 @@
 		matchOpen = false;
 		candidates = [];
 		matchError = false;
+		closeComparison();
 	});
+
+	function closeComparison() {
+		comparing = null;
+		comparingDetail = null;
+		loadingDetail = false;
+		detailFailed = false;
+	}
+
+	/**
+	 * Open the side-by-side view for one candidate and pull its cast and crew. A failure isn't fatal:
+	 * the comparison still shows everything the search row carried, and linking stays available —
+	 * it just can't cross-check the people.
+	 */
+	async function compare(candidate: MediaSearchResult) {
+		comparing = candidate;
+		comparingDetail = null;
+		detailFailed = false;
+		loadingDetail = true;
+		try {
+			const res = await fetch(`/api/title/${candidate.type}/${candidate.tmdbId}`);
+			if (!res.ok) throw new Error(String(res.status));
+			const body = (await res.json()) as { detail: MediaDetail };
+			// The user may have gone back to the list while this was in flight.
+			if (comparing?.tmdbId === candidate.tmdbId) comparingDetail = body.detail;
+		} catch {
+			if (comparing?.tmdbId === candidate.tmdbId) detailFailed = true;
+		} finally {
+			if (comparing?.tmdbId === candidate.tmdbId) loadingDetail = false;
+		}
+	}
 
 	async function findMatches() {
 		if (!entry) return;
@@ -325,6 +365,19 @@
 						Search for a match
 					</OfflineAction>
 				{/if}
+			{:else if comparing}
+				<MatchComparison
+					{entry}
+					entrySeasons={data.seasons}
+					entryCredits={data.credits}
+					candidate={comparing}
+					detail={comparingDetail}
+					loading={loadingDetail}
+					failed={detailFailed}
+					busy={linking !== null}
+					onlink={() => comparing && link(comparing)}
+					onback={closeComparison}
+				/>
 			{:else}
 				<div class="flex flex-col gap-2">
 					<h2 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -367,12 +420,13 @@
 										<span class="text-xs text-muted-foreground">{candidate.year ?? '—'}</span>
 									</div>
 									<Button
+										variant="outline"
 										size="sm"
 										class="shrink-0"
 										disabled={linking !== null}
-										onclick={() => link(candidate)}
+										onclick={() => compare(candidate)}
 									>
-										Link
+										Compare
 									</Button>
 								</li>
 							{/each}

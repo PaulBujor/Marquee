@@ -4,7 +4,15 @@
  *
  * Flat rather than under `src/lib/media/`, which would collide with the existing `src/lib/media.ts`.
  */
-import { CREDIT_ROLES, type CreditRole, type MediaCredit } from '$lib/sync/events';
+import {
+	CREDIT_ROLES,
+	personExternalId,
+	personId,
+	type CreditRole,
+	type MediaCredit
+} from '$lib/sync/events';
+// Type-only import of the API contract shape — erased at build, so no server code reaches the client.
+import type { MediaDetail } from '$lib/server/tmdb';
 
 const ROLE_LABELS: Record<CreditRole, { one: string; many: string }> = {
 	cast: { one: 'Cast', many: 'Cast' },
@@ -56,4 +64,68 @@ export function foldName(name: string): string {
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, ' ')
 		.trim();
+}
+
+/** The credit shape a provider detail response carries, before anything of ours is stored. */
+type DetailCredits = Pick<MediaDetail, 'cast' | 'director' | 'writers' | 'producers' | 'creators'>;
+
+/**
+ * Wire credits from a provider detail response, without going near the store. The comparison view
+ * needs a candidate's cast and crew before anything is tracked — there is no stored row to read,
+ * and hydrating one just to look at it would write a title the user may well reject.
+ *
+ * Ids are derived the same way the server derives them, so the two sides agree on who a person is
+ * even though nothing has been written yet.
+ */
+export function creditsFromDetail(detail: DetailCredits): MediaCredit[] {
+	const out: MediaCredit[] = [];
+	const add = (
+		tmdbId: number,
+		name: string,
+		role: CreditRole,
+		sortOrder: number,
+		character: string | null,
+		profilePath: string | null
+	) => {
+		if (!name) return;
+		out.push({
+			personId: personId('tmdb', tmdbId),
+			externalId: personExternalId(tmdbId),
+			name,
+			profilePath,
+			role,
+			character,
+			sortOrder
+		});
+	};
+
+	detail.cast.forEach((c, i) => add(c.id, c.name, 'cast', i, c.character || null, c.profilePath));
+	if (detail.director) add(detail.director.id, detail.director.name, 'director', 0, null, null);
+	detail.writers.forEach((c, i) => add(c.id, c.name, 'writer', i, null, null));
+	detail.producers.forEach((c, i) => add(c.id, c.name, 'producer', i, null, null));
+	detail.creators.forEach((c, i) => add(c.id, c.name, 'creator', i, null, null));
+	return out;
+}
+
+/** How much of one credit list turns up in another. */
+export interface CreditOverlap {
+	/** Folded names present on both sides — what the comparison highlights. */
+	shared: Set<string>;
+	/** Distinct people on the left. */
+	total: number;
+	/** How many of them the right side also credits. */
+	matched: number;
+}
+
+/**
+ * Compare two credit lists by name, ignoring role: a person the user filed as "director" and the
+ * provider files as "writer" is still the same person turning up in both, which is exactly the
+ * signal the user is looking for. Matching nothing is not evidence against a match — a sparse
+ * custom entry matches nothing by construction — so this reports counts and lets the user decide.
+ */
+export function compareCredits(mine: MediaCredit[], theirs: MediaCredit[]): CreditOverlap {
+	const mineFolded = new Set(mine.map((c) => foldName(c.name)).filter((n) => n !== ''));
+	const theirsFolded = new Set(theirs.map((c) => foldName(c.name)).filter((n) => n !== ''));
+	const shared = new Set([...mineFolded].filter((n) => theirsFolded.has(n)));
+	return { shared, total: mineFolded.size, matched: shared.size };
 }

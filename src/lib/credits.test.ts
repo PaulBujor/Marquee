@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { creditRoleLabel, foldName, groupCredits } from './credits';
-import type { MediaCredit } from '$lib/sync/events';
+import {
+	compareCredits,
+	creditRoleLabel,
+	creditsFromDetail,
+	foldName,
+	groupCredits
+} from './credits';
+import { personExternalId, personId, type MediaCredit } from '$lib/sync/events';
 
 function credit(over: Partial<MediaCredit> & Pick<MediaCredit, 'name' | 'role'>): MediaCredit {
 	return {
@@ -43,6 +49,92 @@ describe('groupCredits', () => {
 		expect(groupCredits([credit({ name: 'Solo', role: 'writer' })]).map((g) => g.role)).toEqual([
 			'writer'
 		]);
+	});
+});
+
+describe('creditsFromDetail', () => {
+	const detail = {
+		cast: [
+			{ id: 6193, name: 'Leonardo DiCaprio', character: 'Cobb', profilePath: '/leo.jpg' },
+			{ id: 24045, name: 'Joseph Gordon-Levitt', character: '', profilePath: null }
+		],
+		director: { id: 525, name: 'Christopher Nolan' },
+		writers: [{ id: 525, name: 'Christopher Nolan' }],
+		producers: [{ id: 947, name: 'Emma Thomas' }],
+		creators: []
+	};
+
+	it('derives the same person ids the server does, so both sides agree on who someone is', () => {
+		const credits = creditsFromDetail(detail);
+		const nolan = credits.filter((c) => c.name === 'Christopher Nolan');
+		expect(nolan.map((c) => c.role)).toEqual(['director', 'writer']);
+		expect(nolan[0].personId).toBe(personId('tmdb', 525));
+		expect(nolan[0].externalId).toBe(personExternalId(525));
+	});
+
+	it('numbers billing within each role and normalizes a blank character to null', () => {
+		const credits = creditsFromDetail(detail);
+		const cast = credits.filter((c) => c.role === 'cast');
+		expect(cast.map((c) => c.sortOrder)).toEqual([0, 1]);
+		expect(cast[0].character).toBe('Cobb');
+		expect(cast[1].character).toBeNull();
+	});
+
+	it('skips an unnamed person rather than producing a blank credit', () => {
+		const credits = creditsFromDetail({
+			...detail,
+			cast: [{ id: 9, name: '', character: 'Extra', profilePath: null }]
+		});
+		expect(credits.some((c) => c.role === 'cast')).toBe(false);
+	});
+});
+
+describe('compareCredits', () => {
+	it('counts the people on both sides regardless of the role each filed them under', () => {
+		// The user filed them as director, the provider as writer — still the same person turning up
+		// twice, which is the signal the comparison is for.
+		const overlap = compareCredits(
+			[credit({ name: 'Ana Petrescu', role: 'director' })],
+			[credit({ name: 'Ana Petrescu', role: 'writer' })]
+		);
+		expect(overlap).toMatchObject({ total: 1, matched: 1 });
+		expect(overlap.shared.has('ana petrescu')).toBe(true);
+	});
+
+	it('matches across spelling differences the fold ignores', () => {
+		const overlap = compareCredits(
+			[credit({ name: 'Léa Seydoux', role: 'cast' })],
+			[credit({ name: 'Lea Seydoux', role: 'cast' })]
+		);
+		expect(overlap.matched).toBe(1);
+	});
+
+	it('counts distinct people, not credits', () => {
+		// Someone credited in two roles is one person to cross-check, not two.
+		const overlap = compareCredits(
+			[
+				credit({ name: 'Ana Petrescu', role: 'director' }),
+				credit({ name: 'Ana Petrescu', role: 'writer' })
+			],
+			[credit({ name: 'Ana Petrescu', role: 'director' })]
+		);
+		expect(overlap).toMatchObject({ total: 1, matched: 1 });
+	});
+
+	it('reports no overlap without claiming the titles differ', () => {
+		const overlap = compareCredits(
+			[credit({ name: 'Ana Petrescu', role: 'director' })],
+			[credit({ name: 'Christopher Nolan', role: 'director' })]
+		);
+		expect(overlap).toMatchObject({ total: 1, matched: 0 });
+		expect(overlap.shared.size).toBe(0);
+	});
+
+	it('handles an entry that credits nobody', () => {
+		expect(compareCredits([], [credit({ name: 'Anyone', role: 'cast' })])).toMatchObject({
+			total: 0,
+			matched: 0
+		});
 	});
 });
 
