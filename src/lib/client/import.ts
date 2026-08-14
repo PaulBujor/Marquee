@@ -7,7 +7,13 @@
  *
  * Client-safe (browser only).
  */
-import { applyEventsToIdb, enqueueEvents, getDeviceId, putMediaBatch } from '$lib/client/idb';
+import {
+	applyEventsToIdb,
+	enqueueEvents,
+	getDeviceId,
+	putCustomMedia,
+	putMediaBatch
+} from '$lib/client/idb';
 import { reportClientError } from '$lib/client/report-error';
 import { sync } from '$lib/client/sync/engine.svelte';
 import { parseExport, type ParseFailure } from '$lib/portability/parse';
@@ -69,7 +75,13 @@ export async function applyImport(plan: ImportPlan): Promise<void> {
 	try {
 		// Media first, so the channel can start hydrating the real rows while events sync. Batched
 		// for the same reason the events below are: one transaction, not one per record.
-		await putMediaBatch(plan.media);
+		await putMediaBatch(plan.media.filter((m) => m.source !== 'custom'));
+
+		// User-authored entries go through the authoring write instead: nothing will hydrate them, so
+		// each one has to be queued for backup or the restore would live on this device only.
+		for (const record of plan.media.filter((m) => m.source === 'custom')) {
+			await putCustomMedia(record);
+		}
 
 		await enqueueEvents(plan.events);
 		// One transaction for the whole batch — a library's worth of events applied one at a time

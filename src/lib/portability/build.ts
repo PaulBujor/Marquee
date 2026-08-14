@@ -8,6 +8,7 @@ import {
 	EXPORT_FORMAT,
 	EXPORT_SCHEMA_VERSION,
 	type ExportedEpisode,
+	type ExportedSeason,
 	type ExportedTitle,
 	type MarqueeExport
 } from './schema';
@@ -18,6 +19,12 @@ export interface ExportInput {
 	media: ClientMedia[];
 	/** Every watch row, watched or not — this filters them. */
 	watches: ClientEpisodeWatch[];
+	/**
+	 * Season rows for custom shows, keyed by media id. Provider-backed titles don't need them —
+	 * their seasons are re-fetched — but a user-authored show has no other source, so without these
+	 * an import would restore its watch history against episodes that no longer exist.
+	 */
+	customSeasons?: Map<string, ExportedSeason[]>;
 	exportedAt: Date;
 }
 
@@ -76,6 +83,7 @@ export function buildExport(input: ExportInput): MarqueeExport {
 
 	const titles = input.tracking.map((t): ExportedTitle => {
 		const m = mediaById.get(t.mediaId);
+		const isCustom = m?.source === 'custom';
 		const addedAt = isoClock(t.addedAt, input.exportedAt);
 		// A row that only ever saw a favorite/rating event keeps the initial 0 clock, which would
 		// export as 1970. Nothing changes status before it was added, so the add is the floor.
@@ -87,6 +95,11 @@ export function buildExport(input: ExportInput): MarqueeExport {
 			type: m?.type ?? null,
 			title: m?.title ?? null,
 			year: m?.year ?? null,
+			source: m?.source ?? null,
+			// Only for a user-authored entry: a provider's text is re-fetched, but this is the user's
+			// own writing and exists nowhere else.
+			overview: isCustom ? (m?.overview ?? '') : null,
+			seasons: isCustom && m?.type === 'show' ? (input.customSeasons?.get(t.mediaId) ?? []) : null,
 			status: t.status,
 			favorite: t.favorite,
 			rating: t.rating,

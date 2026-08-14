@@ -5,16 +5,29 @@
  *
  * Client-safe (no server imports).
  */
-import type { MediaProvider, TrackingStatus } from '$lib/sync/events';
+import type { MediaProvider, MediaSource, TrackingStatus } from '$lib/sync/events';
 
 /** Discriminator written into every file, so a foreign JSON can be rejected before parsing it. */
 export const EXPORT_FORMAT = 'marquee-export';
 
-/** Bumped when the document shape changes. Import refuses versions it doesn't understand. */
-export const EXPORT_SCHEMA_VERSION = 1;
+/**
+ * Bumped when the document shape changes. Import refuses versions it doesn't understand.
+ *
+ * v2 adds `source`, `overview` and `seasons`, which together let a user-authored entry survive a
+ * round trip. Before that, an export carried a custom title's tracking history but nothing that
+ * could rebuild the title itself, so importing left a nameless row. v1 files still import: the
+ * added fields are optional, and a v1 entry simply has no custom media to restore.
+ */
+export const EXPORT_SCHEMA_VERSION = 2;
 
 /** Filename stem for a downloaded export; the date and extension are appended. */
 export const EXPORT_FILENAME_PREFIX = 'marquee-export';
+
+/** A season of a user-authored show — enough to rebuild its episode list on import. */
+export interface ExportedSeason {
+	seasonNumber: number;
+	episodeCount: number;
+}
 
 /** A single episode a user has watched. Season 0 is TMDB's Specials. */
 export interface ExportedEpisode {
@@ -45,6 +58,15 @@ export interface ExportedTitle {
 	type: 'movie' | 'show' | null;
 	title: string | null;
 	year: number | null;
+	/**
+	 * Whether the entry is provider-backed or the user's own. Absent in v1 files, where every entry
+	 * that could be restored was provider-backed.
+	 */
+	source?: MediaSource | null;
+	/** The user's own description. Only carried for custom entries — provider text is re-fetched. */
+	overview?: string | null;
+	/** A custom show's seasons; absent for movies and for provider-backed titles. */
+	seasons?: ExportedSeason[] | null;
 	status: TrackingStatus;
 	favorite: boolean;
 	/** User rating 1–5; null = unrated. */
