@@ -1,8 +1,9 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { putMedia, recordEvent, setActiveUser } from '$lib/client/idb';
+import { putCustomMedia, putMedia, recordEvent, setActiveUser } from '$lib/client/idb';
 import { tmdbMediaId, type MediaRecord } from '$lib/sync/events';
 import { LibraryState } from './library.svelte';
+import { showProgress } from './library';
 
 setActiveUser('test-user'); // the store is namespaced per user; scope it before opening
 
@@ -94,5 +95,69 @@ describe('LibraryState.load — the reported bug, through the real IndexedDB cal
 		await library.load();
 		const after = library.items.find((i) => i.mediaId === MID);
 		expect(after?.status).toBe('completed'); // resolved on the next read alone
+	});
+});
+
+describe('LibraryState.load — a custom entry', () => {
+	const CUSTOM_ID = '88888888-8888-4888-8888-888888888888';
+
+	it('carries its source through, and its synthesized episodes drive progress like any show', async () => {
+		// Built the way `createCustomMedia` builds one: a past air date on every episode, and
+		// `inProduction: false`. Both matter here — a null air date would make the episodes invisible
+		// to `showProgress`, and a true/unknown production status would keep it out of `completed`.
+		await putCustomMedia({
+			id: CUSTOM_ID,
+			provider: 'local',
+			externalId: null,
+			source: 'custom',
+			type: 'show',
+			title: 'Midnight Cassette Club',
+			year: 1986,
+			posterPath: null,
+			backdropPath: null,
+			overview: '',
+			genres: [],
+			releaseDate: null,
+			status: null,
+			inProduction: false,
+			firstAirDate: null,
+			lastAirDate: null,
+			version: 0,
+			seasons: [
+				{
+					seasonNumber: 1,
+					name: 'Season 1',
+					overview: '',
+					airDate: '1986-01-01',
+					posterPath: null,
+					episodeCount: 2
+				}
+			],
+			episodes: [1, 2].map((episode) => ({
+				season: 1,
+				episode,
+				name: '',
+				overview: '',
+				airDate: '1986-01-01',
+				runtime: null,
+				stillPath: null
+			}))
+		});
+		await recordEvent('tracking.added', CUSTOM_ID, { status: 'watching' });
+
+		const library = new LibraryState();
+		await library.load();
+		const item = library.items.find((i) => i.mediaId === CUSTOM_ID);
+
+		// `source` is what tells every list this is a custom entry: `externalId === null` alone can't,
+		// since an unsynced provider-backed title looks the same.
+		expect(item?.source).toBe('custom');
+		expect(item?.externalId).toBeNull();
+		expect(showProgress(item!)).toMatchObject({ watched: 0, total: 2 });
+
+		await recordEvent('episode.watched', CUSTOM_ID, { season: 1, episode: 1 });
+		await recordEvent('episode.watched', CUSTOM_ID, { season: 1, episode: 2 });
+		await library.load();
+		expect(library.items.find((i) => i.mediaId === CUSTOM_ID)?.status).toBe('completed');
 	});
 });

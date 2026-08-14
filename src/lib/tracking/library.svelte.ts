@@ -52,6 +52,7 @@ export class LibraryState {
 			items.push({
 				mediaId: t.mediaId,
 				externalId: m?.externalId ?? null,
+				source: m?.source ?? null,
 				status: deriveStatus({
 					type: m?.type ?? 'movie',
 					projectedStatus: t.status,
