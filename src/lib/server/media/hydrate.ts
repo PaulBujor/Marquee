@@ -1,11 +1,21 @@
 /**
- * Server-side media hydration. Client sends `(provider, externalId)`; the server derives our media
- * id and fetches metadata from TMDB. `refreshMedia` is TTL-aware: on a miss it fully hydrates;
- * on a hit it re-pulls only stale rows (airing shows past a TTL; movies + finished shows never),
- * diffs child rows and bumps `version` only when content changed.
+ * Server-side media hydration for the media channel + the nightly refresh cron. The client sends
+ * only identity `(provider, externalId)`; the server derives our media id and fetches metadata from
+ * TMDB, so the shared catalog only ever holds authoritative data — a client can't inject a
+ * title/poster for a shared `linked` row.
+ *
+ * `refreshMedia` is refresh-aware: on a miss it fully hydrates (details + every season's episodes);
+ * on a hit it re-pulls only when the row is stale (airing shows past a TTL; movies + finished shows
+ * never), diffs the `seasons`/`episodes` child rows against what's stored and writes only what
+ * actually changed, and bumps `version` only when content actually changed.
+ *
+ * The child-row reconcilers (`syncSeasons` / `syncEpisodes`) and the content signatures are
+ * exported because they aren't TMDB-specific: storing a user-authored show needs exactly the same
+ * diff-and-write against `seasons`/`episodes` (see `./custom`).
  */
 import { and, eq, or, sql } from 'drizzle-orm';
 import {
+	credits,
 	episodes,
 	media,
 	seasons,
@@ -13,6 +23,7 @@ import {
 	type Media,
 	type SeasonRow
 } from '$lib/server/db/schema';
+import { creditRowsFromDetail, creditSignature, syncCredits } from './credits';
 import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '$lib/server/db/chunk';
 import { hasDescription } from '$lib/media';
 import { mediaId, type MediaProvider } from '$lib/sync/events';
@@ -45,8 +56,10 @@ export function parseTmdbExternalId(externalId: string): ParsedTmdbExternalId | 
 }
 
 /**
- * Whether a movie hasn't released yet. Missing date treated as end of current year — a concrete
- * horizon to refresh toward.
+ * Whether a movie hasn't released yet, so it should keep refreshing (release date + metadata can
+ * still change). TMDB gives a full date or nothing; a missing/uncertain date is treated as end of
+ * the current year — a concrete horizon to refresh toward. A movie whose date is in the
+ * past has released and never refreshes again.
  */
 function movieUnreleased(releaseDate: string | null, now: number): boolean {
 	const today = new Date(now).toISOString().slice(0, 10);
@@ -55,9 +68,10 @@ function movieUnreleased(releaseDate: string | null, now: number): boolean {
 }
 
 /**
- * Whether a stored row should be re-pulled. `refreshed_at: 0` (pre-relational backfill) always
- * refreshes. Past TTL: airing shows and unreleased movies refresh; finished shows and released
- * movies don't.
+ * Whether a stored row should be re-pulled from TMDB. A `refreshed_at` of 0 marks a row that
+ * predates the relational model (migration backfill) — always refresh it once to populate
+ * seasons/episodes. Otherwise, past the TTL: airing shows refresh, and **unreleased movies** refresh
+ * released movies and finished shows never change, so they don't.
  */
 export function needsRefresh(row: Media, now: number): boolean {
 	if (row.refreshedAt === 0) return true;
@@ -143,7 +157,8 @@ function toRows(
 		externalId,
 		type: detail.type,
 		title: detail.title,
-		// Fold with JS `toLowerCase()` for full Unicode (SQLite `LIKE` is ASCII-only).
+		// Fold with JS `toLowerCase()` so the degraded search matches the offline client's folding
+		// (full Unicode), not SQLite's ASCII-only `LIKE`.
 		titleNormalized: detail.title.toLowerCase(),
 		year: detail.year,
 		posterPath: detail.posterPath,
@@ -156,7 +171,7 @@ function toRows(
 		firstAirDate: detail.firstAirDate,
 		lastAirDate: detail.lastAirDate
 	};
-	// Season endpoint's overview is the real synopsis; show-detail's is often blank.
+	// The show-detail summary's overview is often blank; the season endpoint's is the real synopsis.
 	const seasonOverviewByNumber = new Map(seasonDetails.map((sd) => [sd.seasonNumber, sd.overview]));
 	const seasonRows = detail.seasons.map((s) => {
 		const detailOverview = seasonOverviewByNumber.get(s.seasonNumber) ?? '';
@@ -185,7 +200,11 @@ function toRows(
 	return { scalars, seasonRows, episodeRows };
 }
 
-/** Reconcile seasons: upsert new/changed rows, delete disappeared ones, leave unchanged rows alone. */
+/**
+ * Reconcile a show's stored seasons against freshly-fetched ones: upsert rows that are new or whose
+ * content differs, delete rows that disappeared (or were renumbered away from), and leave every
+ * unchanged row untouched — a genuinely unchanged season set issues zero queries.
+ */
 export async function syncSeasons(
 	db: Db,
 	id: string,
@@ -283,8 +302,10 @@ export async function syncEpisodes(
 }
 
 /**
- * Ensure a media row exists for `(provider, externalId)` and return it. Cached + TTL-aware;
- * **throws** on TMDB failure so callers can distinguish real errors from no-ops.
+ * Ensure a fresh media row (+ its seasons/episodes) exists for `(provider, externalId)` and return
+ * it. Cached + TTL-aware: an up-to-date row is returned without touching TMDB. Returns null for an
+ * unknown provider or a malformed id; **throws** if TMDB fails, so a caller can tell a real refresh
+ * from a no-op and retry. `force` re-pulls even within the TTL; `now` is injectable for tests.
  */
 export async function refreshMedia(
 	db: Db,
@@ -313,7 +334,8 @@ export async function refreshMedia(
 		throw err;
 	});
 
-	// Fetch every season's episodes for air dates. Rethrow on failure so the row stays stale.
+	// Fetch every season's episodes (incl. Specials) for their air dates. Don't swallow a failure —
+	// otherwise the show persists with zero episodes; rethrow so the row stays stale and retries.
 	const seasonDetails: SeasonDetail[] =
 		detail.type === 'show'
 			? await Promise.all(
@@ -345,6 +367,9 @@ export async function refreshMedia(
 		);
 	}
 
+	// Cast/crew arrive on the same detail response — no extra request needed.
+	const { personRows, creditRows } = creditRowsFromDetail(id, detail);
+
 	if (!existing) {
 		await db
 			.insert(media)
@@ -354,6 +379,7 @@ export async function refreshMedia(
 			await syncSeasons(db, id, [], seasonRows);
 			await syncEpisodes(db, id, [], episodeRows);
 		}
+		await syncCredits(db, id, personRows, creditRows);
 	} else {
 		const oldSeasons: SeasonRow[] =
 			detail.type === 'show' ? await db.select().from(seasons).where(eq(seasons.mediaId, id)) : [];
@@ -361,6 +387,7 @@ export async function refreshMedia(
 			detail.type === 'show'
 				? await db.select().from(episodes).where(eq(episodes.mediaId, id))
 				: [];
+		const oldCredits = await db.select().from(credits).where(eq(credits.mediaId, id));
 		const changed =
 			existing.title !== scalars.title ||
 			existing.status !== scalars.status ||
@@ -368,13 +395,19 @@ export async function refreshMedia(
 			existing.lastAirDate !== scalars.lastAirDate ||
 			existing.releaseDate !== scalars.releaseDate ||
 			seasonSignature(oldSeasons) !== seasonSignature(seasonRows) ||
-			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows);
-		// Children first: if that throws, the row keeps its old `refreshedAt` and retries next cycle.
+			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows) ||
+			creditSignature(oldCredits) !== creditSignature(creditRows);
+		// Write the children first: if that throws, the media row keeps its old `refreshedAt`, so the
+		// next sync retries — rather than being stamped fresh-but-empty and never refreshing again.
 		if (detail.type === 'show') {
 			await syncSeasons(db, id, oldSeasons, seasonRows);
 			await syncEpisodes(db, id, oldEpisodes, episodeRows);
 		}
-		// CAS on refreshedAt: first writer moves the clock; the loser's WHERE matches no row.
+		await syncCredits(db, id, personRows, creditRows);
+		// Compare-and-set on refreshedAt: two concurrent consumers can read the same snapshot, and the
+		// loser's write would overwrite the winner's version bump — clients never re-download the changed
+		// content. Whoever writes first moves refreshedAt, so the loser's WHERE matches no row and is
+		// a no-op. The message retries or the next sweep picks it up.
 		await db
 			.update(media)
 			.set({

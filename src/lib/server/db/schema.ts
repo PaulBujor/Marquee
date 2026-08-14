@@ -10,6 +10,7 @@ import {
 // Relative (not `$lib`) so drizzle-kit's esbuild bundler resolves it outside Vite.
 import {
 	MEDIA_PROVIDERS,
+	CREDIT_ROLES,
 	MEDIA_SOURCES,
 	SYNC_EVENT_TYPES,
 	TRACKING_STATUSES,
@@ -335,6 +336,52 @@ export const episodes = sqliteTable(
 );
 
 /**
+ * A person who can be credited on a title. Provider-backed persons have a derived id; user-authored
+ * ones are scoped by `ownerUserId`, same as `media`.
+ */
+export const people = sqliteTable(
+	'people',
+	{
+		id: text('id').primaryKey(),
+		provider: text('provider', { enum: MEDIA_PROVIDERS }).notNull().default('tmdb'),
+		// e.g. `person/287`; null for a user-authored person.
+		externalId: text('external_id'),
+		ownerUserId: text('owner_user_id').references(() => users.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		profilePath: text('profile_path')
+	},
+	// Same NULL-distinctness reliance as `media`: many owned rows can share a null external id.
+	(table) => [
+		uniqueIndex('people_provider_external_idx').on(table.provider, table.externalId),
+		index('people_owner_idx').on(table.ownerUserId)
+	]
+);
+
+/**
+ * A person's credit on a title. PK is `(media_id, person_id, role)`. Cascades from both sides.
+ */
+export const credits = sqliteTable(
+	'credits',
+	{
+		mediaId: text('media_id')
+			.notNull()
+			.references(() => media.id, { onDelete: 'cascade' }),
+		personId: text('person_id')
+			.notNull()
+			.references(() => people.id, { onDelete: 'cascade' }),
+		role: text('role', { enum: CREDIT_ROLES }).notNull(),
+		// Who they played; cast only.
+		character: text('character'),
+		// Billing order within the role, so a rebuilt list keeps the provider's ranking.
+		sortOrder: integer('sort_order').notNull().default(0)
+	},
+	(table) => [
+		primaryKey({ columns: [table.mediaId, table.personId, table.role] }),
+		index('credits_person_idx').on(table.personId)
+	]
+);
+
+/**
  * A user's tracking row for a title. `mediaId` intentionally has **no FK** to
  * `media`: a `tracking.status_changed` can arrive from another device before this
  * server has seen the corresponding `tracking.added`, so decoupling avoids FK
@@ -395,6 +442,8 @@ export type Event = typeof events.$inferSelect;
 export type SyncState = typeof syncState.$inferSelect;
 export type Media = typeof media.$inferSelect;
 export type SeasonRow = typeof seasons.$inferSelect;
+export type Person = typeof people.$inferSelect;
+export type CreditRow = typeof credits.$inferSelect;
 export type EpisodeRow = typeof episodes.$inferSelect;
 export type Tracking = typeof tracking.$inferSelect;
 export type EpisodeWatch = typeof episodeWatches.$inferSelect;
