@@ -191,16 +191,18 @@ export async function searchLocalMedia(query: string, limit = 20): Promise<Searc
 }
 
 /**
- * The user's own authored entries matching a title substring. Separate from
- * {@link searchLocalMedia}, which backs the *offline* fallback for provider-backed titles: these
- * are searchable in every network mode, because nothing upstream has ever heard of them, so this
- * is the only way to reach one.
+ * User-authored entries matching a title substring. Linked entries are excluded — the database
+ * title they now represent is the one to find.
  */
 export async function searchCustomMedia(query: string, limit = 20): Promise<ClientMedia[]> {
 	const q = query.trim().toLowerCase();
 	if (!q) return [];
+	const db = await openDb();
+	const linked = new Set(
+		(await db.getAll('mediaLinks')).filter((l) => l.targetId !== null).map((l) => l.mediaId)
+	);
 	return (await getAllMedia())
-		.filter((m) => m.source === 'custom' && m.title.toLowerCase().includes(q))
+		.filter((m) => m.source === 'custom' && !linked.has(m.id) && m.title.toLowerCase().includes(q))
 		.sort((a, b) => a.title.localeCompare(b.title))
 		.slice(0, limit);
 }
