@@ -14,7 +14,7 @@ Branding only — the destinations live in the bottom tab bar. -->
 	rather than as a band. `px-5` is the app-wide column inset, so it sets the value; the page's own
 	`<main>` adds no top padding of its own. -->
 	<div
-		class="relative mx-auto flex w-full max-w-3xl items-center justify-between px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
+		class="relative z-10 mx-auto flex w-full max-w-3xl transform-gpu items-center justify-between px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
 	>
 		<a href={resolve('/')} class="flex items-center gap-2">
 			<!-- Two marks rather than one `src` picked in JS: the theme rune's `isDark` is derived from a

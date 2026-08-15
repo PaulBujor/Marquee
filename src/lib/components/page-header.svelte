@@ -12,7 +12,7 @@
 <header class="sticky top-0 z-40">
 	<HeaderScrim />
 	<div
-		class="relative mx-auto flex w-full max-w-2xl flex-col gap-3 px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3"
+		class="relative z-10 mx-auto flex w-full max-w-2xl transform-gpu flex-col gap-3 px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3"
 	>
 		{@render children()}
 	</div>

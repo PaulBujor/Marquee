@@ -382,7 +382,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 	<HeaderScrim strong show={!titleInView} />
 	<!-- Inset equally on all three sides that frame the control, matching the app header. -->
 	<div
-		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
+		class="relative z-10 mx-auto flex w-full max-w-2xl transform-gpu items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
 	>
 		<!-- Ghost: no plate, so it sits as lightly as possible on the hero artwork. `icon-lg` is 44px —
 		a full touch target even though nothing is drawn around it. -->

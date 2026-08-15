@@ -10,6 +10,17 @@
 	// (down to 0 when hidden) rather than the container's opacity — an ancestor opacity fade doesn't
 	// interpolate backdrop-filter, so the blur would pop in while only the tint faded. Absolutely
 	// fills its (positioned) parent header; edit here, once.
+	//
+	// Two rules keep the header's own content out of the blur, and both are needed in WebKit.
+	//
+	// `z-0` here (with `z-10` on the content in each header that uses this) states the paint order
+	// rather than leaving it to tree order. That alone is not enough: every layer below sets
+	// `backdrop-filter`, and WebKit samples its backdrop from the enclosing *composited* layer — a
+	// `sticky`/`fixed` header is composited — so the header's own text ends up inside the sampled
+	// backdrop no matter where it paints, and comes out blurred and washed out. The headers therefore
+	// also promote their content to its own layer (`transform-gpu`), which takes it out of the
+	// backdrop entirely. Neither rule is decorative; dropping either brings the blurred wordmark back
+	// on iOS.
 	let { strong = false, show = true }: { strong?: boolean; show?: boolean } = $props();
 
 	// Each layer: blur radius (px) plus the mask stops where it holds full then fades to transparent
@@ -29,7 +40,7 @@
 	}
 </script>
 
-<div class="pointer-events-none absolute inset-0">
+<div class="pointer-events-none absolute inset-0 z-0">
 	{#each layers as layer (layer.blur)}
 		{@const radius = show ? layer.blur : 0}
 		<div
