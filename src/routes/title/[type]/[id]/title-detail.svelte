@@ -14,6 +14,7 @@
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import MediaImage from '$lib/components/media/media-image.svelte';
 	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
+	import LinkedEntryNotice from '$lib/components/media/linked-entry-notice.svelte';
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -496,6 +497,10 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				{/if}
 				<TrackingControls {tracking} type={detail.type} />
 			{/if}
+			<!-- Only renders when one of the user's own entries was matched to this title. That entry has
+			no route of its own once linked — it's off every list and out of search — so this is the one
+			place the association stays visible and reversible. -->
+			<LinkedEntryNotice {mediaId} />
 		</div>
 
 		<!-- Collapsible details: overview, cast, trailer -->

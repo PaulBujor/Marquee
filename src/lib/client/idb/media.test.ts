@@ -270,6 +270,25 @@ describe('searchCustomMedia', () => {
 		expect(await searchCustomMedia('cassette')).toEqual([]);
 	});
 
+	it('brings the entry back once the match is taken back', async () => {
+		// The round trip the unlink control exists for: nothing about linking was destructive, so
+		// undoing it has to restore the only route back to the entry.
+		const link = createEvent(
+			'media.linked',
+			CUSTOM_ID,
+			{ targetId: tmdbMediaId('movie', 603), provider: 'tmdb', externalId: 'movie/603' },
+			DEVICE
+		);
+		await applyEventToIdb(link);
+		expect(await searchCustomMedia('cassette')).toEqual([]);
+
+		await applyEventToIdb({
+			...createEvent('media.unlinked', CUSTOM_ID, {}, DEVICE),
+			clientCreatedAt: link.clientCreatedAt + 1
+		});
+		expect((await searchCustomMedia('cassette')).map((m) => m.id)).toEqual([CUSTOM_ID]);
+	});
+
 	it('keeps an entry whose suggestions were merely dismissed', async () => {
 		// Declining a match says "not this one", not "this is that" — the entry is still the only way
 		// to reach the title.

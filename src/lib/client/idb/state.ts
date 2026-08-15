@@ -163,6 +163,15 @@ async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<v
 			});
 			break;
 		}
+		case 'media.unlinked': {
+		/** Only the link field moves — unlinked doesn't affect the declined/suggestion clock. */
+			await upsertMediaLink(tx, entityId, clock, 'linkedUpdatedAt', (l) => {
+				l.targetId = null;
+				l.provider = null;
+				l.externalId = null;
+			});
+			break;
+		}
 		case 'media.match_declined': {
 			await upsertMediaLink(tx, entityId, clock, 'declinedUpdatedAt', (l) => {
 				l.declined = true;
@@ -212,6 +221,12 @@ export async function getTrackingByMediaId(mediaId: string): Promise<ClientTrack
 export async function getMediaLink(mediaId: string): Promise<ClientMediaLink | undefined> {
 	const db = await openDb();
 	return db.get('mediaLinks', mediaId);
+}
+
+/** Entries matched *to* `targetId` — reverse lookup of getMediaLink. Small store; scan is fine. */
+export async function getMediaLinksTo(targetId: string): Promise<ClientMediaLink[]> {
+	const db = await openDb();
+	return (await db.getAll('mediaLinks')).filter((l) => l.targetId === targetId);
 }
 
 /** Watched-episode rows for a show. */

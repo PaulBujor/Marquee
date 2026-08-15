@@ -162,6 +162,7 @@ export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 			];
 		}
 		case 'media.linked':
+		case 'media.unlinked':
 		case 'media.match_declined': {
 			// Resolved on the client — no server read path consults them, so nothing to materialize.
 			return [];

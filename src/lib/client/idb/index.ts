@@ -27,6 +27,7 @@ export {
 	getTracking,
 	getTrackingByMediaId,
 	getMediaLink,
+	getMediaLinksTo,
 	getEpisodeWatches,
 	getAllEpisodeWatches
 } from './state';
