@@ -338,6 +338,71 @@ describe('filterUpcoming', () => {
 		]);
 	});
 
+	it('places an undated future movie at the end of the year it is announced for', () => {
+		const items = [
+			item({
+				mediaId: 'dated',
+				type: 'movie',
+				status: 'want_to_watch',
+				title: 'Dated',
+				releaseDate: '2027-03-04',
+				year: 2027
+			}),
+			item({
+				mediaId: 'undated',
+				type: 'movie',
+				status: 'want_to_watch',
+				title: 'Undated',
+				releaseDate: null,
+				year: 2027
+			})
+		];
+		// The undated one sorts after everything actually dated in its year — an unconfirmed date can
+		// only be later than one already known — and says so rather than claiming New Year's Eve.
+		expect(filterUpcoming(items, today).map((e) => [e.date, e.title, e.dateExact])).toEqual([
+			['2027-03-04', 'Dated', true],
+			['2027-12-31', 'Undated', false]
+		]);
+	});
+
+	it('keeps an undated movie out once its year has passed', () => {
+		const items = [
+			item({
+				mediaId: 'lapsed',
+				type: 'movie',
+				status: 'want_to_watch',
+				releaseDate: null,
+				year: 2025 // already over as of `today`
+			})
+		];
+		expect(filterUpcoming(items, today)).toEqual([]);
+	});
+
+	it('excludes a movie with no year at all — nothing places it on a timeline', () => {
+		const items = [
+			item({
+				mediaId: 'unknown',
+				type: 'movie',
+				status: 'want_to_watch',
+				releaseDate: null,
+				year: null
+			})
+		];
+		expect(filterUpcoming(items, today)).toEqual([]);
+	});
+
+	it('marks real dates exact, including episode air dates', () => {
+		const items = [
+			item({
+				mediaId: 'show',
+				type: 'show',
+				status: 'watching',
+				episodes: [{ season: 1, episode: 1, airDate: '2026-09-01' }]
+			})
+		];
+		expect(filterUpcoming(items, today)[0].dateExact).toBe(true);
+	});
+
 	it('excludes non-watching shows and non-want-to-watch movies', () => {
 		const items = [
 			item({
@@ -360,6 +425,7 @@ describe('filterUpcoming', () => {
 describe('groupUpcomingByYear', () => {
 	const entry = (date: string, title: string): UpcomingEntry => ({
 		date,
+		dateExact: true,
 		mediaId: `${title}-${date}`,
 		externalId: null,
 		source: 'linked',

@@ -83,6 +83,12 @@ export function showProgress(item: LibraryItem, today: string = todayIso()): Sho
 export interface UpcomingEntry {
 	/** `YYYY-MM-DD` air/release date, strictly in the future. */
 	date: string;
+	/**
+	 * False when the date is our own stand-in rather than a real one: a movie announced for a year
+	 * with no day attached sits at Dec 31 of that year. The timeline says so rather than printing a
+	 * date nobody confirmed.
+	 */
+	dateExact: boolean;
 	mediaId: string;
 	externalId: string | null;
 	source: MediaSource | null;
@@ -100,6 +106,12 @@ export interface UpcomingEntry {
  * release dates of **want-to-watch** movies, sorted ascending by date. Excludes Specials (season 0)
  * and anything already aired/released (date must be strictly after `today`). Other statuses
  * (completed / did-not-finish, and want-to-watch shows) don't contribute.
+ *
+ * A movie announced for a future year but not yet dated to the day still belongs here — it's the
+ * case a watchlist most wants to surface. It takes the **end of its year** (the same stand-in
+ * {@link releaseDateKey} uses for sorting, since an unconfirmed date can only be later than any
+ * date already known), and is flagged `dateExact: false` so the timeline doesn't claim a precision
+ * it doesn't have. A movie with no year at all has nothing to place it against and stays out.
  */
 export function filterUpcoming(items: LibraryItem[], today: string = todayIso()): UpcomingEntry[] {
 	const out: UpcomingEntry[] = [];
@@ -110,6 +122,7 @@ export function filterUpcoming(items: LibraryItem[], today: string = todayIso())
 				if (ep.season === 0 || ep.airDate === null || ep.airDate <= today) continue;
 				out.push({
 					date: ep.airDate,
+					dateExact: true,
 					mediaId: item.mediaId,
 					externalId: item.externalId,
 					source: item.source,
@@ -123,9 +136,12 @@ export function filterUpcoming(items: LibraryItem[], today: string = todayIso())
 			}
 		} else {
 			if (item.status !== 'want_to_watch') continue;
-			if (item.releaseDate === null || item.releaseDate <= today) continue;
+			const exact = item.releaseDate !== null;
+			const date = item.releaseDate ?? (item.year !== null ? `${item.year}-12-31` : null);
+			if (date === null || date <= today) continue;
 			out.push({
-				date: item.releaseDate,
+				date,
+				dateExact: exact,
 				mediaId: item.mediaId,
 				externalId: item.externalId,
 				source: item.source,

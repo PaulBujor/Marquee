@@ -5,7 +5,7 @@
 	import DetailLink from '$lib/components/media/detail-link.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { LibraryState } from '$lib/tracking/library.svelte';
-	import { filterUpcoming, groupUpcomingByYear } from '$lib/tracking/library';
+	import { filterUpcoming, groupUpcomingByYear, type UpcomingEntry } from '$lib/tracking/library';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import type { PageData } from './$types';
 
@@ -32,6 +32,17 @@
 	});
 	function formatDate(iso: string): string {
 		return dateFmt.format(new Date(`${iso}T00:00:00Z`));
+	}
+
+	/**
+	 * The heading for one day's run. A run made up entirely of titles we only know the *year* for is
+	 * headed by that year instead of Dec 31 — they're parked at the end of the year, not released on
+	 * New Year's Eve. A real Dec 31 release in the same run wins the date back, and the rows below
+	 * still say which is which.
+	 */
+	function dayHeading(date: string, entries: UpcomingEntry[]): string {
+		if (entries.every((e) => !e.dateExact)) return `Later in ${date.slice(0, 4)}`;
+		return formatDate(date);
 	}
 </script>
 
@@ -66,7 +77,7 @@ divider below is positioned against. -->
 				{#each days as [date, entries] (date)}
 					<section class="flex flex-col gap-2">
 						<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-							{formatDate(date)}
+							{dayHeading(date, entries)}
 						</h2>
 						<ul class="flex flex-col gap-1">
 							{#each entries as entry (entry.mediaId + (entry.kind === 'episode' ? `-${entry.season}-${entry.episode}` : ''))}
@@ -89,7 +100,9 @@ divider below is positioned against. -->
 											<span class="text-sm text-muted-foreground">
 												{entry.kind === 'episode'
 													? `S${entry.season} · E${entry.episode}`
-													: 'Release'}
+													: entry.dateExact
+														? 'Release'
+														: 'Release date to be confirmed'}
 											</span>
 										</div>
 									</DetailLink>
