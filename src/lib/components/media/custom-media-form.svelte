@@ -130,25 +130,29 @@
 	const creditsError = $derived(errorFor('credits'));
 
 	/**
-	 * A refusal to submit that no field is showing. Every field above renders its own message, but
-	 * only for the fields that have one — a failure anywhere else (an overlong description, a shape
-	 * the form can't produce by typing but a stored record can carry) would otherwise make Save do
-	 * visibly nothing, which is indistinguishable from the app being broken. Never leave a form
-	 * refusing in silence.
+	 * Why the last submit was refused, always shown next to the button.
+	 *
+	 * The per-field messages above are the friendly half, but they only cover four fields *and* only
+	 * render where their field renders — the seasons message lives inside the shows-only block, so a
+	 * seasons-path failure on a movie has nowhere to appear at all. Any gap here makes Save do
+	 * visibly nothing, which is indistinguishable from the app being broken. So this names the
+	 * offending field unconditionally: a form must never refuse in silence.
 	 */
-	const unshownError = $derived.by(() => {
+	const submitError = $derived.by(() => {
 		if (!showErrors || parsed.success) return null;
-		if (titleError || yearError || seasonsError || creditsError) return null;
-		return "Something here isn't valid, but we can't tell you what — please report this.";
+		const issue = parsed.error.issues[0];
+		if (!issue) return "Something here isn't valid.";
+		const field = issue.path.join('.');
+		return field ? `${field}: ${issue.message}` : issue.message;
 	});
 	$effect(() => {
-		if (!unshownError || parsed.success) return;
-		// Report it: a validation failure with nothing to point at is a bug in this form, and without
-		// this the only evidence is a user saying the button does nothing.
+		if (parsed.success || !showErrors) return;
+		// Report every refusal. A form the user can't get past is worth a log line whether or not the
+		// message on screen was enough for them to fix it themselves.
 		const issues = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
-		console.warn('custom-media form: unshown validation failure', issues);
+		console.warn('custom-media form: rejected', issues);
 		reportClientError({
-			message: `custom-media form rejected with no visible error: ${issues.join('; ')}`,
+			message: `custom-media form rejected: ${issues.join('; ')}`,
 			source: 'custom-media:validation',
 			at: Date.now()
 		});
@@ -359,8 +363,8 @@
 			</div>
 
 			<div class="flex flex-col gap-2 border-t border-border p-4">
-				{#if unshownError}
-					<p class="text-sm text-destructive">{unshownError}</p>
+				{#if submitError}
+					<p class="text-sm text-destructive">{submitError}</p>
 				{/if}
 				<div class="flex justify-end gap-2">
 					<Button type="button" variant="ghost" onclick={() => (open = false)}>Cancel</Button>
