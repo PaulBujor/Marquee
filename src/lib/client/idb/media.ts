@@ -195,12 +195,21 @@ export async function searchLocalMedia(query: string, limit = 20): Promise<Searc
  * {@link searchLocalMedia}, which backs the *offline* fallback for provider-backed titles: these
  * are searchable in every network mode, because nothing upstream has ever heard of them, so this
  * is the only way to reach one.
+ *
+ * An entry the user has **matched to a real title** is left out. It isn't deleted — its events stay
+ * in the log, the row stays on the device and the link is a plain LWW field, so undoing the match
+ * would bring it straight back — but offering it in search alongside the title it now *is* would
+ * invite adding the same work twice under two ids. The linked title is the one to find.
  */
 export async function searchCustomMedia(query: string, limit = 20): Promise<ClientMedia[]> {
 	const q = query.trim().toLowerCase();
 	if (!q) return [];
+	const db = await openDb();
+	const linked = new Set(
+		(await db.getAll('mediaLinks')).filter((l) => l.targetId !== null).map((l) => l.mediaId)
+	);
 	return (await getAllMedia())
-		.filter((m) => m.source === 'custom' && m.title.toLowerCase().includes(q))
+		.filter((m) => m.source === 'custom' && !linked.has(m.id) && m.title.toLowerCase().includes(q))
 		.sort((a, b) => a.title.localeCompare(b.title))
 		.slice(0, limit);
 }
