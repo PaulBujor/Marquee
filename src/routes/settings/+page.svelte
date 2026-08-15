@@ -5,6 +5,7 @@
 	import NotificationsCard from './notifications-card.svelte';
 	import DataCacheCard from './data-cache-card.svelte';
 	import DataPortabilityCard from './data-portability-card.svelte';
+	import DiagnosticsCard from './diagnostics-card.svelte';
 	import CreditsCard from './credits-card.svelte';
 	import DeleteAccountCard from './delete-account-card.svelte';
 	import type { ActionData, PageData } from './$types';
@@ -30,6 +31,7 @@ same height as the ones that do carry a 40px control, so the sticky offsets stay
 	<NotificationsCard />
 	<DataCacheCard />
 	<DataPortabilityCard />
+	<DiagnosticsCard />
 	<CreditsCard />
 	<DeleteAccountCard userEmail={data.user.email} {form} />
 </main>
