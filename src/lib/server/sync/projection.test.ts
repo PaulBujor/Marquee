@@ -178,6 +178,16 @@ describe('projectEvent via applyEvents', () => {
 		expect(await db.select().from(episodeWatches)).toHaveLength(0);
 	});
 
+	it('materializes nothing for an unlink either, so a rebuild stays exact', async () => {
+		const custom = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+		const events = [
+			ev('media.linked', custom, { targetId: MID, provider: 'tmdb', externalId: 'movie/603' }, 100),
+			ev('media.unlinked', custom, {}, 200)
+		];
+		await applyEvents(db, USER, events);
+		expect(await db.select().from(tracking).where(eq(tracking.userId, USER))).toEqual([]);
+	});
+
 	it('a media.linked event does not disturb the addedAt floor of a tracked title', async () => {
 		// `addedAt` is defined over `tracking.*` events only; a link carries its own clock and must
 		// stay out of that calculation entirely — here an *older* one that would pull the floor down.

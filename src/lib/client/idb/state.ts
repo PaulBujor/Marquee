@@ -166,6 +166,16 @@ async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<v
 			});
 			break;
 		}
+		case 'media.unlinked': {
+			// Only the link field moves. A dismissal is a separate decision with its own clock, and
+			// taking a match back doesn't say anything about whether the user wants suggestions again.
+			await upsertMediaLink(tx, entityId, clock, 'linkedUpdatedAt', (l) => {
+				l.targetId = null;
+				l.provider = null;
+				l.externalId = null;
+			});
+			break;
+		}
 		case 'media.match_declined': {
 			await upsertMediaLink(tx, entityId, clock, 'declinedUpdatedAt', (l) => {
 				l.declined = true;
@@ -215,6 +225,20 @@ export async function getTrackingByMediaId(mediaId: string): Promise<ClientTrack
 export async function getMediaLink(mediaId: string): Promise<ClientMediaLink | undefined> {
 	const db = await openDb();
 	return db.get('mediaLinks', mediaId);
+}
+
+/**
+ * The user's own entries matched *to* `targetId` — the reverse of {@link getMediaLink}, and the only
+ * route back to an entry once it's been linked: it's off every list and out of search by then, so
+ * the title it was matched to is the one place the association is still visible.
+ *
+ * A scan rather than an index. The store holds one row per entry the user has made an identity
+ * decision about — tens, not thousands — so an index would cost a schema version to save nothing
+ * measurable.
+ */
+export async function getMediaLinksTo(targetId: string): Promise<ClientMediaLink[]> {
+	const db = await openDb();
+	return (await db.getAll('mediaLinks')).filter((l) => l.targetId === targetId);
 }
 
 /** Watched-episode rows for a show. */

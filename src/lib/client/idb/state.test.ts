@@ -263,6 +263,58 @@ describe('media link projection', () => {
 		expect(await getMediaLink(custom)).toMatchObject({ declined: true, targetId: target });
 	});
 
+	it('clears the link when the match is taken back', async () => {
+		const custom = newMid();
+		await applyEventToIdb(
+			ev(
+				'media.linked',
+				custom,
+				{ targetId: target, provider: 'tmdb', externalId: 'show/1396' },
+				100
+			)
+		);
+		await applyEventToIdb(ev('media.unlinked', custom, {}, 200));
+
+		expect(await getMediaLink(custom)).toMatchObject({
+			targetId: null,
+			provider: null,
+			externalId: null
+		});
+	});
+
+	it('leaves a dismissal alone when unlinking', async () => {
+		// Taking a match back says nothing about whether the user wants suggestions again — the two
+		// decisions carry independent clocks.
+		const custom = newMid();
+		await applyEventToIdb(ev('media.match_declined', custom, {}, 100));
+		await applyEventToIdb(
+			ev(
+				'media.linked',
+				custom,
+				{ targetId: target, provider: 'tmdb', externalId: 'show/1396' },
+				200
+			)
+		);
+		await applyEventToIdb(ev('media.unlinked', custom, {}, 300));
+
+		expect(await getMediaLink(custom)).toMatchObject({ targetId: null, declined: false });
+	});
+
+	it('ignores an unlink that arrives older than the link it would undo', async () => {
+		// A stale unlink replayed from another device must not undo a newer match.
+		const custom = newMid();
+		await applyEventToIdb(ev('media.unlinked', custom, {}, 100));
+		await applyEventToIdb(
+			ev(
+				'media.linked',
+				custom,
+				{ targetId: target, provider: 'tmdb', externalId: 'show/1396' },
+				200
+			)
+		);
+		expect(await getMediaLink(custom)).toMatchObject({ targetId: target });
+	});
+
 	it('resolves the same way whichever order the events arrive in', async () => {
 		const forwards = newMid();
 		const backwards = newMid();

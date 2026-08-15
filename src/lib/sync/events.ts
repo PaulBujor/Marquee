@@ -41,6 +41,7 @@ export const SYNC_EVENT_TYPES = [
 	'episode.watched',
 	'episode.unwatched',
 	'media.linked',
+	'media.unlinked',
 	'media.match_declined'
 ] as const;
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
@@ -141,6 +142,14 @@ export interface EventPayloadMap {
 	 * it. A link is an association, never a deletion: the source entry and its history stay.
 	 */
 	'media.linked': { targetId: string; provider: HydratableProvider; externalId: string };
+	/**
+	 * The user took `entityId` back off the title it was matched to. Breaks the association only —
+	 * the state that linking re-emitted onto the target stays where it is. An append-only log can't
+	 * take those events back, and nothing distinguishes "watched because of the merge" from "watched
+	 * independently", so undoing the association is the honest scope. The entry becomes reachable
+	 * again (searchable, re-addable) with its own history intact.
+	 */
+	'media.unlinked': Record<string, never>;
 	/**
 	 * The user rejected the matches offered for `entityId`. Suppresses the suggestion until they
 	 * ask for it again, and syncs so the dismissal holds on every device.
@@ -349,6 +358,7 @@ const payloadSchemas = {
 		provider: z.enum(HYDRATABLE_PROVIDERS),
 		externalId: z.string().min(1).max(128)
 	}),
+	'media.unlinked': z.object({}),
 	'media.match_declined': z.object({})
 } as const;
 
@@ -397,6 +407,10 @@ export const eventEnvelopeSchema = z.discriminatedUnion('type', [
 	envelopeBase.extend({
 		type: z.literal('media.linked'),
 		payload: payloadSchemas['media.linked']
+	}),
+	envelopeBase.extend({
+		type: z.literal('media.unlinked'),
+		payload: payloadSchemas['media.unlinked']
 	}),
 	envelopeBase.extend({
 		type: z.literal('media.match_declined'),
