@@ -46,7 +46,12 @@ const titleSchema = z.object({
 			z.object({
 				role: z.enum(CREDIT_ROLES),
 				name: z.string().min(1).max(CUSTOM_NAME_MAX),
-				character: z.string().max(CUSTOM_NAME_MAX).nullable().optional()
+				character: z.string().max(CUSTOM_NAME_MAX).nullable().optional(),
+				externalId: z
+					.string()
+					.regex(/^person\/\d{1,12}$/)
+					.nullable()
+					.optional()
 			})
 		)
 		.max(CUSTOM_MAX_CREDITS)

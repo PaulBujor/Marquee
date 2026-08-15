@@ -133,6 +133,23 @@ describe('customMediaInputSchema', () => {
 		expect(ok(input({ credits: [credit(), credit({ role: 'director' })] }))).toBe(true);
 	});
 
+	it('accepts a provider hint on a picked person, and rejects a malformed one', () => {
+		// Set when the author picked someone out of search rather than typing a bare name. Neither
+		// field is identity — the shape check is there so a push can't smuggle arbitrary strings into
+		// a person row or an image path.
+		expect(
+			ok(input({ credits: [credit({ externalId: 'person/137427', profilePath: '/dv.jpg' })] }))
+		).toBe(true);
+		expect(ok(input({ credits: [credit({ externalId: null, profilePath: null })] }))).toBe(true);
+
+		expect(ok(input({ credits: [credit({ externalId: '137427' })] }))).toBe(false);
+		expect(ok(input({ credits: [credit({ externalId: 'movie/603' })] }))).toBe(false);
+		expect(ok(input({ credits: [credit({ profilePath: 'https://evil.test/x.jpg' })] }))).toBe(
+			false
+		);
+		expect(ok(input({ credits: [credit({ profilePath: '/../secrets' })] }))).toBe(false);
+	});
+
 	it('bounds how many people one entry credits', () => {
 		const many = (n: number) =>
 			Array.from({ length: n }, (_, i) => credit({ name: `Person ${i}` }));

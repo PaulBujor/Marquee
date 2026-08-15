@@ -66,7 +66,11 @@ function synthesizeSeasons(seasons: CustomSeasonInput[], airDate: string): Media
 /**
  * Turn the form's credit rows into wire credits, numbering each role's billing from the order the
  * user arranged them in. A person the entry doesn't credit yet gets an id minted here — random for
- * the same reason the media id is, and per-user private, so `externalId` stays null.
+ * the same reason the media id is, and private to this user.
+ *
+ * `externalId`/`profilePath` carry through only when the author picked someone out of search. They
+ * record *who was meant*; the minted id is still what identifies the person, so a custom entry never
+ * claims the provider's row.
  */
 function synthesizeCredits(input: CustomCreditInput[], mintPersonId: () => string): MediaCredit[] {
 	const billing = new Map<string, number>();
@@ -76,9 +80,9 @@ function synthesizeCredits(input: CustomCreditInput[], mintPersonId: () => strin
 		const character = c.character.trim();
 		return {
 			personId: c.personId ?? mintPersonId(),
-			externalId: null,
+			externalId: c.externalId ?? null,
 			name: c.name.trim(),
-			profilePath: null,
+			profilePath: c.profilePath ?? null,
 			role: c.role,
 			// Only cast play someone; the form hides the field for every other role.
 			character: c.role === 'cast' && character !== '' ? character : null,
@@ -163,7 +167,9 @@ export function toCustomMediaInput(
 				personId: c.personId,
 				role: c.role,
 				name: c.name,
-				character: c.character ?? ''
+				character: c.character ?? '',
+				externalId: c.externalId,
+				profilePath: c.profilePath
 			}))
 	};
 }

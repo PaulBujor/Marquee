@@ -84,7 +84,9 @@ function mediaStub(entry: ExportedTitle, id: string, now: number): MediaRecord |
 				credits: (entry.credits ?? []).map((c) => ({
 					role: c.role,
 					name: c.name,
-					character: c.character ?? ''
+					character: c.character ?? '',
+					// The provider hint survives; the person id does not (see `ExportedCredit`).
+					externalId: c.externalId ?? null
 				}))
 			},
 			// The exported id, so the restored entry is the same title the events already name.

@@ -3,12 +3,10 @@
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { NativeSelect, NativeSelectOption } from '$lib/components/ui/native-select';
 	import { Textarea } from '$lib/components/ui/textarea';
+	import CreditRow from './credit-row.svelte';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import { CREDIT_ROLES } from '$lib/sync/events';
-	import { creditRoleLabel } from '$lib/credits';
 	import {
 		CUSTOM_MAX_CREDITS,
 		CUSTOM_MAX_EPISODES_PER_SEASON,
@@ -16,7 +14,6 @@
 		CUSTOM_MAX_SEASONS,
 		CUSTOM_MAX_YEAR,
 		CUSTOM_MIN_YEAR,
-		CUSTOM_NAME_MAX,
 		CUSTOM_OVERVIEW_MAX,
 		CUSTOM_TITLE_MAX,
 		customMediaInputSchema,
@@ -100,7 +97,14 @@
 	const creditInput = $derived<CustomCreditInput[]>(
 		credits
 			.filter((c) => c.name.trim() !== '')
-			.map((c) => ({ personId: c.personId, role: c.role, name: c.name, character: c.character }))
+			.map((c) => ({
+				personId: c.personId,
+				role: c.role,
+				name: c.name,
+				character: c.character,
+				externalId: c.externalId,
+				profilePath: c.profilePath
+			}))
 	);
 
 	const candidate = $derived<CustomMediaInput>({
@@ -140,7 +144,10 @@
 	function addCredit() {
 		if (credits.length >= CUSTOM_MAX_CREDITS) return;
 		const role = credits.at(-1)?.role ?? 'cast';
-		credits = [...credits, { key: nextCreditKey++, role, name: '', character: '' }];
+		credits = [
+			...credits,
+			{ key: nextCreditKey++, role, name: '', character: '', externalId: null, profilePath: null }
+		];
 	}
 
 	function removeCredit(key: number) {
@@ -305,42 +312,9 @@
 							the same title.
 						</p>
 					{/if}
-					<ul class="flex flex-col gap-2">
-						{#each credits as credit (credit.key)}
-							<li class="flex flex-wrap items-center gap-2">
-								<NativeSelect bind:value={credit.role} size="sm" aria-label="Role" class="w-28">
-									{#each CREDIT_ROLES as role (role)}
-										<NativeSelectOption value={role}>{creditRoleLabel(role)}</NativeSelectOption>
-									{/each}
-								</NativeSelect>
-								<Input
-									bind:value={credit.name}
-									maxlength={CUSTOM_NAME_MAX}
-									autocomplete="off"
-									placeholder="Name"
-									aria-label="Name"
-									class="min-w-32 flex-1"
-								/>
-								{#if credit.role === 'cast'}
-									<Input
-										bind:value={credit.character}
-										maxlength={CUSTOM_NAME_MAX}
-										autocomplete="off"
-										placeholder="as…"
-										aria-label={credit.name ? `Character played by ${credit.name}` : 'Character'}
-										class="min-w-24 flex-1"
-									/>
-								{/if}
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon"
-									onclick={() => removeCredit(credit.key)}
-									aria-label={credit.name ? `Remove ${credit.name}` : 'Remove this credit'}
-								>
-									<Trash2Icon class="size-4" />
-								</Button>
-							</li>
+					<ul class="flex flex-col gap-3">
+						{#each credits as credit, i (credit.key)}
+							<CreditRow bind:credit={credits[i]} onremove={() => removeCredit(credit.key)} />
 						{/each}
 					</ul>
 					{#if creditsError}

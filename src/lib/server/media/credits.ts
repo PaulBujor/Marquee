@@ -23,7 +23,7 @@ type PersonInsert = typeof people.$inferInsert;
 type CreditInsert = typeof credits.$inferInsert;
 
 /** Mutable columns compared to decide whether a row needs rewriting. */
-const PERSON_CONTENT_FIELDS = ['name', 'profilePath'] as const;
+const PERSON_CONTENT_FIELDS = ['name', 'externalId', 'profilePath'] as const;
 const CREDIT_CONTENT_FIELDS = ['character', 'sortOrder'] as const;
 
 function contentChanged<K extends string>(
@@ -85,8 +85,13 @@ export function creditRowsFromDetail(
 
 /**
  * Flatten a pushed custom record's credits into person + credit rows. The mirror of
- * {@link creditRowsFromDetail} for the one case the server can't fetch: people the author typed,
- * stored owner-scoped and private, with no provider identity to derive an id from.
+ * {@link creditRowsFromDetail} for the one case the server can't fetch: people on a user's own
+ * entry, stored owner-scoped and private.
+ *
+ * The row stays `provider: 'local'` even when it carries a provider external id. That id is a
+ * *hint* — which real person the author picked out of search — not a claim on the shared catalog,
+ * and keeping the provider local is what says so. Uniqueness is per owner (see the partial indexes
+ * on `people`), so two accounts can each hold their own row pointing at the same person.
  */
 export function creditRowsFromCustom(
 	mediaId: string,
@@ -101,10 +106,10 @@ export function creditRowsFromCustom(
 			personRows.set(c.personId, {
 				id: c.personId,
 				provider: 'local',
-				externalId: null,
+				externalId: c.externalId,
 				ownerUserId: userId,
 				name: c.name,
-				profilePath: null
+				profilePath: c.profilePath
 			});
 		}
 		// Same collapse as the provider path: `(media, person, role)` is the primary key, and keeping
@@ -153,7 +158,12 @@ async function upsertPeople(db: Db, rows: PersonInsert[]): Promise<void> {
 			.values(chunk)
 			.onConflictDoUpdate({
 				target: people.id,
-				set: { name: sql`excluded.name`, profilePath: sql`excluded.profile_path` }
+				set: {
+					name: sql`excluded.name`,
+					// Re-picking a different person out of search rewrites the hint on the same owned row.
+					externalId: sql`excluded.external_id`,
+					profilePath: sql`excluded.profile_path`
+				}
 			});
 	}
 }

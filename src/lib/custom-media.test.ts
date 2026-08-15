@@ -251,8 +251,22 @@ describe('toCustomMediaInput', () => {
 
 		const back = toCustomMediaInput(record, [], record.credits ?? []);
 		expect(back.credits).toEqual([
-			{ personId: 'person-0', role: 'cast', name: 'Tomas Ilie', character: 'The Courier' },
-			{ personId: 'person-1', role: 'director', name: 'Ana Petrescu', character: '' }
+			{
+				personId: 'person-0',
+				role: 'cast',
+				name: 'Tomas Ilie',
+				character: 'The Courier',
+				externalId: null,
+				profilePath: null
+			},
+			{
+				personId: 'person-1',
+				role: 'director',
+				name: 'Ana Petrescu',
+				character: '',
+				externalId: null,
+				profilePath: null
+			}
 		]);
 
 		// And re-saving that input keeps every id rather than minting new rows.

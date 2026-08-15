@@ -50,12 +50,28 @@ export type CustomSeasonInput = z.infer<typeof customSeasonInputSchema>;
  * `personId` is absent the first time a name is entered and minted on save. It comes *back* on an
  * edit so re-saving keeps crediting the same person rather than minting a fresh row each time —
  * which would orphan the old one and break the "everything this person worked on" lookup.
+ *
+ * `externalId` and `profilePath` are set when the author picked someone out of search instead of
+ * typing a bare name — a record of who they meant, not a link. The person is still stored as their
+ * own private row. Both are null offline, where there is nobody to search.
  */
 export const customCreditInputSchema = z.object({
 	personId: z.uuid().optional(),
 	role: z.enum(CREDIT_ROLES),
 	name: z.string().trim().min(1).max(CUSTOM_NAME_MAX),
-	character: z.string().trim().max(CUSTOM_NAME_MAX)
+	character: z.string().trim().max(CUSTOM_NAME_MAX),
+	// Optional as well as nullable: everything that builds this input without a search behind it —
+	// an import, a test, the form before anyone picks anyone — simply omits them.
+	externalId: z
+		.string()
+		.regex(/^person\/\d{1,12}$/)
+		.nullable()
+		.optional(),
+	profilePath: z
+		.string()
+		.regex(/^\/[A-Za-z0-9._-]{1,128}$/)
+		.nullable()
+		.optional()
 });
 
 export type CustomCreditInput = z.infer<typeof customCreditInputSchema>;
