@@ -1,44 +1,34 @@
 /**
- * Shape and pure helpers for the client error log — the record behind the "something went wrong"
- * toast, kept so an error is still readable after the toast has gone.
- *
- * Split from the rune (`errors.svelte.ts`) the same way the sync log is, so the capping, folding
- * and formatting are testable without a browser.
+ * The client error log's shape and pure helpers — split from the rune (`errors.svelte.ts`) so the
+ * folding, capping and formatting test without a browser.
  */
 
 /** One captured error. `at` is epoch ms. */
 export interface ClientErrorEntry {
 	at: number;
 	message: string;
-	/** Where it came from — a route id, `'window.error'`, `'sync'`, a feature tag. */
+	/** A route id, `'window.error'`, `'sync'`, a feature tag. */
 	source?: string;
 	stack?: string;
-	/** Path only; the query string is dropped before a report ever leaves the browser. */
+	/** Path only — the query string is dropped before a report leaves the browser. */
 	url?: string;
 	status?: number;
-	/**
-	 * How many times this same error has been seen. A render loop or a retrying timer throws the
-	 * same thing repeatedly, and a log that lists it 400 times is unreadable — and would push the
-	 * one error you actually need off the end.
-	 */
+	/** How many times this same error has been seen (see {@link appendError}). */
 	count: number;
 }
 
-/**
- * How many distinct errors to keep. Deep enough that a first failure is still there after the
- * cascade it caused, shallow enough to stay readable and to fit in sessionStorage.
- */
+/** Deep enough that a first failure survives the cascade it caused; shallow enough to stay readable. */
 export const MAX_ERRORS = 25;
 
-/** Two reports are the same error when they came from the same place saying the same thing. */
+/** Same place, same message. */
 function sameError(a: ClientErrorEntry, b: ClientErrorEntry): boolean {
 	return a.message === b.message && a.source === b.source;
 }
 
 /**
- * Add an entry, newest first, folding a repeat into the existing one rather than appending. The
- * fold bumps `count` and refreshes `at`, so a recurring error keeps showing when it last happened
- * without burying everything else.
+ * Add an entry, newest first, folding a repeat into the existing one and moving it back to the top.
+ * A render loop or a retrying timer throws the same error hundreds of times, and listing each one
+ * would push the first failure — the one worth reading — off the end.
  */
 export function appendError(
 	entries: ClientErrorEntry[],
@@ -47,13 +37,12 @@ export function appendError(
 	const existing = entries.findIndex((e) => sameError(e, entry));
 	if (existing !== -1) {
 		const folded = { ...entries[existing], at: entry.at, count: entries[existing].count + 1 };
-		// Move it back to the top: the newest occurrence is the one worth seeing first.
 		return [folded, ...entries.slice(0, existing), ...entries.slice(existing + 1)];
 	}
 	return [entry, ...entries].slice(0, MAX_ERRORS);
 }
 
-/** `14:22:03`, local time — the log is read next to a user's own memory of when it happened. */
+/** `14:22:03`, local — read next to the user's own memory of when it happened. */
 export function formatTime(at: number): string {
 	return new Date(at).toLocaleTimeString(undefined, {
 		hour: '2-digit',
@@ -62,7 +51,7 @@ export function formatTime(at: number): string {
 	});
 }
 
-/** The whole log as plain text, for the copy button — what a bug report should be pasted from. */
+/** The log as plain text, for the copy button — what a bug report gets pasted from. */
 export function formatErrorText(entries: ClientErrorEntry[]): string {
 	if (entries.length === 0) return 'No errors recorded.';
 	return entries
@@ -85,6 +74,21 @@ export function formatErrorText(entries: ClientErrorEntry[]): string {
 		.join('\n\n');
 }
 
+export const TOAST_MAX = 3;
+export const TOAST_WINDOW_MS = 30_000;
+
+/**
+ * Rolling-window rate limit for error toasts: the timestamps to keep, and whether to show this one.
+ * A looping error already folds into one log entry, but a page breaking several ways at once
+ * shouldn't bury the app — and a per-session cap would stop announcing errors for good, so the
+ * window lets a later, unrelated failure speak up.
+ */
+export function admitToast(recent: number[], now: number): { recent: number[]; show: boolean } {
+	const kept = recent.filter((t) => now - t < TOAST_WINDOW_MS);
+	if (kept.length >= TOAST_MAX) return { recent: kept, show: false };
+	return { recent: [...kept, now], show: true };
+}
+
 /** Restore a persisted log, tolerating anything that isn't one. */
 export function parseErrors(raw: string | null): ClientErrorEntry[] {
 	if (!raw) return [];
@@ -99,7 +103,7 @@ export function parseErrors(raw: string | null): ClientErrorEntry[] {
 					typeof (e as ClientErrorEntry).message === 'string' &&
 					typeof (e as ClientErrorEntry).at === 'number'
 			)
-			.map((e) => ({ ...e, count: typeof e.count === 'number' ? e.count : 1 }))
+			.map((e) => ({ ...e, count: typeof e.count === 'number' && e.count > 0 ? e.count : 1 }))
 			.slice(0, MAX_ERRORS);
 	} catch {
 		return [];

@@ -4,11 +4,8 @@
 	import ErrorLogDialog from '$lib/components/error-log-dialog.svelte';
 	import { errorLog } from '$lib/client/errors.svelte';
 
-	/**
-	 * A way back to the error log after the toast that announced it has gone. Without this the log
-	 * would only be reachable in the seconds a toast is on screen, which is exactly when a user is
-	 * least likely to want to read a stack trace.
-	 */
+	// The way back to the log once the toast is gone — which is exactly when someone is willing to
+	// sit and read a stack trace.
 	let open = $state(false);
 	const count = $derived(errorLog.entries.length);
 </script>

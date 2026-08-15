@@ -7,9 +7,8 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 
 	/**
-	 * What actually went wrong, in full — the thing behind the toast's "See error". Deliberately
-	 * shows the raw message and stack rather than a friendly summary: by the time someone opens this
-	 * they've already read the friendly version and want something they can paste into a bug report.
+	 * What went wrong, in full — behind the toast's "See error". Raw message and stack rather than a
+	 * friendly summary: whoever opens this has already read the friendly version.
 	 */
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -40,7 +39,7 @@
 				<p class="text-sm text-muted-foreground">Nothing has gone wrong this session.</p>
 			{:else}
 				<ul class="flex flex-col gap-3">
-					{#each errorLog.entries as entry (entry.at + entry.message)}
+					{#each errorLog.entries as entry (`${entry.at}:${entry.message}`)}
 						<li class="flex flex-col gap-1 border-b border-border pb-3 last:border-b-0 last:pb-0">
 							<div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
 								<span class="font-mono text-muted-foreground">{formatTime(entry.at)}</span>

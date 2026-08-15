@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { appendError, formatErrorText, MAX_ERRORS, parseErrors } from './errors';
+import {
+	admitToast,
+	appendError,
+	formatErrorText,
+	MAX_ERRORS,
+	parseErrors,
+	TOAST_MAX,
+	TOAST_WINDOW_MS
+} from './errors';
 import { onClientError, reportClientError } from './report-error';
 
 function entry(message: string, over: Partial<Parameters<typeof appendError>[1]> = {}) {
@@ -73,6 +81,31 @@ describe('parseErrors', () => {
 		expect(parseErrors('not json')).toEqual([]);
 		expect(parseErrors('{"nope":true}')).toEqual([]);
 		expect(parseErrors('[{"no":"message"}]')).toEqual([]);
+	});
+});
+
+describe('admitToast', () => {
+	it('allows a burst up to the cap, then holds off', () => {
+		let recent: number[] = [];
+		for (let i = 0; i < TOAST_MAX; i++) {
+			const out = admitToast(recent, 1_000 + i);
+			recent = out.recent;
+			expect(out.show).toBe(true);
+		}
+		expect(admitToast(recent, 1_100).show).toBe(false);
+	});
+
+	it('lets a later unrelated failure speak up once the window passes', () => {
+		// The reason this is a window and not a per-session cap: three early errors must not silence
+		// the app for the rest of the session.
+		let recent: number[] = [];
+		for (let i = 0; i < TOAST_MAX; i++) recent = admitToast(recent, 1_000).recent;
+		expect(admitToast(recent, 1_000 + TOAST_WINDOW_MS + 1).show).toBe(true);
+	});
+
+	it('drops timestamps that have aged out', () => {
+		const stale = [1, 2, 3, 4, 5];
+		expect(admitToast(stale, TOAST_WINDOW_MS + 10).recent).toEqual([TOAST_WINDOW_MS + 10]);
 	});
 });
 

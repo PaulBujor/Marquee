@@ -11,27 +11,29 @@ const PERSIST_DEBOUNCE_MS = 250;
 class ErrorLog {
 	/** Newest first. */
 	entries = $state<ClientErrorEntry[]>([]);
-	/**
-	 * The most recent error that nobody has told the user about yet — what the toast shows. Cleared
-	 * once surfaced, so navigating around doesn't re-announce an error already seen.
-	 */
+	/** The latest error nobody has told the user about yet. Cleared by whoever surfaces it. */
 	pending = $state<ClientErrorEntry | null>(null);
 
 	#persistTimer: ReturnType<typeof setTimeout> | null = null;
 	#started = false;
 
-	/** Load the persisted log and start recording. Idempotent; browser-only. */
-	start(): () => void {
-		if (this.#started || typeof window === 'undefined') return () => {};
+	/**
+	 * Load the persisted log and start recording. Idempotent, browser-only, and never torn down —
+	 * it runs for the life of the page, from `hooks.client.ts` so it catches errors thrown before
+	 * any component mounts.
+	 *
+	 * Persisted errors are deliberately not replayed as `pending`: after a reload the user has
+	 * already lived through whatever happened, and a toast for it would be noise.
+	 */
+	start(): void {
+		if (this.#started || typeof window === 'undefined') return;
 		this.#started = true;
 		try {
 			this.entries = parseErrors(sessionStorage.getItem(STORAGE_KEY));
 		} catch {
 			this.entries = [];
 		}
-		// Deliberately *not* replaying persisted errors as pending: on a reload the user has already
-		// lived through whatever happened, and a toast for it would be noise.
-		return onClientError((report) => this.#record(report));
+		onClientError((report) => this.#record(report));
 	}
 
 	clear(): void {
@@ -45,7 +47,7 @@ class ErrorLog {
 	}
 
 	#record(report: ClientErrorReport): void {
-		const entry: ClientErrorEntry = {
+		this.entries = appendError(this.entries, {
 			at: report.at ?? Date.now(),
 			message: report.message,
 			source: report.source,
@@ -53,11 +55,9 @@ class ErrorLog {
 			url: report.url,
 			status: report.status,
 			count: 1
-		};
-		this.entries = appendError(this.entries, entry);
-		// A caller that already told the user in its own words doesn't get a second toast — but the
-		// error is still logged, because "the user saw a friendly message" isn't the same as "we know
-		// what happened".
+		});
+		// A caller that already explained the failure keeps its own message — but the error is still
+		// logged, because "the user saw something friendly" isn't "we know what happened".
 		if (!report.handled) this.pending = this.entries[0];
 		this.#persist();
 	}
