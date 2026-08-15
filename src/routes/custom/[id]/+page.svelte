@@ -27,6 +27,8 @@
 	} from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { guardedWrite } from '$lib/client/write-guard';
+	import { reportClientError } from '$lib/client/report-error';
+	import { toast } from 'svelte-sonner';
 	import { createCustomMedia, toCustomMediaInput } from '$lib/custom-media';
 	import { buildLinkEvents } from '$lib/custom-media-link';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
@@ -95,7 +97,22 @@
 	);
 
 	async function saveEdit(input: CustomMediaInput) {
-		if (!entry || saving) return;
+		if (!entry || saving) {
+			// Two ways this page can swallow a save: the record isn't loaded (a route the store hasn't
+			// caught up with), or a previous save is still running. Both look identical to a dead
+			// button, so say so rather than returning into nothing.
+			if (!entry) {
+				reportClientError({
+					message: `custom-media: save ignored, no entry loaded for ${data.id}`,
+					source: 'custom-media:edit',
+					at: Date.now()
+				});
+				toast.error("Couldn't save those changes", {
+					description: "This entry hasn't finished loading on this device."
+				});
+			}
+			return;
+		}
 		saving = true;
 		const id = entry.id;
 		const ok = await guardedWrite(
