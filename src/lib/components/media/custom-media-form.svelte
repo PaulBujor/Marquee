@@ -5,6 +5,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import CreditRow from './credit-row.svelte';
+	import { reportClientError } from '$lib/client/report-error';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import {
@@ -129,6 +130,31 @@
 	const yearError = $derived(errorFor('year'));
 	const seasonsError = $derived(errorFor('seasons'));
 	const creditsError = $derived(errorFor('credits'));
+
+	/**
+	 * A refusal to submit that no field is showing. Every field above renders its own message, but
+	 * only for the fields that have one — a failure anywhere else (an overlong description, a shape
+	 * the form can't produce by typing but a stored record can carry) would otherwise make Save do
+	 * visibly nothing, which is indistinguishable from the app being broken. Never leave a form
+	 * refusing in silence.
+	 */
+	const unshownError = $derived.by(() => {
+		if (!showErrors || parsed.success) return null;
+		if (titleError || yearError || seasonsError || creditsError) return null;
+		return "Something here isn't valid, but we can't tell you what — please report this.";
+	});
+	$effect(() => {
+		if (!unshownError || parsed.success) return;
+		// Report it: a validation failure with nothing to point at is a bug in this form, and without
+		// this the only evidence is a user saying the button does nothing.
+		const issues = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
+		console.warn('custom-media form: unshown validation failure', issues);
+		reportClientError({
+			message: `custom-media form rejected with no visible error: ${issues.join('; ')}`,
+			source: 'custom-media:validation',
+			at: Date.now()
+		});
+	});
 
 	function addSeason() {
 		if (seasons.length >= CUSTOM_MAX_SEASONS) return;
@@ -334,11 +360,16 @@
 				</div>
 			</div>
 
-			<div class="flex justify-end gap-2 border-t border-border p-4">
-				<Button type="button" variant="ghost" onclick={() => (open = false)}>Cancel</Button>
-				<Button type="submit" disabled={busy || (showErrors && !parsed.success)}>
-					{editing ? 'Save' : 'Add to list'}
-				</Button>
+			<div class="flex flex-col gap-2 border-t border-border p-4">
+				{#if unshownError}
+					<p class="text-sm text-destructive">{unshownError}</p>
+				{/if}
+				<div class="flex justify-end gap-2">
+					<Button type="button" variant="ghost" onclick={() => (open = false)}>Cancel</Button>
+					<Button type="submit" disabled={busy}>
+						{editing ? 'Save' : 'Add to list'}
+					</Button>
+				</div>
 			</div>
 		</form>
 	</Dialog.Content>
