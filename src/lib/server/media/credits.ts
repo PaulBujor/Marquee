@@ -1,6 +1,15 @@
 /**
- * Persist a title's cast and crew. `people` rows are shared reference data; reconciliation mirrors
- * `syncSeasons`/`syncEpisodes`: upsert changed, delete disappeared.
+ * Persisting a title's cast and crew.
+ *
+ * The data already arrives — `refreshMedia` fetches TMDB details with `append_to_response=credits`
+ * and `normalizeDetails` turns it into `cast` / `director` / `writers` / `producers` / `creators`.
+ * Until now it was rendered and discarded. Storing it makes it available offline, lets a custom
+ * entry be compared against a candidate on more than its title, and gives the reverse lookup
+ * ("everything this person worked on") somewhere to run.
+ *
+ * `people` rows are shared reference data keyed by our derived person id, so two titles crediting
+ * the same actor converge on one row. Reconciliation mirrors `syncSeasons`/`syncEpisodes`: diff
+ * against what's stored, write only what changed, delete what disappeared.
  */
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { credits, people, type CreditRow, type Person } from '$lib/server/db/schema';
@@ -14,7 +23,7 @@ type PersonInsert = typeof people.$inferInsert;
 type CreditInsert = typeof credits.$inferInsert;
 
 /** Mutable columns compared to decide whether a row needs rewriting. */
-const PERSON_CONTENT_FIELDS = ['name', 'profilePath'] as const;
+const PERSON_CONTENT_FIELDS = ['name', 'externalId', 'profilePath'] as const;
 const CREDIT_CONTENT_FIELDS = ['character', 'sortOrder'] as const;
 
 function contentChanged<K extends string>(
@@ -74,7 +83,16 @@ export function creditRowsFromDetail(
 	return { personRows: [...personRows.values()], creditRows: [...creditRows.values()] };
 }
 
-/** Flatten a custom record's credits into person + credit rows. Owner-scoped, no provider identity. */
+/**
+ * Flatten a pushed custom record's credits into person + credit rows. The mirror of
+ * {@link creditRowsFromDetail} for the one case the server can't fetch: people on a user's own
+ * entry, stored owner-scoped and private.
+ *
+ * The row stays `provider: 'local'` even when it carries a provider external id. That id is a
+ * *hint* — which real person the author picked out of search — not a claim on the shared catalog,
+ * and keeping the provider local is what says so. Uniqueness is per owner (see the partial indexes
+ * on `people`), so two accounts can each hold their own row pointing at the same person.
+ */
 export function creditRowsFromCustom(
 	mediaId: string,
 	userId: string,
@@ -88,10 +106,10 @@ export function creditRowsFromCustom(
 			personRows.set(c.personId, {
 				id: c.personId,
 				provider: 'local',
-				externalId: null,
+				externalId: c.externalId,
 				ownerUserId: userId,
 				name: c.name,
-				profilePath: null
+				profilePath: c.profilePath
 			});
 		}
 		// Same collapse as the provider path: `(media, person, role)` is the primary key, and keeping
@@ -140,12 +158,23 @@ async function upsertPeople(db: Db, rows: PersonInsert[]): Promise<void> {
 			.values(chunk)
 			.onConflictDoUpdate({
 				target: people.id,
-				set: { name: sql`excluded.name`, profilePath: sql`excluded.profile_path` }
+				set: {
+					name: sql`excluded.name`,
+					// Re-picking a different person out of search rewrites the hint on the same owned row.
+					externalId: sql`excluded.external_id`,
+					profilePath: sql`excluded.profile_path`
+				}
 			});
 	}
 }
 
-/** Upsert shared people rows from a provider response — add/refresh only, never delete. */
+/**
+ * Upsert the people a provider-backed title credits. Shared rows, so this only ever adds or
+ * refreshes a name or photo — it never deletes, since another title may credit the same person.
+ *
+ * Only ever called with rows derived from a provider response. A person id the *client* supplied
+ * must go through {@link syncOwnedPeople} instead, which won't write outside that user's own rows.
+ */
 export async function syncProviderPeople(db: Db, rows: PersonInsert[]): Promise<void> {
 	if (rows.length === 0) return;
 	const byId = await loadPeople(
@@ -162,8 +191,12 @@ export async function syncProviderPeople(db: Db, rows: PersonInsert[]): Promise<
 }
 
 /**
- * Upsert user-authored people rows. Won't overwrite a provider-backed person's data.
- * Returns the set of ids that are safe to credit.
+ * Upsert people a user authored, and report which ids are safe to credit.
+ *
+ * A person id on a custom entry is minted by the client, so a push can name an id that already
+ * exists — including a provider person's, whose id is derivable by anyone. Such a row is left
+ * untouched and its id reported unusable, so one account can never rewrite the name every other
+ * title shows for that person. Same gate, same reasoning, as the media row's own `mayWrite`.
  */
 export async function syncOwnedPeople(
 	db: Db,
@@ -189,7 +222,11 @@ export async function syncOwnedPeople(
 	return new Set(writable.map((r) => r.id));
 }
 
-/** Reconcile a title's credits: upsert changed, delete disappeared. */
+/**
+ * Reconcile a title's credits against what's stored: upsert new or changed rows, delete the ones
+ * that disappeared (a re-credited film, a corrected cast list), leave unchanged rows untouched.
+ * The people they name must already exist — a credit is a foreign key onto them.
+ */
 export async function syncCredits(db: Db, mediaId: string, newRows: CreditInsert[]): Promise<void> {
 	const oldRows: CreditRow[] = await db.select().from(credits).where(eq(credits.mediaId, mediaId));
 	const key = (r: { personId: string; role: string }) => `${r.personId}:${r.role}`;
@@ -235,7 +272,10 @@ export async function loadCredits(db: Db, mediaId: string): Promise<MediaCredit[
 	return (await loadCreditsForMedia(db, [mediaId])).get(mediaId) ?? [];
 }
 
-/** Credits for many titles in one pass, keyed by media id. */
+/**
+ * Credits for many titles in one pass, keyed by media id. The media channel returns whole batches,
+ * so a per-title query there would be one round trip per row.
+ */
 export async function loadCreditsForMedia(
 	db: Db,
 	mediaIds: string[]

@@ -332,8 +332,18 @@ describe('a user-authored entry survives the round trip', () => {
 				[
 					CUSTOM_ID,
 					[
-						{ role: 'cast' as const, name: 'Tomas Ilie', character: 'The Courier' },
-						{ role: 'creator' as const, name: 'Ana Petrescu', character: null }
+						{
+							role: 'cast' as const,
+							name: 'Tomas Ilie',
+							character: 'The Courier',
+							externalId: null
+						},
+						{
+							role: 'creator' as const,
+							name: 'Ana Petrescu',
+							character: null,
+							externalId: 'person/137427'
+						}
 					]
 				]
 			]),
@@ -370,7 +380,8 @@ describe('a user-authored entry survives the round trip', () => {
 
 		expect(record.credits).toMatchObject([
 			{ role: 'cast', name: 'Tomas Ilie', character: 'The Courier', externalId: null },
-			{ role: 'creator', name: 'Ana Petrescu', character: null }
+			// The provider hint travels: it names the same person for any account, unlike the person id.
+			{ role: 'creator', name: 'Ana Petrescu', character: null, externalId: 'person/137427' }
 		]);
 		// A person id belongs to the account that minted it and means nothing anywhere else, so the
 		// import mints its own rather than restoring the exporter's.

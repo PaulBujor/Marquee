@@ -55,16 +55,30 @@ const customEpisodeSchema = z.object({
 });
 
 /**
- * A credit the author typed themselves. `externalId` and `profilePath` are pinned null because the
- * person is user-authored too: a custom entry credits names its author wrote, never a claim on a
- * provider's person row. That keeps every person reachable from a custom entry privately owned, so
- * a push can't reach the shared people catalog at all.
+ * A credit on a user-authored entry.
+ *
+ * The person is always **owner-scoped**: `personId` is a UUID the client minted, and the server
+ * refuses to write one that resolves to a row this user doesn't own. So a push can't reach the
+ * shared people catalog, whatever else it claims.
+ *
+ * `externalId` and `profilePath` are the *hint* left behind when the author picked a real person out
+ * of search instead of typing a bare name. They record who was meant — so a restored entry still
+ * links through to that person and doesn't fall back to a name nothing can resolve — and they are
+ * shape-checked rather than trusted: an external id must look like a provider person reference, a
+ * profile path like a provider image path (the image proxy re-validates before fetching anything).
+ * Neither is identity; the owner-scoped `personId` is.
  */
 const customCreditSchema = z.object({
 	personId: uuid,
-	externalId: z.string().nullable(),
+	externalId: z
+		.string()
+		.regex(/^person\/\d{1,12}$/)
+		.nullable(),
 	name: z.string().min(1).max(CUSTOM_NAME_MAX),
-	profilePath: z.string().nullable(),
+	profilePath: z
+		.string()
+		.regex(/^\/[A-Za-z0-9._-]{1,128}$/)
+		.nullable(),
 	role: z.enum(CREDIT_ROLES),
 	character: z.string().max(CUSTOM_NAME_MAX).nullable(),
 	sortOrder: z.number().int().nonnegative()

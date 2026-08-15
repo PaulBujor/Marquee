@@ -290,6 +290,52 @@ describe('syncOwnedPeople', () => {
 		expect(row).toMatchObject({ name: 'Theirs', ownerUserId: OTHER });
 	});
 
+	it('keeps the provider hint on an owned row without joining the shared catalog', async () => {
+		const { personRows } = creditRowsFromCustom(MEDIA_ID, USER, [
+			{ ...customCredit(OWN_PERSON, 'Denis Villeneuve'), externalId: 'person/137427' }
+		]);
+		await syncOwnedPeople(db, USER, personRows);
+
+		const [row] = await db.select().from(people).where(eq(people.id, OWN_PERSON));
+		// The hint records who the author picked out of search. The row stays `local` and owned —
+		// that's what says it isn't a claim on the shared person.
+		expect(row).toMatchObject({
+			provider: 'local',
+			externalId: 'person/137427',
+			ownerUserId: USER
+		});
+	});
+
+	it('lets two accounts each hold their own row for the same real person', async () => {
+		// The unconditional unique index this replaced would have rejected the second write outright.
+		const theirs = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+		const pick = (id: string, user: string) =>
+			creditRowsFromCustom(MEDIA_ID, user, [
+				{ ...customCredit(id, 'Denis Villeneuve'), externalId: 'person/137427' }
+			]).personRows;
+
+		await syncOwnedPeople(db, USER, pick(OWN_PERSON, USER));
+		await syncOwnedPeople(db, OTHER, pick(theirs, OTHER));
+
+		const rows = await db.select().from(people).where(eq(people.externalId, 'person/137427'));
+		expect(rows.map((r) => r.ownerUserId).sort()).toEqual([USER, OTHER].sort());
+	});
+
+	it('rewrites the hint when the author picks somebody else', async () => {
+		const first = creditRowsFromCustom(MEDIA_ID, USER, [
+			{ ...customCredit(OWN_PERSON, 'Denis Villeneuve'), externalId: 'person/137427' }
+		]);
+		await syncOwnedPeople(db, USER, first.personRows);
+
+		const corrected = creditRowsFromCustom(MEDIA_ID, USER, [
+			{ ...customCredit(OWN_PERSON, 'Ana Petrescu'), externalId: null }
+		]);
+		await syncOwnedPeople(db, USER, corrected.personRows);
+
+		const [row] = await db.select().from(people).where(eq(people.id, OWN_PERSON));
+		expect(row).toMatchObject({ name: 'Ana Petrescu', externalId: null });
+	});
+
 	it('lets the owner rename their own person', async () => {
 		const { personRows } = creditRowsFromCustom(MEDIA_ID, USER, [
 			customCredit(OWN_PERSON, 'First Spelling')
