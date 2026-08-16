@@ -306,10 +306,6 @@ describe('refreshMedia', () => {
 		expect(episodeRows).toHaveLength(3);
 	});
 
-	// Two consumers can hold the same pre-write snapshot (a retrying drain overlapping the next
-	// sweep). Both would compute `changed` against it and write `existing.version + 1`, bumping
-	// twice for one real change and forcing every client to re-download. The compare-and-set on
-	// `refreshedAt` makes the second write a no-op.
 	it('rethrows when the detail fetch fails, leaving the stored row stale', async () => {
 		const db = createTestDb();
 		const stub = showStub();
