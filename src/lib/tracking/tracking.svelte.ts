@@ -173,7 +173,8 @@ export class TrackingState {
 				message: `tracking write failed: ${message}`,
 				stack: err instanceof Error ? err.stack : undefined,
 				source: 'tracking',
-				at: Date.now()
+				at: Date.now(),
+				handled: true // already showing our own toast below
 			});
 			toast.error("Couldn't save that change", { description: 'Please try again.' });
 			await this.load().catch(() => {});

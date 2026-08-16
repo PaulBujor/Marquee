@@ -16,7 +16,10 @@
 		errorLog.pending = null;
 		const admitted = admitToast(recentToasts, Date.now());
 		recentToasts = admitted.recent;
-		if (!admitted.show) return;
+		if (!admitted.show) {
+			errorLog.suppressedCount++;
+			return;
+		}
 
 		toast.error('Something went wrong', {
 			description: entry.message,

@@ -8,6 +8,7 @@
 	// sit and read a stack trace.
 	let open = $state(false);
 	const count = $derived(errorLog.entries.length);
+	const suppressed = $derived(errorLog.suppressedCount);
 </script>
 
 <Card.Root>
@@ -18,8 +19,12 @@
 				Nothing has gone wrong on this device this session.
 			{:else}
 				{count}
-				{count === 1 ? 'error' : 'errors'} recorded on this device this session. Copying the log into
-				a bug report is the fastest way to get something fixed.
+				{count === 1 ? 'error' : 'errors'} recorded on this device this session.
+				{#if suppressed > 0}
+					{suppressed}
+					{suppressed === 1 ? 'toast was' : 'toasts were'} suppressed to avoid burying the app.
+				{/if}
+				Copying the log into a bug report is the fastest way to get something fixed.
 			{/if}
 		</Card.Description>
 	</Card.Header>

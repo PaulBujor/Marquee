@@ -13,6 +13,8 @@ class ErrorLog {
 	entries = $state<ClientErrorEntry[]>([]);
 	/** The latest error nobody has told the user about yet. Cleared by whoever surfaces it. */
 	pending = $state<ClientErrorEntry | null>(null);
+	/** How many toasts the rolling-window rate limiter has swallowed this session. */
+	suppressedCount = $state(0);
 
 	#persistTimer: ReturnType<typeof setTimeout> | null = null;
 	#started = false;
@@ -37,8 +39,13 @@ class ErrorLog {
 	}
 
 	clear(): void {
+		if (this.#persistTimer) {
+			clearTimeout(this.#persistTimer);
+			this.#persistTimer = null;
+		}
 		this.entries = [];
 		this.pending = null;
+		this.suppressedCount = 0;
 		try {
 			sessionStorage?.removeItem(STORAGE_KEY);
 		} catch {
