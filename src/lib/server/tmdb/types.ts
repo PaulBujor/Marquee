@@ -7,11 +7,16 @@ export interface TmdbMultiSearchItem {
 	// movie titles
 	title?: string;
 	release_date?: string;
-	// tv titles
+	// tv titles (`name` is also the person's name)
 	name?: string;
 	first_air_date?: string;
 	poster_path?: string | null;
 	overview?: string;
+	// people
+	profile_path?: string | null;
+	known_for_department?: string;
+	/** The few titles TMDB considers this person best known for. Shape matches a multi-search row. */
+	known_for?: Array<{ title?: string; name?: string }>;
 }
 
 export interface TmdbMultiSearchResponse {
@@ -31,6 +36,25 @@ export interface MediaSearchResult {
 	posterPath: string | null;
 	overview: string;
 }
+
+/** Normalized person row from a multi-search. */
+export interface PersonSearchResult {
+	tmdbId: number;
+	name: string;
+	profilePath: string | null;
+	/** What TMDB considers their main line of work — "Acting", "Directing", "Production"… */
+	department: string | null;
+	/** Titles TMDB considers them best known for, for a one-line subtitle. */
+	knownFor: string[];
+}
+
+/**
+ * One row of a search, tagged so the UI can render and filter a single relevance-ordered list.
+ * People are kept in the same list rather than a parallel one because TMDB's multi-search ranks
+ * everything together — searching a director should be able to put them above their films.
+ */
+export type SearchResult =
+	({ kind: 'media' } & MediaSearchResult) | ({ kind: 'person' } & PersonSearchResult);
 
 /**
  * A single row from an appended `recommendations` / `similar` list. Same shape as a multi-search
@@ -182,12 +206,107 @@ export interface TmdbSeasonDetailResponse {
 	episodes?: TmdbEpisode[];
 }
 
+// --- Person (`/person/{id}` with `append_to_response=combined_credits`) ---
+
+/**
+ * A single row from a person's `combined_credits`. Movies and shows are mixed (hence `media_type`),
+ * and the same row shape serves both lists: `cast` rows carry `character`, `crew` rows carry `job`.
+ */
+export interface TmdbCombinedCreditItem {
+	id: number;
+	media_type: 'movie' | 'tv';
+	// movie titles
+	title?: string;
+	release_date?: string;
+	// tv titles
+	name?: string;
+	first_air_date?: string;
+	poster_path?: string | null;
+	character?: string;
+	job?: string;
+}
+
+/** The appended `combined_credits` object — everything the person worked on, unpaginated. */
+export interface TmdbCombinedCredits {
+	cast?: TmdbCombinedCreditItem[];
+	crew?: TmdbCombinedCreditItem[];
+}
+
+/** Raw `/person/{id}` response (only consumed fields modelled). */
+export interface TmdbPersonResponse {
+	id: number;
+	name?: string;
+	biography?: string;
+	birthday?: string | null;
+	deathday?: string | null;
+	place_of_birth?: string | null;
+	known_for_department?: string;
+	profile_path?: string | null;
+	combined_credits?: TmdbCombinedCredits;
+}
+
+/** One title a person worked on, as the person page lists it. */
+export interface PersonCredit {
+	tmdbId: number;
+	type: 'movie' | 'show';
+	title: string;
+	/** Release / first-air year, or null when TMDB has no date. */
+	year: number | null;
+	/** `YYYY-MM-DD`, or null when TMDB has no date (unannounced). */
+	date: string | null;
+	posterPath: string | null;
+	/** What they did on it — a character name, or their jobs joined ("Director, Writer"). */
+	role: string;
+}
+
+/** Normalized, app-facing person detail — the biographical half of the person page. */
+export interface PersonDetail {
+	tmdbId: number;
+	name: string;
+	biography: string;
+	/** `YYYY-MM-DD`, or null. */
+	birthday: string | null;
+	/** `YYYY-MM-DD`, or null. */
+	deathday: string | null;
+	placeOfBirth: string | null;
+	knownForDepartment: string | null;
+	profilePath: string | null;
+}
+
+/**
+ * A person plus one page of their credits. TMDB returns `combined_credits` whole, so the paging is
+ * ours: `upcoming` (unreleased / undated work) is small and comes back in full on every page, while
+ * the much longer released list is what actually pages.
+ */
+export interface PersonCreditsPage {
+	person: PersonDetail;
+	/** Titles dated in the future, or with no date at all — soonest first, undated last. */
+	upcoming: PersonCredit[];
+	/** Released credits, newest-first, sliced to `page`. */
+	credits: PersonCredit[];
+	/** 1-based, clamped to `totalPages`. */
+	page: number;
+	/** At least 1, even when there are no released credits. */
+	totalPages: number;
+	/** Total released credits across all pages. */
+	total: number;
+}
+
 /** A normalized cast member for the detail UI. */
 export interface CastMember {
 	id: number;
 	name: string;
 	character: string;
 	profilePath: string | null;
+}
+
+/**
+ * A normalized crew member for the detail UI. Carries the TMDB person id (not just the name) so a
+ * crew credit links to that person's page, same as a cast avatar.
+ */
+export interface CrewMember {
+	id: number;
+	name: string;
 }
 
 /** A normalized YouTube trailer (its `key` is the YouTube video id). */
@@ -213,13 +332,13 @@ export interface MediaDetail {
 	genres: string[];
 	cast: CastMember[];
 	/** The director (movies only), or null when unknown / for shows. */
-	director: string | null;
+	director: CrewMember | null;
 	/** Writers (movies) — Writer / Screenplay / Story, deduped. Empty for shows. */
-	writers: string[];
+	writers: CrewMember[];
 	/** Producers (Producer / Executive Producer), deduped. */
-	producers: string[];
+	producers: CrewMember[];
 	/** Series creators (shows only), from TMDB `created_by`. Empty for movies. */
-	creators: string[];
+	creators: CrewMember[];
 	trailer: MediaTrailer | null;
 	/** `YYYY-MM-DD`. Movies only. */
 	releaseDate: string | null;
@@ -267,5 +386,7 @@ export interface Episode {
 export interface SeasonDetail {
 	seasonNumber: number;
 	name: string;
+	/** Richer than the show-detail season summary's overview. */
+	overview: string;
 	episodes: Episode[];
 }

@@ -8,7 +8,7 @@ const IMAGE_TIMEOUT_MS = 10_000;
 
 /**
  * Same-origin proxy for TMDB images, so the client can fetch poster/backdrop **bytes** to cache
- * as offline blobs (MRQ-111b) — `image.tmdb.org` sends no CORS headers, so a direct client fetch
+ * as offline blobs — `image.tmdb.org` sends no CORS headers, so a direct client fetch
  * is blocked. Locked down to the TMDB image CDN with an allow-listed size + path so it can't be
  * used as an open proxy. Auth-gated; long-cached (image paths are immutable).
  */

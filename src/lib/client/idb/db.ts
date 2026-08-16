@@ -90,6 +90,10 @@ export interface MetaValues {
 	cursor: number;
 	/** Epoch ms of the last successful event sync — shown in settings, drives "last synced". */
 	lastSyncAt: number;
+	/** Epoch ms of the last full media version-diff pass — lets the cadence survive a PWA relaunch. */
+	lastFullMediaCheck: number;
+	/** Last 5 committed search queries, most recent first — local-only, never synced. */
+	recentSearches: string[];
 }
 export type MetaKey = keyof MetaValues;
 /** A single `meta` row — a known key paired with its typed value. */

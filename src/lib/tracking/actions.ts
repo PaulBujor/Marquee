@@ -97,6 +97,25 @@ export function isSpecialsSeason(seasonNumber: number): boolean {
 	return seasonNumber === SPECIALS_SEASON;
 }
 
+export function seasonCount(seasons: { seasonNumber: number }[]): number {
+	return seasons.filter((s) => !isSpecialsSeason(s.seasonNumber)).length;
+}
+
+/**
+ * A show's production state, straight off TMDB's `in_production`. `ended` is TMDB's own term,
+ * rather than "finished", which would collide with the user's unrelated `did_not_finish` status.
+ * `in_production` is deliberately not "airing": it's true for a renewed show between seasons as
+ * well as one releasing weekly, and telling those apart needs a scheduled next episode we don't
+ * currently fetch.
+ */
+export type ProductionState = 'in_production' | 'ended' | 'unknown';
+
+export function productionState(inProduction: boolean | null): ProductionState {
+	if (inProduction === true) return 'in_production';
+	if (inProduction === false) return 'ended';
+	return 'unknown';
+}
+
 /** Stable key for an episode's watched-state, matching the client `episodeWatches` set. */
 export function watchedKey(season: number, episode: number): string {
 	return `${season}:${episode}`;

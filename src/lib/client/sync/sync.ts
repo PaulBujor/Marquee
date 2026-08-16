@@ -57,7 +57,7 @@ export function parseRetryAfter(
 
 /**
  * A retained snapshot of the last sync failure. Deliberately structured (not just a string) so
- * a future "report a sync problem" affordance (MRQ-95) has the HTTP status, attempt count, and
+ * a future "report a sync problem" affordance has the HTTP status, attempt count, and
  * time to hand — the engine keeps the most recent one on `SyncEngine.lastError`.
  */
 export interface SyncErrorInfo {

@@ -1,5 +1,5 @@
 /**
- * Crowdsourced search fallback (MRQ-90): a substring search over the shared `media` catalog, used
+ * Crowdsourced search fallback: a substring search over the shared `media` catalog, used
  * when TMDB is unreachable so the search screen degrades to results we already hold rather than
  * going blank. Scoped to provider-backed `linked` rows only — a user's private `custom` entries are
  * never surfaced to other users.
@@ -33,7 +33,7 @@ export async function searchLinkedMedia(
 	if (!q) return [];
 	// Fold the query with JS `toLowerCase()` and match the pre-folded `title_normalized` column, so
 	// this agrees with the offline client's full-Unicode folding rather than SQLite `LIKE`'s ASCII-only
-	// case-insensitivity (MRQ-141). Both operands are already lowercased, so LIKE is a plain substring.
+	// case-insensitivity. Both operands are already lowercased, so LIKE is a plain substring.
 	const pattern = `%${escapeLike(q.toLowerCase())}%`;
 	const rows = await db
 		.select({

@@ -34,6 +34,8 @@ const detailsBase = {
 export const movieDetailsResponseSchema = z.looseObject(detailsBase);
 export const tvDetailsResponseSchema = z.looseObject(detailsBase);
 
+export const personResponseSchema = z.looseObject(detailsBase);
+
 export const seasonDetailResponseSchema = z.looseObject({
 	season_number: z.number(),
 	episodes: z

@@ -13,6 +13,82 @@
 	scrollbar-width: none;
 }
 
+/* Vertical space the floating tab bar occupies: card height + the gap below it + the home-indicator
+ * inset. The bar overwrites both at runtime with its measured height (user font scaling changes it);
+ * these are the SSR / no-JS baselines. `--tab-bar-space` is what pages pad by (`pb-tab-bar`) and
+ * holds the EXPANDED height, so the page never reflows as the bar collapses; `--tab-bar-live` is the
+ * height right now, and positions the fixed overlays that sit directly above the bar — toasts and
+ * the undo pill — so they follow it down instead of leaving a gap. Unconditional: the two pages
+ * without a bar (login, the signed-out landing) are viewport-centred and never apply the utility. */
+:root {
+	--tab-bar-space: calc(4.875rem + max(0.75rem, env(safe-area-inset-bottom)));
+	--tab-bar-live: var(--tab-bar-space);
+}
+@media (min-width: 40rem) {
+	:root {
+		--tab-bar-space: calc(3.5rem + 1rem);
+	}
+}
+
+@utility pb-tab-bar {
+	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
+}
+
+/* The app's frosted-glass material, shared by every surface that floats over scrolling content: the
+ * tab bar, the scroll-undo pill, the search field, and Sonner's toasts. Blur alone is not enough:
+ * over a poster or a full-bleed backdrop the artwork reads straight through and the labels lose
+ * contrast. So the backdrop is also pushed toward the surface's own tone — `contrast()` compresses
+ * it toward mid-grey, then `brightness()` carries it up in light mode and down in dark — which is
+ * what makes a native material read as a tinted plate rather than a window.
+ *
+ * Over the page background both labels clear WCAG AA comfortably. Over artwork the wash can't fully
+ * win without turning the surface into an opaque plate, so the floor there is the 3:1 AA-large
+ * threshold, measured against a pure-black or pure-white pixel landing directly behind a glyph.
+ * Worst case is the 11px teal active label: 3.37:1 light, 3.39:1 dark. Both prefixes: iOS Safari
+ * needs `-webkit-`.
+ *
+ * The tints are set by that floor, not by taste, and differ per theme because the floor does — dark
+ * crushes the backdrop further down, so it can stay much thinner at the same legibility. Thinning
+ * light instead and compensating with a stronger `contrast()` is not an option: it holds the same
+ * floor by letting through the same amount of backdrop, only flattened elsewhere. The blur is the
+ * one free variable — it holds none of the floor, and only decides how legible the backdrop's
+ * shapes stay through the surface.
+ *
+ * Without backdrop-filter the surface stays fully opaque — a translucent panel with no wash behind
+ * it would be the unreadable case this exists to prevent.
+ *
+ * Plain CSS rather than an `@utility`, deliberately: unlayered rules beat Tailwind's utility layer,
+ * so applying `.glass` to a component that already sets its own background (the search input's
+ * `bg-transparent` / `dark:bg-input/30`) works without per-call-site overrides. The recipe is held
+ * in two variables as well as the class, because Sonner styles its own toast element and can only be
+ * reached through the custom properties it reads — those toasts must not drift from this.
+ *
+ * The class is strictly the *material* — background and filter, nothing else. It used to carry the
+ * border and shadow too, which beat `focus-visible:ring-3` and `focus-visible:border-ring` on the
+ * search field (Tailwind's ring is a box-shadow) and left it with no visible focus indicator at all.
+ * Border and shadow belong to each call site. */
+:root {
+	--glass-bg: var(--popover);
+	--glass-filter: none;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	:root {
+		--glass-bg: color-mix(in oklab, var(--popover) 70%, transparent);
+		--glass-filter: blur(10px) saturate(1.8) contrast(0.6) brightness(1.6);
+	}
+	.dark {
+		--glass-bg: color-mix(in oklab, var(--popover) 35%, transparent);
+		--glass-filter: blur(10px) saturate(1.8) contrast(0.9) brightness(0.55);
+	}
+}
+
+.glass {
+	background-color: var(--glass-bg);
+	-webkit-backdrop-filter: var(--glass-filter);
+	backdrop-filter: var(--glass-filter);
+}
+
 /*
  * Design tokens. Colors are oklch(Lightness Chroma Hue), each with its sRGB hex
  * alongside — the hex is the value the palette was specified in, the oklch is
@@ -85,8 +161,18 @@
 }
 
 @theme inline {
-	--radius-sm: calc(var(--radius) - 4px);
-	--radius-md: calc(var(--radius) - 2px);
+	/* Corner radii, as four rungs the app actually distinguishes between — they were previously
+	 * 2px apart (20/22/24/28), a ladder too fine to design with, which is why the values below had
+	 * been open-coded as `rounded-[10px]` / `rounded-[14px]` all over the app instead. Each rung has
+	 * a job:
+	 *   sm  list rows, inline chips, banners, compact controls
+	 *   md  artwork and media tiles (posters, avatars), menu/select items, tooltips, skeletons
+	 *   lg  menus, popovers and select panels (= --radius)
+	 *   xl  cards and dialogs — the largest surfaces
+	 * Anything a finger presses is a capsule (`rounded-full`) instead: buttons, badges, toggles,
+	 * toasts and the bottom tab bar. Reach for a rung, not a pixel value. */
+	--radius-sm: 10px;
+	--radius-md: 14px;
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) + 4px);
 
@@ -118,8 +204,25 @@
 		@apply border-border outline-ring/50;
 	}
 
+	/* Both, not just body: the root is what shows through when a page is rubber-banded past its end,
+	   and in an installed PWA it is also taller than the content by the safe-area inset added below. */
+	html,
 	body {
 		@apply bg-background text-foreground;
+	}
+
+	/* Installed iOS PWAs hit an open WebKit bug where viewport units come back missing a safe-area
+	   inset under `viewport-fit=cover`, so the page stops short of the bottom of the screen: iOS
+	   fills the remainder itself (the dark band below the content) and a `position: fixed; bottom: 0`
+	   element lands on the short edge rather than the real one. Handing the document that height back
+	   is the fix WebKit's own bug thread recommends.
+	   Scoped to installed apps — in a browser tab the window is not the screen, and adding the inset
+	   there would only buy a strip of dead scrollable space. It resolves to plain `100dvh` wherever
+	   the inset is zero, and stops doing anything at all once the bug is fixed. */
+	@media (display-mode: standalone) {
+		html {
+			min-height: calc(100dvh + env(safe-area-inset-bottom));
+		}
 	}
 
 	/* Kill the mobile double-tap-to-zoom gesture (and the legacy ~300ms click delay) on buttons and

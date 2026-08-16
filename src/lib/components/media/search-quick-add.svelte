@@ -4,7 +4,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 
-	// Quick add/remove button for a search row (MRQ-125). Presentational: the parent owns the
+	// Quick add/remove button for a search row. Presentational: the parent owns the
 	// tracked lookup + write handlers so a change on one row reflects on all of them.
 	interface Props {
 		title: string;

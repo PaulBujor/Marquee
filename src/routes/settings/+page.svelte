@@ -1,6 +1,5 @@
 <script lang="ts">
 	import PageHeader from '$lib/components/page-header.svelte';
-	import BackButton from '$lib/components/back-button.svelte';
 	import AccountCard from './account-card.svelte';
 	import AppearanceCard from './appearance-card.svelte';
 	import NotificationsCard from './notifications-card.svelte';
@@ -17,14 +16,15 @@
 	<title>Settings · Marquee</title>
 </svelte:head>
 
+<!-- No back control: this is a tab root, reachable from anywhere. `min-h-10` holds the header at the
+same height as the ones that do carry a 40px control, so the sticky offsets stay uniform. -->
 <PageHeader>
-	<div class="flex items-center gap-3">
-		<BackButton />
+	<div class="flex min-h-10 items-center gap-3">
 		<h1 class="font-serif text-xl font-semibold">Settings</h1>
 	</div>
 </PageHeader>
 
-<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-16">
+<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-tab-bar">
 	<AccountCard user={data.user} codeTtlMinutes={data.codeTtlMinutes} {form} />
 	<AppearanceCard />
 	<NotificationsCard />

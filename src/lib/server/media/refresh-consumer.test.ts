@@ -53,6 +53,7 @@ function seasonDetail(seasonNumber: number): SeasonDetail {
 	return {
 		seasonNumber,
 		name: `S${seasonNumber}`,
+		overview: '',
 		episodes: [
 			{
 				episodeNumber: 1,

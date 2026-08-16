@@ -39,3 +39,38 @@ export async function getLastSyncAt(): Promise<number | null> {
 export async function setLastSyncAt(at: number): Promise<void> {
 	await setMeta('lastSyncAt', at);
 }
+
+/** Epoch ms of the last full media version-diff pass, or 0 if never run on this device. */
+export async function getLastFullMediaCheck(): Promise<number> {
+	return (await getMeta('lastFullMediaCheck')) ?? 0;
+}
+
+export async function setLastFullMediaCheck(at: number): Promise<void> {
+	await setMeta('lastFullMediaCheck', at);
+}
+
+const RECENT_SEARCHES_LIMIT = 25;
+
+/** Last committed searches, most recent first — empty if none recorded on this device. */
+export async function getRecentSearches(): Promise<string[]> {
+	return (await getMeta('recentSearches')) ?? [];
+}
+
+/**
+ * Record a committed search query, bumping it to the front if already present (rather than
+ * showing it twice) and capping the list at {@link RECENT_SEARCHES_LIMIT}. Returns the updated
+ * list so the caller can update its UI state without a second round trip. Blank queries are
+ * ignored — clearing the search box shouldn't add an empty entry.
+ */
+export async function addRecentSearch(query: string): Promise<string[]> {
+	const q = query.trim();
+	if (!q) return getRecentSearches();
+	const existing = await getRecentSearches();
+	const next = [q, ...existing.filter((s) => s !== q)].slice(0, RECENT_SEARCHES_LIMIT);
+	await setMeta('recentSearches', next);
+	return next;
+}
+
+export async function clearRecentSearches(): Promise<void> {
+	await setMeta('recentSearches', []);
+}

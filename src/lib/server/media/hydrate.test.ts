@@ -66,7 +66,7 @@ function movieStub(overrides: Partial<MediaDetail> = {}) {
 				return { ...movieDefaults, tmdbId: id, type, ...overrides };
 			},
 			async getSeason(): Promise<SeasonDetail> {
-				return { seasonNumber: 0, name: '', episodes: [] };
+				return { seasonNumber: 0, name: '', overview: '', episodes: [] };
 			}
 		}
 	};
@@ -90,6 +90,8 @@ function showStub() {
 	let detailCalls = 0;
 	let inProduction = true;
 	const season1 = { name: 'Season 1', overview: '', posterPath: null as string | null };
+	// The season endpoint's overview, separate from `season1.overview` so tests can vary each.
+	let seasonDetailOverview = '';
 	const episodesBySeason: Record<number, EpisodeStub[]> = {
 		1: [
 			{
@@ -132,6 +134,9 @@ function showStub() {
 		updateSeason(patch: Partial<typeof season1>) {
 			Object.assign(season1, patch);
 		},
+		updateSeasonDetailOverview(overview: string) {
+			seasonDetailOverview = overview;
+		},
 		endProduction() {
 			inProduction = false;
 		},
@@ -163,6 +168,7 @@ function showStub() {
 				return {
 					seasonNumber,
 					name: `Season ${seasonNumber}`,
+					overview: seasonNumber === 1 ? seasonDetailOverview : '',
 					episodes: (episodesBySeason[seasonNumber] ?? []).map((e) => ({
 						episodeNumber: e.episodeNumber,
 						name: e.name,
@@ -200,7 +206,7 @@ describe('needsRefresh', () => {
 		const released = { type: 'movie' as const, releaseDate: '2020-01-01', refreshedAt: T0 };
 		expect(needsRefresh(released as never, T0 + 5e9)).toBe(false);
 	});
-	it('refreshes an unreleased movie only past the TTL (MRQ-128)', () => {
+	it('refreshes an unreleased movie only past the TTL', () => {
 		const future = { type: 'movie' as const, releaseDate: '2030-01-01', refreshedAt: T0 };
 		expect(needsRefresh(future as never, T0 + 1000)).toBe(false);
 		expect(needsRefresh(future as never, T0 + 13 * 3600_000)).toBe(true);
@@ -231,7 +237,7 @@ describe('refreshMedia', () => {
 			source: 'linked',
 			type: 'movie',
 			title: 'The Matrix',
-			titleNormalized: 'the matrix', // JS-folded for the degraded search (MRQ-141)
+			titleNormalized: 'the matrix', // JS-folded for the degraded search
 			backdropPath: '/backdrop.jpg',
 			releaseDate: '1999-03-31',
 			version: 1,
@@ -425,6 +431,32 @@ describe('refreshMedia', () => {
 		expect(second!.version).toBe(2);
 		expect(writes.filter((w) => w.table === 'episodes')).toEqual([]);
 		expect(writes.filter((w) => w.table === 'seasons')).toHaveLength(1);
+	});
+
+	it('prefers the season-endpoint overview over the thinner show-detail summary', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		stub.updateSeason({ overview: 'Thin summary.' });
+		stub.updateSeasonDetailOverview('The full season synopsis.');
+
+		const result = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		expect(result).not.toBeNull();
+		const seasonRows = await db.select().from(seasons).where(eq(seasons.mediaId, result!.id));
+		expect(seasonRows[0]?.overview).toBe('The full season synopsis.');
+	});
+
+	it('falls back to the show-detail summary overview when the season endpoint has none', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		stub.updateSeason({ overview: 'Thin summary.' });
+		// seasonDetailOverview stays '' — TMDB's empty string for a season with no synopsis.
+
+		const result = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		expect(result).not.toBeNull();
+		const seasonRows = await db.select().from(seasons).where(eq(seasons.mediaId, result!.id));
+		expect(seasonRows[0]?.overview).toBe('Thin summary.');
 	});
 
 	it('returns null for an unknown provider or malformed id without calling TMDB', async () => {

@@ -40,7 +40,7 @@
 
 <div
 	class={cn(
-		'relative flex aspect-[2/3] w-full flex-col items-end justify-end overflow-hidden rounded-[14px] bg-secondary',
+		'relative flex aspect-[2/3] w-full flex-col items-end justify-end overflow-hidden rounded-md bg-secondary',
 		isCustom && 'border border-dashed border-border',
 		className
 	)}

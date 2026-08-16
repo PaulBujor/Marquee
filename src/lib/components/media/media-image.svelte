@@ -1,6 +1,6 @@
 <script lang="ts">
 	// An offline-capable <img>: renders the cached image Blob (kept in IndexedDB by the media
-	// channel, MRQ-111b) when present, else the TMDB URL. Re-checks after each sync so a poster
+	// channel) when present, else the TMDB URL. Re-checks after each sync so a poster
 	// swaps to its local blob once fetched, and revokes its object URL on teardown / id change.
 	import { getMediaImages } from '$lib/client/idb/images';
 	import { posterUrl, POSTER_SIZE, type TmdbImageSize } from '$lib/media';
@@ -33,7 +33,7 @@
 	// Non-reactive bookkeeping for the blob currently shown: its identity (`id:kind:updatedAt`) and
 	// the object URL made from it. A sync re-check compares against this so an unchanged blob keeps
 	// its existing URL instead of getting a brand-new one — recreating the URL makes the browser
-	// reload the <img>, which is the visible "pop" on every event/sync (MRQ-140).
+	// reload the <img>, which is the visible "pop" on every event/sync.
 	let loadedKey: string | null = null;
 	let loadedUrl: string | null = null;
 

@@ -135,16 +135,45 @@ export async function getEpisodes(mediaId: string): Promise<ClientEpisode[]> {
 }
 
 /**
- * Every media id the local `tracking`/`episodeWatches` projections reference — the client-side
- * mirror of what the server would derive from the same projections. Unconditional (a removed
- * tracking row still counts, matching the server's scope): `tracking`'s keyPath *is* `mediaId`,
- * so this is two cheap local index reads, no filtering needed beyond dedup.
+ * Media ids on a list — a non-removed `tracking` row, or a `watched: true` episode. Both what the
+ * media channel asks the server about and the keep-set eviction runs against, so a title stops
+ * being fetched and starts being dropped the moment it leaves every list. Tombstones (a removed
+ * tracking row, a `watched: false` episode) don't count.
  */
 export async function getReferencedMediaIds(): Promise<string[]> {
 	const db = await openDb();
-	const ids = new Set<string>(await db.getAllKeys('tracking'));
-	for (const row of await db.getAll('episodeWatches')) ids.add(row.mediaId);
+	const ids = new Set<string>();
+	for (const row of await db.getAll('tracking')) if (!row.removed) ids.add(row.mediaId);
+	for (const row of await db.getAll('episodeWatches')) if (row.watched) ids.add(row.mediaId);
 	return [...ids];
+}
+
+/**
+ * Drop `media` rows and their `seasons`/`episodes` children for ids outside `keepIds`. No
+ * storage-pressure gate like `pruneMediaImages` has — reference data is small and re-fetched from
+ * the channel on re-add, so leaving every list is reason enough. Returns how many rows were deleted.
+ */
+export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
+	const db = await openDb();
+	const tx = db.transaction(['media', 'seasons', 'episodes'], 'readwrite');
+	const mediaStore = tx.objectStore('media');
+	const seasonStore = tx.objectStore('seasons');
+	const episodeStore = tx.objectStore('episodes');
+	const seasonIndex = seasonStore.index('by_media');
+	const episodeIndex = episodeStore.index('by_media');
+	let deleted = 0;
+
+	for (let cursor = await mediaStore.openCursor(); cursor; cursor = await cursor.continue()) {
+		if (keepIds.has(cursor.value.id)) continue;
+		const id = cursor.value.id;
+		await cursor.delete();
+		deleted++;
+		for (const key of await seasonIndex.getAllKeys(id)) await seasonStore.delete(key);
+		for (const key of await episodeIndex.getAllKeys(id)) await episodeStore.delete(key);
+	}
+
+	await tx.done;
+	return deleted;
 }
 
 /**

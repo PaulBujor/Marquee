@@ -29,9 +29,10 @@ describe('offlineSeason', () => {
 			episode(1, 1, { name: 'A', overview: 'o1', airDate: '2020-01-01', stillPath: '/s.jpg' }),
 			episode(2, 1, { name: 'other' })
 		];
-		expect(offlineSeason(1, 'Season 1', rows)).toEqual({
+		expect(offlineSeason(1, 'Season 1', 'A season synopsis.', rows)).toEqual({
 			seasonNumber: 1,
 			name: 'Season 1',
+			overview: 'A season synopsis.',
 			episodes: [
 				{
 					episodeNumber: 1,
@@ -123,7 +124,7 @@ describe('buildOfflineDetail', () => {
 				{
 					seasonNumber: 1,
 					name: 'Season 1',
-					overview: '',
+					overview: 'A season synopsis.',
 					airDate: '2008-01-20',
 					posterPath: null,
 					episodeCount: 2
@@ -152,7 +153,9 @@ describe('buildOfflineDetail', () => {
 		});
 		const out = await buildOfflineDetail('show', 1396);
 		expect(out?.detail.seasons).toHaveLength(1);
+		expect(out?.detail.seasons[0]?.overview).toBe('A season synopsis.');
 		expect(out?.season?.seasonNumber).toBe(1);
+		expect(out?.season?.overview).toBe('A season synopsis.');
 		expect(out?.season?.episodes.map((e) => e.name)).toEqual(['Pilot', 'Cat']);
 	});
 });

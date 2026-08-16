@@ -89,12 +89,13 @@ await rm(SPLASH, { recursive: true, force: true });
 await mkdir(ICONS, { recursive: true });
 await mkdir(SPLASH, { recursive: true });
 
-// 1. Browser favicons (PNG), light + dark, from the full-bleed sources
+// 1. Browser favicons (PNG), light + dark, from the full-bleed sources. 96 and 144 are for
+//    the header mark's 2x/3x steps, not for any favicon slot.
 for (const [input, suffix] of [
 	[src.favicon, ''],
 	[src.faviconDark, '-dark']
 ]) {
-	for (const s of [16, 32, 48]) {
+	for (const s of [16, 32, 48, 96, 144]) {
 		await sharp(input)
 			.resize(s, s)
 			.png()

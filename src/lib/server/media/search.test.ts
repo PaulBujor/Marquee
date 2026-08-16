@@ -114,7 +114,7 @@ describe('searchLinkedMedia', () => {
 	it('folds non-ASCII case like the offline client (matches accented titles)', async () => {
 		const db = await createTestDb();
 		// `title_normalized` holds the JS `toLowerCase()` fold (what refreshMedia writes), so an
-		// uppercase accented query matches — where SQLite's ASCII-only LIKE on `title` would not (MRQ-141).
+		// uppercase accented query matches — where SQLite's ASCII-only LIKE on `title` would not.
 		await db.insert(media).values({
 			id: 'ete',
 			provider: 'tmdb',

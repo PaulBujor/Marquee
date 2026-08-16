@@ -5,16 +5,19 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
+	import ExpandableText from '$lib/components/expandable-text.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
+	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
 	import MediaImage from '$lib/components/media/media-image.svelte';
+	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { posterUrl } from '$lib/media.js';
+	import { hasDescription, posterUrl } from '$lib/media.js';
 	import { formatExactDateTime, formatRelativeDay } from '$lib/date.js';
 	import {
 		tmdbMediaId,
@@ -22,7 +25,14 @@
 		type MediaRecord,
 		type TrackingStatus
 	} from '$lib/sync/events';
-	import { isAired, todayIso, watchedKey, type DatedEpisode } from '$lib/tracking/actions';
+	import {
+		productionState,
+		isAired,
+		seasonCount,
+		todayIso,
+		watchedKey,
+		type DatedEpisode
+	} from '$lib/tracking/actions';
 	import { deriveStatus } from '$lib/tracking/derive-status';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
 	import { getTracking, getEpisodes, getAllMedia, getEpisodeWatches } from '$lib/client/idb';
@@ -32,12 +42,11 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
-	import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import StarIcon from '@lucide/svelte/icons/star';
-	import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
+	import type { CrewMember, MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 
 	// `detail` is always present — the cached IndexedDB copy first, upgraded in place to the full
 	// network copy. `enrichState` says how to render the network-only sections (cast, trailer,
@@ -66,6 +75,10 @@
 	const formatDate = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
 	// Our own media id for the tracking event pipeline (provider-agnostic).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
+	const seasons = $derived(detail.type === 'show' ? seasonCount(detail.seasons) : 0);
+	const production = $derived(
+		detail.type === 'show' ? productionState(detail.inProduction) : 'unknown'
+	);
 	// Today (YYYY-MM-DD) for the per-episode aired check — an episode is watchable once it's aired.
 	const today = todayIso();
 
@@ -188,6 +201,10 @@
 			? (detail.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
 			: null
 	);
+	// The loaded season carries the real synopsis; the summary stands in until it resolves.
+	const selectedSeasonOverview = $derived(
+		[currentSeason?.overview, selectedSeasonSummary?.overview].find(hasDescription) ?? null
+	);
 	// Whether a bulk mark of the selected season right now would under-seed — see
 	// `TrackingState.readyToMarkSeason`.
 	const seasonNotReady = $derived(
@@ -258,22 +275,19 @@
 		}
 	});
 
-	// Suggestion-chain origin + depth. Normal navigation still pushes one entry per hop (so browser
-	// Back steps back one title at a time), but each "Similar" link carries the chain's origin forward
-	// in `?from=` plus a `hops` counter — so a few hops deep we can also offer a jump straight back to
-	// where the chain started (home, or the search that began it).
+	// Suggestion-chain origin. Each "Similar" link carries the chain's origin forward in `?from=`, so
+	// however deep the chain runs, a cold-opened title still knows where the chain began (home, or
+	// the search that started it) and the back control has somewhere sensible to land. Rewinding the
+	// whole chain in one go no longer needs its own control — the tab bar is always on screen.
 	const originParam = $derived(page.url.searchParams.get('from'));
-	const hops = $derived(Math.max(0, Number(page.url.searchParams.get('hops')) || 0));
 	// The origin to return to: the carried `?from` param, else where this title was entered from (home
 	// or a search, tracked in the shared navigation state), else home.
 	const origin = $derived(originParam ?? navigation.entryOrigin);
-	// Offer the jump-to-origin control once the chain is a few hops deep.
-	const showBackToOrigin = $derived(hops >= 3);
 
-	/** A "Similar" card's href: the same route carrying the origin + an incremented hop count. */
+	/** A "Similar" card's href: the same route, carrying the chain's origin forward. */
 	function similarHref(type: 'movie' | 'show', id: number): string {
 		const path = resolve('/title/[type]/[id]', { type, id: String(id) });
-		return `${path}?from=${encodeURIComponent(origin)}&hops=${hops + 1}`;
+		return `${path}?from=${encodeURIComponent(origin)}`;
 	}
 
 	// Reset the per-title view state whenever the media changes — a title → title hop via a "Similar"
@@ -296,15 +310,6 @@
 		goto(origin);
 	}
 
-	function popToOrigin() {
-		// Pop back through the entries the chain pushed — the initial title entry plus one per hop —
-		// so the origin is reached by rewinding history, not by pushing a fresh entry on top. When the
-		// back stack isn't there (e.g. a deep-linked chain URL) fall back to navigating to the origin.
-		const steps = hops + 1;
-		if (steps < history.length) history.go(-steps);
-		else goToOrigin();
-	}
-
 	function goBack() {
 		if (navigation.canGoBack) history.back();
 		else goToOrigin();
@@ -320,6 +325,7 @@
 			seasonCache[seasonNumber] = offlineSeason(
 				seasonNumber,
 				summary?.name ?? `Season ${seasonNumber}`,
+				summary?.overview ?? '',
 				await getEpisodes(mediaId)
 			);
 			return;
@@ -347,14 +353,10 @@
 		}
 	}
 
-	/** First-letter initials for a cast avatar with no profile image. */
-	function initials(name: string): string {
-		return name
-			.split(/\s+/)
-			.slice(0, 2)
-			.map((part) => part[0] ?? '')
-			.join('')
-			.toUpperCase();
+	/** A cast or crew member's own page. Un-annotated so `resolve()`'s branded type survives — the
+	 * lint rule that requires resolved hrefs keys on it. */
+	function personHref(id: number) {
+		return resolve('/person/[id]', { id: String(id) });
 	}
 </script>
 
@@ -362,38 +364,38 @@
 	<title>{detail.title} · Marquee</title>
 </svelte:head>
 
+<!-- A comma-separated crew list where each name links to that person. The separator's space is
+an entity because Svelte trims a literal trailing space at the end of an element. -->
+{#snippet crewNames(members: CrewMember[])}
+	{#each members as member, i (member.id)}
+		{#if i > 0}<span>,&#32;</span>{/if}<a
+			href={personHref(member.id)}
+			class="underline decoration-dotted underline-offset-4 hover:decoration-solid">{member.name}</a
+		>
+	{/each}
+{/snippet}
+
 <!-- Fixed header over the hero: the back control is always reachable, but the blur backing + title
 fade in together only once the in-content <h1> scrolls out of view — over the hero the header is
 fully transparent. Blur is stronger here (over artwork) than the other headers. -->
 <header class="fixed inset-x-0 top-0 z-40">
 	<HeaderScrim strong show={!titleInView} />
+	<!-- Inset equally on all three sides that frame the control, matching the app header. -->
 	<div
-		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
+		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
 	>
+		<!-- Ghost: no plate, so it sits as lightly as possible on the hero artwork. `icon-lg` is 44px —
+		a full touch target even though nothing is drawn around it. -->
 		<Button
 			onclick={goBack}
-			variant="outline"
-			size="icon"
+			variant="ghost"
+			size="icon-lg"
 			shape="round"
-			class="shrink-0 text-muted-foreground"
+			class="shrink-0"
 			aria-label="Go back"
 		>
-			<ChevronLeftIcon class="size-4" />
+			<ChevronLeftIcon class="size-5" />
 		</Button>
-		{#if showBackToOrigin}
-			<!-- A few suggestions deep: rewind straight back to where the chain started (home / search). -->
-			<Button
-				onclick={popToOrigin}
-				variant="outline"
-				size="icon"
-				shape="round"
-				class="shrink-0 text-muted-foreground"
-				aria-label="Back to start"
-				title="Back to start"
-			>
-				<ChevronsLeftIcon class="size-4" />
-			</Button>
-		{/if}
 		{#if !titleInView}
 			<h2
 				class="min-w-0 flex-1 truncate font-serif text-lg font-semibold"
@@ -423,9 +425,9 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 	{/if}
 
 	<div
-		class="flex flex-col gap-4 px-5 pb-10 {detail.backdropPath
+		class="flex flex-col gap-4 px-5 pb-tab-bar {detail.backdropPath
 			? '-mt-14'
-			: 'pt-[calc(3.5rem+env(safe-area-inset-top))]'}"
+			: 'pt-[calc(4.75rem+env(safe-area-inset-top))]'}"
 	>
 		<!-- Poster overlaps the bottom of the backdrop; title/badges sit alongside it. -->
 		<div class="flex items-end gap-4">
@@ -447,9 +449,14 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 					{detail.title}
 				</h1>
 				<div class="flex flex-wrap items-center gap-2">
-					<MediaBadge>
-						{detail.type === 'movie' ? 'Movie' : 'Show'}{detail.year ? ` · ${detail.year}` : ''}
-					</MediaBadge>
+					<MediaTypeLabel type={detail.type} year={detail.year} {seasons} />
+					{#if production === 'in_production'}
+						<MediaBadge variant="production">
+							<span class="size-1.5 rounded-full bg-primary"></span>In production
+						</MediaBadge>
+					{:else if production === 'ended'}
+						<MediaBadge variant="status">Ended</MediaBadge>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -518,25 +525,25 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 							{/if}
 							{#if detail.director}
 								<dt class="text-muted-foreground">Director</dt>
-								<dd>{detail.director}</dd>
+								<dd>{@render crewNames([detail.director])}</dd>
 							{/if}
 							{#if detail.creators.length > 0}
 								<dt class="text-muted-foreground">
 									{detail.creators.length > 1 ? 'Creators' : 'Creator'}
 								</dt>
-								<dd>{detail.creators.join(', ')}</dd>
+								<dd>{@render crewNames(detail.creators)}</dd>
 							{/if}
 							{#if detail.writers.length > 0}
 								<dt class="text-muted-foreground">
 									{detail.writers.length > 1 ? 'Writers' : 'Writer'}
 								</dt>
-								<dd>{detail.writers.join(', ')}</dd>
+								<dd>{@render crewNames(detail.writers)}</dd>
 							{/if}
 							{#if detail.producers.length > 0}
 								<dt class="text-muted-foreground">
 									{detail.producers.length > 1 ? 'Producers' : 'Producer'}
 								</dt>
-								<dd>{detail.producers.join(', ')}</dd>
+								<dd>{@render crewNames(detail.producers)}</dd>
 							{/if}
 						</dl>
 					{/if}
@@ -552,7 +559,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 									</li>
 								{/each}
 							</ul>
-							<Skeleton class="aspect-video w-full rounded-[14px]" />
+							<Skeleton class="aspect-video w-full rounded-md" />
 						</div>
 					{:else if offline}
 						<!-- Cast, trailer, and similar come from TMDB and aren't cached for offline. -->
@@ -569,31 +576,25 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 							</h2>
 							<ul class="no-scrollbar flex gap-3.5 overflow-x-auto pb-1">
 								{#each detail.cast as member (member.id)}
-									{@const avatar = posterUrl(member.profilePath, 'w185')}
-									<li class="flex w-16 shrink-0 flex-col items-center text-center">
-										{#if avatar}
-											<img
-												src={avatar}
-												alt={member.name}
-												loading="lazy"
-												decoding="async"
-												class="size-14 rounded-full object-cover"
-											/>
-										{:else}
-											<div
-												class="flex size-14 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-muted-foreground"
-												aria-hidden="true"
-											>
-												{initials(member.name)}
-											</div>
-										{/if}
-										<span class="mt-1.5 text-[0.7rem] leading-tight font-medium">{member.name}</span
+									<li class="w-16 shrink-0">
+										<a
+											href={personHref(member.id)}
+											class="flex w-full flex-col items-center rounded-lg text-center focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 										>
-										{#if member.character}
-											<span class="text-[0.65rem] leading-tight text-muted-foreground"
-												>{member.character}</span
+											<PersonAvatar
+												name={member.name}
+												profilePath={member.profilePath}
+												class="size-14"
+											/>
+											<span class="mt-1.5 text-[0.7rem] leading-tight font-medium"
+												>{member.name}</span
 											>
-										{/if}
+											{#if member.character}
+												<span class="text-[0.65rem] leading-tight text-muted-foreground"
+													>{member.character}</span
+												>
+											{/if}
+										</a>
 									</li>
 								{/each}
 							</ul>
@@ -606,7 +607,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 								Trailer
 							</h2>
 							{#if showTrailer}
-								<div class="aspect-video w-full overflow-hidden rounded-[14px]">
+								<div class="aspect-video w-full overflow-hidden rounded-md">
 									<iframe
 										src={`https://www.youtube-nocookie.com/embed/${detail.trailer.key}?autoplay=1`}
 										title={detail.trailer.name}
@@ -619,7 +620,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 								<button
 									type="button"
 									onclick={() => (showTrailer = true)}
-									class="group relative aspect-video w-full overflow-hidden rounded-[14px] bg-secondary"
+									class="group relative aspect-video w-full overflow-hidden rounded-md bg-secondary"
 									aria-label={`Play trailer: ${detail.trailer.name}`}
 								>
 									<img
@@ -652,7 +653,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				<div class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Similar</div>
 				<div class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
 					{#each [0, 1, 2, 3, 4] as i (i)}
-						<div class="w-24 shrink-0"><Skeleton class="aspect-[2/3] w-full rounded-[14px]" /></div>
+						<div class="w-24 shrink-0"><Skeleton class="aspect-[2/3] w-full rounded-md" /></div>
 					{/each}
 				</div>
 			</section>
@@ -723,6 +724,16 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						</button>
 					{/each}
 				</div>
+
+				{#if selectedSeasonOverview}
+					{#key selectedSeason}
+						<ExpandableText
+							text={selectedSeasonOverview}
+							lines={4}
+							class="text-sm leading-relaxed text-muted-foreground"
+						/>
+					{/key}
+				{/if}
 
 				{#if tracking.view.tracked && selectedSeasonSummary && !tracking.isSeasonWatched(selectedSeasonSummary.seasonNumber)}
 					<Button

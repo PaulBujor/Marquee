@@ -20,6 +20,7 @@ export interface OfflineTitle {
 export function offlineSeason(
 	seasonNumber: number,
 	name: string,
+	overview: string,
 	episodeRows: ClientEpisode[]
 ): SeasonDetail {
 	const episodes: Episode[] = episodeRows
@@ -33,7 +34,7 @@ export function offlineSeason(
 			stillPath: e.stillPath,
 			runtime: e.runtime
 		}));
-	return { seasonNumber, name, episodes };
+	return { seasonNumber, name, overview, episodes };
 }
 
 /**
@@ -109,7 +110,12 @@ async function assembleOfflineDetail(
 			seasons.find((s) => s.seasonNumber === requested) ??
 			seasons.find((s) => s.seasonNumber >= 1) ??
 			seasons[0];
-		season = offlineSeason(chosen.seasonNumber, chosen.name, await getEpisodes(id));
+		season = offlineSeason(
+			chosen.seasonNumber,
+			chosen.name,
+			chosen.overview,
+			await getEpisodes(id)
+		);
 	}
 
 	return { detail, season };

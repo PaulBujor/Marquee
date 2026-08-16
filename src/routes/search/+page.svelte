@@ -1,20 +1,33 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Input } from '$lib/components/ui/input';
+	import { Button } from '$lib/components/ui/button';
 	import PageHeader from '$lib/components/page-header.svelte';
-	import BackButton from '$lib/components/back-button.svelte';
-	import MediaBadge from '$lib/components/media/media-badge.svelte';
+	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
+	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { posterUrl } from '$lib/media.js';
-	import { getTracking, putMedia, recordEvent, searchLocalMedia } from '$lib/client/idb';
+	import {
+		addRecentSearch,
+		clearRecentSearches,
+		getRecentSearches,
+		getTracking,
+		putMedia,
+		recordEvent,
+		searchLocalMedia
+	} from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
+	import type { SearchResult } from '$lib/server/tmdb';
+	import { tabs } from '$lib/state/tabs.svelte.js';
 	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
+	import ClockIcon from '@lucide/svelte/icons/clock';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { PageData } from './$types';
 
@@ -65,6 +78,24 @@
 		}
 	}
 
+	// Local-only search history (device IndexedDB, never synced) — shown before the user types.
+	let recentSearches = $state<string[]>([]);
+	onMount(() => {
+		void getRecentSearches().then((r) => (recentSearches = r));
+	});
+	async function recordSearch(q: string) {
+		recentSearches = await addRecentSearch(q);
+	}
+	async function selectRecentSearch(q: string) {
+		query = q;
+		await commit();
+		await recordSearch(q);
+	}
+	async function clearHistory() {
+		await clearRecentSearches();
+		recentSearches = [];
+	}
+
 	const DEBOUNCE_MS = 300;
 
 	// Local input value, seeded once from the URL (untrack marks the initial read as intentional).
@@ -73,6 +104,21 @@
 	let query = $state(untrack(() => data.q));
 	let searching = $state(false);
 	let searchInput = $state<HTMLInputElement | null>(null);
+
+	// The Search tab focuses this field — on arrival from another destination, and immediately when
+	// it's tapped while already here. The request is a counter rather than a flag so repeated taps
+	// re-fire and it doesn't matter whether it was raised before or after this page mounted; tracking
+	// the one we served means reaching /search any other way (a deep link, Back from a title) never
+	// steals focus or pops the soft keyboard.
+	let servedFocus = 0;
+	$effect(() => {
+		const request = tabs.searchFocusRequest;
+		const el = searchInput;
+		if (!el || request === servedFocus) return;
+		servedFocus = request;
+		el.focus();
+		el.select();
+	});
 
 	let debounce: ReturnType<typeof setTimeout> | undefined;
 	// Guards the loading flag against overlapping commits — only the latest clears it.
@@ -121,8 +167,35 @@
 			void commit();
 		wasOnline = nowOnline;
 	});
-	// The active result set + the query/mode that drive the list and the degraded/offline banner.
-	const results = $derived<SearchLikeMedia[]>(online ? data.results : offlineResults);
+	// One relevance-ordered list whatever the source. Offline rows come from the local catalog, which
+	// holds titles only, so they're tagged `media` to sit in the same list as the online results.
+	const results = $derived<SearchResult[]>(
+		online
+			? data.results
+			: offlineResults.map((media) => ({
+					kind: 'media' as const,
+					...media,
+					// `overview` is optional on a local row but required on a search result; keep the real
+					// one where there is one, or a quick-add from offline would store a blank overview.
+					overview: media.overview ?? ''
+				}))
+	);
+
+	// All / Titles / People is a filter over that one list rather than three requests, so it stays in
+	// local state: putting it in the URL would re-run the load and re-hit TMDB just to hide rows.
+	type ResultTab = 'all' | 'titles' | 'people';
+	const RESULT_TABS: { key: ResultTab; label: string }[] = [
+		{ key: 'all', label: 'All' },
+		{ key: 'titles', label: 'Titles' },
+		{ key: 'people', label: 'People' }
+	];
+	let resultTab = $state<ResultTab>('all');
+
+	const mediaResults = $derived(results.filter((r) => r.kind === 'media'));
+	const peopleResults = $derived(results.filter((r) => r.kind === 'person'));
+	const visibleResults = $derived(
+		resultTab === 'titles' ? mediaResults : resultTab === 'people' ? peopleResults : results
+	);
 	// Loading = the online commit is in flight, or the offline local search is still running.
 	const loading = $derived(searching || offlineSearching);
 	const activeQuery = $derived(online ? data.q : query.trim());
@@ -174,27 +247,40 @@
 		commit();
 		searchInput?.focus();
 	}
+
+	// Record to history once the user settles on a query (Enter, or leaving the field) rather than on
+	// every keystroke the live-search debounce reacts to — `recordSearch` itself ignores blanks.
+	function onSearchKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') void recordSearch(query);
+	}
+	function onSearchBlur() {
+		void recordSearch(query);
+	}
 </script>
 
 <svelte:head>
 	<title>Search · Marquee</title>
 </svelte:head>
 
+<!-- No back control: this is a tab root. The search field sits where a page title would, and its
+h-10 holds the header at the same height as the other pages'. -->
 <PageHeader>
 	<div class="flex items-center gap-3">
-		<BackButton />
-		<!-- The search field sits where a page title would; back button + input share one row + size. -->
 		<div class="relative flex-1">
+			<!-- `glass`: the same frosted material as the tab bar. The field sits in a sticky header that
+			results scroll beneath, so it needs the tint and wash for the same reason the bar does. -->
 			<Input
 				bind:ref={searchInput}
 				type="search"
 				bind:value={query}
 				oninput={onInput}
+				onkeydown={onSearchKeydown}
+				onblur={onSearchBlur}
 				placeholder="Search movies and shows"
 				aria-label="Search movies and shows"
 				autocomplete="off"
 				autocapitalize="none"
-				class="appearance-none pr-11 [&::-webkit-search-cancel-button]:appearance-none"
+				class="glass appearance-none pr-11 [&::-webkit-search-cancel-button]:appearance-none"
 			/>
 			{#if query}
 				<button
@@ -210,12 +296,12 @@
 	</div>
 </PageHeader>
 
-<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-16">
+<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-tab-bar">
 	{#if loading}
 		<ul class="flex flex-col gap-3">
 			{#each [0, 1, 2, 3] as i (i)}
 				<li class="flex items-center gap-3">
-					<Skeleton class="aspect-[2/3] w-12 rounded-[10px]" />
+					<Skeleton class="aspect-[2/3] w-12 rounded-sm" />
 					<div class="flex flex-1 flex-col gap-2">
 						<Skeleton class="h-4 w-1/2" />
 						<Skeleton class="h-3 w-1/4" />
@@ -224,11 +310,33 @@
 			{/each}
 		</ul>
 	{:else}
+		{#if !activeQuery && recentSearches.length > 0}
+			<div class="flex flex-col gap-2">
+				<div class="flex items-center justify-between">
+					<h2 class="text-sm font-medium text-muted-foreground">Recent searches</h2>
+					<Button variant="ghost" size="sm" onclick={clearHistory}>Clear</Button>
+				</div>
+				<ul class="flex flex-col gap-1">
+					{#each recentSearches as q (q)}
+						<li>
+							<button
+								type="button"
+								onclick={() => selectRecentSearch(q)}
+								class="flex w-full items-center gap-3 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-secondary"
+							>
+								<ClockIcon class="size-4 shrink-0 text-muted-foreground" />
+								<span class="truncate">{q}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 		{#if networkMode !== 'up' && activeQuery}
 			<!-- Degraded/offline banner: TMDB unreachable → shared library; offline → your own titles. -->
 			<p
 				data-spec-ref="search-degraded-offline-banner"
-				class="rounded-[10px] bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
+				class="rounded-sm bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
 			>
 				{networkMode === 'offline'
 					? "You're offline — showing titles from your own list only."
@@ -237,43 +345,90 @@
 		{/if}
 		{#if activeQuery && results.length === 0}
 			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
-				No movies or shows found for “{activeQuery}”.
+				Nothing found for “{activeQuery}”.
 			</p>
 		{/if}
 	{/if}
+
 	{#if !loading && results.length > 0}
-		<ul class="flex flex-col gap-1">
-			{#each results as item (item.type + item.tmdbId)}
-				{@const id = tmdbMediaId(item.type, item.tmdbId)}
-				<li class="flex items-center gap-1">
-					<a
-						href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
-						class="-ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-secondary"
-					>
-						<div class="w-12 shrink-0">
-							<PosterTile
-								type={item.type}
-								posterUrl={posterUrl(item.posterPath)}
-								alt={item.title}
+		<!-- One request, three views of it. Shown only once there's something to split. -->
+		<Tabs.Root bind:value={resultTab}>
+			<Tabs.List class="w-full">
+				{#each RESULT_TABS as t (t.key)}
+					<Tabs.Trigger value={t.key}>{t.label}</Tabs.Trigger>
+				{/each}
+			</Tabs.List>
+		</Tabs.Root>
+
+		{#if visibleResults.length === 0}
+			<p class="px-1 py-6 text-center text-sm text-muted-foreground">
+				{#if resultTab === 'people' && networkMode !== 'up'}
+					People need a connection — only your own titles are searchable right now.
+				{:else if resultTab === 'people'}
+					No people found for “{activeQuery}”.
+				{:else}
+					No movies or shows found for “{activeQuery}”.
+				{/if}
+			</p>
+		{:else}
+			<ul class="flex flex-col gap-1">
+				{#each visibleResults as item (item.kind === 'person' ? `p${item.tmdbId}` : `${item.type}${item.tmdbId}`)}
+					{#if item.kind === 'person'}
+						<li>
+							<a
+								href={resolve('/person/[id]', { id: String(item.tmdbId) })}
+								class="-mx-2 flex min-w-0 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors hover:bg-secondary"
+							>
+								<PersonAvatar
+									name={item.name}
+									profilePath={item.profilePath}
+									class="size-12 shrink-0"
+								/>
+								<div class="flex min-w-0 flex-1 flex-col gap-1">
+									<span class="truncate font-medium">{item.name}</span>
+									<span class="truncate text-sm text-muted-foreground">
+										{[item.department, item.knownFor.slice(0, 2).join(', ')]
+											.filter(Boolean)
+											.join(' · ') || 'Person'}
+									</span>
+								</div>
+							</a>
+						</li>
+					{:else}
+						{@const id = tmdbMediaId(item.type, item.tmdbId)}
+						<li class="flex items-center gap-1">
+							<a
+								href={resolve('/title/[type]/[id]', { type: item.type, id: String(item.tmdbId) })}
+								class="-ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors hover:bg-secondary"
+							>
+								<div class="w-12 shrink-0">
+									<PosterTile
+										type={item.type}
+										posterUrl={posterUrl(item.posterPath)}
+										alt={item.title}
+									/>
+								</div>
+								<div class="flex min-w-0 flex-1 flex-col gap-1">
+									<span class="truncate font-medium">{item.title}</span>
+									<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+										<MediaTypeLabel type={item.type} year={item.year} />
+										{#if tracked.get(id) === 'did_not_finish'}
+											<span class="text-xs">Didn't finish</span>
+										{/if}
+									</div>
+								</div>
+							</a>
+							<SearchQuickAdd
+								title={item.title}
+								status={tracked.get(id)}
+								busy={writing.has(id)}
+								onadd={() => quickAdd(item)}
+								onremove={() => quickRemove(item)}
 							/>
-						</div>
-						<div class="flex min-w-0 flex-1 flex-col gap-1">
-							<span class="truncate font-medium">{item.title}</span>
-							<div class="flex items-center gap-2 text-sm text-muted-foreground">
-								<MediaBadge>{item.type === 'movie' ? 'Movie' : 'Show'}</MediaBadge>
-								{#if item.year}<span>{item.year}</span>{/if}
-							</div>
-						</div>
-					</a>
-					<SearchQuickAdd
-						title={item.title}
-						status={tracked.get(id)}
-						busy={writing.has(id)}
-						onadd={() => quickAdd(item)}
-						onremove={() => quickRemove(item)}
-					/>
-				</li>
-			{/each}
-		</ul>
+						</li>
+					{/if}
+				{/each}
+			</ul>
+		{/if}
 	{/if}
 </main>

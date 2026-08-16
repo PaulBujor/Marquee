@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import type { MediaSearchResult } from '$lib/server/tmdb';
+import type { SearchResult } from '$lib/server/tmdb';
 import type { PageLoad } from './$types';
 
 /**
@@ -14,18 +14,18 @@ export const load: PageLoad = async ({ url, fetch, parent }) => {
 	if (!user) redirect(303, '/login');
 
 	const q = url.searchParams.get('q')?.trim() ?? '';
-	if (!q) return { q: '', results: [] as MediaSearchResult[], degraded: false };
+	if (!q) return { q: '', results: [] as SearchResult[], degraded: false };
 
 	try {
 		const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
 		if (res.ok) {
-			const data = (await res.json()) as { results: MediaSearchResult[]; degraded: boolean };
+			const data = (await res.json()) as { results: SearchResult[]; degraded: boolean };
 			return { q, results: data.results, degraded: data.degraded };
 		}
 		// A non-OK response (e.g. 503 with no TMDB key) — show the query with no results, not an error.
-		return { q, results: [] as MediaSearchResult[], degraded: false };
+		return { q, results: [] as SearchResult[], degraded: false };
 	} catch {
 		// Network failure — offline. The client's local-catalog search fills in.
-		return { q, results: [] as MediaSearchResult[], degraded: false };
+		return { q, results: [] as SearchResult[], degraded: false };
 	}
 };
