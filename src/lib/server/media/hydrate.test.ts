@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { eq, getTableName } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
-import { episodes, seasons } from '$lib/server/db/schema';
+import { episodes, media, seasons } from '$lib/server/db/schema';
 import { mediaId } from '$lib/sync/events';
 import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 import { needsRefresh, parseTmdbExternalId, refreshMedia } from './hydrate';
@@ -304,6 +304,28 @@ describe('refreshMedia', () => {
 		expect(second!.version).toBe(2);
 		const episodeRows = await db.select().from(episodes).where(eq(episodes.mediaId, id));
 		expect(episodeRows).toHaveLength(3);
+	});
+
+	it('rethrows when the detail fetch fails, leaving the stored row stale', async () => {
+		const db = createTestDb();
+		const stub = showStub();
+		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
+
+		const failing = {
+			getDetails: async () => {
+				throw new Error('tmdb detail fetch failed');
+			},
+			getSeason: stub.client.getSeason
+		};
+		await expect(
+			refreshMedia(db, failing, 'tmdb', 'show/1396', T0 + 13 * 3600_000)
+		).rejects.toThrow('tmdb detail fetch failed');
+
+		const [row] = await db
+			.select()
+			.from(media)
+			.where(eq(media.id, mediaId('tmdb', 'show/1396')));
+		expect(row.refreshedAt).toBe(T0);
 	});
 
 	it('past the TTL, re-pulls but keeps version when nothing changed', async () => {

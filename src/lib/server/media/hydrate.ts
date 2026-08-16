@@ -298,8 +298,8 @@ async function syncEpisodes(
 /**
  * Ensure a fresh media row (+ its seasons/episodes) exists for `(provider, externalId)` and return
  * it. Cached + TTL-aware: an up-to-date row is returned without touching TMDB. Returns null for an
- * unknown provider / malformed id / first-time TMDB miss (a transient miss on an existing row keeps
- * the stored data). `force` re-pulls even within the TTL; `now` is injectable for tests.
+ * unknown provider or a malformed id; **throws** if TMDB fails, so a caller can tell a real refresh
+ * from a no-op and retry. `force` re-pulls even within the TTL; `now` is injectable for tests.
  */
 export async function refreshMedia(
 	db: Db,
@@ -318,12 +318,15 @@ export async function refreshMedia(
 	const existing = existingRows[0] ?? null;
 	if (existing && !force && !needsRefresh(existing, now)) return existing;
 
+	// Don't swallow a failure here. Returning the stored row would be indistinguishable from a
+	// successful no-op refresh, so the caller could neither retry nor report it — the queue consumer
+	// would ack a title it never actually refreshed. Callers that want leniency catch it themselves
+	// (see resolveMediaSync, which isolates per-title failures); the row keeps its old `refreshedAt`
+	// either way, so it stays a candidate for the next sweep.
 	const detail = await tmdb.getDetails(parsed.type, parsed.tmdbId).catch((err) => {
 		console.error(`refreshMedia: getDetails failed for ${externalId}`, err);
-		return null;
+		throw err;
 	});
-	// A transient TMDB miss shouldn't wipe an existing row — keep what we have.
-	if (!detail) return existing;
 
 	// Fetch every season's episodes (incl. Specials) for their air dates. Don't swallow a failure —
 	// otherwise the show persists with zero episodes; rethrow so the row stays stale and retries.
@@ -388,6 +391,10 @@ export async function refreshMedia(
 			await syncSeasons(db, id, oldSeasons, seasonRows);
 			await syncEpisodes(db, id, oldEpisodes, episodeRows);
 		}
+		// Compare-and-set on refreshedAt: two concurrent consumers can read the same snapshot, and the
+		// loser's write would overwrite the winner's version bump — clients never re-download the changed
+		// content. Whoever writes first moves refreshedAt, so the loser's WHERE matches no row and is
+		// a no-op. The message retries or the next sweep picks it up.
 		await db
 			.update(media)
 			.set({
@@ -398,7 +405,7 @@ export async function refreshMedia(
 				refreshedAt: now,
 				version: changed ? existing.version + 1 : existing.version
 			})
-			.where(eq(media.id, id));
+			.where(and(eq(media.id, id), eq(media.refreshedAt, existing.refreshedAt)));
 	}
 
 	const stored = await db.select().from(media).where(eq(media.id, id)).limit(1);

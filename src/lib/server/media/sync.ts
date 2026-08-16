@@ -11,8 +11,9 @@
  * append-only `events` log on every call.
  *
  * TTL-based re-hydration of already-stored titles (an in-production show past its airing TTL)
- * is **cron-only** now (`refreshStaleMedia`) — a request-time poll was never a meaningful driver
- * of a 12h TTL, so this path only ever hydrates a title it has *no* stored row for yet.
+ * is **cron-only** now (`enqueueStaleMedia` → the media-refresh queue) — a request-time poll was
+ * never a meaningful driver of a 12h TTL, so this path only ever hydrates a title it has *no*
+ * stored row for yet.
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import {
@@ -139,7 +140,7 @@ export async function resolveMediaSync(
 	const existingById = new Map((await loadMedia([...validIds])).map((r) => [r.id, r]));
 
 	// Only a title with *no* stored row needs TMDB work here — an existing-but-stale row is the
-	// nightly cron's job (`refreshStaleMedia`), not a request-time concern.
+	// nightly cron's job (`enqueueStaleMedia`), not a request-time concern.
 	const missing: typeof req.refs = [];
 	for (const id of validIds) {
 		const ref = refById.get(id);
