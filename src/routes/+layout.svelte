@@ -10,6 +10,7 @@
 	import ScrollUndoPill from '$lib/components/scroll-undo-pill.svelte';
 	import TabBar from '$lib/components/tab-bar.svelte';
 	import { Toaster } from '$lib/components/ui/sonner';
+	import ErrorReporter from '$lib/components/error-reporter.svelte';
 	import { goto } from '$app/navigation';
 	import { theme } from '$lib/state/theme.svelte.js';
 	import { activeTab } from '$lib/state/tabs';
@@ -266,6 +267,9 @@ movie/show page's immersive layout uncluttered. Navigation itself lives in the b
 	<TabBar />
 {/if}
 <Toaster offset={toastOffset} mobileOffset={toastOffset} />
+<!-- Surfaces reported errors: a toast when something breaks, the full message and stack behind it.
+Mounted here so it covers every route, including the ones that fail before their own UI renders. -->
+<ErrorReporter />
 <InstallPrompt />
 <NotificationPrompt />
 <PwaUpdatePrompt />

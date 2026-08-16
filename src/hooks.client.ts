@@ -1,5 +1,6 @@
 import type { HandleClientError } from '@sveltejs/kit';
 import { installGlobalErrorReporting, reportClientError } from '$lib/client/report-error';
+import { errorLog } from '$lib/client/errors.svelte';
 
 /**
  * The catch-all net, installed once when the client module loads. `handleError` below only fires
@@ -7,6 +8,12 @@ import { installGlobalErrorReporting, reportClientError } from '$lib/client/repo
  * timer or a floating promise would reach nothing but the browser console.
  */
 installGlobalErrorReporting();
+
+/**
+ * Start recording here rather than from a component, so an error thrown before the first mount is
+ * still in the log — and so nothing can unsubscribe it by unmounting.
+ */
+errorLog.start();
 
 /**
  * Central capture for **unexpected** client-side errors (uncaught throws during navigation /

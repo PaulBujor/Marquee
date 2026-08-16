@@ -14,10 +14,36 @@ export interface ClientErrorReport {
 	url?: string;
 	/** Epoch ms the error occurred. */
 	at?: number;
+	/**
+	 * Set by a caller that has already told the user what went wrong in its own words — the error
+	 * still reaches the log and the sink, it just doesn't raise a second toast over the first.
+	 */
+	handled?: boolean;
+}
+
+/** Notified for every report, in addition to the network sink. */
+type ClientErrorListener = (report: ClientErrorReport) => void;
+const listeners = new Set<ClientErrorListener>();
+
+/**
+ * Watch every reported error — how the UI learns about them, while this module stays rune-free and
+ * importable from `hooks.client.ts`. A throwing listener can't break reporting: surfacing an error
+ * must never be able to lose it.
+ */
+export function onClientError(listener: ClientErrorListener): () => void {
+	listeners.add(listener);
+	return () => listeners.delete(listener);
 }
 
 /** Fire-and-forget POST the report; swallow every failure. No-op outside the browser. */
 export function reportClientError(report: ClientErrorReport): void {
+	for (const listener of listeners) {
+		try {
+			listener(report);
+		} catch {
+			// Never let a listener swallow the report the sink still needs to send.
+		}
+	}
 	if (typeof fetch === 'undefined') return;
 	try {
 		void fetch('/api/client-error', {
