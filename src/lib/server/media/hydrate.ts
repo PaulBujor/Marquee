@@ -391,14 +391,10 @@ export async function refreshMedia(
 			await syncSeasons(db, id, oldSeasons, seasonRows);
 			await syncEpisodes(db, id, oldEpisodes, episodeRows);
 		}
-		// Compare-and-set on `refreshedAt`, against a lost update. Two consumers can refresh one row
-		// concurrently (a drain still retrying when the next sweep re-enqueues the same title, run
-		// under `max_concurrency` > 1). The dangerous interleave is a writer that read `existing`
-		// before the other's update but lands after it: it computes `changed` against children the
-		// other has already rewritten, concludes nothing changed, and writes its stale `version`
-		// back over the newer one — leaving content that moved at a version clients have already
-		// seen, so no one re-downloads it. Whoever writes first moves `refreshedAt`, so the loser
-		// matches no row and is a no-op; the queue redelivers it or the next sweep picks it up.
+		// Compare-and-set on refreshedAt: two concurrent consumers can read the same snapshot, and the
+		// loser's write would overwrite the winner's version bump — clients never re-download the changed
+		// content. Whoever writes first moves refreshedAt, so the loser's WHERE matches no row and is
+		// a no-op. The message retries or the next sweep picks it up.
 		await db
 			.update(media)
 			.set({

@@ -11,16 +11,11 @@ interface Body {
 }
 
 /**
- * Processes one Cloudflare Queues batch of media-refresh messages. Not reachable by end users —
- * self-`fetch`ed by the `queue()` handler appended to the worker (see `scripts/append-cron.mjs`),
- * the same way the `scheduled` handler self-fetches the other cron routes, since the
- * adapter-generated worker has no build step of its own that could import this route's module
- * graph directly. `queue()` can't get the ack/retry decision any other way: applying it requires
- * the real `Message` objects it holds, which only exist inside that invocation, so this route
- * computes the `QueueOutcome[]` and lets the caller relay it.
- *
- * Gated by `CRON_SECRET` like the other cron-triggered routes, purely so it isn't a bare unauth'd
- * TMDB-hydration endpoint — nothing about it is safe to expose otherwise.
+ * Consumes one queue batch of media-refresh messages. Self-fetched by the queue() handler
+ * (see append-cron.mjs) — same pattern as scheduled/cron routes, since the adapter-generated
+ * worker can't import this module graph directly. Computes QueueOutcome[] for the caller to
+ * relay, because ack/retry requires the real Message objects the caller holds.
+ * Gated by CRON_SECRET so it isn't an unauth'd TMDB-hydration endpoint.
  */
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	if (!(await isAuthorizedCronRequest(request, platform?.env.CRON_SECRET))) {

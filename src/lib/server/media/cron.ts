@@ -60,12 +60,10 @@ export async function enqueueStaleMedia(
 	// predicates, so an unindexed OR here would fall back to a full table scan. Each branch below
 	// is a plain equality/range filter that `media_type_in_production_idx` /
 	// `media_type_release_date_idx` covers directly.
-	// Each branch is limited, not just the merged result: an unbounded SELECT would pull the whole
-	// matching population into Worker memory before the cap could apply, so a runaway catalog (or a
-	// candidate-query bug) would blow the read up exactly where the ceiling is supposed to protect
-	// it. Every branch is ordered oldest-refresh-first, so taking the first `max` per branch still
-	// leaves the `max` oldest overall in the merged set. The `+ 1` is what makes overflow visible —
-	// reading exactly `max` can't distinguish "that's all of them" from "there are more".
+	// Limit per branch, not just the merged result — an unbounded SELECT pulls the whole catalog
+	// into Worker memory before the cap can engage. Ordered oldest-first so the first `max` per
+	// branch still contains the `max` oldest overall. The `+ 1` makes overflow distinguishable
+	// from exhaustion.
 	const [airingShows, betweenSeasonShows, undatedMovies, upcomingMovies] = await Promise.all([
 		db
 			.select(columns)

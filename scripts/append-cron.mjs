@@ -1,19 +1,12 @@
 /**
- * Post-build step: attach `scheduled` (cron) and `queue` (Cloudflare Queues) handlers to the
- * worker adapter-cloudflare emits. The adapter generates a fetch-only `_worker.js` (exporting a
- * `worker_default` object) and has no option for other handlers, so we append handlers that
- * self-invoke the internal cron/queue routes through the worker's own `fetch` rather than
- * importing app code directly (this script has no build step of its own to compile TS/resolve
- * `$lib` aliases). `scheduled` branches on the schedule (maintenance vs. notifications); `queue`
- * routes a batch (by its Cloudflare queue name, see QUEUE_ROUTES below) to the matching internal
- * route and applies the outcomes it returns to the real `Message` objects — that's the only place
- * the ack/retry decision can be applied, since it requires the objects this invocation holds.
- * `queue` is deliberately job-agnostic: it knows nothing about media refresh specifically, so a
- * second queue-backed job (e.g. the push digest) is one more JOB_ROUTES entry plus its
- * `queues` bindings in wrangler.jsonc, not a change to the relay. The queue-name map it emits is
- * derived from those bindings, so a rename can't silently desync. Appending is idempotent — a
- * re-run against an already-patched worker is a no-op rather than a duplicate declaration. Runs
- * after `vite build` (see the `build` script).
+ * Post-build step: attach `scheduled` and `queue` handlers to the worker adapter-cloudflare
+ * emits. The adapter produces a fetch-only `_worker.js`, so we append handlers that self-fetch
+ * the matching internal routes rather than importing app code (no build step here to compile TS
+ * or resolve `$lib`). `scheduled` branches on the cron schedule; `queue` routes a batch by its
+ * Cloudflare queue name to an internal route, which returns per-message ack/retry outcomes that
+ * this handler applies to the real `Message` objects — the only place that's possible, since it
+ * requires the objects this invocation holds. The route map is derived from wrangler.jsonc bindings
+ * so a rename can't silently desync. Appending is idempotent. Runs after `vite build`.
  */
 import { appendFile, readFile } from 'node:fs/promises';
 
@@ -31,18 +24,15 @@ if (!src.includes('worker_default')) {
 		`append-cron: expected \`worker_default\` in ${WORKER} — adapter-cloudflare output changed, update this script.`
 	);
 }
-// The appended blocks declare module-scope consts, so a second append would produce a worker that
-// fails to parse (`Identifier 'QUEUE_ROUTES' has already been declared`). Vite rewrites _worker.js
-// on every build, so this only trips when the post-build step is re-run against an existing one.
+// Second append would duplicate a `const` declaration and break parsing. Vite rewrites _worker.js
+// on every build, so this only fires when re-run against an existing one.
 if (src.includes('QUEUE_ROUTES')) {
 	console.log('append-cron: handlers already present in', WORKER, '— nothing to do.');
 	process.exit(0);
 }
 
-// Derive the queue -> route map from wrangler.jsonc rather than restating queue names here. A
-// rename or a new consumer would otherwise leave `QUEUE_ROUTES[batch.queue]` undefined at runtime,
-// which retries every batch until the whole backlog dead-letters — a silent, deploy-time-invisible
-// failure. Fail the build instead.
+// Derive queue → route from wrangler.jsonc rather than restating names here — a rename would
+// otherwise leave QUEUE_ROUTES[batch.queue] undefined, silently dead-lettering the backlog.
 const wrangler = JSON.parse(
 	(await readFile(WRANGLER, 'utf8'))
 		// Strip // comments and trailing commas — enough for this file's JSONC.
@@ -107,10 +97,8 @@ worker_default.queue = async (batch, env, ctx) => {
 		batch.retryAll();
 		return;
 	}
-	// The route decides ack/retry per message (attempt cap, etc. — see e.g. refresh-consumer.ts);
-	// this handler is a mechanical relay, not a policy. On a total failure (route unreachable,
-	// throws before responding) every message is retried and Cloudflare's own max_retries/DLQ
-	// becomes the backstop, since no per-message decision was ever computed.
+	// Route decides ack/retry per message; this is a mechanical relay. On total failure (route
+	// unreachable) every message retries — Cloudflare's max_retries/DLQ is the backstop.
 	try {
 		const res = await worker_default.fetch(
 			new Request('https://cron' + path, {

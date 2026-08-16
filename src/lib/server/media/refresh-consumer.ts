@@ -28,18 +28,12 @@ export interface MediaRefreshMessage {
 }
 
 /**
- * Give up after this many delivery attempts and `ack` (drop) rather than `retry` — a title whose
- * TMDB hydration keeps failing (bad data, a persistently-erroring season) must not spin forever.
- * Deliberately lower than the Cloudflare Queues consumer's own `max_retries` (wrangler.jsonc) so
- * *this* decision is what ends the loop; Cloudflare's own retry/DLQ is only a backstop for cases
- * this code never got to run at all (e.g. the self-fetch itself throwing).
- *
- * Note the counter is the transport's, and it counts *deliveries*, not failures this code saw: a
- * batch that died before reaching the route (a bad `CRON_SECRET`, a non-JSON 500) is retried whole,
- * incrementing every message's `attempts` without any of them having been tried on their own
- * merits. The gap to `max_retries` is wide enough to absorb a few of those before a title that
- * never genuinely failed gets dropped. Making this exact would need a per-title attempt count in
- * durable state; the message body can't carry one, since a redelivery replays the original body.
+ * Give up after this many delivery attempts and ack (drop). Deliberately below the Cloudflare
+ * consumer's max_retries (wrangler.jsonc) so *this* decision ends the loop — Cloudflare's
+ * retry/DLQ is only a backstop for batches that never reached this code (bad CRON_SECRET, etc.).
+ * The counter is the transport's and counts *deliveries*, not failures — a batch that dies
+ * before the route inflates every message's count without any being tried. The gap absorbs
+ * a few of those; closing it exactly would need per-title durable state.
  */
 export const MAX_DELIVERY_ATTEMPTS = 5;
 
