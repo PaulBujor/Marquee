@@ -95,17 +95,31 @@ describe('enqueueStaleMedia', () => {
 		expect(queue.items).toHaveLength(1);
 	});
 
-	it('caps a run at ENQUEUE_MAX and reports the overflow', async () => {
+	// Exercised against an injected cap rather than ENQUEUE_MAX: the behaviour under test is the
+	// boundary itself, and seeding 5000+ rows to prove it costs seconds and grows with the ceiling.
+	it('caps a run at the enqueue ceiling and reports the overflow', async () => {
 		const db = createTestDb();
-		for (let i = 0; i < ENQUEUE_MAX + 5; i++) {
+		for (let i = 0; i < 7; i++) {
 			await seedMedia(db, `show/${1000 + i}`, { type: 'show', inProduction: true });
 		}
 		const queue = createMemoryQueue<MediaRefreshMessage>();
-		const result = await enqueueStaleMedia(db, queue, T0);
-		expect(result.scanned).toBe(ENQUEUE_MAX + 5);
-		expect(result.queued).toBe(ENQUEUE_MAX);
+		const result = await enqueueStaleMedia(db, queue, T0, false, 5);
+		expect(result.queued).toBe(5);
 		expect(result.capped).toBe(true);
-		expect(queue.items).toHaveLength(ENQUEUE_MAX);
+		expect(queue.items).toHaveLength(5);
+		// The per-branch read stops at `max + 1`, so `scanned` proves overflow without being the
+		// full population count.
+		expect(result.scanned).toBe(6);
+	});
+
+	it('defaults the ceiling to ENQUEUE_MAX', async () => {
+		const db = createTestDb();
+		await seedMedia(db, 'show/1', { type: 'show', inProduction: true });
+		const queue = createMemoryQueue<MediaRefreshMessage>();
+		const result = await enqueueStaleMedia(db, queue, T0);
+		expect(ENQUEUE_MAX).toBe(5000);
+		expect(result.capped).toBe(false);
+		expect(result.queued).toBe(1);
 	});
 
 	it('carries force through to every enqueued message', async () => {

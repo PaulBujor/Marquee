@@ -91,6 +91,18 @@ function failingTmdb() {
 	};
 }
 
+/** A stub whose detail fetch always fails — the TMDB rate-limit / 5xx case. */
+function failingDetailsTmdb() {
+	return {
+		async getDetails(): Promise<MediaDetail> {
+			throw new Error('tmdb detail fetch failed');
+		},
+		async getSeason(_id: number, seasonNumber: number): Promise<SeasonDetail> {
+			return seasonDetail(seasonNumber);
+		}
+	};
+}
+
 async function seedMedia(db: ReturnType<typeof createTestDb>, externalId: string) {
 	await db.insert(media).values({
 		id: mediaId('tmdb', externalId),
@@ -122,6 +134,28 @@ describe('processMediaRefreshBatch', () => {
 			.from(media)
 			.where(eq(media.id, mediaId('tmdb', 'show/1')));
 		expect(row.refreshedAt).toBe(T0);
+	});
+
+	// A failed detail fetch used to be swallowed by refreshMedia, which returned the stored row —
+	// indistinguishable from a successful no-op refresh, so the title was acked and silently left
+	// stale for a full day. It has to be retried like any other failure.
+	it('retries a title whose detail fetch fails, and leaves it stale', async () => {
+		const db = createTestDb();
+		await seedMedia(db, 'show/9');
+
+		const outcomes = await processMediaRefreshBatch(
+			db,
+			failingDetailsTmdb(),
+			[envelope('show/9', 1)],
+			T0
+		);
+
+		expect(outcomes).toEqual(['retry']);
+		const [row] = await db
+			.select()
+			.from(media)
+			.where(eq(media.id, mediaId('tmdb', 'show/9')));
+		expect(row.refreshedAt).toBe(0);
 	});
 
 	it('retries a failing title while under the attempt cap', async () => {

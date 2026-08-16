@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { enqueueStaleMedia } from '$lib/server/media/cron';
 import type { MediaRefreshMessage } from '$lib/server/media/refresh-consumer';
 import { cloudflareQueueProducer } from '$lib/server/queue/cloudflare';
+import type { QueueProducer } from '$lib/server/queue/types';
 import { purgeExpiredAuth } from '$lib/server/auth/cleanup';
 import type { createDb } from '$lib/server/db';
 import { isAuthorizedCronRequest } from '$lib/server/http/secret';
@@ -12,9 +13,9 @@ type Db = ReturnType<typeof createDb>;
 /** Enqueue stale in-production media for re-hydration by the media-refresh queue consumer.
  * Self-contained: catches its own failures so a D1/queue outage can't prevent the other
  * maintenance jobs from running. */
-async function enqueueMedia(db: Db, queue: Queue<MediaRefreshMessage>, force: boolean) {
+async function enqueueMedia(db: Db, queue: QueueProducer<MediaRefreshMessage>, force: boolean) {
 	try {
-		const result = await enqueueStaleMedia(db, cloudflareQueueProducer(queue), Date.now(), force);
+		const result = await enqueueStaleMedia(db, queue, Date.now(), force);
 		console.log(
 			`cron: ${result.scanned} unsettled titles, enqueued ${result.queued}` +
 				`${result.capped ? ' (capped; remainder rolls to the next run)' : ''}${force ? ' (forced)' : ''}`
@@ -61,7 +62,18 @@ export const POST: RequestHandler = async ({ request, url, locals, platform }) =
 
 	// `platform` is always set alongside `locals.db` (see hooks.server.ts) — the guard above covers
 	// both.
-	const media = await enqueueMedia(locals.db, platform!.env.MEDIA_REFRESH_QUEUE, force);
+	// Enqueueing itself never calls TMDB, but every message it produces will: without a key the
+	// consumer 503s on each batch, the relay retries the whole batch, and the entire backlog
+	// dead-letters. Check once here instead, and no-op the way the synchronous sweep used to.
+	const tmdbKey = platform!.env.TMDB_API_KEY;
+	if (!tmdbKey) console.error('cron: skipping media enqueue — TMDB is not configured.');
+	const media = tmdbKey
+		? await enqueueMedia(
+				locals.db,
+				cloudflareQueueProducer(platform!.env.MEDIA_REFRESH_QUEUE),
+				force
+			)
+		: { ok: false as const, error: 'TMDB is not configured.' };
 	const auth = await purgeAuth(locals.db);
 
 	return json({ media, auth });

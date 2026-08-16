@@ -285,7 +285,7 @@ export const media = sqliteTable(
 	// (`external_id = null`) never collide.
 	(table) => [
 		uniqueIndex('media_provider_external_idx').on(table.provider, table.externalId),
-		// The nightly cron's "unsettled" sweep (refreshStaleMedia) filters shows and movies
+		// The nightly cron's "unsettled" sweep (enqueueStaleMedia) filters shows and movies
 		// separately (type + in_production; type + release_date) rather than one OR'd query, so
 		// each branch gets its own supporting index instead of relying on SQLite to plan an OR.
 		index('media_type_in_production_idx').on(table.type, table.inProduction),

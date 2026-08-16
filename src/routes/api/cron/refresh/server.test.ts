@@ -29,14 +29,27 @@ function makeEvent(opts: {
 	header?: string | null;
 	force?: boolean;
 	queue?: unknown;
+	tmdbKey?: string | null;
 }): RequestEvent {
-	const { db, header = SECRET, force = false, queue = fakeQueue().binding } = opts;
+	const {
+		db,
+		header = SECRET,
+		force = false,
+		queue = fakeQueue().binding,
+		tmdbKey = 'tmdb-key'
+	} = opts;
 	const request = new Request('https://app/api/cron/refresh', {
 		method: 'POST',
 		headers: header === null ? {} : { 'x-cron-key': header }
 	});
 	const url = new URL(`https://app/api/cron/refresh${force ? '?force=1' : ''}`);
-	const platform = { env: { CRON_SECRET: SECRET, MEDIA_REFRESH_QUEUE: queue } };
+	const platform = {
+		env: {
+			CRON_SECRET: SECRET,
+			MEDIA_REFRESH_QUEUE: queue,
+			...(tmdbKey === null ? {} : { TMDB_API_KEY: tmdbKey })
+		}
+	};
 	return { request, url, locals: { db }, platform } as unknown as RequestEvent;
 }
 
@@ -97,6 +110,37 @@ describe('POST /api/cron/refresh', () => {
 		expect(body.auth.ok).toBe(true);
 		expect(sent).toEqual([{ provider: 'tmdb', externalId: 'show/1' }]);
 		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	// Enqueueing never calls TMDB itself, but every message it produces does. Without a key the
+	// consumer 503s on every batch and the relay retries it, so an unguarded sweep would push the
+	// whole backlog into the dead-letter queue. Skip the enqueue and say so, like the old
+	// synchronous sweep did.
+	it('enqueues nothing when TMDB is not configured, and still purges auth', async () => {
+		const db = createTestDb();
+		await db.insert(media).values({
+			id: mediaId('tmdb', 'show/8'),
+			provider: 'tmdb',
+			externalId: 'show/8',
+			source: 'linked',
+			type: 'show',
+			title: 'show/8',
+			inProduction: true,
+			version: 1,
+			refreshedAt: 0
+		});
+		const { sent, binding } = fakeQueue();
+
+		const res = await POST(makeEvent({ db, queue: binding, tmdbKey: null }));
+		const body = (await res.json()) as {
+			media: { ok: boolean; error?: string };
+			auth: { ok: boolean };
+		};
+
+		expect(body.media.ok).toBe(false);
+		expect(body.media.error).toMatch(/TMDB/);
+		expect(sent).toEqual([]);
+		expect(body.auth.ok).toBe(true);
 	});
 
 	it('carries ?force=1 onto the enqueued message', async () => {

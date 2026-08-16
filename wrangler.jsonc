@@ -33,17 +33,21 @@
 		"consumers": [
 			{
 				"queue": "marquee-media-refresh",
-				// Each message costs one TMDB detail call plus one per season, sequentially — small
-				// batches keep a single invocation well inside the Worker's CPU/wall-time budget.
+				// Titles are refreshed one at a time, but each costs one TMDB detail call plus one
+				// *concurrent* call per season (refreshMedia fans seasons out with Promise.all), so a
+				// long-running series alone is dozens of requests. Small batches keep a single
+				// invocation well inside the Worker's CPU/wall-time budget.
 				"max_batch_size": 10,
 				"max_batch_timeout": 30,
-				// Backstop only: refresh-consumer.ts gives up (acks) after MAX_DELIVERY_ATTEMPTS (3),
+				// Backstop only: refresh-consumer.ts gives up (acks) after MAX_DELIVERY_ATTEMPTS (5),
 				// which must stay below this so *that* decision is what ends retries, not this one.
-				"max_retries": 5,
-				// Conservative: the previous cron refresh was effectively single-flight (a sequential
-				// per-title loop). A full-backlog drain now concentrates requests into one nightly
-				// window instead of spreading across nights, so concurrency starts low pending real
-				// TMDB headroom data; raise once that's confirmed (see MRQ-195 PR description).
+				// The gap is wide because a batch-level failure retries every message, inflating each
+				// one's attempt count without it having been tried on its own merits.
+				"max_retries": 10,
+				// Conservative: the previous cron refresh was effectively single-flight. A full-backlog
+				// drain now concentrates requests into one nightly window instead of spreading across
+				// nights, so concurrency starts low pending real TMDB headroom data. Note the real
+				// peak is this times the season count of the widest title in flight, not this alone.
 				"max_concurrency": 2,
 				"dead_letter_queue": "marquee-media-refresh-dlq"
 			}
@@ -88,10 +92,12 @@
 				],
 				"consumers": [
 					{
+						// Mirrors the prod consumer above — see the rationale for each value there.
+						// `max_retries` must stay above refresh-consumer.ts's MAX_DELIVERY_ATTEMPTS.
 						"queue": "marquee-preview-media-refresh",
 						"max_batch_size": 10,
 						"max_batch_timeout": 30,
-						"max_retries": 5,
+						"max_retries": 10,
 						"max_concurrency": 2,
 						"dead_letter_queue": "marquee-preview-media-refresh-dlq"
 					}

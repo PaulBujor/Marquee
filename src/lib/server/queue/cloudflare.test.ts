@@ -37,6 +37,8 @@ describe('cloudflareQueueProducer', () => {
 		expect(calls[1]).toHaveLength(1);
 	});
 
+	// Contract, not an accident of the loop: `chunkBySize` yields no chunks for an empty input, so
+	// an empty enqueue must not reach the transport at all.
 	it('does not call sendBatch for an empty batch', async () => {
 		const sendBatch = vi.fn();
 		const producer = cloudflareQueueProducer({ sendBatch } as never);
