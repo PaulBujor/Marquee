@@ -186,11 +186,20 @@ export async function getUnsyncedMediaIds(referencedIds: string[]): Promise<stri
 	return referencedIds.filter((_, i) => !rows[i] || rows[i]?.version === 0);
 }
 
-/** Identity of locally-known provider-backed media among `ids`, to push to the channel for server
- *  hydration. A `linked` row always names an external provider, so the narrower type holds. */
-export async function getLinkedMediaRefs(
-	ids: string[]
-): Promise<{ provider: HydratableProvider; externalId: string }[]> {
+/** Provider + external id for a title the server can hydrate. */
+export interface MediaIdentityRef {
+	provider: HydratableProvider;
+	externalId: string;
+}
+
+/** The version a client holds for a media id (0 when no local row exists). */
+export interface MediaVersionEntry {
+	id: string;
+	version: number;
+}
+
+/** Provider-backed media among `ids` for the media-sync channel. */
+export async function getLinkedMediaRefs(ids: string[]): Promise<MediaIdentityRef[]> {
 	const rows = await Promise.all(ids.map((id) => getMedia(id)));
 	return rows
 		.filter(
@@ -203,8 +212,7 @@ export async function getLinkedMediaRefs(
 		}));
 }
 
-/** `id` + the version held for each of `ids` (0 when there's no local row) — the version-diff
- *  report the media channel sends. */
-export async function getMediaVersions(ids: string[]): Promise<{ id: string; version: number }[]> {
+/** Version-diff report for the media-sync channel. */
+export async function getMediaVersions(ids: string[]): Promise<MediaVersionEntry[]> {
 	return Promise.all(ids.map(async (id) => ({ id, version: (await getMedia(id))?.version ?? 0 })));
 }

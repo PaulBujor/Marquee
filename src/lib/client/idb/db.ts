@@ -1,15 +1,9 @@
 /**
- * Client-side IndexedDB: the offline store backing the sync pipeline. It holds an
- * `events` outbox (local events awaiting push) plus materialized `tracking` /
- * `episodeWatches` stores (the client-side projection of the same event log the
- * server materializes) and a `media` reference cache with its `seasons` / `episodes`
- * child stores (populated off a separate channel, not derived from events; episodes
- * carry air dates for watchability + the upcoming calendar). `mediaLinks` materializes the
- * `media.*` events — which of the user's own entries have been matched to a provider-backed
- * title. `meta` holds the `deviceId` and sync `cursor`. The database itself is namespaced per
- * user (`marquee-<userId>`, see {@link setActiveUser}).
- *
- * Client-safe (browser only) — never imported from server code.
+ * Client-side IndexedDB: offline store for the sync pipeline. Holds an `events` outbox,
+ * materialized `tracking` / `episodeWatches` stores (client projection of the event log),
+ * a `media` reference cache with `seasons`/`episodes` children, and `mediaLinks` for
+ * `media.*` identity decisions. `meta` holds `deviceId` and sync `cursor`. Database is
+ * namespaced per user (`marquee-<userId>`). Client-safe only.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type {
@@ -22,9 +16,8 @@ import type {
 } from '$lib/sync/events';
 
 /**
- * An outbox event: the envelope plus a `synced` flag (0 = pending push, 1 = acked).
- * It's `0 | 1`, not a boolean, because the `by_synced` index queries unsynced rows and
- * IndexedDB keys must be number/string/Date/array — a boolean can't be an index key.
+ * Outbox event: the envelope plus a `synced` flag. `0 | 1` (not boolean) because IndexedDB
+ * index keys must be number/string/Date/array.
  */
 export interface OutboxEvent extends EventEnvelope {
 	synced: 0 | 1;
@@ -44,7 +37,7 @@ export interface ClientSeason extends MediaSeason {
 	mediaId: string;
 }
 
-/** `id` = `${mediaId}::s{S}e{E}`. A null `airDate` is absent from the `by_airDate` index. */
+/** `id` = `${mediaId}::s{S}e{E}`. A null `airDate` excludes it from the `by_airDate` index. */
 export interface ClientEpisode extends MediaEpisode {
 	id: string;
 	mediaId: string;
@@ -67,10 +60,7 @@ export interface ClientTracking {
 
 /**
  * Materialized identity decision for one media reference: the provider-backed title the user
- * matched it to, and whether they've dismissed the suggestion. Keyed by the *source* id (a custom
- * entry), with per-field LWW clocks like a tracking row, so a link and a dismissal from different
- * devices merge independently. Client-only — the server stores the `media.*` events but
- * materializes nothing from them (see `server/sync/projection.ts`).
+ * matched it to, and whether they've dismissed the suggestion. Keyed by source id (a custom entry).
  */
 export interface ClientMediaLink {
 	mediaId: string;
@@ -93,10 +83,7 @@ export interface ClientEpisodeWatch {
 	updatedAt: number;
 }
 
-/**
- * Cached artwork for a title — poster + backdrop **image bytes** as Blobs, keyed by our media
- * id, so tracked titles render with zero network and an offline export carries the artwork.
- */
+/** Cached poster + backdrop image bytes, keyed by media id. */
 export interface MediaImages {
 	id: string;
 	poster: Blob | null;
@@ -104,7 +91,7 @@ export interface MediaImages {
 	updatedAt: number;
 }
 
-/** The `meta` key/value store's known keys and the type each maps to. */
+/** The `meta` key/value store's known keys. */
 export interface MetaValues {
 	deviceId: string;
 	cursor: number;
@@ -148,11 +135,9 @@ let dbPromise: Promise<MarqueeDatabase> | null = null;
 let activeUserId: string | null = null;
 
 /**
- * Scope the local store to a signed-in user. The database is **namespaced per user**
- * (`marquee-<userId>`), so switching accounts opens a *different* database — the prior
- * user's data (including unsynced events) is never cleared or exposed to another account.
- * Call once on login (from the root layout) before any store access. Passing `null` (logout)
- * detaches; the next {@link openDb} will throw until a user is set again.
+ * Scope the local store to a signed-in user (`marquee-<userId>`). Call once on login before any
+ * store access. Passing `null` (logout) detaches; the next {@link openDb} will throw until a user
+ * is set again.
  */
 export function setActiveUser(userId: string | null): void {
 	if (userId === activeUserId) return;
@@ -162,9 +147,7 @@ export function setActiveUser(userId: string | null): void {
 
 /**
  * Delete the active user's local database (offline replica + outbox + cursor). The next
- * {@link openDb} recreates it empty, so a fresh sync re-pulls everything from the server — used by
- * the "clear local data" reset. Caller should flush pending events first (unsynced edits are lost)
- * and reload afterwards. No-op when no user is active.
+ * {@link openDb} recreates it empty. Caller should flush pending events first and reload after.
  */
 export async function wipeLocalData(): Promise<void> {
 	if (!activeUserId || typeof indexedDB === 'undefined') return;

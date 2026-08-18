@@ -93,9 +93,8 @@ async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<v
 	switch (event.type) {
 		case 'tracking.added': {
 			const payload = event.payload as EventPayloadMap['tracking.added'];
-			// Media is reference data, handled off the event log; an add only asserts tracking
-			// state. Status and revive are independent LWW fields (mirrors the server): a stale
-			// add can't un-remove a title a newer removal tombstoned.
+			// Status and revive are independent LWW fields — a stale add can't un-remove a
+			// title a newer removal tombstoned.
 			await upsertTracking(tx, entityId, clock, 'statusUpdatedAt', (t) => {
 				t.status = payload.status;
 			});
@@ -153,9 +152,7 @@ async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<v
 		}
 		case 'media.linked': {
 			const payload = event.payload as EventPayloadMap['media.linked'];
-			// The match and the dismissal are independent LWW fields (mirrors how `tracking.added`
-			// clears a tombstone): accepting a match clears an earlier decline, but a decline that
-			// happened *later* on another device still wins.
+			// Match and dismissal are independent LWW fields — accepting clears an earlier decline.
 			await upsertMediaLink(tx, entityId, clock, 'linkedUpdatedAt', (l) => {
 				l.targetId = payload.targetId;
 				l.provider = payload.provider;
