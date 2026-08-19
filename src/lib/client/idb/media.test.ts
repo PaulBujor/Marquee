@@ -625,3 +625,109 @@ describe('removal-then-eviction', () => {
 		expect(await db.get('tracking', removed)).toMatchObject({ removed: true });
 	});
 });
+
+describe('media.deleted', () => {
+	const CUSTOM_ID = '88888888-8888-4888-8888-888888888888';
+	const OTHER_ID = '99999999-9999-4999-8999-999999999999';
+
+	function customShow(id: string, title: string): MediaRecord {
+		return record({
+			id,
+			provider: 'local',
+			externalId: null,
+			source: 'custom',
+			type: 'show',
+			title,
+			version: 0,
+			seasons: [
+				{
+					seasonNumber: 1,
+					name: 'Season 1',
+					overview: '',
+					airDate: '2020-01-01',
+					posterPath: null,
+					episodeCount: 2
+				}
+			],
+			episodes: [1, 2].map((episode) => ({
+				season: 1,
+				episode,
+				name: '',
+				overview: '',
+				airDate: '2020-01-01',
+				runtime: null,
+				stillPath: null
+			})),
+			credits: [
+				{
+					personId: '00000000-0000-4000-8000-0000000000aa',
+					externalId: null,
+					name: 'A Person',
+					profilePath: null,
+					role: 'cast',
+					character: 'Someone',
+					sortOrder: 0
+				}
+			]
+		});
+	}
+
+	beforeEach(async () => {
+		const db = await openDb();
+		await db.clear('media');
+		await db.clear('mediaLinks');
+		await putCustomMedia(customShow(CUSTOM_ID, 'Midnight Cassette Club'));
+		await putCustomMedia(customShow(OTHER_ID, 'Another Entry'));
+	});
+
+	it('erases the entry and everything hanging off it', async () => {
+		// Nothing can re-hydrate a user-authored row, so a tracking tombstone alone would leave the
+		// entry sitting in search forever — deleting has to actually delete.
+		await applyEventToIdb(createEvent('media.deleted', CUSTOM_ID, {}, DEVICE));
+
+		const db = await openDb();
+		expect(await getMedia(CUSTOM_ID)).toBeUndefined();
+		expect(await db.getAllFromIndex('seasons', 'by_media', CUSTOM_ID)).toEqual([]);
+		expect(await db.getAllFromIndex('episodes', 'by_media', CUSTOM_ID)).toEqual([]);
+		expect(await getCredits(CUSTOM_ID)).toEqual([]);
+		expect(await searchCustomMedia('cassette')).toEqual([]);
+	});
+
+	it('leaves the user’s other entries alone', async () => {
+		await applyEventToIdb(createEvent('media.deleted', CUSTOM_ID, {}, DEVICE));
+
+		expect(await getMedia(OTHER_ID)).toBeDefined();
+		const db = await openDb();
+		expect((await db.getAllFromIndex('episodes', 'by_media', OTHER_ID)).length).toBe(2);
+	});
+
+	it('drops the identity decision recorded against it', async () => {
+		// A dismissal or a match for a row that no longer exists could only confuse a later replay.
+		await applyEventToIdb(createEvent('media.match_declined', CUSTOM_ID, {}, DEVICE));
+		await applyEventToIdb(createEvent('media.deleted', CUSTOM_ID, {}, DEVICE));
+
+		expect(await (await openDb()).get('mediaLinks', CUSTOM_ID)).toBeUndefined();
+	});
+
+	it('ignores an event naming a provider-backed row', async () => {
+		// `entityId` is client-minted and untrusted; the shared catalog is the channel's to manage.
+		const shared = tmdbMediaId('show', 1396);
+		await putMedia(showRecord(shared, 'show/1396', 'Breaking Bad'));
+
+		await applyEventToIdb(createEvent('media.deleted', shared, {}, DEVICE));
+
+		expect(await getMedia(shared)).toBeDefined();
+		expect((await (await openDb()).getAllFromIndex('seasons', 'by_media', shared)).length).toBe(1);
+	});
+
+	it('applies in a batch alongside the tracking events that accompany it', async () => {
+		// The delete flow records the unwatches + tombstone first, then the deletion.
+		await applyEventsToIdb([
+			createEvent('tracking.removed', CUSTOM_ID, {}, DEVICE),
+			createEvent('media.deleted', CUSTOM_ID, {}, DEVICE)
+		]);
+
+		expect(await getMedia(CUSTOM_ID)).toBeUndefined();
+		expect(await (await openDb()).get('tracking', CUSTOM_ID)).toMatchObject({ removed: true });
+	});
+});

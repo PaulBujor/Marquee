@@ -282,6 +282,42 @@ export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
 }
 
 /**
+ * Erase user-authored entries and everything hanging off them — the projection of `media.deleted`.
+ *
+ * Scoped to `source === 'custom'`: a provider-backed row is shared catalog the channel re-fetches,
+ * so an event naming one is ignored rather than acted on. The `mediaLinks` row goes too, since an
+ * identity decision about an entry that no longer exists can only confuse a later replay.
+ *
+ * Runs outside the projection transaction (see `applyEventToIdb`) so the ordinary tracking write
+ * path doesn't have to hold the media stores open.
+ */
+export async function deleteLocalMedia(ids: string[]): Promise<void> {
+	if (ids.length === 0) return;
+	const db = await openDb();
+	const tx = db.transaction([...MEDIA_STORES, 'mediaLinks'], 'readwrite');
+	const mediaStore = tx.objectStore('media');
+	const seasonStore = tx.objectStore('seasons');
+	const episodeStore = tx.objectStore('episodes');
+	const creditStore = tx.objectStore('credits');
+
+	for (const id of ids) {
+		if ((await mediaStore.get(id))?.source !== 'custom') continue;
+		await mediaStore.delete(id);
+		for (const key of await seasonStore.index('by_media').getAllKeys(id)) {
+			await seasonStore.delete(key);
+		}
+		for (const key of await episodeStore.index('by_media').getAllKeys(id)) {
+			await episodeStore.delete(key);
+		}
+		for (const key of await creditStore.index('by_media').getAllKeys(id)) {
+			await creditStore.delete(key);
+		}
+		await tx.objectStore('mediaLinks').delete(id);
+	}
+	await tx.done;
+}
+
+/**
  * Referenced ids the client has no synced copy of yet — no local row at all, or the `version: 0`
  * placeholder a quick-add snapshot seeds (see `mediaRecordFromSearch`). These are what the media
  * channel needs to ask the server about; everything else stays local until the next full check.

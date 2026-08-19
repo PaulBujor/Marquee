@@ -42,7 +42,8 @@ export const SYNC_EVENT_TYPES = [
 	'episode.unwatched',
 	'media.linked',
 	'media.unlinked',
-	'media.match_declined'
+	'media.match_declined',
+	'media.deleted'
 ] as const;
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
 
@@ -149,6 +150,13 @@ export interface EventPayloadMap {
 	 * ask for it again, and syncs so the dismissal holds on every device.
 	 */
 	'media.match_declined': Record<string, never>;
+	/**
+	 * The user deleted their own authored entry. The one destructive `media.*` event, and the only
+	 * event that touches reference data — a custom row is private and nothing can re-hydrate it, so
+	 * "off my lists" (a `tracking.removed` tombstone) genuinely isn't the same as "gone". Travelling
+	 * through the log is what carries the deletion to the user's other devices.
+	 */
+	'media.deleted': Record<string, never>;
 }
 
 /** Any event payload — the union of all per-type shapes (used to type the stored JSON column). */
@@ -353,7 +361,8 @@ const payloadSchemas = {
 		externalId: z.string().min(1).max(128)
 	}),
 	'media.unlinked': z.object({}),
-	'media.match_declined': z.object({})
+	'media.match_declined': z.object({}),
+	'media.deleted': z.object({})
 } as const;
 
 const envelopeBase = z.object({
@@ -409,6 +418,10 @@ export const eventEnvelopeSchema = z.discriminatedUnion('type', [
 	envelopeBase.extend({
 		type: z.literal('media.match_declined'),
 		payload: payloadSchemas['media.match_declined']
+	}),
+	envelopeBase.extend({
+		type: z.literal('media.deleted'),
+		payload: payloadSchemas['media.deleted']
 	})
 ]);
 

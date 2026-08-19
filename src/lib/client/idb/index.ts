@@ -49,7 +49,8 @@ export {
 	getUnsyncedMediaIds,
 	getPendingCustomMedia,
 	clearPendingPush,
-	pruneStaleMedia
+	pruneStaleMedia,
+	deleteLocalMedia
 } from './media';
 export {
 	getDeviceId,
