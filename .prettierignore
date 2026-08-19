@@ -13,6 +13,8 @@ worker-configuration.d.ts
 # Agent tooling: committed skills (vendored upstream, left in its own formatting) plus
 # git-ignored local settings — keeps local `pnpm lint` in step with CI
 .claude/
+# Same reason: local harness state that never reaches the repo, so CI never sees it either
+.omo/
 
 # OpenCode agent runtime data
 .omo/
