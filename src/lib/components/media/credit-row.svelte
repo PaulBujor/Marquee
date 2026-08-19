@@ -70,7 +70,7 @@
 		credit.externalId = null;
 		credit.profilePath = null;
 		if (timer) clearTimeout(timer);
-		const query = credit.name.trim();
+		const query = (credit.name ?? '').trim();
 		if (!sync.online || query.length < MIN_QUERY) {
 			reset();
 			return;
