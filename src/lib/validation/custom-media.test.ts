@@ -5,6 +5,7 @@ import {
 	CUSTOM_MAX_EPISODES_TOTAL,
 	CUSTOM_MAX_SEASONS,
 	CUSTOM_NAME_MAX,
+	CUSTOM_OVERVIEW_MAX,
 	CUSTOM_TITLE_MAX,
 	customMediaInputSchema,
 	totalEpisodes
@@ -32,6 +33,16 @@ describe('customMediaInputSchema', () => {
 	it('accepts a minimal movie', () => {
 		expect(ok(input())).toBe(true);
 		expect(ok(input({ year: null, overview: '' }))).toBe(true);
+	});
+
+	it('bounds the overview and trims it, like the title', () => {
+		expect(ok(input({ overview: 'x'.repeat(CUSTOM_OVERVIEW_MAX) }))).toBe(true);
+		expect(ok(input({ overview: 'x'.repeat(CUSTOM_OVERVIEW_MAX + 1) }))).toBe(false);
+		// Trimmed *before* the bound, so trailing whitespace can't push a valid synopsis over it.
+		const parsed = customMediaInputSchema.safeParse(
+			input({ overview: `  ${'x'.repeat(CUSTOM_OVERVIEW_MAX)}  ` })
+		);
+		expect(parsed.success && parsed.data.overview).toBe('x'.repeat(CUSTOM_OVERVIEW_MAX));
 	});
 
 	it('accepts a show with seasons', () => {
