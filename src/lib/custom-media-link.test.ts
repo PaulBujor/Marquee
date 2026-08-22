@@ -49,6 +49,32 @@ const forEntity = (events: ReturnType<typeof buildLinkEvents>, id: string) =>
 	events.filter((e) => e.entityId === id);
 
 describe('buildLinkEvents', () => {
+	it('revives a target the user removed more recently than the entry was added', () => {
+		// Otherwise the title vanishes outright: the target's revive is stamped with the entry's
+		// historical `addedAt` and loses to the newer tombstone, while the entry itself is tombstoned
+		// at `now`. Both projections agree, so nothing heals it.
+		const addedAt = Date.UTC(2024, 0, 1);
+		const removedAt = Date.UTC(2025, 0, 1);
+		const events = buildLinkEvents(
+			source({ addedAt }),
+			[],
+			{ ...TARGET, removedUpdatedAt: removedAt },
+			NOW
+		);
+
+		const revives = forEntity(events, TARGET.targetId).filter((e) => e.type === 'tracking.added');
+		expect(revives.map((e) => e.clock)).toEqual([addedAt, removedAt]);
+	});
+
+	it('does not re-stamp the status clock when the target carries no newer tombstone', () => {
+		// The extra revive re-asserts the status at its own clock, and the historical
+		// `status_changed` is what dates a completed title — so it must stay off the common path.
+		const events = buildLinkEvents(source({ addedAt: Date.UTC(2024, 0, 1) }), [], TARGET, NOW);
+		expect(
+			forEntity(events, TARGET.targetId).filter((e) => e.type === 'tracking.added')
+		).toHaveLength(1);
+	});
+
 	it('records the association against the custom entry, naming the target by identity', () => {
 		const events = buildLinkEvents(source(), [], TARGET, NOW);
 		expect(events[0]).toEqual({
