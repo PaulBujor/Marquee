@@ -29,7 +29,22 @@ export const MEDIA_SYNC_MAX = 500;
  */
 export const MEDIA_SYNC_CUSTOM_MAX = 25;
 
-const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+/**
+ * A **client-minted** id: pinned to v4, the version `crypto.randomUUID()` emits.
+ *
+ * Our derived ids (`mediaId`, `personId`) are v5, and anyone can compute one from public inputs —
+ * `uuidv5('tmdb:movie/603')`. Accepting any version here let a push claim a derived id for a row
+ * this endpoint then stamps as the caller's private property: a squatted media id makes the real
+ * title unhydratable for every user (a stored row means `resolveMediaSync` never calls
+ * `refreshMedia`, and ownership then filters it away), and a squatted person id lands in the shared
+ * people catalog, where account deletion would cascade it out from under every title crediting them.
+ *
+ * Pinning the version makes the two id spaces provably disjoint, so the collision can't be
+ * expressed rather than merely being rejected downstream.
+ */
+const uuid = z
+	.string()
+	.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
 /** `YYYY-MM-DD`, the only date shape anything in the media model stores. */
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 /** Same bound the event envelope puts on a client clock (below Jan 1 2100). */
