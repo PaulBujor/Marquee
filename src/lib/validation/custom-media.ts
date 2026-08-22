@@ -33,7 +33,7 @@ export const CUSTOM_MAX_CREDITS = 100;
 /** A person's name — much shorter than a title, and long enough for any real one. */
 export const CUSTOM_NAME_MAX = 120;
 
-/** Roughly the first films (Roundhay Garden Scene, 1888), with room to spare. */
+/** Predates any film. */
 export const CUSTOM_MIN_YEAR = 1870;
 /**
  * A fixed ceiling rather than "this year + N": a schema whose bounds move with the clock can't be

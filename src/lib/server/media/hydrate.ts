@@ -367,7 +367,8 @@ export async function refreshMedia(
 		);
 	}
 
-	// Cast/crew arrive on the same detail response — no extra request needed.
+	// Cast and crew arrive on the same detail response the scalars come from, so persisting them
+	// costs no extra request.
 	const { personRows, creditRows } = creditRowsFromDetail(id, detail);
 	await syncProviderPeople(db, personRows);
 

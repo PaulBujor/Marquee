@@ -1,6 +1,11 @@
 /**
- * Detail route for a title: provider-backed titles use `/title/[type]/[id]` (opens from provider id);
- * custom titles use `/custom/[id]`. Returns null when the title has no page yet (media not synced).
+ * Which detail page a title belongs on. The two kinds of media are addressed differently: a
+ * provider-backed title by its provider id (so the page opens before anything is cached locally,
+ * and a shared link keeps working), a user-authored one by our own id, since it exists nowhere but
+ * this account.
+ *
+ * Returns the route's parts rather than a path, so the caller can run them through SvelteKit's
+ * `resolve()` — and so this stays a pure decision, testable without the app's module graph.
  */
 import type { MediaSource } from '$lib/sync/events';
 import { parseTmdbExternalId } from './media-record';
@@ -17,7 +22,11 @@ export interface DetailTarget {
 export type DetailRoute =
 	{ kind: 'title'; type: 'movie' | 'show'; id: string } | { kind: 'custom'; id: string };
 
-/** The detail route for a title, or null when it has no page yet (media not synced). */
+/**
+ * The detail route for a title, or **null when it has none yet** — a tracked title whose media
+ * hasn't synced has no provider id to address and no local record to render. Callers render those
+ * unlinked.
+ */
 export function detailRoute(item: DetailTarget): DetailRoute | null {
 	if (item.source === 'custom') {
 		return item.mediaId ? { kind: 'custom', id: item.mediaId } : null;

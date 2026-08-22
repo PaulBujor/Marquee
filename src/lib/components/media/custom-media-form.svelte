@@ -52,11 +52,7 @@
 
 	let title = $state('');
 	let type = $state<'movie' | 'show'>('movie');
-	// Year and episode counts are `number | null`, not strings, because that is what Svelte's
-	// `bind:value` hands back for an `<input type="number">` — it coerces on every input event and
-	// gives null for an empty field. Holding them as strings meant they *were* strings until the
-	// first keystroke and numbers afterwards, so anything doing string work on them (`year.trim()`)
-	// threw the moment the field was touched.
+	// `number | null` — what `bind:value` yields for an `<input type="number">`, null when empty.
 	let year = $state<number | null>(null);
 	let overview = $state('');
 	let seasons = $state<{ seasonNumber: number; episodes: number | null }[]>([]);
@@ -153,13 +149,7 @@
 		const field = issue.path.join('.');
 		return field ? `${field}: ${issue.message}` : issue.message;
 	});
-	/**
-	 * Report a refusal — a form the user can't get past is worth a log line whether or not the
-	 * message on screen was enough for them to fix it themselves.
-	 *
-	 * Called from {@link submit}, not from an effect tracking `parsed`: that re-fires on every
-	 * keystroke, so one stuck form turned into a `/api/client-error` per character typed.
-	 */
+	/** Called from {@link submit}, not an effect on `parsed` — an effect reports per keystroke. */
 	function reportRefusal(error: z.ZodError<CustomMediaInput>) {
 		const issues = error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
 		console.warn('custom-media form: rejected', issues);
