@@ -171,6 +171,13 @@ async function findReleases(
 				eq(trackingTable.userId, userId),
 				eq(trackingTable.removed, false),
 				inArray(trackingTable.status, [...ACTIVE_SHOW_STATUSES]),
+				// Provider-backed titles only. A custom entry's episodes all share one synthesized air
+				// date, clamped to today so they stay watchable — so a show the user typed in themselves
+				// lands squarely in this window, and every episode passes the premiere test below
+				// (they share the date that `min()` returns). Authoring a 30-episode show would push
+				// "30 new episodes" about work the user just entered by hand. Nothing a custom entry
+				// carries is a release we could announce; that clamp means it can never be in the future.
+				eq(mediaTable.source, 'linked'),
 				gte(episodesTable.seasonNumber, SPECIALS_SEASON + 1),
 				gte(episodesTable.airDate, from),
 				lte(episodesTable.airDate, to)
@@ -216,6 +223,9 @@ async function findReleases(
 				eq(trackingTable.removed, false),
 				inArray(trackingTable.status, [...ACTIVE_STATUSES]),
 				eq(mediaTable.type, 'movie'),
+				// Same rule as the episode query. A custom movie has no release date so it never matches
+				// today, but that's an accident of the writer, not a guarantee worth relying on.
+				eq(mediaTable.source, 'linked'),
 				gte(mediaTable.releaseDate, from),
 				lte(mediaTable.releaseDate, to)
 			)
