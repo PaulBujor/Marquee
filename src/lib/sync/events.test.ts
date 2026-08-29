@@ -90,7 +90,9 @@ describe('validateEvent', () => {
 				{ targetId: tmdbMediaId('movie', 603), provider: 'tmdb', externalId: 'movie/603' },
 				DEVICE
 			),
-			createEvent('media.match_declined', CUSTOM_ID, {}, DEVICE)
+			createEvent('media.unlinked', CUSTOM_ID, {}, DEVICE),
+			createEvent('media.match_declined', CUSTOM_ID, {}, DEVICE),
+			createEvent('media.deleted', CUSTOM_ID, {}, DEVICE)
 		];
 		for (const ev of cases) expect(validateEvent(ev)).toEqual(ev);
 	});

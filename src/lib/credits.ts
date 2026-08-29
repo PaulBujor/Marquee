@@ -1,4 +1,7 @@
-/** Presentation helpers for cast and crew: labels, grouping, name comparison. Client-safe. */
+/**
+ * Presentation helpers for cast and crew, shared by the authoring form and the match comparison.
+ * Client-safe and pure — no store access, and the only server import is a type.
+ */
 import {
 	CREDIT_ROLES,
 	personExternalId,
@@ -30,7 +33,11 @@ export interface CreditGroup {
 	people: MediaCredit[];
 }
 
-/** Group credits by role in fixed order, dropping empty roles. */
+/**
+ * Group credits by role for rendering, in a fixed role order rather than whatever order the rows
+ * arrived in — so a title and the entry it might match line up section for section. Roles nobody
+ * holds are dropped.
+ */
 export function groupCredits(credits: MediaCredit[]): CreditGroup[] {
 	const groups: CreditGroup[] = [];
 	for (const role of CREDIT_ROLES) {
@@ -43,7 +50,11 @@ export function groupCredits(credits: MediaCredit[]): CreditGroup[] {
 	return groups;
 }
 
-/** Fold a name for comparison: strip accents, lowercase, collapse whitespace/punctuation. */
+/**
+ * Fold a name for comparison: case, accents and punctuation removed, whitespace collapsed. Enough
+ * to see that "Léa Seydoux" and "Lea  Seydoux" are the same person without pretending to be a
+ * fuzzy matcher — the comparison view shows the user both lists and lets them decide.
+ */
 export function foldName(name: string): string {
 	return name
 		.normalize('NFD')
@@ -56,7 +67,14 @@ export function foldName(name: string): string {
 /** The credit shape a provider detail response carries, before anything of ours is stored. */
 type DetailCredits = Pick<MediaDetail, 'cast' | 'director' | 'writers' | 'producers' | 'creators'>;
 
-/** Wire credits from a provider detail response, derived the same way the server does. */
+/**
+ * Wire credits from a provider detail response, without going near the store. The comparison view
+ * needs a candidate's cast and crew before anything is tracked — there is no stored row to read,
+ * and hydrating one just to look at it would write a title the user may well reject.
+ *
+ * Ids are derived the same way the server derives them, so the two sides agree on who a person is
+ * even though nothing has been written yet.
+ */
 export function creditsFromDetail(detail: DetailCredits): MediaCredit[] {
 	const out: MediaCredit[] = [];
 	const add = (
@@ -97,7 +115,12 @@ export interface CreditOverlap {
 	matched: number;
 }
 
-/** Compare two credit lists by folded name (ignoring role). Reports counts; matching nothing isn't evidence. */
+/**
+ * Compare two credit lists by name, ignoring role: a person the user filed as "director" and the
+ * provider files as "writer" is still the same person turning up in both, which is exactly the
+ * signal the user is looking for. Matching nothing is not evidence against a match — a sparse
+ * custom entry matches nothing by construction — so this reports counts and lets the user decide.
+ */
 export function compareCredits(mine: MediaCredit[], theirs: MediaCredit[]): CreditOverlap {
 	const mineFolded = new Set(mine.map((c) => foldName(c.name)).filter((n) => n !== ''));
 	const theirsFolded = new Set(theirs.map((c) => foldName(c.name)).filter((n) => n !== ''));

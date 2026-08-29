@@ -10,7 +10,13 @@ import { z } from 'zod';
 import { CREDIT_ROLES } from '$lib/sync/events';
 
 export const CUSTOM_TITLE_MAX = 200;
-export const CUSTOM_OVERVIEW_MAX = 2000;
+/**
+ * A synopsis someone typed themselves. Sized against what a real one looks like — a provider's own
+ * overview runs a few hundred characters — with room to spare, rather than against what the column
+ * would tolerate. Every custom record travels whole on the media channel, so this is also what caps
+ * a push — `MEDIA_SYNC_CUSTOM_MAX` records carrying one of these each.
+ */
+export const CUSTOM_OVERVIEW_MAX = 1000;
 export const CUSTOM_MAX_SEASONS = 50;
 export const CUSTOM_MAX_EPISODES_PER_SEASON = 200;
 /**
@@ -27,7 +33,7 @@ export const CUSTOM_MAX_CREDITS = 100;
 /** A person's name — much shorter than a title, and long enough for any real one. */
 export const CUSTOM_NAME_MAX = 120;
 
-/** Roughly the first films (Roundhay Garden Scene, 1888), with room to spare. */
+/** Predates any film. */
 export const CUSTOM_MIN_YEAR = 1870;
 /**
  * A fixed ceiling rather than "this year + N": a schema whose bounds move with the clock can't be
@@ -87,7 +93,8 @@ export const customMediaInputSchema = z
 		title: z.string().trim().min(1).max(CUSTOM_TITLE_MAX),
 		type: z.enum(['movie', 'show']),
 		year: z.number().int().min(CUSTOM_MIN_YEAR).max(CUSTOM_MAX_YEAR).nullable(),
-		overview: z.string().max(CUSTOM_OVERVIEW_MAX),
+		// Trimmed like the title, so the value the form validates is the value that gets stored.
+		overview: z.string().trim().max(CUSTOM_OVERVIEW_MAX),
 		seasons: z.array(customSeasonInputSchema).max(CUSTOM_MAX_SEASONS),
 		credits: z.array(customCreditInputSchema).max(CUSTOM_MAX_CREDITS)
 	})

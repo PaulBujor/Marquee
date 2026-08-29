@@ -6,10 +6,11 @@
  */
 import { todayIso } from '$lib/tracking/actions';
 import type { MediaCredit, MediaEpisode, MediaRecord, MediaSeason } from '$lib/sync/events';
-import type {
-	CustomCreditInput,
-	CustomMediaInput,
-	CustomSeasonInput
+import {
+	CUSTOM_OVERVIEW_MAX,
+	type CustomCreditInput,
+	type CustomMediaInput,
+	type CustomSeasonInput
 } from '$lib/validation/custom-media';
 
 /**
@@ -77,11 +78,11 @@ function synthesizeCredits(input: CustomCreditInput[], mintPersonId: () => strin
 	return input.map((c) => {
 		const sortOrder = billing.get(c.role) ?? 0;
 		billing.set(c.role, sortOrder + 1);
-		const character = c.character.trim();
+		const character = (c.character ?? '').trim();
 		return {
 			personId: c.personId ?? mintPersonId(),
 			externalId: c.externalId ?? null,
-			name: c.name.trim(),
+			name: (c.name ?? '').trim(),
 			profilePath: c.profilePath ?? null,
 			role: c.role,
 			// Only cast play someone; the form hides the field for every other role.
@@ -119,11 +120,11 @@ export function createCustomMedia(
 		externalId: null,
 		source: 'custom',
 		type: input.type,
-		title: input.title.trim(),
+		title: (input.title ?? '').trim(),
 		year: input.year,
 		posterPath: null,
 		backdropPath: null,
-		overview: input.overview.trim(),
+		overview: (input.overview ?? '').trim(),
 		genres: [],
 		releaseDate: null,
 		// TMDB's own production status; there is none for a title TMDB has never seen.
@@ -151,10 +152,12 @@ export function toCustomMediaInput(
 	credits: MediaCredit[] = []
 ): CustomMediaInput {
 	return {
-		title: record.title,
+		title: record.title ?? '',
 		type: record.type,
 		year: record.year,
-		overview: record.overview,
+		// Clamped, not just copied: an entry authored under a looser bound would otherwise seed a form
+		// the schema then refuses, leaving it permanently un-editable.
+		overview: (record.overview ?? '').slice(0, CUSTOM_OVERVIEW_MAX),
 		seasons:
 			record.type === 'show'
 				? seasons
@@ -166,7 +169,7 @@ export function toCustomMediaInput(
 			.map((c) => ({
 				personId: c.personId,
 				role: c.role,
-				name: c.name,
+				name: c.name ?? '',
 				character: c.character ?? '',
 				externalId: c.externalId,
 				profilePath: c.profilePath

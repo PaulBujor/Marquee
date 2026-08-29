@@ -115,9 +115,13 @@ export async function storeCustomMedia(
 		const { personRows, creditRows } = creditRowsFromCustom(record.id, userId, record.credits);
 		// People first — a credit is a foreign key onto one. A person id this user may not write (it
 		// already belongs to someone else, or to the shared catalog) takes its credit down with it
-		// rather than pointing at a row that says someone else's name.
-		const writablePeople = await syncOwnedPeople(db, userId, personRows);
-		const ownCreditRows = creditRows.filter((c) => writablePeople.has(c.personId));
+		// rather than pointing at a row that says someone else's name. An id absent from the mapping
+		// is one of those; an id mapped to a *different* one is the same person already stored under
+		// the id that mapping names.
+		const storedPersonId = await syncOwnedPeople(db, userId, personRows);
+		const ownCreditRows = creditRows
+			.filter((c) => storedPersonId.has(c.personId))
+			.map((c) => ({ ...c, personId: storedPersonId.get(c.personId) as string }));
 
 		if (!existing) {
 			await db

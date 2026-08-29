@@ -1,15 +1,9 @@
 /**
  * Wrapper for local writes that must not fail silently.
  *
- * A write to IndexedDB can fail for reasons the user has no way to see — a blocked version upgrade,
- * a storage quota, a private-mode restriction. Left uncaught in an event handler the rejection goes
- * nowhere: the dialog closes, the button re-enables, and the user believes their entry was saved.
- * Worse, nothing reaches `/api/client-error`, so it's invisible from our side too.
- *
- * This is the same contract `TrackingState.#run` applies to tracking writes, factored out for the
- * paths that don't go through it.
- *
- * Client-safe (browser only).
+ * An IndexedDB write can fail invisibly (blocked upgrade, quota, private mode), and an uncaught
+ * rejection in an event handler reaches neither the user nor `/api/client-error`. Same contract
+ * `TrackingState.#run` applies to tracking writes, for the paths that don't go through it.
  */
 import { toast } from 'svelte-sonner';
 import { reportClientError } from './report-error';

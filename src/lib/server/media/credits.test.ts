@@ -243,7 +243,9 @@ describe('syncOwnedPeople', () => {
 		const { personRows } = creditRowsFromCustom(MEDIA_ID, USER, [
 			customCredit(OWN_PERSON, 'Local Auteur')
 		]);
-		expect(await syncOwnedPeople(db, USER, personRows)).toEqual(new Set([OWN_PERSON]));
+		expect(await syncOwnedPeople(db, USER, personRows)).toEqual(
+			new Map([[OWN_PERSON, OWN_PERSON]])
+		);
 
 		const [row] = await db.select().from(people).where(eq(people.id, OWN_PERSON));
 		expect(row).toMatchObject({
@@ -263,7 +265,7 @@ describe('syncOwnedPeople', () => {
 		const { personRows } = creditRowsFromCustom(MEDIA_ID, USER, [
 			customCredit(nolan, 'Not Christopher Nolan')
 		]);
-		expect(await syncOwnedPeople(db, USER, personRows)).toEqual(new Set());
+		expect(await syncOwnedPeople(db, USER, personRows)).toEqual(new Map());
 
 		const [row] = await db.select().from(people).where(eq(people.id, nolan));
 		expect(row).toMatchObject({ name: 'Christopher Nolan', ownerUserId: null });
@@ -284,7 +286,7 @@ describe('syncOwnedPeople', () => {
 		const { personRows } = creditRowsFromCustom(MEDIA_ID, USER, [
 			customCredit(OWN_PERSON, 'Mine Now')
 		]);
-		expect(await syncOwnedPeople(db, USER, personRows)).toEqual(new Set());
+		expect(await syncOwnedPeople(db, USER, personRows)).toEqual(new Map());
 
 		const [row] = await db.select().from(people).where(eq(people.id, OWN_PERSON));
 		expect(row).toMatchObject({ name: 'Theirs', ownerUserId: OTHER });
@@ -304,6 +306,45 @@ describe('syncOwnedPeople', () => {
 			externalId: 'person/137427',
 			ownerUserId: USER
 		});
+	});
+
+	it('collapses one searched person credited under two roles onto a single row', async () => {
+		// The form mints an id per credit row and allows the same person twice under different roles,
+		// so this arrives as two ids carrying one `externalId`. Two rows would violate
+		// `people_owner_external_idx`, and the abort takes the whole media-sync request with it.
+		const second = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+		const { personRows, creditRows } = creditRowsFromCustom(MEDIA_ID, USER, [
+			{ ...customCredit(OWN_PERSON, 'Christopher Nolan'), externalId: 'person/525' },
+			{
+				...customCredit(second, 'Christopher Nolan'),
+				externalId: 'person/525',
+				role: 'writer' as const
+			}
+		]);
+
+		expect(personRows).toHaveLength(1);
+		// Both credits point at the id that survived the collapse.
+		expect(creditRows.map((c) => c.personId)).toEqual([OWN_PERSON, OWN_PERSON]);
+		await expect(syncOwnedPeople(db, USER, personRows)).resolves.toBeDefined();
+		expect(await db.select().from(people).where(eq(people.externalId, 'person/525'))).toHaveLength(
+			1
+		);
+	});
+
+	it('re-points a second entry’s new id at the row that person already has', async () => {
+		// Same person, different entry, so a fresh id — but only one row per (owner, provider, ext) may
+		// exist. The stored id wins and the caller follows it.
+		const later = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+		const pick = (id: string) =>
+			creditRowsFromCustom(MEDIA_ID, USER, [
+				{ ...customCredit(id, 'Denis Villeneuve'), externalId: 'person/137427' }
+			]).personRows;
+
+		await syncOwnedPeople(db, USER, pick(OWN_PERSON));
+		expect(await syncOwnedPeople(db, USER, pick(later))).toEqual(new Map([[later, OWN_PERSON]]));
+		expect(
+			await db.select().from(people).where(eq(people.externalId, 'person/137427'))
+		).toHaveLength(1);
 	});
 
 	it('lets two accounts each hold their own row for the same real person', async () => {

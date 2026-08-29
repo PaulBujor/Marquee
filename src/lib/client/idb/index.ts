@@ -27,6 +27,7 @@ export {
 	getTracking,
 	getTrackingByMediaId,
 	getMediaLink,
+	getMediaLinksTo,
 	getEpisodeWatches,
 	getAllEpisodeWatches
 } from './state';
@@ -48,7 +49,8 @@ export {
 	getUnsyncedMediaIds,
 	getPendingCustomMedia,
 	clearPendingPush,
-	pruneStaleMedia
+	pruneStaleMedia,
+	deleteLocalMedia
 } from './media';
 export {
 	getDeviceId,

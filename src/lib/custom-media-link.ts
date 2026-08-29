@@ -31,6 +31,11 @@ export interface LinkTarget {
 	targetId: string;
 	provider: HydratableProvider;
 	externalId: string;
+	/**
+	 * The target's own `removedUpdatedAt`, when this device holds a tracking row for it — 0 when it
+	 * has never been tracked or removed here. See {@link buildLinkEvents} for why the merge needs it.
+	 */
+	removedUpdatedAt?: number;
 }
 
 /** Clamp a stored clock to a positive integer, falling back to `now` for unset (0) clocks. */
@@ -98,6 +103,17 @@ export function buildLinkEvents(
 			entityId: target.targetId,
 			payload: { season: w.season, episode: w.episode },
 			clock: clockOr(w.updatedAt, now)
+		});
+	}
+
+	const addedClock = clockOr(source.addedAt, now);
+	const tombstone = target.removedUpdatedAt ?? 0;
+	if (tombstone > addedClock) {
+		events.push({
+			type: 'tracking.added',
+			entityId: target.targetId,
+			payload: { status: source.status },
+			clock: tombstone
 		});
 	}
 

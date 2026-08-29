@@ -3,9 +3,8 @@
  *
  * The data already arrives — `refreshMedia` fetches TMDB details with `append_to_response=credits`
  * and `normalizeDetails` turns it into `cast` / `director` / `writers` / `producers` / `creators`.
- * Until now it was rendered and discarded. Storing it makes it available offline, lets a custom
- * entry be compared against a candidate on more than its title, and gives the reverse lookup
- * ("everything this person worked on") somewhere to run.
+ * Storing it makes it available offline, lets a custom entry be compared against a candidate on
+ * more than its title, and gives the reverse lookup ("everything this person worked on") a home.
  *
  * `people` rows are shared reference data keyed by our derived person id, so two titles crediting
  * the same actor converge on one row. Reconciliation mirrors `syncSeasons`/`syncEpisodes`: diff
@@ -92,6 +91,11 @@ export function creditRowsFromDetail(
  * *hint* — which real person the author picked out of search — not a claim on the shared catalog,
  * and keeping the provider local is what says so. Uniqueness is per owner (see the partial indexes
  * on `people`), so two accounts can each hold their own row pointing at the same person.
+ *
+ * People are collapsed by that hint, not by the id the client sent. The form mints a fresh id per
+ * credit row and allows the same person under two roles, so crediting someone as director *and*
+ * writer produces two ids naming one person — two rows that collide on `people_owner_external_idx`
+ * and abort the whole push. Credits follow the id the collapse kept.
  */
 export function creditRowsFromCustom(
 	mediaId: string,
@@ -102,8 +106,11 @@ export function creditRowsFromCustom(
 	const creditRows = new Map<string, CreditInsert>();
 
 	for (const c of pushed) {
-		if (!personRows.has(c.personId)) {
-			personRows.set(c.personId, {
+		// A null hint identifies nobody, so a typed-in name stays on its own id.
+		const identity = c.externalId === null ? `id:${c.personId}` : `ext:${c.externalId}`;
+		const existing = personRows.get(identity);
+		if (!existing) {
+			personRows.set(identity, {
 				id: c.personId,
 				provider: 'local',
 				externalId: c.externalId,
@@ -112,13 +119,15 @@ export function creditRowsFromCustom(
 				profilePath: c.profilePath
 			});
 		}
+		const storedId = existing?.id ?? c.personId;
+
 		// Same collapse as the provider path: `(media, person, role)` is the primary key, and keeping
 		// the first occurrence preserves the order the author put them in.
-		const key = `${c.personId}:${c.role}`;
+		const key = `${storedId}:${c.role}`;
 		if (!creditRows.has(key)) {
 			creditRows.set(key, {
 				mediaId,
-				personId: c.personId,
+				personId: storedId,
 				role: c.role,
 				character: c.character,
 				sortOrder: c.sortOrder
@@ -191,35 +200,76 @@ export async function syncProviderPeople(db: Db, rows: PersonInsert[]): Promise<
 }
 
 /**
- * Upsert people a user authored, and report which ids are safe to credit.
+ * Upsert people a user authored, and report the id each pushed person is actually stored under.
  *
  * A person id on a custom entry is minted by the client, so a push can name an id that already
  * exists — including a provider person's, whose id is derivable by anyone. Such a row is left
- * untouched and its id reported unusable, so one account can never rewrite the name every other
- * title shows for that person. Same gate, same reasoning, as the media row's own `mayWrite`.
+ * untouched and its id left out of the result, so one account can never rewrite the name every
+ * other title shows for that person. Same gate, same reasoning, as the media row's own `mayWrite`.
+ *
+ * The result is a mapping rather than a set because a person can arrive under a **new id for an
+ * identity this user already stores**: the form mints an id per credit row, so crediting the same
+ * searched person on a second entry sends a second id carrying the same `externalId`. Only one row
+ * per `(owner, provider, external_id)` may exist, so the stored id wins and the caller re-points
+ * the credit at it — otherwise the insert aborts the push and takes the whole media channel with it.
  */
 export async function syncOwnedPeople(
 	db: Db,
 	userId: string,
 	rows: PersonInsert[]
-): Promise<Set<string>> {
-	if (rows.length === 0) return new Set();
-	const byId = await loadPeople(
-		db,
-		rows.map((r) => r.id)
-	);
-	const writable = rows.filter((r) => {
-		const old = byId.get(r.id);
-		return !old || old.ownerUserId === userId;
-	});
-	await upsertPeople(
-		db,
-		writable.filter((r) => {
-			const old = byId.get(r.id);
-			return !old || contentChanged(old, r, PERSON_CONTENT_FIELDS);
-		})
-	);
-	return new Set(writable.map((r) => r.id));
+): Promise<Map<string, string>> {
+	if (rows.length === 0) return new Map();
+	const [byId, byExternalId] = await Promise.all([
+		loadPeople(
+			db,
+			rows.map((r) => r.id)
+		),
+		loadOwnedPeopleByExternalId(
+			db,
+			userId,
+			rows.map((r) => r.externalId)
+		)
+	]);
+
+	const canonical = new Map<string, string>();
+	const toWrite: PersonInsert[] = [];
+	for (const row of rows) {
+		// An identity this user already holds under another id: keep the stored row, re-point the
+		// credit. Its name/photo are left as they are — the hint says it's the same person either way.
+		const owned = typeof row.externalId === 'string' ? byExternalId.get(row.externalId) : undefined;
+		if (owned && owned.id !== row.id) {
+			canonical.set(row.id, owned.id);
+			continue;
+		}
+		const old = byId.get(row.id);
+		if (old && old.ownerUserId !== userId) continue; // not this user's to write
+		canonical.set(row.id, row.id);
+		if (!old || contentChanged(old, row, PERSON_CONTENT_FIELDS)) toWrite.push(row);
+	}
+
+	await upsertPeople(db, toWrite);
+	return canonical;
+}
+
+/** This user's own person rows carrying any of `externalIds`, keyed by external id. */
+async function loadOwnedPeopleByExternalId(
+	db: Db,
+	userId: string,
+	externalIds: (string | null | undefined)[]
+): Promise<Map<string, Person>> {
+	const ids = [...new Set(externalIds.filter((e): e is string => typeof e === 'string'))];
+	if (ids.length === 0) return new Map();
+	const rows = (
+		await Promise.all(
+			chunkIds(ids).map((chunk) =>
+				db
+					.select()
+					.from(people)
+					.where(and(eq(people.ownerUserId, userId), inArray(people.externalId, chunk)))
+			)
+		)
+	).flat();
+	return new Map(rows.map((r) => [r.externalId as string, r]));
 }
 
 /**

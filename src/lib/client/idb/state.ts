@@ -3,6 +3,9 @@
  * This mirrors the server's `projectEvent` — same deterministic keys, same
  * per-field last-write-wins by `clientCreatedAt` — so local optimistic state and
  * pulled server state converge to the same result regardless of arrival order.
+ *
+ * `media.deleted` is the one event that reaches past those stores into the media cache; it runs
+ * after the projection transaction commits, for the reason on {@link deletedMediaIds}.
  */
 import type { IDBPTransaction } from 'idb';
 import {
@@ -12,6 +15,7 @@ import {
 	type ClientTracking,
 	type MarqueeDB
 } from './db';
+import { deleteLocalMedia } from './media';
 import type { EventEnvelope, EventPayloadMap } from '$lib/sync/events';
 
 /** Client episode key — no userId prefix (the store is already single-user). */
@@ -163,13 +167,34 @@ async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<v
 			});
 			break;
 		}
+		case 'media.unlinked': {
+			/** Only the link field moves — unlinked doesn't affect the declined/suggestion clock. */
+			await upsertMediaLink(tx, entityId, clock, 'linkedUpdatedAt', (l) => {
+				l.targetId = null;
+				l.provider = null;
+				l.externalId = null;
+			});
+			break;
+		}
 		case 'media.match_declined': {
 			await upsertMediaLink(tx, entityId, clock, 'declinedUpdatedAt', (l) => {
 				l.declined = true;
 			});
 			break;
 		}
+		case 'media.deleted':
+			// Handled after this transaction commits — see `deletedMediaIds`.
+			break;
 	}
+}
+
+/**
+ * The entries a batch of events deletes. Kept out of the projection transaction: erasing a custom
+ * entry touches the four media stores, and widening `PROJECTION_STORES` to hold them would make
+ * every tracking write lock the whole media cache for the sake of one rare event.
+ */
+function deletedMediaIds(events: EventEnvelope[]): string[] {
+	return events.filter((e) => e.type === 'media.deleted').map((e) => e.entityId);
 }
 
 /** Apply a single event to the local materialized stores (idempotent, LWW). */
@@ -178,6 +203,7 @@ export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 	const tx = db.transaction(PROJECTION_STORES, 'readwrite');
 	await applyEventInTx(tx, event);
 	await tx.done;
+	await deleteLocalMedia(deletedMediaIds([event]));
 }
 
 /**
@@ -191,6 +217,7 @@ export async function applyEventsToIdb(events: EventEnvelope[]): Promise<void> {
 	const tx = db.transaction(PROJECTION_STORES, 'readwrite');
 	for (const event of events) await applyEventInTx(tx, event);
 	await tx.done;
+	await deleteLocalMedia(deletedMediaIds(events));
 }
 
 /** All non-removed tracking rows (optionally filtered by status). */
@@ -212,6 +239,12 @@ export async function getTrackingByMediaId(mediaId: string): Promise<ClientTrack
 export async function getMediaLink(mediaId: string): Promise<ClientMediaLink | undefined> {
 	const db = await openDb();
 	return db.get('mediaLinks', mediaId);
+}
+
+/** Entries matched *to* `targetId` — reverse lookup of getMediaLink. Small store; scan is fine. */
+export async function getMediaLinksTo(targetId: string): Promise<ClientMediaLink[]> {
+	const db = await openDb();
+	return (await db.getAll('mediaLinks')).filter((l) => l.targetId === targetId);
 }
 
 /** Watched-episode rows for a show. */

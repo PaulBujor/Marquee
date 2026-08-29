@@ -188,6 +188,37 @@ describe('sendNewReleaseDigest', () => {
 		expect(calls).toHaveLength(1);
 	});
 
+	it('never announces a title the user wrote themselves', async () => {
+		// A custom entry's episodes all share one synthesized air date, clamped to today so they stay
+		// watchable — which drops them straight into the digest window, and they all pass the premiere
+		// test because they share the date `min()` returns. Without the `source` filter, authoring a
+		// show pushed "N new episodes" about work the user had just typed in.
+		const CUSTOM = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+		await seedSub(db, 'https://push.example/custom', MADRID);
+		await db.insert(media).values({
+			id: CUSTOM,
+			provider: 'local',
+			source: 'custom',
+			ownerUserId: USER,
+			type: 'show',
+			title: 'Midnight Cassette Club',
+			externalId: null
+		});
+		await db
+			.insert(tracking)
+			.values({ id: `${USER}::${CUSTOM}`, userId: USER, mediaId: CUSTOM, status: 'want_to_watch' });
+		await seedEpisode(db, CUSTOM, 1, 1, '2026-07-27');
+		await seedEpisode(db, CUSTOM, 1, 2, '2026-07-27');
+		const { sender, calls } = fakeSender();
+
+		expect(await sendNewReleaseDigest(db, {} as Env, NOW, sender)).toEqual({
+			dueUsers: 1,
+			sent: 0,
+			pruned: 0
+		});
+		expect(calls).toHaveLength(0);
+	});
+
 	it('stays silent for a new episode of a long-running show nothing has been watched of', async () => {
 		// The complaint: an unwatched show pushing an episode every week.
 		await seedSub(db, 'https://push.example/ep-1', MADRID);

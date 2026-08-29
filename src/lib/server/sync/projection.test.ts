@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
-import { episodeWatches, events as eventsTable, tracking, users } from '$lib/server/db/schema';
+import {
+	episodeWatches,
+	events as eventsTable,
+	media,
+	tracking,
+	users
+} from '$lib/server/db/schema';
 import {
 	tmdbMediaId,
 	trackingKey,
@@ -178,6 +184,16 @@ describe('projectEvent via applyEvents', () => {
 		expect(await db.select().from(episodeWatches)).toHaveLength(0);
 	});
 
+	it('materializes nothing for an unlink either, so a rebuild stays exact', async () => {
+		const custom = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+		const events = [
+			ev('media.linked', custom, { targetId: MID, provider: 'tmdb', externalId: 'movie/603' }, 100),
+			ev('media.unlinked', custom, {}, 200)
+		];
+		await applyEvents(db, USER, events);
+		expect(await db.select().from(tracking).where(eq(tracking.userId, USER))).toEqual([]);
+	});
+
 	it('a media.linked event does not disturb the addedAt floor of a tracked title', async () => {
 		// `addedAt` is defined over `tracking.*` events only; a link carries its own clock and must
 		// stay out of that calculation entirely — here an *older* one that would pull the floor down.
@@ -188,6 +204,73 @@ describe('projectEvent via applyEvents', () => {
 			ev('media.linked', MID, { targetId: MID, provider: 'tmdb', externalId: 'movie/603' }, older)
 		]);
 		expect((await trackingRow(db)).addedAt.getTime()).toBe(added);
+	});
+
+	it('media.deleted removes the row the user authored', async () => {
+		const custom = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+		await db.insert(media).values({
+			id: custom,
+			provider: 'local',
+			source: 'custom',
+			ownerUserId: USER,
+			type: 'movie',
+			title: 'Mine'
+		});
+
+		await applyEvents(db, USER, [ev('media.deleted', custom, {}, 100)]);
+
+		expect(await db.select().from(media)).toEqual([]);
+	});
+
+	it('media.deleted cannot reach the shared catalog or another account’s entry', async () => {
+		// `entityId` is client-minted, so the ownership predicates are the gate, not a convenience.
+		const USER2 = 'user-2';
+		const theirs = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+		await db.insert(users).values({ id: USER2, email: 'u2@x.com', status: 'enabled' });
+		await db.insert(media).values([
+			{
+				id: MID,
+				provider: 'tmdb',
+				externalId: 'movie/603',
+				source: 'linked',
+				type: 'movie',
+				title: 'Shared'
+			},
+			{
+				id: theirs,
+				provider: 'local',
+				source: 'custom',
+				ownerUserId: USER2,
+				type: 'movie',
+				title: 'Theirs'
+			}
+		]);
+
+		await applyEvents(db, USER, [
+			ev('media.deleted', MID, {}, 100),
+			ev('media.deleted', theirs, {}, 200)
+		]);
+
+		expect((await db.select().from(media)).map((m) => m.id).sort()).toEqual([MID, theirs].sort());
+	});
+
+	it('rebuildProjection re-applies a deletion rather than resurrecting the entry', async () => {
+		// The one event that touches media. Replaying it is both idempotent and correct — the entry
+		// really was deleted, so a rebuild must not hand it back.
+		const custom = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+		await db.insert(media).values({
+			id: custom,
+			provider: 'local',
+			source: 'custom',
+			ownerUserId: USER,
+			type: 'movie',
+			title: 'Mine'
+		});
+		await applyEvents(db, USER, [ev('media.deleted', custom, {}, 100)]);
+
+		await rebuildProjection(db, USER);
+
+		expect(await db.select().from(media)).toEqual([]);
 	});
 
 	it('rebuildProjection replays the log to the same materialized state', async () => {

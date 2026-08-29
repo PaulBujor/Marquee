@@ -10,6 +10,7 @@
 	import CustomMediaForm from '$lib/components/media/custom-media-form.svelte';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
+	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -234,6 +235,9 @@
 				<Skeleton class="size-9 rounded-full" />
 			</div>
 		{:else}
+			{#if entry.type === 'show' && tracking.view.tracked}
+				<NextEpisodeRow {tracking} />
+			{/if}
 			<TrackingControls {tracking} type={entry.type} />
 		{/if}
 

@@ -5,7 +5,13 @@
  */
 import { z } from 'zod';
 import { CREDIT_ROLES, MEDIA_PROVIDERS, MEDIA_SOURCES, TRACKING_STATUSES } from '$lib/sync/events';
-import { CUSTOM_MAX_CREDITS, CUSTOM_NAME_MAX } from '$lib/validation/custom-media';
+import {
+	CUSTOM_MAX_CREDITS,
+	CUSTOM_MAX_EPISODES_PER_SEASON,
+	CUSTOM_MAX_SEASONS,
+	CUSTOM_NAME_MAX,
+	CUSTOM_OVERVIEW_MAX
+} from '$lib/validation/custom-media';
 import { EXPORT_FORMAT, EXPORT_SCHEMA_VERSION, type MarqueeExport } from './schema';
 
 /** Why a file couldn't be read, mapped to a message in the UI. */
@@ -31,14 +37,20 @@ const titleSchema = z.object({
 	year: z.number().int().nullable(),
 	// v2 additions, optional so a v1 file still reads (see EXPORT_SCHEMA_VERSION).
 	source: z.enum(MEDIA_SOURCES).nullable().optional(),
-	overview: z.string().nullable().optional(),
+	overview: z.string().max(CUSTOM_OVERVIEW_MAX).nullable().optional(),
+	// Bounded to the same limits the authoring schema enforces. An import file is untrusted input,
+	// and `planImport` fans `episodeCount` out into one object per episode *while the user is still
+	// deciding whether to import* — an unbounded count freezes the tab on file selection alone. An
+	// unbounded overview is quieter but never heals: it writes locally, then fails the push schema on
+	// every sync cycle forever.
 	seasons: z
 		.array(
 			z.object({
-				seasonNumber: z.number().int().nonnegative(),
-				episodeCount: z.number().int().nonnegative()
+				seasonNumber: z.number().int().min(1).max(CUSTOM_MAX_SEASONS),
+				episodeCount: z.number().int().nonnegative().max(CUSTOM_MAX_EPISODES_PER_SEASON)
 			})
 		)
+		.max(CUSTOM_MAX_SEASONS)
 		.nullable()
 		.optional(),
 	credits: z

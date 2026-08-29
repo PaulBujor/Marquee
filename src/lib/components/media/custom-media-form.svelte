@@ -5,6 +5,8 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import CreditRow from './credit-row.svelte';
+	import { reportClientError } from '$lib/client/report-error';
+	import type { z } from 'zod';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import {
@@ -50,11 +52,10 @@
 
 	let title = $state('');
 	let type = $state<'movie' | 'show'>('movie');
-	// Year and episode counts are held as strings: an `<input type="number">` binds to `''` while
-	// being cleared, and coercing mid-edit would fight the user's typing.
-	let year = $state('');
+	// `number | null` — what `bind:value` yields for an `<input type="number">`, null when empty.
+	let year = $state<number | null>(null);
 	let overview = $state('');
-	let seasons = $state<{ seasonNumber: number; episodes: string }[]>([]);
+	let seasons = $state<{ seasonNumber: number; episodes: number | null }[]>([]);
 	// Credit rows carry a local `key` because nothing else about a row is stable while it's being
 	// typed: the name changes on every keystroke and a brand-new person has no id yet.
 	let credits = $state<(CustomCreditInput & { key: number })[]>([]);
@@ -73,20 +74,24 @@
 		showErrors = false;
 		title = initial?.title ?? initialTitle;
 		type = initial?.type ?? initialType;
-		year = initial?.year != null ? String(initial.year) : '';
+		year = initial?.year ?? null;
 		overview = initial?.overview ?? '';
 		seasons = (initial?.seasons ?? []).map((s) => ({
 			seasonNumber: s.seasonNumber,
-			episodes: String(s.episodeCount)
+			episodes: s.episodeCount
 		}));
 		credits = (initial?.credits ?? []).map((c) => ({ ...c, key: nextCreditKey++ }));
 	});
 
-	/** The season rows as the schema wants them; a blank or unparseable count reads as zero. */
+	/**
+	 * The season rows as the schema wants them. A blank count reads as zero — a season the user
+	 * added but hasn't filled in yet is "no episodes yet", not a validation dead end. A non-integer
+	 * (the one thing a number field still lets through) becomes -1, which the schema rejects.
+	 */
 	const seasonInput = $derived<CustomSeasonInput[]>(
 		seasons.map((s) => ({
 			seasonNumber: s.seasonNumber,
-			episodeCount: Number.isInteger(Number(s.episodes)) ? Number(s.episodes) : -1
+			episodeCount: s.episodes === null ? 0 : Number.isInteger(s.episodes) ? s.episodes : -1
 		}))
 	);
 
@@ -94,7 +99,7 @@
 	// here means "add person, change your mind, save" works without a validation dead end.
 	const creditInput = $derived<CustomCreditInput[]>(
 		credits
-			.filter((c) => c.name.trim() !== '')
+			.filter((c) => (c.name ?? '').trim() !== '')
 			.map((c) => ({
 				personId: c.personId,
 				role: c.role,
@@ -108,7 +113,7 @@
 	const candidate = $derived<CustomMediaInput>({
 		title,
 		type,
-		year: year.trim() === '' ? null : Number(year),
+		year,
 		overview,
 		seasons: type === 'show' ? seasonInput : [],
 		credits: creditInput
@@ -128,10 +133,37 @@
 	const seasonsError = $derived(errorFor('seasons'));
 	const creditsError = $derived(errorFor('credits'));
 
+	/**
+	 * Why the last submit was refused, always shown next to the button.
+	 *
+	 * The per-field messages above are the friendly half, but they only cover four fields *and* only
+	 * render where their field renders — the seasons message lives inside the shows-only block, so a
+	 * seasons-path failure on a movie has nowhere to appear at all. Any gap here makes Save do
+	 * visibly nothing, which is indistinguishable from the app being broken. So this names the
+	 * offending field unconditionally: a form must never refuse in silence.
+	 */
+	const submitError = $derived.by(() => {
+		if (!showErrors || parsed.success) return null;
+		const issue = parsed.error.issues[0];
+		if (!issue) return "Something here isn't valid.";
+		const field = issue.path.join('.');
+		return field ? `${field}: ${issue.message}` : issue.message;
+	});
+	/** Called from {@link submit}, not an effect on `parsed` — an effect reports per keystroke. */
+	function reportRefusal(error: z.ZodError<CustomMediaInput>) {
+		const issues = error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
+		console.warn('custom-media form: rejected', issues);
+		reportClientError({
+			message: `custom-media form rejected: ${issues.join('; ')}`,
+			source: 'custom-media:validation',
+			at: Date.now()
+		});
+	}
+
 	function addSeason() {
 		if (seasons.length >= CUSTOM_MAX_SEASONS) return;
 		const next = seasons.reduce((max, s) => Math.max(max, s.seasonNumber), 0) + 1;
-		seasons = [...seasons, { seasonNumber: next, episodes: '' }];
+		seasons = [...seasons, { seasonNumber: next, episodes: null }];
 	}
 
 	function removeSeason(seasonNumber: number) {
@@ -155,7 +187,11 @@
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
 		showErrors = true;
-		if (!parsed.success || busy) return;
+		if (!parsed.success) {
+			reportRefusal(parsed.error);
+			return;
+		}
+		if (busy) return;
 		onsubmit(parsed.data);
 	}
 </script>
@@ -332,11 +368,16 @@
 				</div>
 			</div>
 
-			<div class="flex justify-end gap-2 border-t border-border p-4">
-				<Button type="button" variant="ghost" onclick={() => (open = false)}>Cancel</Button>
-				<Button type="submit" disabled={busy || (showErrors && !parsed.success)}>
-					{editing ? 'Save' : 'Add to list'}
-				</Button>
+			<div class="flex flex-col gap-2 border-t border-border p-4">
+				{#if submitError}
+					<p class="text-sm text-destructive">{submitError}</p>
+				{/if}
+				<div class="flex justify-end gap-2">
+					<Button type="button" variant="ghost" onclick={() => (open = false)}>Cancel</Button>
+					<Button type="submit" disabled={busy}>
+						{editing ? 'Save' : 'Add to list'}
+					</Button>
+				</div>
 			</div>
 		</form>
 	</Dialog.Content>

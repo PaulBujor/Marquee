@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createCustomMedia, customEpisodeAirDate, toCustomMediaInput } from './custom-media';
-import { customMediaInputSchema, type CustomMediaInput } from '$lib/validation/custom-media';
+import {
+	CUSTOM_OVERVIEW_MAX,
+	customMediaInputSchema,
+	type CustomMediaInput
+} from '$lib/validation/custom-media';
 import {
 	isAired,
 	isSeriesFullyWatched,
@@ -222,7 +226,36 @@ describe('createCustomMedia', () => {
 	});
 });
 
+describe('createCustomMedia with fields the schema never saw', () => {
+	// `planImport` builds its input by hand from an export document, where `overview`, `character`
+	// and `name` are all optional-and-nullable. Nothing validates that input before it lands here, so
+	// a missing field has to normalize rather than throw halfway through building the record.
+	const loose = (over: Record<string, unknown>) =>
+		input(over as Partial<CustomMediaInput>) as unknown as CustomMediaInput;
+
+	it('reads a missing overview as empty', () => {
+		expect(createCustomMedia(loose({ overview: null }), { now: NOW }).overview).toBe('');
+		expect(createCustomMedia(loose({ overview: undefined }), { now: NOW }).overview).toBe('');
+	});
+
+	it('reads a missing character or name as empty', () => {
+		const record = createCustomMedia(
+			loose({ credits: [{ role: 'cast', name: 'Tomas Ilie', character: null }] }),
+			{ now: NOW, mintPersonId: mintIds() }
+		);
+		expect(record.credits?.[0]).toMatchObject({ name: 'Tomas Ilie', character: null });
+	});
+});
+
 describe('toCustomMediaInput', () => {
+	it('clamps an overview stored under a looser bound', () => {
+		// Otherwise the form seeds a value its own schema then refuses, and the entry can never be
+		// edited again.
+		const record = createCustomMedia(input(), { now: NOW });
+		const stored = { ...record, overview: 'x'.repeat(CUSTOM_OVERVIEW_MAX + 500) };
+		expect(toCustomMediaInput(stored, []).overview).toHaveLength(CUSTOM_OVERVIEW_MAX);
+	});
+
 	it('round-trips a show back to the form values it was built from', () => {
 		const original = input({
 			type: 'show',
