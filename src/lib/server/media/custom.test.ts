@@ -24,8 +24,8 @@ function credit(
 	name: string,
 	role: CreditRole,
 	over: Partial<MediaCredit> = {}
-): MediaCredit {
-	return {
+) {
+	const result: MediaCredit = {
 		personId,
 		externalId: null,
 		name,
@@ -35,6 +35,7 @@ function credit(
 		sortOrder: 0,
 		...over
 	};
+	return result;
 }
 
 /** A TMDB client that must never be reached — custom media has nothing to hydrate from. */
@@ -48,7 +49,7 @@ const noTmdb = {
 };
 
 function push(over: Partial<ValidatedCustomMedia> = {}): ValidatedCustomMedia {
-	return {
+	const defaults: ValidatedCustomMedia = {
 		id: CUSTOM_ID,
 		provider: 'local',
 		externalId: null,
@@ -69,9 +70,9 @@ function push(over: Partial<ValidatedCustomMedia> = {}): ValidatedCustomMedia {
 		seasons: null,
 		episodes: null,
 		credits: [],
-		editedAt: T0,
-		...over
+		editedAt: T0
 	};
+	return { ...defaults, ...over };
 }
 
 /** The show variant: two seasons of two episodes, dated in the past so they read as aired. */
