@@ -13,14 +13,28 @@
 	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { putCustomMedia } from '$lib/client/idb';
+	import { posterUrl } from '$lib/media.js';
+	import OfflineAction from '$lib/components/offline-action.svelte';
+	import {
+		getEpisodeWatches,
+		getTrackingByMediaId,
+		putCustomMedia,
+		putMedia,
+		recordEvent,
+		recordEvents
+	} from '$lib/client/idb';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import { createCustomMedia, toCustomMediaInput } from '$lib/custom-media';
+	import { buildLinkEvents } from '$lib/custom-media-link';
 	import { TrackingState } from '$lib/tracking/tracking.svelte';
 	import { isAired, todayIso } from '$lib/tracking/actions';
+	import { mediaRecordFromSearch } from '$lib/tracking/media-record';
+	import { tmdbExternalId, tmdbMediaId } from '$lib/sync/events';
+	import type { MediaSearchResult, SearchResult } from '$lib/server/tmdb';
 	import type { CustomMediaInput } from '$lib/validation/custom-media';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import FileQuestionIcon from '@lucide/svelte/icons/file-question';
+	import Link2Icon from '@lucide/svelte/icons/link-2';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import type { PageData } from './$types';
 
@@ -72,8 +86,7 @@
 		if (!entry || saving) return;
 		saving = true;
 		try {
-			// Same id, so this rewrites the entry rather than forking a second one. Seasons and
-			// episodes are rebuilt from the form, and the server reconciles the child rows.
+			// Same id — rewrites the entry; seasons/episodes rebuilt from form, server reconciles child rows.
 			await putCustomMedia(createCustomMedia(input, { id: entry.id }));
 			sync.requestSync();
 			editOpen = false;
@@ -87,6 +100,92 @@
 		await tracking.remove();
 		removeOpen = false;
 		await goto(resolve('/'));
+	}
+
+	// --- Matching ---
+	let matchOpen = $state(false);
+	let candidates = $state<MediaSearchResult[]>([]);
+	let searchingMatches = $state(false);
+	let matchError = $state(false);
+	let linking = $state<string | null>(null);
+
+	const declined = $derived(data.link?.declined === true);
+
+	async function findMatches() {
+		if (!entry) return;
+		matchOpen = true;
+		searchingMatches = true;
+		matchError = false;
+		try {
+			const res = await fetch(`/api/search?q=${encodeURIComponent(entry.title)}`);
+			if (!res.ok) throw new Error(String(res.status));
+			const body = (await res.json()) as { results: SearchResult[] };
+			candidates = body.results
+				.filter((r): r is { kind: 'media' } & MediaSearchResult => r.kind === 'media')
+				// Only offer titles of the same kind — a show is never the film of the same name.
+				.filter((r) => r.type === entry.type)
+				.slice(0, 8);
+		} catch {
+			matchError = true;
+			candidates = [];
+		} finally {
+			searchingMatches = false;
+		}
+	}
+
+	async function decline() {
+		if (!entry) return;
+		await recordEvent('media.match_declined', entry.id, {});
+		sync.requestSync();
+		matchOpen = false;
+		await invalidate('app:custom-media');
+	}
+
+	async function link(candidate: MediaSearchResult) {
+		if (!entry || linking) return;
+		const targetId = tmdbMediaId(candidate.type, candidate.tmdbId);
+		linking = targetId;
+		try {
+			// Seed the target's media snapshot first, so the channel has identity to hydrate from and
+			// the title renders the moment we land on it.
+			await putMedia($state.snapshot(mediaRecordFromSearch(candidate)));
+
+			const [row, watches] = await Promise.all([
+				getTrackingByMediaId(entry.id),
+				getEpisodeWatches(entry.id)
+			]);
+			if (!row) return;
+
+			await recordEvents(
+				buildLinkEvents(
+					{
+						mediaId: entry.id,
+						status: row.status,
+						favorite: row.favorite,
+						rating: row.rating,
+						addedAt: row.addedAt,
+						statusUpdatedAt: row.statusUpdatedAt,
+						favoriteUpdatedAt: row.favoriteUpdatedAt,
+						ratingUpdatedAt: row.ratingUpdatedAt
+					},
+					watches,
+					{
+						targetId,
+						provider: 'tmdb',
+						externalId: tmdbExternalId(candidate.type, candidate.tmdbId)
+					}
+				)
+			);
+			sync.requestSync();
+			await goto(
+				resolve('/title/[type]/[id]', {
+					type: candidate.type,
+					id: String(candidate.tmdbId)
+				})
+			);
+		} finally {
+			linking = null;
+		}
 	}
 </script>
 
@@ -147,6 +246,90 @@
 				Edit details
 			</Button>
 		</div>
+
+		<section class="flex flex-col gap-3 border-t border-dashed border-border pt-4">
+			<p class="text-sm leading-relaxed text-muted-foreground">
+				No description, cast or artwork yet — you added this one yourself, and it hasn't been
+				matched to a database entry. You can look for a match whenever you like; nothing is matched
+				without you saying so.
+			</p>
+
+			{#if !matchOpen}
+				{#if sync.online}
+					<Button
+						variant="outline"
+						class="w-full"
+						data-spec-ref="custom-entry-manual-link-button"
+						onclick={findMatches}
+					>
+						<Link2Icon class="size-4" />
+						{declined ? 'Look for a match again' : 'Search for a match'}
+					</Button>
+				{:else}
+					<OfflineAction message="Searching for a match needs a connection.">
+						Search for a match
+					</OfflineAction>
+				{/if}
+			{:else}
+				<div class="flex flex-col gap-2">
+					<h2 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+						Possible matches
+					</h2>
+					{#if searchingMatches}
+						<ul class="flex flex-col gap-3">
+							{#each [0, 1, 2] as i (i)}
+								<li class="flex items-center gap-3">
+									<Skeleton class="aspect-[2/3] w-10 rounded-sm" />
+									<div class="flex flex-1 flex-col gap-2">
+										<Skeleton class="h-4 w-1/2" />
+										<Skeleton class="h-3 w-1/4" />
+									</div>
+								</li>
+							{/each}
+						</ul>
+					{:else if matchError}
+						<p class="text-sm text-muted-foreground">
+							Couldn't reach the database just now. Try again in a moment.
+						</p>
+					{:else if candidates.length === 0}
+						<p class="text-sm text-muted-foreground">
+							Nothing matching “{entry.title}”. It stays your own entry — try again later, or edit
+							the title if it might be listed differently.
+						</p>
+					{:else}
+						<ul class="flex flex-col">
+							{#each candidates as candidate (candidate.tmdbId)}
+								<li class="flex items-center gap-3 border-b border-border py-2 last:border-b-0">
+									<div class="w-10 shrink-0">
+										<PosterTile
+											type={candidate.type}
+											posterUrl={posterUrl(candidate.posterPath)}
+											alt={candidate.title}
+										/>
+									</div>
+									<div class="flex min-w-0 flex-1 flex-col">
+										<span class="truncate text-sm font-medium">{candidate.title}</span>
+										<span class="text-xs text-muted-foreground">{candidate.year ?? '—'}</span>
+									</div>
+									<Button
+										size="sm"
+										class="shrink-0"
+										disabled={linking !== null}
+										onclick={() => link(candidate)}
+									>
+										Link
+									</Button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					<div class="flex gap-2">
+						<Button variant="ghost" size="sm" onclick={decline}>None of these</Button>
+						<Button variant="ghost" size="sm" onclick={() => (matchOpen = false)}>Close</Button>
+					</div>
+				</div>
+			{/if}
+		</section>
 
 		{#if entry.type === 'show' && data.seasons.length > 0}
 			<section class="flex flex-col gap-3">

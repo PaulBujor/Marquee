@@ -214,6 +214,11 @@ describe('buildExport', () => {
 				type: 'movie',
 				title: 'Inception',
 				year: 2010,
+				source: 'linked',
+				// A provider-backed title's description and structure are re-fetched on import, so the
+				// file doesn't carry them — only a user-authored entry has no other source.
+				overview: null,
+				seasons: null,
 				status: 'completed',
 				favorite: true,
 				rating: 5,
