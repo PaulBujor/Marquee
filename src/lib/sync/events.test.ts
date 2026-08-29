@@ -3,6 +3,7 @@ import {
 	createEvent,
 	episodeKey,
 	EVENT_SCHEMA_VERSION,
+	isHydratableProvider,
 	mediaId,
 	tmdbExternalId,
 	tmdbMediaId,
@@ -12,6 +13,8 @@ import {
 } from './events';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
+/** Stands in for a custom entry's randomly-minted media id. */
+const CUSTOM_ID = '22222222-2222-4222-8222-222222222222';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 describe('media identity', () => {
@@ -36,6 +39,15 @@ describe('media identity', () => {
 
 	it('disambiguates movie vs show sharing a numeric id', () => {
 		expect(tmdbMediaId('movie', 603)).not.toBe(tmdbMediaId('show', 603));
+	});
+
+	it('narrows a provider to the ones a title can be hydrated from', () => {
+		expect(isHydratableProvider('tmdb')).toBe(true);
+		// User-authored media has no external source to pull from.
+		expect(isHydratableProvider('local')).toBe(false);
+		expect(isHydratableProvider(null)).toBe(false);
+		expect(isHydratableProvider(undefined)).toBe(false);
+		expect(isHydratableProvider('omdb')).toBe(false);
 	});
 });
 
@@ -71,9 +83,32 @@ describe('validateEvent', () => {
 			createEvent('episode.unwatched', 'show:1396', { season: 1, episode: 2 }, DEVICE),
 			// Season 0 is valid — TMDB numbers Specials as season 0.
 			createEvent('episode.watched', 'show:1396', { season: 0, episode: 1 }, DEVICE),
-			createEvent('tracking.removed', 'movie:603', {}, DEVICE)
+			createEvent('tracking.removed', 'movie:603', {}, DEVICE),
+			createEvent(
+				'media.linked',
+				CUSTOM_ID,
+				{ targetId: tmdbMediaId('movie', 603), provider: 'tmdb', externalId: 'movie/603' },
+				DEVICE
+			),
+			createEvent('media.match_declined', CUSTOM_ID, {}, DEVICE)
 		];
 		for (const ev of cases) expect(validateEvent(ev)).toEqual(ev);
+	});
+
+	it('rejects a link whose target is not a media id, or whose provider we cannot hydrate', () => {
+		const good = createEvent(
+			'media.linked',
+			CUSTOM_ID,
+			{ targetId: tmdbMediaId('movie', 603), provider: 'tmdb', externalId: 'movie/603' },
+			DEVICE
+		);
+		expect(validateEvent(good)).toEqual(good);
+		expect(
+			validateEvent({ ...good, payload: { ...good.payload, targetId: 'movie/603' } })
+		).toBeNull();
+		// `local` is a media provider but not a hydratable one — nothing could resolve such a target.
+		expect(validateEvent({ ...good, payload: { ...good.payload, provider: 'local' } })).toBeNull();
+		expect(validateEvent({ ...good, payload: { ...good.payload, externalId: '' } })).toBeNull();
 	});
 
 	it('rejects malformed events', () => {

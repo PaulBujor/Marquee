@@ -1,13 +1,10 @@
 /**
  * Turns an export document into the writes that restore it: media stubs to seed, events to replay.
- * Pure (device id injected, clocks from the document), so it tests without IndexedDB.
- *
- * Produces **the fewest events that reconstruct the end state**, not a plausible history — no
- * intermediate statuses are invented. Dates are the exception: each event carries its recorded
- * clock, since those clocks are the watched dates the app displays.
+ * Produces the fewest events that reconstruct the end state, not a plausible history. Pure (no IDB).
  */
 import {
 	createEvent,
+	isHydratableProvider,
 	mediaId as deriveMediaId,
 	type EventEnvelope,
 	type MediaRecord
@@ -32,21 +29,17 @@ export interface ImportPlan {
 /** Matches `crypto.randomUUID()` output — the only ids we'd trust from a file as an entity id. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * The upper bound the event schema enforces on `clientCreatedAt` (Jan 1 2100), so a bogus clock
- * can't win every future merge. Mirrored here to reject a clock before minting it, rather than
- * having the server drop the event later.
- */
+/** Upper bound on `clientCreatedAt` (Jan 1 2100 epoch ms) — rejects bogus clocks up front. */
 const MAX_CLOCK = 4102444800000;
 
 /**
- * Our media id for an entry. Provider-backed titles re-derive it from `(provider, externalId)` —
- * the file's `mediaId` is untrusted and may be stale or hand-edited, and the derivation is
- * deterministic, so recomputing always beats copying. An entry with no provider identity falls
- * back to the exported id, which is all it has.
+ * Our media id for an entry. Provider-backed titles re-derive from `(provider, externalId)` —
+ * the file's `mediaId` is untrusted. Custom entries fall back to the exported id.
  */
 function resolveMediaId(entry: ExportedTitle): string | null {
-	if (entry.provider && entry.externalId) return deriveMediaId(entry.provider, entry.externalId);
+	if (isHydratableProvider(entry.provider) && entry.externalId) {
+		return deriveMediaId(entry.provider, entry.externalId);
+	}
 	return UUID.test(entry.mediaId) ? entry.mediaId : null;
 }
 
@@ -58,10 +51,8 @@ function resolveClock(iso: string, fallback: number): number {
 }
 
 /**
- * A behind-version media stub for an entry, or null when we can't build one. Required, not
- * cosmetic: the media channel derives what to hydrate from the local `media` store, and an event
- * names a title only by an opaque derived id — without a stub carrying `(provider, externalId)`
- * the server never learns what the title is. `version: 0` makes the next sync replace it.
+ * A behind-version media stub for the media channel to hydrate, or null when unbuildable.
+ * `version: 0` makes the next sync replace it.
  */
 function mediaStub(entry: ExportedTitle): MediaRecord | null {
 	if (entry.provider !== 'tmdb' || !entry.externalId) return null;
@@ -97,19 +88,18 @@ export function planImport(
 		titles += 1;
 
 		const addedAt = resolveClock(entry.addedAt, now);
-		// The status clock can't precede the add — `addedAt` is the earliest clock the projection saw.
+		// Status clock can't precede the add.
 		const statusAt = Math.max(resolveClock(entry.statusChangedAt, addedAt), addedAt);
 
 		events.push(createEvent('tracking.added', id, { status: entry.status }, deviceId, addedAt));
-		// A second event only when the status moved after the add — that separates "added in January"
-		// from "watched in June". Both carry the final status; the path taken wasn't exported.
+		// A second event only when the status moved after the add — both carry the final status;
+		// the path taken wasn't exported.
 		if (statusAt > addedAt) {
 			events.push(
 				createEvent('tracking.status_changed', id, { status: entry.status }, deviceId, statusAt)
 			);
 		}
-		// Their own LWW clocks aren't exported (nothing surfaces them), so use the status clock —
-		// the latest the title is known to have moved.
+		// Use status clock for favorite/rating — not exported separately.
 		if (entry.favorite) {
 			events.push(
 				createEvent('tracking.favorite_toggled', id, { favorite: true }, deviceId, statusAt)

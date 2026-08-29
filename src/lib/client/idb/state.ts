@@ -5,7 +5,13 @@
  * pulled server state converge to the same result regardless of arrival order.
  */
 import type { IDBPTransaction } from 'idb';
-import { openDb, type ClientEpisodeWatch, type ClientTracking, type MarqueeDB } from './db';
+import {
+	openDb,
+	type ClientEpisodeWatch,
+	type ClientMediaLink,
+	type ClientTracking,
+	type MarqueeDB
+} from './db';
 import type { EventEnvelope, EventPayloadMap } from '$lib/sync/events';
 
 /** Client episode key — no userId prefix (the store is already single-user). */
@@ -16,8 +22,8 @@ function localEpisodeId(mediaId: string, season: number, episode: number): strin
 type TrackingClock =
 	'statusUpdatedAt' | 'favoriteUpdatedAt' | 'ratingUpdatedAt' | 'removedUpdatedAt';
 
-/** The stores a projection writes. Both are held by one transaction so a batch commits as a unit. */
-const PROJECTION_STORES = ['tracking', 'episodeWatches'] as const;
+/** The stores a projection writes. All are held by one transaction so a batch commits as a unit. */
+const PROJECTION_STORES = ['tracking', 'episodeWatches', 'mediaLinks'] as const;
 type ProjectionTx = IDBPTransaction<MarqueeDB, typeof PROJECTION_STORES, 'readwrite'>;
 
 /** Read-modify-write a tracking row under LWW guard on `clockField`, inside a caller's transaction. */
@@ -51,6 +57,34 @@ async function upsertTracking(
 	await store.put(row);
 }
 
+type MediaLinkClock = 'linkedUpdatedAt' | 'declinedUpdatedAt';
+
+/** Read-modify-write a media-link row under LWW guard on `clockField`, inside a caller's transaction. */
+async function upsertMediaLink(
+	tx: ProjectionTx,
+	mediaId: string,
+	clock: number,
+	clockField: MediaLinkClock,
+	mutate: (l: ClientMediaLink) => void
+): Promise<void> {
+	const store = tx.objectStore('mediaLinks');
+	const existing = await store.get(mediaId);
+	const row: ClientMediaLink = existing ?? {
+		mediaId,
+		targetId: null,
+		provider: null,
+		externalId: null,
+		declined: false,
+		linkedUpdatedAt: 0,
+		declinedUpdatedAt: 0
+	};
+	if (clock >= row[clockField]) {
+		mutate(row);
+		row[clockField] = clock;
+	}
+	await store.put(row);
+}
+
 /** Apply one event within an open projection transaction (idempotent, LWW). */
 async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<void> {
 	const clock = event.clientCreatedAt;
@@ -59,9 +93,8 @@ async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<v
 	switch (event.type) {
 		case 'tracking.added': {
 			const payload = event.payload as EventPayloadMap['tracking.added'];
-			// Media is reference data, handled off the event log; an add only asserts tracking
-			// state. Status and revive are independent LWW fields (mirrors the server): a stale
-			// add can't un-remove a title a newer removal tombstoned.
+			// Status and revive are independent LWW fields — a stale add can't un-remove a
+			// title a newer removal tombstoned.
 			await upsertTracking(tx, entityId, clock, 'statusUpdatedAt', (t) => {
 				t.status = payload.status;
 			});
@@ -117,6 +150,25 @@ async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<v
 			}
 			break;
 		}
+		case 'media.linked': {
+			const payload = event.payload as EventPayloadMap['media.linked'];
+			// Match and dismissal are independent LWW fields — accepting clears an earlier decline.
+			await upsertMediaLink(tx, entityId, clock, 'linkedUpdatedAt', (l) => {
+				l.targetId = payload.targetId;
+				l.provider = payload.provider;
+				l.externalId = payload.externalId;
+			});
+			await upsertMediaLink(tx, entityId, clock, 'declinedUpdatedAt', (l) => {
+				l.declined = false;
+			});
+			break;
+		}
+		case 'media.match_declined': {
+			await upsertMediaLink(tx, entityId, clock, 'declinedUpdatedAt', (l) => {
+				l.declined = true;
+			});
+			break;
+		}
 	}
 }
 
@@ -154,6 +206,12 @@ export async function getTracking(status?: ClientTracking['status']): Promise<Cl
 export async function getTrackingByMediaId(mediaId: string): Promise<ClientTracking | undefined> {
 	const db = await openDb();
 	return db.get('tracking', mediaId);
+}
+
+/** The identity decision recorded for a title, or undefined when the user hasn't made one. */
+export async function getMediaLink(mediaId: string): Promise<ClientMediaLink | undefined> {
+	const db = await openDb();
+	return db.get('mediaLinks', mediaId);
 }
 
 /** Watched-episode rows for a show. */

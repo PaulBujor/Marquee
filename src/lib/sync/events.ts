@@ -22,14 +22,8 @@ export const TRACKING_STATUSES = [
 export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
 
 /**
- * The kinds of events the foundation supports. Events record only *what the user did*;
- * media metadata is separate reference data (see {@link MediaRecord}). `tracking.*`
- * are the lifecycle of a watchlist entry, keyed to a title by `entityId` (our media id);
- * `episode.*` are per-episode watched state.
- *
- * Episodes keep a `watched`/`unwatched` pair (a binary toggle reads cleaner than a
- * boolean payload), while `status` is an enum, so it's one `status_changed` carrying
- * the new value rather than an event per status.
+ * Event types. `tracking.*` are watchlist lifecycle events; `episode.*` are per-episode watched
+ * state; `media.*` record identity decisions about a title's provider link.
  */
 export const SYNC_EVENT_TYPES = [
 	'tracking.added',
@@ -38,7 +32,9 @@ export const SYNC_EVENT_TYPES = [
 	'tracking.rated',
 	'tracking.removed',
 	'episode.watched',
-	'episode.unwatched'
+	'episode.unwatched',
+	'media.linked',
+	'media.match_declined'
 ] as const;
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];
 
@@ -69,13 +65,12 @@ export interface MediaEpisode {
 }
 
 /**
- * Media reference data — the shared shape of the server `media` row (plus its `seasons`/`episodes`
- * child rows), the client media cache, and the media-channel payload. Held so tracked titles render
- * offline; TMDB stays the source. Events reference a title by its `id` and never embed it. `version`
- * is bumped server-side whenever a refresh changes content, so a client can spot a stale copy
- * without diffing every field.
+ * Media reference data — the shared shape of the server `media` row, client cache, and media-channel
+ * payload. Events reference a title by `id` and never embed it. `version` is bumped on refresh so
+ * clients can spot a stale copy.
  */
 export interface MediaRecord {
+	/** Derived from `(provider, externalId)` for provider-backed titles; random for custom media. */
 	id: string;
 	provider: MediaProvider;
 	/** The provider's own id, e.g. `movie/603`; null for custom media. */
@@ -124,15 +119,21 @@ export interface EventPayloadMap {
 	'tracking.removed': Record<string, never>;
 	'episode.watched': EpisodeCoord;
 	'episode.unwatched': EpisodeCoord;
+	/**
+	 * The user matched `entityId` to a provider-backed title. Target carried as `(provider, externalId)`
+	 * alongside `targetId` so a reader can re-derive. A link is an association, never a deletion.
+	 */
+	'media.linked': { targetId: string; provider: HydratableProvider; externalId: string };
+	/** The user dismissed the match suggestions for `entityId`. Syncs so the dismissal holds on every device. */
+	'media.match_declined': Record<string, never>;
 }
 
 /** Any event payload — the union of all per-type shapes (used to type the stored JSON column). */
 export type EventPayload = EventPayloadMap[SyncEventType];
 
 /**
- * An event as produced and stored by a client. `id` is a client-generated UUID that
- * doubles as the global dedup key; `entityId` is the deterministic `mediaId` the event
- * targets. The client never sets `userId`/`sequence` — the server assigns those on persist.
+ * An event as produced and stored by a client. `id` is a client-generated UUID; `entityId` is the
+ * deterministic media id. Client never sets `userId`/`sequence` — the server assigns those.
  */
 export interface EventEnvelope<T extends SyncEventType = SyncEventType> {
 	id: string;
@@ -154,8 +155,19 @@ export interface ServerEvent<T extends SyncEventType = SyncEventType> extends Ev
 	serverReceivedAt: number;
 }
 
-/** Metadata providers we can hydrate a title from. Custom (user-authored) media is a separate, deferred concern. */
-export const MEDIA_PROVIDERS = ['tmdb'] as const;
+/**
+ * External metadata providers — the ones we can hydrate a title from, and so the only ones a
+ * `refs` identity or a link target may name.
+ */
+export const HYDRATABLE_PROVIDERS = ['tmdb'] as const;
+export type HydratableProvider = (typeof HYDRATABLE_PROVIDERS)[number];
+
+/**
+ * Where a media row's metadata comes from. `local` is user-authored (custom) media: nobody
+ * hydrates it, it carries no `externalId`, and its id is random rather than derived. Keeping it
+ * in the same enum means `provider` never lies about a row's origin.
+ */
+export const MEDIA_PROVIDERS = [...HYDRATABLE_PROVIDERS, 'local'] as const;
 export type MediaProvider = (typeof MEDIA_PROVIDERS)[number];
 
 /**
@@ -172,12 +184,19 @@ export type MediaSource = (typeof MEDIA_SOURCES)[number];
 const MEDIA_ID_NAMESPACE = 'b7c8e9a0-3f2d-4c1b-9e6a-8d5f4a2b1c0e';
 
 /**
- * Our own, **provider-agnostic** media id: a deterministic UUIDv5 derived from
- * `(provider, externalId)`. Every device derives the same id offline with no
- * coordination, and switching providers (or becoming our own) needs no remap.
+ * Provider-agnostic media id: a deterministic UUIDv5 from `(provider, externalId)`. Every device
+ * derives the same id offline. Custom media mints a random id instead, so the parameter is the
+ * narrower {@link HydratableProvider}.
  */
-export function mediaId(provider: MediaProvider, externalId: string): string {
+export function mediaId(provider: HydratableProvider, externalId: string): string {
 	return uuidv5(`${provider}:${externalId}`, MEDIA_ID_NAMESPACE);
+}
+
+/** Narrows an untrusted/stored provider value to one we can hydrate from. */
+export function isHydratableProvider(
+	provider: string | null | undefined
+): provider is HydratableProvider {
+	return HYDRATABLE_PROVIDERS.includes(provider as HydratableProvider);
 }
 
 /**
@@ -204,13 +223,9 @@ export function episodeKey(userId: string, media: string, season: number, episod
 }
 
 /**
- * Build a new event, stamping the client-owned fields. `entityId` is the target
- * `mediaId`; use {@link mediaId} to derive it.
- *
- * `clock` defaults to now, which is what a live user action wants. Pass an explicit value only
- * when replaying something that genuinely happened earlier — an import seeding a restored library
- * uses the exported `addedAt`, so the events merge by last-write-wins against their real age
- * rather than winning every conflict by virtue of being replayed today.
+ * Build a new event, stamping client-owned fields. `clock` defaults to now. Pass an explicit value
+ * only when replaying an import — the exported `addedAt` lets events merge by real age, not replay
+ * time.
  */
 export function createEvent<T extends SyncEventType>(
 	type: T,
@@ -250,7 +265,14 @@ const payloadSchemas = {
 	'tracking.rated': z.object({ rating: z.number().int().min(1).max(5).nullable() }),
 	'tracking.removed': z.object({}),
 	'episode.watched': z.object({ season: seasonNumber, episode: episodeNumber }),
-	'episode.unwatched': z.object({ season: seasonNumber, episode: episodeNumber })
+	'episode.unwatched': z.object({ season: seasonNumber, episode: episodeNumber }),
+	// A link target must be a title someone can actually hydrate, so `local` is not accepted here.
+	'media.linked': z.object({
+		targetId: uuid,
+		provider: z.enum(HYDRATABLE_PROVIDERS),
+		externalId: z.string().min(1).max(128)
+	}),
+	'media.match_declined': z.object({})
 } as const;
 
 const envelopeBase = z.object({
@@ -294,6 +316,14 @@ export const eventEnvelopeSchema = z.discriminatedUnion('type', [
 	envelopeBase.extend({
 		type: z.literal('episode.unwatched'),
 		payload: payloadSchemas['episode.unwatched']
+	}),
+	envelopeBase.extend({
+		type: z.literal('media.linked'),
+		payload: payloadSchemas['media.linked']
+	}),
+	envelopeBase.extend({
+		type: z.literal('media.match_declined'),
+		payload: payloadSchemas['media.match_declined']
 	})
 ]);
 

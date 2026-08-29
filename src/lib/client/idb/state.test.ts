@@ -12,6 +12,7 @@ import {
 	applyEventsToIdb,
 	getAllEpisodeWatches,
 	getEpisodeWatches,
+	getMediaLink,
 	getTracking,
 	getTrackingByMediaId
 } from './state';
@@ -197,6 +198,90 @@ describe('applyEventsToIdb', () => {
 
 	it('does nothing, and opens nothing, for an empty batch', async () => {
 		await expect(applyEventsToIdb([])).resolves.toBeUndefined();
+	});
+});
+
+describe('media link projection', () => {
+	const target = tmdbMediaId('show', 1396);
+
+	it('records an accepted match against the source entry', async () => {
+		const custom = newMid();
+		await applyEventToIdb(
+			ev(
+				'media.linked',
+				custom,
+				{ targetId: target, provider: 'tmdb', externalId: 'show/1396' },
+				100
+			)
+		);
+		expect(await getMediaLink(custom)).toMatchObject({
+			mediaId: custom,
+			targetId: target,
+			provider: 'tmdb',
+			externalId: 'show/1396',
+			declined: false
+		});
+	});
+
+	it('has no link at all for an entry the user never decided about', async () => {
+		expect(await getMediaLink(newMid())).toBeUndefined();
+	});
+
+	it('records a dismissal without inventing a target', async () => {
+		const custom = newMid();
+		await applyEventToIdb(ev('media.match_declined', custom, {}, 100));
+		expect(await getMediaLink(custom)).toMatchObject({ declined: true, targetId: null });
+	});
+
+	it('clears an earlier dismissal when a match is accepted', async () => {
+		const custom = newMid();
+		await applyEventToIdb(ev('media.match_declined', custom, {}, 100));
+		await applyEventToIdb(
+			ev(
+				'media.linked',
+				custom,
+				{ targetId: target, provider: 'tmdb', externalId: 'show/1396' },
+				200
+			)
+		);
+		expect(await getMediaLink(custom)).toMatchObject({ declined: false, targetId: target });
+	});
+
+	it('keeps a later dismissal from another device, but keeps the link it arrived after', async () => {
+		// The two fields carry independent clocks: dismissing again after linking hides the
+		// suggestion without erasing the match that was already accepted.
+		const custom = newMid();
+		await applyEventToIdb(
+			ev(
+				'media.linked',
+				custom,
+				{ targetId: target, provider: 'tmdb', externalId: 'show/1396' },
+				100
+			)
+		);
+		await applyEventToIdb(ev('media.match_declined', custom, {}, 200));
+		expect(await getMediaLink(custom)).toMatchObject({ declined: true, targetId: target });
+	});
+
+	it('resolves the same way whichever order the events arrive in', async () => {
+		const forwards = newMid();
+		const backwards = newMid();
+		const link = (mid: string, clock: number) =>
+			ev(
+				'media.linked',
+				mid,
+				{ targetId: target, provider: 'tmdb', externalId: 'show/1396' },
+				clock
+			);
+
+		await applyEventToIdb(link(forwards, 100));
+		await applyEventToIdb(ev('media.match_declined', forwards, {}, 200));
+		await applyEventToIdb(ev('media.match_declined', backwards, {}, 200));
+		await applyEventToIdb(link(backwards, 100));
+
+		const a = await getMediaLink(forwards);
+		const b = await getMediaLink(backwards);
+		expect({ ...a, mediaId: '' }).toEqual({ ...b, mediaId: '' });
 	});
 });
 

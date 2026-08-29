@@ -232,15 +232,8 @@ export const syncState = sqliteTable('sync_state', {
 });
 
 /**
- * Global media catalog cache (not user-scoped) — reference data, not a projection of the event
- * log, keyed by our own media id which events reference via `entityId`. Synced on its own channel,
- * never through `/api/sync`. TMDB is the real source; this is a display cache so tracked titles
- * render offline.
- *
- * Identity is provider-agnostic: `id` is ours (a deterministic v5 UUID for provider-sourced titles;
- * random for custom), and `{provider, externalId}` records where it came from, so a provider switch
- * or outage needs no remap. `source` marks provider-backed (`linked`, shareable) vs. user-authored
- * (`custom`, private) rows. A show's seasons/episodes live in the child tables below.
+ * Global media catalog cache (not user-scoped). Reference data synced on its own channel, keyed by
+ * our own media id. `source` marks provider-backed (`linked`) vs. user-authored (`custom`) rows.
  */
 export const media = sqliteTable(
 	'media',
@@ -250,13 +243,12 @@ export const media = sqliteTable(
 		// e.g. `movie/603`; null for custom entries.
 		externalId: text('external_id'),
 		source: text('source', { enum: MEDIA_SOURCES }).notNull().default('linked'),
+		// Owner of a custom row; null for the shared `linked` catalog. Account deletion cascades.
+		ownerUserId: text('owner_user_id').references(() => users.id, { onDelete: 'cascade' }),
 		type: text('type', { enum: ['movie', 'show'] }).notNull(),
 		title: text('title').notNull(),
-		// Case-folded title for the degraded/offline search fallback. SQLite `LIKE` folds
-		// only ASCII, while the offline client search uses JS `toLowerCase()` (full Unicode) — so the
-		// two disagreed on accented/non-ASCII titles. We fold in app code on hydrate (matching the
-		// client) and query this column, so both paths return the same rows. `refreshMedia` populates
-		// it; the migration backfills existing rows with SQL `lower()` (ASCII) until they re-hydrate.
+		// Case-folded title for offline search. JS `toLowerCase()` (full Unicode) vs SQLite `LIKE`
+		// (ASCII-only) — folded in app code on hydrate, backfilled by the migration.
 		titleNormalized: text('title_normalized').notNull().default(''),
 		year: integer('year'),
 		posterPath: text('poster_path'),
@@ -292,7 +284,10 @@ export const media = sqliteTable(
 		index('media_type_release_date_idx').on(table.type, table.releaseDate),
 		// The nightly sweep also matches shows by TMDB status (a between-seasons show has
 		// `in_production` false but an airing status), so that branch needs its own index.
-		index('media_type_status_idx').on(table.type, table.status)
+		index('media_type_status_idx').on(table.type, table.status),
+		// Serves both owner-scoped reads (recovering a user's custom entries on a fresh device) and
+		// the account-deletion sweep.
+		index('media_owner_idx').on(table.ownerUserId)
 	]
 );
 

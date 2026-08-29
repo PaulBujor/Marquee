@@ -163,6 +163,33 @@ describe('projectEvent via applyEvents', () => {
 		expect((await trackingRow(db)).removed).toBe(true); // removal@300 still wins
 	});
 
+	it('persists media.* events without materializing anything from them', async () => {
+		// Media links are resolved client-side. The server's job is to carry them to the user's other
+		// devices, so they must reach the log — but must not touch a materialized table, or a
+		// rebuild would stop reproducing it.
+		const custom = '22222222-2222-4222-8222-222222222222';
+		const applied = await applyEvents(db, USER, [
+			ev('media.linked', custom, { targetId: MID, provider: 'tmdb', externalId: 'movie/603' }, 100),
+			ev('media.match_declined', custom, {}, 200)
+		]);
+		expect(applied).toHaveLength(2);
+		expect(await db.select().from(eventsTable)).toHaveLength(2);
+		expect(await db.select().from(tracking)).toHaveLength(0);
+		expect(await db.select().from(episodeWatches)).toHaveLength(0);
+	});
+
+	it('a media.linked event does not disturb the addedAt floor of a tracked title', async () => {
+		// `addedAt` is defined over `tracking.*` events only; a link carries its own clock and must
+		// stay out of that calculation entirely — here an *older* one that would pull the floor down.
+		const added = Date.UTC(2026, 1, 5);
+		const older = Date.UTC(2025, 0, 1);
+		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, added)]);
+		await applyEvents(db, USER, [
+			ev('media.linked', MID, { targetId: MID, provider: 'tmdb', externalId: 'movie/603' }, older)
+		]);
+		expect((await trackingRow(db)).addedAt.getTime()).toBe(added);
+	});
+
 	it('rebuildProjection replays the log to the same materialized state', async () => {
 		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'want_to_watch' }, 100)]);
 		await applyEvents(db, USER, [ev('tracking.status_changed', MID, { status: 'watching' }, 200)]);
