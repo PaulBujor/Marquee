@@ -16,3 +16,5 @@ worker-configuration.d.ts
 
 # Throwaway PWA-asset tool output (source of truth is dev-assets/logo.png)
 dev-assets/
+
+# OpenCode agent runtime data.omo/
