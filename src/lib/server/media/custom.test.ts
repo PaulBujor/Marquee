@@ -19,8 +19,13 @@ const PERSON_A = 'aaaaaaaa-0000-4000-8000-aaaaaaaaaaaa';
 const PERSON_B = 'bbbbbbbb-0000-4000-8000-bbbbbbbbbbbb';
 
 /** A credit as the author's own client sends it: a name they typed, no provider identity. */
-function credit(personId: string, name: string, role: CreditRole, over: Partial<MediaCredit> = {}) {
-	const result: MediaCredit = {
+function credit(
+	personId: string,
+	name: string,
+	role: CreditRole,
+	over: Partial<MediaCredit> = {}
+): MediaCredit {
+	return {
 		personId,
 		externalId: null,
 		name,
@@ -30,7 +35,6 @@ function credit(personId: string, name: string, role: CreditRole, over: Partial<
 		sortOrder: 0,
 		...over
 	};
-	return result;
 }
 
 /** A TMDB client that must never be reached — custom media has nothing to hydrate from. */
@@ -44,7 +48,7 @@ const noTmdb = {
 };
 
 function push(over: Partial<ValidatedCustomMedia> = {}): ValidatedCustomMedia {
-	const defaults: ValidatedCustomMedia = {
+	return {
 		id: CUSTOM_ID,
 		provider: 'local',
 		externalId: null,
@@ -65,9 +69,9 @@ function push(over: Partial<ValidatedCustomMedia> = {}): ValidatedCustomMedia {
 		seasons: null,
 		episodes: null,
 		credits: [],
-		editedAt: T0
+		editedAt: T0,
+		...over
 	};
-	return { ...defaults, ...over };
 }
 
 /** The show variant: two seasons of two episodes, dated in the past so they read as aired. */
