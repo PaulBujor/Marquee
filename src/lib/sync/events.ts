@@ -200,6 +200,36 @@ export function isHydratableProvider(
 }
 
 /**
+ * How a person is credited. `creator` is a show's `created_by`; `director`/`writer` are movie crew.
+ * Enum rather than TMDB's free-text job strings, which are inconsistent.
+ */
+export const CREDIT_ROLES = ['cast', 'director', 'writer', 'producer', 'creator'] as const;
+export type CreditRole = (typeof CREDIT_ROLES)[number];
+
+/** One person's credit on a title — shared shape for the `credits` row and its wire record. */
+export interface MediaCredit {
+	/** Our own person id (see {@link personId}). */
+	personId: string;
+	name: string;
+	profilePath: string | null;
+	role: CreditRole;
+	/** Who they played; cast only. */
+	character: string | null;
+	/** Billing order within the role, so a rebuilt list matches how the provider ranked it. */
+	sortOrder: number;
+}
+
+/** TMDB external id for a person — namespaced as `person/${tmdbId}` to avoid collisions with titles. */
+export function personExternalId(tmdbId: number): string {
+	return `person/${tmdbId}`;
+}
+
+/** Our own id for a provider-backed person, derived the same way a title's is. */
+export function personId(provider: HydratableProvider, tmdbId: number): string {
+	return mediaId(provider, personExternalId(tmdbId));
+}
+
+/**
  * TMDB's stable external id for a title — `${type}/${tmdbId}`. TMDB numbers movies
  * and shows independently, so the bare number is ambiguous; the type disambiguates.
  */

@@ -6,6 +6,7 @@
  * namespaced per user (`marquee-<userId>`). Client-safe only.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import { reportClientError } from '$lib/client/report-error';
 import type {
 	EventEnvelope,
 	HydratableProvider,
@@ -210,7 +211,37 @@ export function openDb(): Promise<MarqueeDatabase> {
 				const legacy = db as unknown as IDBPDatabase;
 				if (legacy.objectStoreNames.contains('upcoming')) legacy.deleteObjectStore('upcoming');
 				if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+			},
+			/**
+			 * Another tab still has the database open at an older version, so our upgrade can't run.
+			 * Without this the open **hangs forever** — no error, no rejection — and every read and
+			 * write behind it hangs with it, which surfaces as the app silently doing nothing.
+			 */
+			blocked(currentVersion, blockedVersion) {
+				reportClientError({
+					message: `idb: upgrade to v${blockedVersion} blocked by a tab holding v${currentVersion}`,
+					source: 'idb-blocked',
+					at: Date.now()
+				});
+			},
+			/**
+			 * The mirror case: *this* tab is holding an old version open while another wants to
+			 * upgrade. Close so it can proceed — this tab is running superseded code anyway, and the
+			 * next `openDb()` reopens at the new version.
+			 */
+			blocking() {
+				void dbPromise?.then((db) => db.close()).catch(() => {});
+				dbPromise = null;
+			},
+			/** The browser evicted the connection (storage pressure, or the tab was backgrounded out). */
+			terminated() {
+				dbPromise = null;
 			}
+		});
+		// A failed open must not be cached as a permanently-rejected promise: every later call would
+		// reuse the rejection and the store would stay dead for the life of the page.
+		dbPromise.catch(() => {
+			dbPromise = null;
 		});
 	}
 	return dbPromise;
