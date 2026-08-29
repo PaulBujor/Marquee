@@ -39,6 +39,12 @@ export interface ExportedCredit {
 	name: string;
 	/** Who they played; cast only. */
 	character?: string | null;
+	/**
+	 * The provider's id for them (`person/287`), when the author picked them out of search rather
+	 * than typing a bare name. Portable in a way the person id is not — that one belongs to the
+	 * account that minted it, this one names the same person for anybody.
+	 */
+	externalId?: string | null;
 }
 
 /** A single episode a user has watched. Season 0 is TMDB's Specials. */

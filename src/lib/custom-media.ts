@@ -13,9 +13,17 @@ import type {
 } from '$lib/validation/custom-media';
 
 /**
- * The air date every synthesized episode gets. Null means unannounced/unaired, which makes the
- * episode unwatchable — wrong for a custom entry the user says exists. A real past date makes
- * watchability work unchanged. Clamped to today if the year is in the future.
+ * The air date every synthesized episode of a custom show gets.
+ *
+ * It cannot be null. A null air date means *unannounced or not yet aired* — `isAired` reads it that
+ * way, and so does everything built on it: an episode with no date is unwatchable, contributes no
+ * progress, is never the "next episode", and is skipped by "mark season watched". That's the right
+ * reading for TMDB data we simply don't have yet, but for a custom entry the user is asserting the
+ * episode exists. Giving it a real past date makes every one of those helpers work unchanged, and
+ * keeps the entry off the upcoming timeline, which only shows dates in the future.
+ *
+ * The entry's year is the honest choice where there is one. A year in the future would put the date
+ * ahead of today and make the episodes unwatchable again, so it's clamped.
  */
 export function customEpisodeAirDate(year: number | null, now: number = Date.now()): string {
 	const today = todayIso(now);
@@ -55,7 +63,15 @@ function synthesizeSeasons(seasons: CustomSeasonInput[], airDate: string): Media
 	}));
 }
 
-/** Turn form credit rows into wire credits with billing order per role. */
+/**
+ * Turn the form's credit rows into wire credits, numbering each role's billing from the order the
+ * user arranged them in. A person the entry doesn't credit yet gets an id minted here — random for
+ * the same reason the media id is, and private to this user.
+ *
+ * `externalId`/`profilePath` carry through only when the author picked someone out of search. They
+ * record *who was meant*; the minted id is still what identifies the person, so a custom entry never
+ * claims the provider's row.
+ */
 function synthesizeCredits(input: CustomCreditInput[], mintPersonId: () => string): MediaCredit[] {
 	const billing = new Map<string, number>();
 	return input.map((c) => {
@@ -64,9 +80,9 @@ function synthesizeCredits(input: CustomCreditInput[], mintPersonId: () => strin
 		const character = c.character.trim();
 		return {
 			personId: c.personId ?? mintPersonId(),
-			externalId: null,
+			externalId: c.externalId ?? null,
 			name: c.name.trim(),
-			profilePath: null,
+			profilePath: c.profilePath ?? null,
 			role: c.role,
 			// Only cast play someone; the form hides the field for every other role.
 			character: c.role === 'cast' && character !== '' ? character : null,
@@ -76,9 +92,16 @@ function synthesizeCredits(input: CustomCreditInput[], mintPersonId: () => strin
 }
 
 /**
- * A complete media record for a new or edited custom entry. `id` is supplied for an edit, minted
- * randomly for a new one. `version: 0` marks it as never round-tripped through the server. Shows
- * are stamped `inProduction: false` so they can reach `completed`.
+ * A complete media record for a new or edited custom entry.
+ *
+ * `id` is supplied for an edit and minted randomly for a new one — random rather than derived,
+ * because there is no `(provider, externalId)` to derive from and a private entry must not have an
+ * id anyone else could compute. `version: 0` marks it as never having been round-tripped through
+ * the server, exactly as a quick-add snapshot does.
+ *
+ * A show is stamped `inProduction: false` so it can reach `completed`: `isStillAiring` keeps a show
+ * with unaired episodes in `watching`, and the user has told us the whole thing, so there is
+ * nothing still to come.
  */
 export function createCustomMedia(
 	input: CustomMediaInput,
@@ -144,7 +167,9 @@ export function toCustomMediaInput(
 				personId: c.personId,
 				role: c.role,
 				name: c.name,
-				character: c.character ?? ''
+				character: c.character ?? '',
+				externalId: c.externalId,
+				profilePath: c.profilePath
 			}))
 	};
 }

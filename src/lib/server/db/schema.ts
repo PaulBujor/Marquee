@@ -350,9 +350,24 @@ export const people = sqliteTable(
 		name: text('name').notNull(),
 		profilePath: text('profile_path')
 	},
-	// Same NULL-distinctness reliance as `media`: many owned rows can share a null external id.
+	/**
+	 * Uniqueness is scoped by ownership, in two partial indexes rather than one.
+	 *
+	 * The shared catalogue must dedupe on `(provider, external_id)` so two titles crediting the same
+	 * actor converge on one row. An owned row can't join that index: a user who picks a real person
+	 * from search stores *their own* copy of that identity (we deliberately don't write them into the
+	 * shared catalogue), so two accounts picking the same person would collide on a key that is
+	 * supposed to be globally unique. Scoping the owned index by `owner_user_id` keeps both rules
+	 * true at once. Both still rely on the same NULL-distinctness as `media`: many rows can share a
+	 * null external id.
+	 */
 	(table) => [
-		uniqueIndex('people_provider_external_idx').on(table.provider, table.externalId),
+		uniqueIndex('people_provider_external_idx')
+			.on(table.provider, table.externalId)
+			.where(sql`owner_user_id is null`),
+		uniqueIndex('people_owner_external_idx')
+			.on(table.ownerUserId, table.provider, table.externalId)
+			.where(sql`owner_user_id is not null`),
 		index('people_owner_idx').on(table.ownerUserId)
 	]
 );

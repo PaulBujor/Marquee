@@ -1,5 +1,10 @@
 /**
- * Shape and bounds for a user-authored ("custom") media entry — validated on both client and server.
+ * Shape and bounds for a user-authored ("custom") media entry — one definition validated on both
+ * sides, per the convention: the create/edit form parses against it for immediate feedback, and the
+ * media channel re-validates every pushed record with it server-side, where the answer is
+ * authoritative.
+ *
+ * Client-safe (no server imports).
  */
 import { z } from 'zod';
 import { CREDIT_ROLES } from '$lib/sync/events';
@@ -8,7 +13,10 @@ export const CUSTOM_TITLE_MAX = 200;
 export const CUSTOM_OVERVIEW_MAX = 2000;
 export const CUSTOM_MAX_SEASONS = 50;
 export const CUSTOM_MAX_EPISODES_PER_SEASON = 200;
-/** Total episodes across all seasons — each becomes a row and a replay event per watched state. */
+/**
+ * Across all seasons. Every episode becomes a row on both sides, and a link replays one event per
+ * watched episode, so the total is what actually needs bounding — not just the per-season count.
+ */
 export const CUSTOM_MAX_EPISODES_TOTAL = 2000;
 
 /**
@@ -21,7 +29,11 @@ export const CUSTOM_NAME_MAX = 120;
 
 /** Roughly the first films (Roundhay Garden Scene, 1888), with room to spare. */
 export const CUSTOM_MIN_YEAR = 1870;
-/** Fixed ceiling (not "this year + N") — downstream code clamps derived air dates instead. */
+/**
+ * A fixed ceiling rather than "this year + N": a schema whose bounds move with the clock can't be
+ * tested deterministically, and nothing downstream depends on the limit being tight. Air dates for
+ * a future-dated entry are clamped where they're derived, not here.
+ */
 export const CUSTOM_MAX_YEAR = 2200;
 
 /** A season of a custom show. The user gives it a number and how many episodes it has — nothing else. */
@@ -33,14 +45,33 @@ export const customSeasonInputSchema = z.object({
 export type CustomSeasonInput = z.infer<typeof customSeasonInputSchema>;
 
 /**
- * A credit on a custom entry. `personId` is absent on first entry (minted on save), present on edit
- * so re-saving keeps the same person row rather than orphaning it.
+ * One credited person as the form collects them: a role, a name, and (for cast) who they played.
+ *
+ * `personId` is absent the first time a name is entered and minted on save. It comes *back* on an
+ * edit so re-saving keeps crediting the same person rather than minting a fresh row each time —
+ * which would orphan the old one and break the "everything this person worked on" lookup.
+ *
+ * `externalId` and `profilePath` are set when the author picked someone out of search instead of
+ * typing a bare name — a record of who they meant, not a link. The person is still stored as their
+ * own private row. Both are null offline, where there is nobody to search.
  */
 export const customCreditInputSchema = z.object({
 	personId: z.uuid().optional(),
 	role: z.enum(CREDIT_ROLES),
 	name: z.string().trim().min(1).max(CUSTOM_NAME_MAX),
-	character: z.string().trim().max(CUSTOM_NAME_MAX)
+	character: z.string().trim().max(CUSTOM_NAME_MAX),
+	// Optional as well as nullable: everything that builds this input without a search behind it —
+	// an import, a test, the form before anyone picks anyone — simply omits them.
+	externalId: z
+		.string()
+		.regex(/^person\/\d{1,12}$/)
+		.nullable()
+		.optional(),
+	profilePath: z
+		.string()
+		.regex(/^\/[A-Za-z0-9._-]{1,128}$/)
+		.nullable()
+		.optional()
 });
 
 export type CustomCreditInput = z.infer<typeof customCreditInputSchema>;

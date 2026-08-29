@@ -54,7 +54,8 @@ export async function collectExport(now: Date = new Date()): Promise<MarqueeExpo
 					(await getCredits(m.id)).map((c) => ({
 						role: c.role,
 						name: c.name,
-						character: c.character
+						character: c.character,
+						externalId: c.externalId
 					}))
 				])
 		)
