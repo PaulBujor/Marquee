@@ -106,6 +106,17 @@ export function buildLinkEvents(
 		});
 	}
 
+	const addedClock = clockOr(source.addedAt, now);
+	const tombstone = target.removedUpdatedAt ?? 0;
+	if (tombstone > addedClock) {
+		events.push({
+			type: 'tracking.added',
+			entityId: target.targetId,
+			payload: { status: source.status },
+			clock: tombstone
+		});
+	}
+
 	// Retire the custom entry: unwatch, then tombstone — both at `now` so they beat every clock above.
 	for (const w of watched) {
 		events.push({
