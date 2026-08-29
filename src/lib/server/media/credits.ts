@@ -104,8 +104,6 @@ export function creditRowsFromCustom(
 ): { personRows: PersonInsert[]; creditRows: CreditInsert[] } {
 	const personRows = new Map<string, PersonInsert>();
 	const creditRows = new Map<string, CreditInsert>();
-	/** Pushed person id → the id its row is actually stored under. */
-	const canonicalId = new Map<string, string>();
 
 	for (const c of pushed) {
 		// A null hint identifies nobody, so a typed-in name stays on its own id.
@@ -122,7 +120,6 @@ export function creditRowsFromCustom(
 			});
 		}
 		const storedId = existing?.id ?? c.personId;
-		canonicalId.set(c.personId, storedId);
 
 		// Same collapse as the provider path: `(media, person, role)` is the primary key, and keeping
 		// the first occurrence preserves the order the author put them in.

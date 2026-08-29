@@ -49,7 +49,7 @@
 		: undefined}
 	{...restProps}
 >
-	{#if mediaId}
+	{#if mediaId && !isCustom}
 		<MediaImage
 			id={mediaId}
 			path={posterPath ?? null}

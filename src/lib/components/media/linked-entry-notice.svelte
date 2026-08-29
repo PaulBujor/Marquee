@@ -23,20 +23,25 @@
 	let confirmOpen = $state(false);
 	let busy = $state(false);
 
+	let loadGen = 0;
+
 	$effect(() => {
 		void sync.revision;
 		void mediaId;
-		load();
+		const gen = ++loadGen;
+		load(gen);
 	});
 
-	async function load() {
+	async function load(gen: number) {
 		const links = await getMediaLinksTo(mediaId).catch(() => []);
+		if (gen !== loadGen) return;
 		const rows = await Promise.all(
 			links.map(async (l) => {
 				const media = await getMedia(l.mediaId);
 				return media ? { id: l.mediaId, title: media.title } : null;
 			})
 		);
+		if (gen !== loadGen) return;
 		matched = rows.filter((r): r is { id: string; title: string } => r !== null);
 	}
 
@@ -54,7 +59,8 @@
 		confirmOpen = false;
 		confirming = null;
 		sync.requestSync();
-		await load();
+		const gen = ++loadGen;
+		await load(gen);
 		// Other views read the same link state — the search page most of all, where the entry
 		// reappears the moment it stops pointing anywhere.
 		await invalidateAll();
