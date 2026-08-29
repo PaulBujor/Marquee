@@ -31,6 +31,11 @@ export interface LinkTarget {
 	targetId: string;
 	provider: HydratableProvider;
 	externalId: string;
+	/**
+	 * The target's own `removedUpdatedAt`, when this device holds a tracking row for it — 0 when it
+	 * has never been tracked or removed here. See {@link buildLinkEvents} for why the merge needs it.
+	 */
+	removedUpdatedAt?: number;
 }
 
 /** Clamp a stored clock to a positive integer, falling back to `now` for unset (0) clocks. */
