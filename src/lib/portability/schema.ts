@@ -1,15 +1,22 @@
 /**
- * On-disk contract for a data export. A library-level document: one entry per tracked title, not
- * an event log. Client-safe.
+ * The on-disk contract for a data export — written by the export builder, read by the import
+ * parser. A **library-level** document: one entry per tracked title carrying its end state, not a
+ * dump of the event log. History is deliberately absent.
+ *
+ * Client-safe (no server imports).
  */
-import type { MediaProvider, MediaSource, TrackingStatus } from '$lib/sync/events';
+import type { CreditRole, MediaProvider, MediaSource, TrackingStatus } from '$lib/sync/events';
 
 /** Discriminator written into every file, so a foreign JSON can be rejected before parsing it. */
 export const EXPORT_FORMAT = 'marquee-export';
 
 /**
- * Bumped when the document shape changes. Import refuses unknown versions. v2 added `source`,
- * `overview` and `seasons` for custom media round-trips; v1 files still import.
+ * Bumped when the document shape changes. Import refuses versions it doesn't understand.
+ *
+ * v2 adds `source`, `overview`, `seasons` and `credits`, which together let a user-authored entry
+ * survive a round trip. Before that, an export carried a custom title's tracking history but
+ * nothing that could rebuild the title itself, so importing left a nameless row. v1 files still
+ * import: the added fields are optional, and a v1 entry simply has no custom media to restore.
  */
 export const EXPORT_SCHEMA_VERSION = 2;
 
@@ -22,6 +29,18 @@ export interface ExportedSeason {
 	episodeCount: number;
 }
 
+/**
+ * A person credited on a user-authored entry. Carried by name and role rather than by person id:
+ * the id is private to the account that minted it, so an import re-mints one and the name is the
+ * only part that means anything outside the file.
+ */
+export interface ExportedCredit {
+	role: CreditRole;
+	name: string;
+	/** Who they played; cast only. */
+	character?: string | null;
+}
+
 /** A single episode a user has watched. Season 0 is TMDB's Specials. */
 export interface ExportedEpisode {
 	season: number;
@@ -31,30 +50,47 @@ export interface ExportedEpisode {
 }
 
 /**
- * One tracked title. Metadata fields are nullable — a tracking row can exist before its `media`
- * row synced. Clocks are load-bearing: import replays events stamped with them.
+ * One tracked title.
+ *
+ * The metadata fields are **nullable together** — a tracking row can exist before its `media` row
+ * synced, and dropping those would lose the user's data. Such an entry keeps only its `mediaId`.
+ *
+ * The clocks are load-bearing: import replays events stamped with them, so a restored library
+ * keeps its real dates and last-write-wins can merge an old export into a newer account.
  */
 export interface ExportedTitle {
 	mediaId: string;
 	provider: MediaProvider | null;
-	/** Provider's own id; null for custom media. The portable identity anchor — importers recompute `mediaId` from it. */
+	/**
+	 * The provider's own id, e.g. `show/95396`; null for custom media or an unhydrated entry. The
+	 * portable identity anchor — `mediaId` derives from it, so an importer recomputes rather than
+	 * trusting ours.
+	 */
 	externalId: string | null;
 	type: 'movie' | 'show' | null;
 	title: string | null;
 	year: number | null;
-	/** Provider-backed or custom. Absent in v1 files. */
+	/**
+	 * Whether the entry is provider-backed or the user's own. Absent in v1 files, where every entry
+	 * that could be restored was provider-backed.
+	 */
 	source?: MediaSource | null;
 	/** The user's own description. Only carried for custom entries — provider text is re-fetched. */
 	overview?: string | null;
 	/** A custom show's seasons; absent for movies and for provider-backed titles. */
 	seasons?: ExportedSeason[] | null;
+	/** A custom entry's cast and crew; absent for provider-backed titles, which re-fetch theirs. */
+	credits?: ExportedCredit[] | null;
 	status: TrackingStatus;
 	favorite: boolean;
 	/** User rating 1–5; null = unrated. */
 	rating: number | null;
 	/** ISO 8601 — when the title joined the library. */
 	addedAt: string;
-	/** ISO 8601 — when the title last changed status. */
+	/**
+	 * ISO 8601 — when the title last changed status. For a `completed` title that's when it was
+	 * watched; for a show it's the fallback when no per-episode dates exist.
+	 */
 	statusChangedAt: string;
 	/** Empty for movies, and for shows with nothing watched. */
 	watchedEpisodes: ExportedEpisode[];

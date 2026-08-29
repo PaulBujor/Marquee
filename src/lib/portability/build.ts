@@ -7,6 +7,7 @@ import type { ClientEpisodeWatch, ClientMedia, ClientTracking } from '$lib/clien
 import {
 	EXPORT_FORMAT,
 	EXPORT_SCHEMA_VERSION,
+	type ExportedCredit,
 	type ExportedEpisode,
 	type ExportedSeason,
 	type ExportedTitle,
@@ -21,6 +22,11 @@ export interface ExportInput {
 	watches: ClientEpisodeWatch[];
 	/** Season rows for custom shows. Provider-backed titles re-fetch theirs; custom ones have no other source. */
 	customSeasons?: Map<string, ExportedSeason[]>;
+	/**
+	 * Cast and crew for custom entries, keyed by media id. Same reasoning as the seasons above: a
+	 * provider re-supplies its own credits, but these are names the user typed and exist nowhere else.
+	 */
+	customCredits?: Map<string, ExportedCredit[]>;
 	exportedAt: Date;
 }
 
@@ -93,6 +99,7 @@ export function buildExport(input: ExportInput): MarqueeExport {
 			// own writing and exists nowhere else.
 			overview: isCustom ? (m?.overview ?? '') : null,
 			seasons: isCustom && m?.type === 'show' ? (input.customSeasons?.get(t.mediaId) ?? []) : null,
+			credits: isCustom ? (input.customCredits?.get(t.mediaId) ?? []) : null,
 			status: t.status,
 			favorite: t.favorite,
 			rating: t.rating,

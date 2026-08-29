@@ -1,8 +1,22 @@
-/** Data export: read the device's offline replica and produce a JSON file. Network-free. */
-import { getAllEpisodeWatches, getAllMedia, getSeasons, getTracking } from '$lib/client/idb';
+/**
+ * Data export: read the device's offline replica and hand the user a JSON file.
+ *
+ * Deliberately network-free — IndexedDB is a full replica, so the export is complete without the
+ * server. That's the point: it works offline, and it works if the service disappears.
+ *
+ * Client-safe (browser only).
+ */
+import {
+	getAllEpisodeWatches,
+	getAllMedia,
+	getCredits,
+	getSeasons,
+	getTracking
+} from '$lib/client/idb';
 import { buildExport } from '$lib/portability/build';
 import {
 	EXPORT_FILENAME_PREFIX,
+	type ExportedCredit,
 	type ExportedSeason,
 	type MarqueeExport
 } from '$lib/portability/schema';
@@ -15,7 +29,9 @@ export async function collectExport(now: Date = new Date()): Promise<MarqueeExpo
 		getAllEpisodeWatches()
 	]);
 
-	// Custom show seasons must travel in the file — they have no other source on import.
+	// A provider-backed show's seasons are re-fetched on import; a user-authored one has no other
+	// source, so its structure has to travel in the file or the watch history comes back pointing at
+	// episodes that no longer exist.
 	const customShows = media.filter((m) => m.source === 'custom' && m.type === 'show');
 	const customSeasons = new Map<string, ExportedSeason[]>(
 		await Promise.all(
@@ -28,7 +44,23 @@ export async function collectExport(now: Date = new Date()): Promise<MarqueeExpo
 		)
 	);
 
-	return buildExport({ tracking, media, watches, customSeasons, exportedAt: now });
+	// Same reasoning for cast and crew, and for movies too: these are names the user typed.
+	const customCredits = new Map<string, ExportedCredit[]>(
+		await Promise.all(
+			media
+				.filter((m) => m.source === 'custom')
+				.map(async (m): Promise<[string, ExportedCredit[]]> => [
+					m.id,
+					(await getCredits(m.id)).map((c) => ({
+						role: c.role,
+						name: c.name,
+						character: c.character
+					}))
+				])
+		)
+	);
+
+	return buildExport({ tracking, media, watches, customSeasons, customCredits, exportedAt: now });
 }
 
 /**

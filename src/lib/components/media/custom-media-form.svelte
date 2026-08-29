@@ -3,19 +3,25 @@
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { NativeSelect, NativeSelectOption } from '$lib/components/ui/native-select';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import { CREDIT_ROLES } from '$lib/sync/events';
+	import { creditRoleLabel } from '$lib/credits';
 	import {
+		CUSTOM_MAX_CREDITS,
 		CUSTOM_MAX_EPISODES_PER_SEASON,
 		CUSTOM_MAX_EPISODES_TOTAL,
 		CUSTOM_MAX_SEASONS,
 		CUSTOM_MAX_YEAR,
 		CUSTOM_MIN_YEAR,
+		CUSTOM_NAME_MAX,
 		CUSTOM_OVERVIEW_MAX,
 		CUSTOM_TITLE_MAX,
 		customMediaInputSchema,
 		totalEpisodes,
+		type CustomCreditInput,
 		type CustomMediaInput,
 		type CustomSeasonInput
 	} from '$lib/validation/custom-media';
@@ -52,6 +58,10 @@
 	let year = $state('');
 	let overview = $state('');
 	let seasons = $state<{ seasonNumber: number; episodes: string }[]>([]);
+	// Credit rows carry a local `key` because nothing else about a row is stable while it's being
+	// typed: the name changes on every keystroke and a brand-new person has no id yet.
+	let credits = $state<(CustomCreditInput & { key: number })[]>([]);
+	let nextCreditKey = 0;
 	let showErrors = $state(false);
 
 	// Reseed whenever the dialog opens, so reopening never shows the previous entry's values.
@@ -72,6 +82,7 @@
 			seasonNumber: s.seasonNumber,
 			episodes: String(s.episodeCount)
 		}));
+		credits = (initial?.credits ?? []).map((c) => ({ ...c, key: nextCreditKey++ }));
 	});
 
 	/** The season rows as the schema wants them; a blank or unparseable count reads as zero. */
@@ -82,19 +93,28 @@
 		}))
 	);
 
+	// A row the user added but hasn't named yet isn't an error — it's an empty row. Dropping it
+	// here means "add person, change your mind, save" works without a validation dead end.
+	const creditInput = $derived<CustomCreditInput[]>(
+		credits
+			.filter((c) => c.name.trim() !== '')
+			.map((c) => ({ personId: c.personId, role: c.role, name: c.name, character: c.character }))
+	);
+
 	const candidate = $derived<CustomMediaInput>({
 		title,
 		type,
 		year: year.trim() === '' ? null : Number(year),
 		overview,
-		seasons: type === 'show' ? seasonInput : []
+		seasons: type === 'show' ? seasonInput : [],
+		credits: creditInput
 	});
 
 	const parsed = $derived(customMediaInputSchema.safeParse(candidate));
 	const episodeTotal = $derived(totalEpisodes(seasonInput));
 
 	/** First message for a field, shown only once the user has tried to submit. */
-	function errorFor(field: 'title' | 'year' | 'seasons'): string | null {
+	function errorFor(field: 'title' | 'year' | 'seasons' | 'credits'): string | null {
 		if (!showErrors || parsed.success) return null;
 		const issue = parsed.error.issues.find((i) => i.path[0] === field);
 		return issue?.message ?? null;
@@ -102,6 +122,7 @@
 	const titleError = $derived(errorFor('title'));
 	const yearError = $derived(errorFor('year'));
 	const seasonsError = $derived(errorFor('seasons'));
+	const creditsError = $derived(errorFor('credits'));
 
 	function addSeason() {
 		if (seasons.length >= CUSTOM_MAX_SEASONS) return;
@@ -111,6 +132,17 @@
 
 	function removeSeason(seasonNumber: number) {
 		seasons = seasons.filter((s) => s.seasonNumber !== seasonNumber);
+	}
+
+	/** New rows repeat the last row's role — credits are usually entered a role at a time. */
+	function addCredit() {
+		if (credits.length >= CUSTOM_MAX_CREDITS) return;
+		const role = credits.at(-1)?.role ?? 'cast';
+		credits = [...credits, { key: nextCreditKey++, role, name: '', character: '' }];
+	}
+
+	function removeCredit(key: number) {
+		credits = credits.filter((c) => c.key !== key);
 	}
 
 	function submit(event: SubmitEvent) {
@@ -253,6 +285,77 @@
 						</Button>
 					</div>
 				{/if}
+
+				<div class="flex flex-col gap-2">
+					<div class="flex items-baseline justify-between">
+						<span class="text-sm font-medium">
+							Cast &amp; crew <span class="font-normal text-muted-foreground">(optional)</span>
+						</span>
+						{#if credits.length > 0}
+							<span class="text-xs text-muted-foreground">
+								{credits.length} / {CUSTOM_MAX_CREDITS}
+							</span>
+						{/if}
+					</div>
+					{#if credits.length === 0}
+						<p class="text-sm text-muted-foreground">
+							Who made it. Worth filling in: it's what tells you whether a suggested match is really
+							the same title.
+						</p>
+					{/if}
+					<ul class="flex flex-col gap-2">
+						{#each credits as credit (credit.key)}
+							<li class="flex flex-wrap items-center gap-2">
+								<NativeSelect bind:value={credit.role} size="sm" aria-label="Role" class="w-28">
+									{#each CREDIT_ROLES as role (role)}
+										<NativeSelectOption value={role}>{creditRoleLabel(role)}</NativeSelectOption>
+									{/each}
+								</NativeSelect>
+								<Input
+									bind:value={credit.name}
+									maxlength={CUSTOM_NAME_MAX}
+									autocomplete="off"
+									placeholder="Name"
+									aria-label="Name"
+									class="min-w-32 flex-1"
+								/>
+								{#if credit.role === 'cast'}
+									<Input
+										bind:value={credit.character}
+										maxlength={CUSTOM_NAME_MAX}
+										autocomplete="off"
+										placeholder="as…"
+										aria-label={credit.name ? `Character played by ${credit.name}` : 'Character'}
+										class="min-w-24 flex-1"
+									/>
+								{/if}
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									onclick={() => removeCredit(credit.key)}
+									aria-label={credit.name ? `Remove ${credit.name}` : 'Remove this credit'}
+								>
+									<Trash2Icon class="size-4" />
+								</Button>
+							</li>
+						{/each}
+					</ul>
+					{#if creditsError}
+						<p class="text-sm text-destructive">{creditsError}</p>
+					{/if}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						class="self-start"
+						onclick={addCredit}
+						disabled={credits.length >= CUSTOM_MAX_CREDITS}
+					>
+						<PlusIcon class="size-4" />
+						Add person
+					</Button>
+				</div>
 			</div>
 
 			<div class="flex justify-end gap-2 border-t border-border p-4">

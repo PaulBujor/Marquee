@@ -328,11 +328,20 @@ describe('a user-authored entry survives the round trip', () => {
 					]
 				]
 			]),
+			customCredits: new Map([
+				[
+					CUSTOM_ID,
+					[
+						{ role: 'cast' as const, name: 'Tomas Ilie', character: 'The Courier' },
+						{ role: 'creator' as const, name: 'Ana Petrescu', character: null }
+					]
+				]
+			]),
 			exportedAt: EXPORTED_AT
 		});
 	}
 
-	it('carries what nothing else could supply: the title, its description and its seasons', () => {
+	it('carries what nothing else could supply: the title, its description, seasons and credits', () => {
 		// A provider-backed title only needs its identity in the file — the metadata is re-fetched.
 		// Nothing will ever re-fetch this one, so the file has to be the source.
 		const [entry] = exportDoc().titles;
@@ -346,8 +355,26 @@ describe('a user-authored entry survives the round trip', () => {
 			seasons: [
 				{ seasonNumber: 1, episodeCount: 2 },
 				{ seasonNumber: 2, episodeCount: 3 }
+			],
+			credits: [
+				{ role: 'cast', name: 'Tomas Ilie', character: 'The Courier' },
+				{ role: 'creator', name: 'Ana Petrescu', character: null }
 			]
 		});
+	});
+
+	it('restores the cast and crew, re-minting the person ids the file could not carry', () => {
+		const parsed = parseExport(JSON.stringify(exportDoc()));
+		if (!parsed.ok) throw new Error('expected the document to parse');
+		const [record] = planImport(parsed.doc, DEVICE).media;
+
+		expect(record.credits).toMatchObject([
+			{ role: 'cast', name: 'Tomas Ilie', character: 'The Courier', externalId: null },
+			{ role: 'creator', name: 'Ana Petrescu', character: null }
+		]);
+		// A person id belongs to the account that minted it and means nothing anywhere else, so the
+		// import mints its own rather than restoring the exporter's.
+		expect(record.credits?.every((c) => c.personId.length > 0)).toBe(true);
 	});
 
 	it('rebuilds the entry whole, keeping the id the events name it by', () => {
@@ -399,6 +426,7 @@ describe('a user-authored entry survives the round trip', () => {
 				delete stripped.source;
 				delete stripped.overview;
 				delete stripped.seasons;
+				delete stripped.credits;
 				return stripped;
 			})
 		};
