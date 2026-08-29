@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import PageHeader from '$lib/components/page-header.svelte';
+	import DetailLink from '$lib/components/media/detail-link.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { LibraryState } from '$lib/tracking/library.svelte';
 	import { filterUpcoming, groupUpcomingByYear } from '$lib/tracking/library';
@@ -18,8 +19,6 @@
 	});
 
 	const upcoming = $derived(filterUpcoming(library.items));
-	// Group into years, each holding per-day runs. The agenda only shows day + month, so a sticky
-	// year divider tells you which year a release lands in.
 	const years = $derived(groupUpcomingByYear(upcoming));
 
 	// Format `YYYY-MM-DD` as e.g. "Tue, Jul 28" in UTC, so a local timezone can't shift the day.
@@ -70,11 +69,8 @@ divider below is positioned against. -->
 						<ul class="flex flex-col gap-1">
 							{#each entries as entry (entry.mediaId + (entry.kind === 'episode' ? `-${entry.season}-${entry.episode}` : ''))}
 								<li>
-									<a
-										href={resolve('/title/[type]/[id]', {
-											type: entry.type,
-											id: entry.externalId?.split('/')[1] ?? ''
-										})}
+									<DetailLink
+										item={entry}
 										class="-mx-2 flex items-center gap-3 rounded-sm px-2 py-1.5 transition-colors hover:bg-secondary"
 									>
 										<div class="w-12 shrink-0">
@@ -82,6 +78,7 @@ divider below is positioned against. -->
 												type={entry.type}
 												mediaId={entry.mediaId}
 												posterPath={entry.posterPath}
+												isCustom={entry.source === 'custom'}
 												alt={entry.title}
 											/>
 										</div>
@@ -93,7 +90,7 @@ divider below is positioned against. -->
 													: 'Release'}
 											</span>
 										</div>
-									</a>
+									</DetailLink>
 								</li>
 							{/each}
 						</ul>

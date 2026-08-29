@@ -10,13 +10,15 @@ import {
 	type DatedEpisode,
 	type EpisodeCoord
 } from './actions';
-import type { TrackingStatus } from '$lib/sync/events';
+import type { MediaSource, TrackingStatus } from '$lib/sync/events';
 
 /** A tracked title joined with its media reference + episode metadata + episode-watch state. */
 export interface LibraryItem {
 	mediaId: string;
 	/** Provider external id (e.g. `movie/603`) — the detail-page route key; null for custom media. */
 	externalId: string | null;
+	/** How the title is sourced; null while its media row hasn't reached this device. */
+	source: MediaSource | null;
 	status: TrackingStatus;
 	favorite: boolean;
 	rating: number | null;
@@ -83,6 +85,7 @@ export interface UpcomingEntry {
 	date: string;
 	mediaId: string;
 	externalId: string | null;
+	source: MediaSource | null;
 	type: 'movie' | 'show';
 	title: string;
 	posterPath: string | null;
@@ -93,10 +96,8 @@ export interface UpcomingEntry {
 }
 
 /**
- * The upcoming-releases agenda: future episodes of shows you're **watching**, merged with
- * release dates of **want-to-watch** movies, sorted ascending by date. Excludes Specials (season 0)
- * and anything already aired/released (date must be strictly after `today`). Other statuses
- * (completed / did-not-finish, and want-to-watch shows) don't contribute.
+ * Upcoming-releases agenda: future episodes of shows you're watching + release dates of
+ * want-to-watch movies, sorted ascending by date. Excludes Specials and already-aired content.
  */
 export function filterUpcoming(items: LibraryItem[], today: string = todayIso()): UpcomingEntry[] {
 	const out: UpcomingEntry[] = [];
@@ -109,6 +110,7 @@ export function filterUpcoming(items: LibraryItem[], today: string = todayIso())
 					date: ep.airDate,
 					mediaId: item.mediaId,
 					externalId: item.externalId,
+					source: item.source,
 					type: 'show',
 					title: item.title,
 					posterPath: item.posterPath,
@@ -124,6 +126,7 @@ export function filterUpcoming(items: LibraryItem[], today: string = todayIso())
 				date: item.releaseDate,
 				mediaId: item.mediaId,
 				externalId: item.externalId,
+				source: item.source,
 				type: 'movie',
 				title: item.title,
 				posterPath: item.posterPath,
@@ -143,12 +146,7 @@ export interface UpcomingYear {
 	days: [string, UpcomingEntry[]][];
 }
 
-/**
- * Group date-sorted upcoming entries into years, each holding its per-day runs. The flat
- * agenda only renders day + month, so the timeline needs a year divider to tell which year a release
- * falls in. Input must be ascending by `date` (as {@link filterUpcoming} returns), so equal dates and
- * equal years are contiguous — a single linear pass preserves order with no Map.
- */
+/** Group date-sorted upcoming entries into years, each holding its per-day runs. */
 export function groupUpcomingByYear(entries: UpcomingEntry[]): UpcomingYear[] {
 	const years: UpcomingYear[] = [];
 	for (const e of entries) {
@@ -176,12 +174,7 @@ export function continueWatching(items: LibraryItem[]): LibraryItem[] {
 /** Sorts after every real date — an unknown release is treated as furthest in the future. */
 const FAR_FUTURE_KEY = '9999-12-31';
 
-/**
- * A sortable release date (`YYYY-MM-DD`): a movie's release date, a show's first air date; else, when
- * only the year is known, its **end** (Dec 31, since the exact date is unconfirmed and later); else
- * {@link FAR_FUTURE_KEY} — an unknown release is furthest in the future, not the earliest. Zero-padded,
- * so a plain string compare orders correctly, and comparable to `todayIso()` to tell released apart.
- */
+/** Sortable release date: exact date, year end, or far-future for unknown. */
 function releaseDateKey(item: LibraryItem): string {
 	const exact = item.type === 'movie' ? item.releaseDate : item.firstAirDate;
 	if (exact) return exact;
@@ -194,10 +187,7 @@ function isReleased(item: LibraryItem, today: string): boolean {
 	return releaseDateKey(item) <= today;
 }
 
-/**
- * Apply the tab + type/year/genre/release filters and the chosen sort. `favorites` spans all
- * statuses; `completed` also covers `did_not_finish` — both are titles you're done with.
- */
+/** Apply tab + type/year/genre/release filters and sort. `favorites` spans all statuses. */
 export function filterAndSortLibrary(
 	items: LibraryItem[],
 	f: LibraryFilters,
@@ -223,8 +213,7 @@ export function filterAndSortLibrary(
 		if (f.sort === 'title') return a.title.localeCompare(b.title);
 		// Newest release first; unknown/undated releases sort to the top as furthest-future.
 		if (f.sort === 'date') return releaseDateKey(b).localeCompare(releaseDateKey(a));
-		// Most recently watched first, with never-watched titles last rather than jumbled in — the
-		// sort spans every tab, so most lists hold some titles that carry no watch date at all.
+		// Most recently watched first; never-watched titles last.
 		if (f.sort === 'watched') {
 			if (a.watchedAt === null) return b.watchedAt === null ? 0 : 1;
 			if (b.watchedAt === null) return -1;
