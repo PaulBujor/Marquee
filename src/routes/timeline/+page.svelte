@@ -5,7 +5,7 @@
 	import DetailLink from '$lib/components/media/detail-link.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import { LibraryState } from '$lib/tracking/library.svelte';
-	import { filterUpcoming, groupUpcomingByYear } from '$lib/tracking/library';
+	import { filterUpcoming, groupUpcomingByYear, type UpcomingEntry } from '$lib/tracking/library';
 	import { sync } from '$lib/client/sync/engine.svelte';
 	import type { PageData } from './$types';
 
@@ -31,12 +31,17 @@
 	function formatDate(iso: string): string {
 		return dateFmt.format(new Date(`${iso}T00:00:00Z`));
 	}
+
+	/** Head a run by year when every title in it lacks an exact date. */
+	function dayHeading(date: string, entries: UpcomingEntry[]): string {
+		if (entries.every((e) => !e.dateExact)) return `Later in ${date.slice(0, 4)}`;
+		return formatDate(date);
+	}
 </script>
 
 <svelte:head><title>Upcoming · Marquee</title></svelte:head>
 
-<!-- No back control: this is a tab root. `min-h-10` keeps the header the height the sticky year
-divider below is positioned against. -->
+<!-- No back control: this is a tab root. -->
 <PageHeader>
 	<div class="flex min-h-10 items-center gap-3">
 		<h1 class="font-serif text-xl font-semibold">Upcoming</h1>
@@ -52,8 +57,7 @@ divider below is positioned against. -->
 	{:else if years.length > 0}
 		{#each years as { year, days } (year)}
 			<div class="flex flex-col gap-6">
-				<!-- Sticky, centered year divider — stays in view while its releases scroll past, so the
-				day+month rows below always have a year for context. Sits just under the page header. -->
+				<!-- Sticky year divider. -->
 				<div class="sticky top-[4.25rem] z-10 -mb-2 flex justify-center">
 					<span
 						class="rounded-full border bg-background/80 px-3 py-0.5 text-xs font-bold tracking-widest text-muted-foreground uppercase backdrop-blur"
@@ -64,7 +68,7 @@ divider below is positioned against. -->
 				{#each days as [date, entries] (date)}
 					<section class="flex flex-col gap-2">
 						<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-							{formatDate(date)}
+							{dayHeading(date, entries)}
 						</h2>
 						<ul class="flex flex-col gap-1">
 							{#each entries as entry (entry.mediaId + (entry.kind === 'episode' ? `-${entry.season}-${entry.episode}` : ''))}
@@ -87,7 +91,9 @@ divider below is positioned against. -->
 											<span class="text-sm text-muted-foreground">
 												{entry.kind === 'episode'
 													? `S${entry.season} · E${entry.episode}`
-													: 'Release'}
+													: entry.dateExact
+														? 'Release'
+														: 'Release date to be confirmed'}
 											</span>
 										</div>
 									</DetailLink>

@@ -83,6 +83,8 @@ export function showProgress(item: LibraryItem, today: string = todayIso()): Sho
 export interface UpcomingEntry {
 	/** `YYYY-MM-DD` air/release date, strictly in the future. */
 	date: string;
+	/** False when the date is a stand-in (year-only: Dec 31) rather than a confirmed release date. */
+	dateExact: boolean;
 	mediaId: string;
 	externalId: string | null;
 	source: MediaSource | null;
@@ -96,8 +98,8 @@ export interface UpcomingEntry {
 }
 
 /**
- * Upcoming-releases agenda: future episodes of shows you're watching + release dates of
- * want-to-watch movies, sorted ascending by date. Excludes Specials and already-aired content.
+ * Future episodes of watching shows, merged with want-to-watch movie releases, sorted ascending.
+ * Year-only movies use Dec 31 as a stand-in and carry `dateExact: false`.
  */
 export function filterUpcoming(items: LibraryItem[], today: string = todayIso()): UpcomingEntry[] {
 	const out: UpcomingEntry[] = [];
@@ -108,6 +110,7 @@ export function filterUpcoming(items: LibraryItem[], today: string = todayIso())
 				if (ep.season === 0 || ep.airDate === null || ep.airDate <= today) continue;
 				out.push({
 					date: ep.airDate,
+					dateExact: true,
 					mediaId: item.mediaId,
 					externalId: item.externalId,
 					source: item.source,
@@ -121,9 +124,12 @@ export function filterUpcoming(items: LibraryItem[], today: string = todayIso())
 			}
 		} else {
 			if (item.status !== 'want_to_watch') continue;
-			if (item.releaseDate === null || item.releaseDate <= today) continue;
+			const exact = item.releaseDate !== null;
+			const date = item.releaseDate ?? (item.year !== null ? `${item.year}-12-31` : null);
+			if (date === null || date <= today) continue;
 			out.push({
-				date: item.releaseDate,
+				date,
+				dateExact: exact,
 				mediaId: item.mediaId,
 				externalId: item.externalId,
 				source: item.source,
@@ -146,7 +152,12 @@ export interface UpcomingYear {
 	days: [string, UpcomingEntry[]][];
 }
 
-/** Group date-sorted upcoming entries into years, each holding its per-day runs. */
+/**
+ * Group date-sorted upcoming entries into years, each holding its per-day runs. The flat
+ * agenda only renders day + month, so the timeline needs a year divider to tell which year a release
+ * falls in. Input must be ascending by `date` (as {@link filterUpcoming} returns), so equal dates and
+ * equal years are contiguous — a single linear pass preserves order with no Map.
+ */
 export function groupUpcomingByYear(entries: UpcomingEntry[]): UpcomingYear[] {
 	const years: UpcomingYear[] = [];
 	for (const e of entries) {
@@ -174,7 +185,12 @@ export function continueWatching(items: LibraryItem[]): LibraryItem[] {
 /** Sorts after every real date — an unknown release is treated as furthest in the future. */
 const FAR_FUTURE_KEY = '9999-12-31';
 
-/** Sortable release date: exact date, year end, or far-future for unknown. */
+/**
+ * A sortable release date (`YYYY-MM-DD`): a movie's release date, a show's first air date; else, when
+ * only the year is known, its **end** (Dec 31, since the exact date is unconfirmed and later); else
+ * {@link FAR_FUTURE_KEY} — an unknown release is furthest in the future, not the earliest. Zero-padded,
+ * so a plain string compare orders correctly, and comparable to `todayIso()` to tell released apart.
+ */
 function releaseDateKey(item: LibraryItem): string {
 	const exact = item.type === 'movie' ? item.releaseDate : item.firstAirDate;
 	if (exact) return exact;
@@ -187,7 +203,10 @@ function isReleased(item: LibraryItem, today: string): boolean {
 	return releaseDateKey(item) <= today;
 }
 
-/** Apply tab + type/year/genre/release filters and sort. `favorites` spans all statuses. */
+/**
+ * Apply the tab + type/year/genre/release filters and the chosen sort. `favorites` spans all
+ * statuses; `completed` also covers `did_not_finish` — both are titles you're done with.
+ */
 export function filterAndSortLibrary(
 	items: LibraryItem[],
 	f: LibraryFilters,
@@ -213,7 +232,8 @@ export function filterAndSortLibrary(
 		if (f.sort === 'title') return a.title.localeCompare(b.title);
 		// Newest release first; unknown/undated releases sort to the top as furthest-future.
 		if (f.sort === 'date') return releaseDateKey(b).localeCompare(releaseDateKey(a));
-		// Most recently watched first; never-watched titles last.
+		// Most recently watched first, with never-watched titles last rather than jumbled in — the
+		// sort spans every tab, so most lists hold some titles that carry no watch date at all.
 		if (f.sort === 'watched') {
 			if (a.watchedAt === null) return b.watchedAt === null ? 0 : 1;
 			if (b.watchedAt === null) return -1;
