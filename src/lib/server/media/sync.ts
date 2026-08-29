@@ -195,9 +195,9 @@ export async function resolveMediaSync(
 	const staleForClient = [...validIds]
 		.map((id) => existingById.get(id))
 		.filter((r): r is Media => r !== undefined)
-	// A private row belongs to exactly one account; ownership is checked separately from the
-	// tracking gate (which proves the user references the id, not that they own it).
-	.filter((r) => r.ownerUserId === null || r.ownerUserId === userId)
+		// A private row belongs to exactly one account; ownership is checked separately from the
+		// tracking gate (which proves the user references the id, not that they own it).
+		.filter((r) => r.ownerUserId === null || r.ownerUserId === userId)
 		.filter((r) => (haveVersion.get(r.id) ?? NO_VERSION) < r.version);
 
 	return { media: await withChildren(db, staleForClient), pending, storedCustom };
