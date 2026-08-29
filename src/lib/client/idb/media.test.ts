@@ -15,6 +15,7 @@ import {
 	putCustomMedia,
 	putMedia,
 	putMediaBatch,
+	searchCustomMedia,
 	searchLocalMedia
 } from './media';
 import { applyEventToIdb, applyEventsToIdb } from './state';
@@ -227,6 +228,55 @@ function showRecord(id: string, externalId: string, title: string): MediaRecord 
 		]
 	});
 }
+
+describe('searchCustomMedia', () => {
+	const CUSTOM_ID = '77777777-7777-4777-8777-777777777777';
+
+	beforeEach(async () => {
+		const db = await openDb();
+		await db.clear('media');
+		await db.clear('mediaLinks');
+		await putCustomMedia(
+			record({
+				id: CUSTOM_ID,
+				provider: 'local',
+				externalId: null,
+				source: 'custom',
+				type: 'movie',
+				title: 'Midnight Cassette Club',
+				version: 0
+			})
+		);
+	});
+
+	it('finds the user’s own entries, which nothing upstream could return', async () => {
+		expect((await searchCustomMedia('cassette')).map((m) => m.id)).toEqual([CUSTOM_ID]);
+	});
+
+	it('drops an entry once it has been matched to a real title', async () => {
+		// Offering it beside the title it now *is* would invite adding the same work twice.
+		await applyEventToIdb(
+			createEvent(
+				'media.linked',
+				CUSTOM_ID,
+				{
+					targetId: tmdbMediaId('movie', 603),
+					provider: 'tmdb',
+					externalId: 'movie/603'
+				},
+				DEVICE
+			)
+		);
+		expect(await searchCustomMedia('cassette')).toEqual([]);
+	});
+
+	it('keeps an entry whose suggestions were merely dismissed', async () => {
+		// Declining a match says "not this one", not "this is that" — the entry is still the only way
+		// to reach the title.
+		await applyEventToIdb(createEvent('media.match_declined', CUSTOM_ID, {}, DEVICE));
+		expect((await searchCustomMedia('cassette')).map((m) => m.id)).toEqual([CUSTOM_ID]);
+	});
+});
 
 describe('credits', () => {
 	const ID = mediaId('tmdb', 'movie/50');
