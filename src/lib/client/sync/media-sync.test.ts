@@ -78,6 +78,7 @@ function record(externalId: string, over: Partial<MediaRecord> = {}): MediaRecor
 		version: 1,
 		seasons: null,
 		episodes: null,
+		credits: null,
 		...over
 	};
 }
@@ -141,6 +142,7 @@ describe('custom media backup', () => {
 			version: 0,
 			seasons: null,
 			episodes: null,
+			credits: [],
 			...over
 		};
 	}

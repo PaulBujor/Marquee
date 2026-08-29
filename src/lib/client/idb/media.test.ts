@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { openDb, setActiveUser } from './db';
 import {
 	clearPendingPush,
+	getCredits,
+	getCreditsForPerson,
 	getLinkedMediaRefs,
 	getMedia,
 	getMediaVersions,
@@ -12,10 +14,17 @@ import {
 	pruneStaleMedia,
 	putCustomMedia,
 	putMedia,
+	putMediaBatch,
 	searchLocalMedia
 } from './media';
 import { applyEventToIdb, applyEventsToIdb } from './state';
-import { createEvent, mediaId, tmdbMediaId, type MediaRecord } from '$lib/sync/events';
+import {
+	createEvent,
+	mediaId,
+	tmdbMediaId,
+	type MediaCredit,
+	type MediaRecord
+} from '$lib/sync/events';
 
 setActiveUser('media-search-test');
 
@@ -39,6 +48,7 @@ function record(over: Partial<MediaRecord> & Pick<MediaRecord, 'type' | 'title'>
 		version: 1,
 		seasons: null,
 		episodes: null,
+		credits: null,
 		...over
 	};
 }
@@ -217,6 +227,125 @@ function showRecord(id: string, externalId: string, title: string): MediaRecord 
 		]
 	});
 }
+
+describe('credits', () => {
+	const ID = mediaId('tmdb', 'movie/50');
+
+	function credit(over: Partial<MediaCredit> & Pick<MediaCredit, 'personId'>): MediaCredit {
+		return {
+			externalId: `person/${over.personId}`,
+			name: `Person ${over.personId}`,
+			profilePath: null,
+			role: 'cast',
+			character: null,
+			sortOrder: 0,
+			...over
+		};
+	}
+
+	beforeEach(async () => {
+		const db = await openDb();
+		await db.clear('media');
+		await db.clear('credits');
+	});
+
+	it('round-trips a cast and crew list, ordered by role then billing', async () => {
+		await putMedia(
+			record({
+				id: ID,
+				type: 'movie',
+				title: 'Credited',
+				externalId: 'movie/50',
+				credits: [
+					credit({ personId: '2', name: 'Second Billed', sortOrder: 1, character: 'Trinity' }),
+					credit({ personId: '1', name: 'Top Billed', sortOrder: 0, character: 'Neo' }),
+					credit({ personId: '3', name: 'A Director', role: 'director' })
+				]
+			})
+		);
+
+		// Roles group first, each keeping its billing — the same order the server hands them over in,
+		// so a renderer can section without re-sorting and two devices always agree.
+		const rows = await getCredits(ID);
+		expect(rows.map((c) => c.name)).toEqual(['Top Billed', 'Second Billed', 'A Director']);
+		expect(rows[0]).toMatchObject({
+			personId: '1',
+			externalId: 'person/1',
+			character: 'Neo',
+			mediaId: ID
+		});
+	});
+
+	it('serves the reverse lookup — every title a person is credited on', async () => {
+		const other = mediaId('tmdb', 'movie/51');
+		await putMedia(
+			record({ id: ID, type: 'movie', title: 'One', credits: [credit({ personId: '7' })] })
+		);
+		await putMedia(
+			record({
+				id: other,
+				type: 'movie',
+				title: 'Two',
+				externalId: 'movie/51',
+				credits: [credit({ personId: '7' }), credit({ personId: '8' })]
+			})
+		);
+
+		expect((await getCreditsForPerson('7')).map((c) => c.mediaId).sort()).toEqual(
+			[ID, other].sort()
+		);
+		expect(await getCreditsForPerson('8')).toHaveLength(1);
+	});
+
+	it('replaces the stored list on a fresh pull, dropping a credit that disappeared', async () => {
+		const full = record({
+			id: ID,
+			type: 'movie',
+			title: 'Recredited',
+			externalId: 'movie/50',
+			credits: [credit({ personId: '1' }), credit({ personId: '2' })]
+		});
+		await putMedia(full);
+		await putMedia({ ...full, credits: [credit({ personId: '1' })] });
+
+		expect((await getCredits(ID)).map((c) => c.personId)).toEqual(['1']);
+	});
+
+	it('leaves a stored list alone for a scalar-only snapshot, and clears it for a known-empty one', async () => {
+		const base = record({
+			id: ID,
+			type: 'movie',
+			title: 'Snapshot',
+			externalId: 'movie/50',
+			credits: [credit({ personId: '1' })]
+		});
+		await putMedia(base);
+
+		// null = "unknown" — a quick-add snapshot must not blank a synced cast.
+		await putMedia({ ...base, credits: null });
+		expect(await getCredits(ID)).toHaveLength(1);
+
+		// [] = "known to have none" — an upstream correction that really did empty the list.
+		await putMedia({ ...base, credits: [] });
+		expect(await getCredits(ID)).toEqual([]);
+	});
+
+	it('is written by a batch pull the same way, and evicted with its title', async () => {
+		await putMediaBatch([
+			record({
+				id: ID,
+				type: 'movie',
+				title: 'Batched',
+				externalId: 'movie/50',
+				credits: [credit({ personId: '1' })]
+			})
+		]);
+		expect(await getCredits(ID)).toHaveLength(1);
+
+		await pruneStaleMedia(new Set());
+		expect(await getCredits(ID)).toEqual([]);
+	});
+});
 
 describe('pruneStaleMedia', () => {
 	beforeEach(async () => {

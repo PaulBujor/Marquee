@@ -1,14 +1,21 @@
 /**
- * Wire contract for `POST /api/media/sync`. Provider-backed titles travel as `refs` (identity
- * only); user-authored titles travel as `custom` (whole records), scoped to their owner.
+ * Wire contract for `POST /api/media/sync` — the media reference channel, separate from the events
+ * channel (`/api/sync`). Client-safe (shared by the endpoint and the client engine).
+ *
+ * The channel is asymmetric on purpose. Provider-backed titles travel as **identity only** (`refs`)
+ * and the server hydrates them, so a shared row can't be poisoned with client-supplied metadata.
+ * User-authored titles have no such source — nobody but the author knows what they are — so they
+ * travel as **whole records** (`custom`) and the server stores them verbatim, scoped to their owner.
  */
 import { z } from 'zod';
-import { HYDRATABLE_PROVIDERS, type MediaRecord } from './events';
+import { CREDIT_ROLES, HYDRATABLE_PROVIDERS, type MediaRecord } from './events';
 import {
+	CUSTOM_MAX_CREDITS,
 	CUSTOM_MAX_EPISODES_TOTAL,
 	CUSTOM_MAX_SEASONS,
 	CUSTOM_MAX_YEAR,
 	CUSTOM_MIN_YEAR,
+	CUSTOM_NAME_MAX,
 	CUSTOM_OVERVIEW_MAX,
 	CUSTOM_TITLE_MAX
 } from '$lib/validation/custom-media';
@@ -16,7 +23,10 @@ import {
 /** Max identity refs / have-entries accepted in one media-sync call. */
 export const MEDIA_SYNC_MAX = 500;
 
-/** Max custom records per call (each carries a full seasons/episodes payload). */
+/**
+ * Max whole custom records accepted in one call. Far smaller than {@link MEDIA_SYNC_MAX} because
+ * each one carries its full seasons/episodes payload rather than a 40-byte identity pair.
+ */
 export const MEDIA_SYNC_CUSTOM_MAX = 25;
 
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
@@ -44,7 +54,27 @@ const customEpisodeSchema = z.object({
 	stillPath: z.null()
 });
 
-/** User-authored record on the wire. Pinned to `local` provider, no external id, no artwork. */
+/**
+ * A credit the author typed themselves. `externalId` and `profilePath` are pinned null because the
+ * person is user-authored too: a custom entry credits names its author wrote, never a claim on a
+ * provider's person row. That keeps every person reachable from a custom entry privately owned, so
+ * a push can't reach the shared people catalog at all.
+ */
+const customCreditSchema = z.object({
+	personId: uuid,
+	externalId: z.string().nullable(),
+	name: z.string().min(1).max(CUSTOM_NAME_MAX),
+	profilePath: z.string().nullable(),
+	role: z.enum(CREDIT_ROLES),
+	character: z.string().max(CUSTOM_NAME_MAX).nullable(),
+	sortOrder: z.number().int().nonnegative()
+});
+
+/**
+ * A user-authored record on the wire. Pinned to exactly the shape our own writer produces — a
+ * `local` provider, no external id, no provider artwork paths — so the endpoint can never be talked
+ * into stashing something that would later read as a shared, provider-backed row.
+ */
 export const customMediaPushSchema = z.object({
 	id: uuid,
 	provider: z.literal('local'),
@@ -67,21 +97,35 @@ export const customMediaPushSchema = z.object({
 	version: z.number().int().nonnegative(),
 	seasons: z.array(customSeasonSchema).max(CUSTOM_MAX_SEASONS).nullable(),
 	episodes: z.array(customEpisodeSchema).max(CUSTOM_MAX_EPISODES_TOTAL).nullable(),
+	// Non-null unlike the child arrays: the author is the only source, so an absent list means they
+	// credited nobody, never "unknown — keep what's stored".
+	credits: z.array(customCreditSchema).max(CUSTOM_MAX_CREDITS),
 	/** Epoch ms of the author's last local edit — the LWW clock, stored as the row's `updatedAt`. */
 	editedAt: clientClock
 });
 
-/** Custom record as the client assembles it (wide `MediaRecord` + edit clock). */
+/**
+ * A custom record as the client assembles it: the shared media shape plus the edit clock that
+ * orders two devices' edits. Deliberately the *wide* `MediaRecord` types — it is what a local row
+ * reads back as. {@link customMediaPushSchema} is the narrow gate both sides run it through, so a
+ * local row that somehow isn't a well-formed custom entry is caught before it's sent, not after.
+ */
 export interface CustomMediaPush extends MediaRecord {
 	editedAt: number;
 }
 
-/** Custom record after validation — the exact shape the endpoint accepts. */
+/**
+ * A custom record **after** validation — the exact shape the endpoint accepts and the server
+ * stores. Narrower than {@link CustomMediaPush} on every field the contract pins, so code holding
+ * one of these has already proved it isn't a provider-backed row wearing a custom label.
+ */
 export type ValidatedCustomMedia = z.infer<typeof customMediaPushSchema>;
 
 /**
- * `refs` are identity hints for hydration; `have` reports the client's version per id. The server
- * replies with rows the client is missing or behind on.
+ * `refs` are identity hints for titles the client has (so the server can hydrate + store them);
+ * `have` reports the `version` the client holds per media id. The server replies with the rows the
+ * client is missing or behind on (server version > client version), and only touches ids the user's
+ * own events reference.
  */
 export const mediaSyncRequestSchema = z.object({
 	// A ref exists so the server can hydrate the title, so only external providers belong here —
@@ -105,8 +149,16 @@ export type MediaSyncRequest = z.infer<typeof mediaSyncRequestSchema>;
 
 export interface MediaSyncResponse {
 	media: MediaRecord[];
-	/** True when the server capped per-request TMDB work and the client should sync again to drain. */
+	/**
+	 * True when more referenced titles still need hydration/refresh than the server processed this
+	 * request (it caps per-request TMDB work to stay under the Worker CPU limit). The client should
+	 * sync again to drain the backlog; absent/false means everything is caught up.
+	 */
 	pending?: boolean;
-	/** Ids from `custom` the server actually stored. Skipped records stay queued for retry. */
+	/**
+	 * Ids from `custom` the server actually stored. Reported rather than assumed: a record the
+	 * request wasn't entitled to write, or one a newer stored copy beat, is skipped — and the
+	 * client must keep those marked for a later attempt instead of dropping the edit.
+	 */
 	storedCustom?: string[];
 }

@@ -28,7 +28,8 @@ function media(externalId: string): MediaRecord {
 		lastAirDate: null,
 		version: 1,
 		seasons: null,
-		episodes: null
+		episodes: null,
+		credits: null
 	};
 }
 

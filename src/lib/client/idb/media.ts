@@ -2,7 +2,13 @@
  * `media` store accessors. A {@link MediaRecord} is stored split across three stores mirroring the
  * server: scalar fields in `media`, and (for shows) the nested arrays in `seasons`/`episodes`.
  */
-import { openDb, type ClientEpisode, type ClientMedia, type ClientSeason } from './db';
+import {
+	openDb,
+	type ClientCredit,
+	type ClientEpisode,
+	type ClientMedia,
+	type ClientSeason
+} from './db';
 import { isHydratableProvider, type HydratableProvider, type MediaRecord } from '$lib/sync/events';
 import type { CustomMediaPush } from '$lib/sync/media-protocol';
 import { parseTmdbExternalId, type SearchLikeMedia } from '$lib/tracking/media-record';
@@ -14,6 +20,13 @@ function seasonKey(mediaId: string, seasonNumber: number): string {
 function episodeKey(mediaId: string, season: number, episode: number): string {
 	return `${mediaId}::s${season}e${episode}`;
 }
+
+function creditKey(mediaId: string, role: string, personId: string): string {
+	return `${mediaId}::${role}::${personId}`;
+}
+
+/** Stores a full media record touches. Held by one transaction so a record commits as a unit. */
+const MEDIA_STORES = ['media', 'seasons', 'episodes', 'credits'] as const;
 
 /**
  * Upsert a media record. A null `seasons`/`episodes` (a scalar-only track-time snapshot) leaves any
@@ -37,9 +50,9 @@ async function writeMedia(
 	record: MediaRecord,
 	opts: { respectPending: boolean; pending?: { editedAt: number } }
 ): Promise<void> {
-	const { seasons, episodes, ...scalars } = record;
+	const { seasons, episodes, credits, ...scalars } = record;
 	const db = await openDb();
-	const tx = db.transaction(['media', 'seasons', 'episodes'], 'readwrite');
+	const tx = db.transaction(MEDIA_STORES, 'readwrite');
 	const mediaStore = tx.objectStore('media');
 	const existing = await mediaStore.get(record.id);
 	if (opts.respectPending && existing?.source === 'custom' && existing.pendingPush === 1) {
@@ -71,6 +84,16 @@ async function writeMedia(
 			await store.put({ ...e, id: episodeKey(record.id, e.season, e.episode), mediaId: record.id });
 		}
 	}
+	// Same null-vs-empty rule as the child arrays above: null is "unknown, leave what's stored"
+	// (a quick-add snapshot), `[]` is "known to have none" and clears them.
+	if (credits) {
+		const store = tx.objectStore('credits');
+		const index = store.index('by_media');
+		for (const key of await index.getAllKeys(record.id)) await store.delete(key);
+		for (const c of credits) {
+			await store.put({ ...c, id: creditKey(record.id, c.role, c.personId), mediaId: record.id });
+		}
+	}
 	await tx.done;
 }
 
@@ -81,14 +104,15 @@ async function writeMedia(
 export async function putMediaBatch(records: MediaRecord[]): Promise<void> {
 	if (records.length === 0) return;
 	const db = await openDb();
-	const tx = db.transaction(['media', 'seasons', 'episodes'], 'readwrite');
+	const tx = db.transaction(MEDIA_STORES, 'readwrite');
 	const mediaStore = tx.objectStore('media');
 	const seasonStore = tx.objectStore('seasons');
 	const episodeStore = tx.objectStore('episodes');
+	const creditStore = tx.objectStore('credits');
 	const now = Date.now();
 
 	for (const record of records) {
-		const { seasons, episodes, ...scalars } = record;
+		const { seasons, episodes, credits, ...scalars } = record;
 		await mediaStore.put({ ...scalars, updatedAt: now });
 		// Same rule as putMedia: a null child array is a scalar-only snapshot and leaves any
 		// already-synced child rows alone; a non-null one replaces them.
@@ -112,6 +136,18 @@ export async function putMediaBatch(records: MediaRecord[]): Promise<void> {
 				await episodeStore.put({
 					...e,
 					id: episodeKey(record.id, e.season, e.episode),
+					mediaId: record.id
+				});
+			}
+		}
+		if (credits) {
+			for (const key of await creditStore.index('by_media').getAllKeys(record.id)) {
+				await creditStore.delete(key);
+			}
+			for (const c of credits) {
+				await creditStore.put({
+					...c,
+					id: creditKey(record.id, c.role, c.personId),
 					mediaId: record.id
 				});
 			}
@@ -179,6 +215,20 @@ export async function getEpisodes(mediaId: string): Promise<ClientEpisode[]> {
 	return (await openDb()).getAllFromIndex('episodes', 'by_media', mediaId);
 }
 
+/** A title's cached cast and crew, ordered by role then billing (as the server returned them). */
+export async function getCredits(mediaId: string): Promise<ClientCredit[]> {
+	const rows = await (await openDb()).getAllFromIndex('credits', 'by_media', mediaId);
+	return rows.sort(
+		(a, b) =>
+			a.role.localeCompare(b.role) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+	);
+}
+
+/** Everything a person is credited on locally — the offline half of the reverse lookup. */
+export async function getCreditsForPerson(personId: string): Promise<ClientCredit[]> {
+	return (await openDb()).getAllFromIndex('credits', 'by_person', personId);
+}
+
 /**
  * Media ids on a list — a non-removed `tracking` row, or a `watched: true` episode. Both what the
  * media channel asks the server about and the keep-set eviction runs against, so a title stops
@@ -205,12 +255,14 @@ export async function getReferencedMediaIds(): Promise<string[]> {
  */
 export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
 	const db = await openDb();
-	const tx = db.transaction(['media', 'seasons', 'episodes'], 'readwrite');
+	const tx = db.transaction(MEDIA_STORES, 'readwrite');
 	const mediaStore = tx.objectStore('media');
 	const seasonStore = tx.objectStore('seasons');
 	const episodeStore = tx.objectStore('episodes');
+	const creditStore = tx.objectStore('credits');
 	const seasonIndex = seasonStore.index('by_media');
 	const episodeIndex = episodeStore.index('by_media');
+	const creditIndex = creditStore.index('by_media');
 	let deleted = 0;
 
 	for (let cursor = await mediaStore.openCursor(); cursor; cursor = await cursor.continue()) {
@@ -220,6 +272,7 @@ export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
 		deleted++;
 		for (const key of await seasonIndex.getAllKeys(id)) await seasonStore.delete(key);
 		for (const key of await episodeIndex.getAllKeys(id)) await episodeStore.delete(key);
+		for (const key of await creditIndex.getAllKeys(id)) await creditStore.delete(key);
 	}
 
 	await tx.done;
@@ -302,6 +355,15 @@ export async function getPendingCustomMedia(limit: number): Promise<CustomMediaP
 							stillPath: e.stillPath
 						}))
 					: null,
+				credits: (await getCredits(row.id)).map((c) => ({
+					personId: c.personId,
+					externalId: c.externalId,
+					name: c.name,
+					profilePath: c.profilePath,
+					role: c.role,
+					character: c.character,
+					sortOrder: c.sortOrder
+				})),
 				// A row can only be pending because an edit stamped the clock, but fall back rather
 				// than push a record the server's schema would reject outright.
 				editedAt: row.editedAt ?? row.updatedAt

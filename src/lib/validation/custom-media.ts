@@ -10,6 +10,14 @@ export const CUSTOM_MAX_EPISODES_PER_SEASON = 200;
 /** Total episodes across all seasons — each becomes a row and a replay event per watched state. */
 export const CUSTOM_MAX_EPISODES_TOTAL = 2000;
 
+/**
+ * Credited people on one entry, across every role. Generous enough for a full unit-production
+ * list typed by hand, small enough that a push stays one modest request.
+ */
+export const CUSTOM_MAX_CREDITS = 100;
+/** A person's name — much shorter than a title, and long enough for any real one. */
+export const CUSTOM_NAME_MAX = 120;
+
 /** Roughly the first films (Roundhay Garden Scene, 1888), with room to spare. */
 export const CUSTOM_MIN_YEAR = 1870;
 /** Fixed ceiling (not "this year + N") — downstream code clamps derived air dates instead. */

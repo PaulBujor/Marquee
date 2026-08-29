@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDb } from '$lib/server/db/test-db';
 import { media, tracking, users } from '$lib/server/db/schema';
-import { mediaId } from '$lib/sync/events';
+import { mediaId, personExternalId, personId } from '$lib/sync/events';
 import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 import { MEDIA_SYNC_REFRESH_MAX, resolveMediaSync } from './sync';
 
@@ -34,8 +34,10 @@ function stub() {
 					voteCount: 0,
 					runtime: null,
 					genres: [],
-					cast: [],
-					director: null,
+					cast: [
+						{ id: 6193, name: 'Leonardo DiCaprio', character: 'Cobb', profilePath: '/leo.jpg' }
+					],
+					director: { id: 525, name: 'Christopher Nolan' },
 					writers: [],
 					producers: [],
 					creators: [],
@@ -109,6 +111,48 @@ describe('resolveMediaSync', () => {
 		expect(res.media).toHaveLength(1);
 		expect(res.media[0]).toMatchObject({ id: REF_ID, title: 'title-603', version: 1 });
 		expect(calls()).toBe(1); // only the referenced id was hydrated
+	});
+
+	it('carries the hydrated cast and crew back on the returned record', async () => {
+		const db = await seed();
+		const { client } = stub();
+		const res = await resolveMediaSync(db, client, USER, {
+			refs: [{ provider: 'tmdb', externalId: REFERENCED }],
+			have: []
+		});
+		expect(res.media[0].credits).toEqual([
+			{
+				personId: personId('tmdb', 6193),
+				externalId: personExternalId(6193),
+				name: 'Leonardo DiCaprio',
+				profilePath: '/leo.jpg',
+				role: 'cast',
+				character: 'Cobb',
+				sortOrder: 0
+			},
+			{
+				personId: personId('tmdb', 525),
+				externalId: personExternalId(525),
+				name: 'Christopher Nolan',
+				profilePath: null,
+				role: 'director',
+				character: null,
+				sortOrder: 0
+			}
+		]);
+	});
+
+	it('reports a title with no credits as an empty list, never as unknown', async () => {
+		const db = await seed();
+		// A stored row nothing has ever credited. `null` here would tell the client "keep what you
+		// have", which is exactly wrong for a list the server is authoritative about.
+		await storeFreshMovie(db, REFERENCED);
+		const { client } = stub();
+		const res = await resolveMediaSync(db, client, USER, {
+			refs: [],
+			have: [{ id: REF_ID, version: 0 }]
+		});
+		expect(res.media[0].credits).toEqual([]);
 	});
 
 	it('returns a stored row the client reports version 0 for (cross-device catch-up)', async () => {

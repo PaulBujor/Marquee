@@ -1,10 +1,6 @@
 import { tmdbExternalId, tmdbMediaId, type MediaRecord } from '$lib/sync/events';
 
-/**
- * Split a TMDB external id (`movie/27205`) back into its parts, or null when it isn't one we could
- * address a title with. The inverse of {@link tmdbExternalId} — used wherever a stored external id
- * has to become a TMDB request or a detail-page route.
- */
+/** Split a TMDB external id (`movie/27205`) into its parts, or null if unparseable. */
 export function parseTmdbExternalId(
 	externalId: string
 ): { type: 'movie' | 'show'; tmdbId: number } | null {
@@ -27,13 +23,7 @@ export interface SearchLikeMedia {
 	overview?: string;
 }
 
-/**
- * Build a minimal {@link MediaRecord} from a search result, for a quick add-to-list without opening
- * the detail page. We only know the scalars TMDB puts on a search row; the rest is
- * null/empty and `version: 0` marks the row behind, so the media channel pulls the authoritative
- * copy (backdrop, genres, seasons/episodes, air dates) on the next sync — same contract the detail
- * page's snapshot uses.
- */
+/** Minimal MediaRecord from a search result for a quick add. `version: 0` so the channel pulls the real copy. */
 export function mediaRecordFromSearch(item: SearchLikeMedia): MediaRecord {
 	return {
 		id: tmdbMediaId(item.type, item.tmdbId),
@@ -54,6 +44,7 @@ export function mediaRecordFromSearch(item: SearchLikeMedia): MediaRecord {
 		lastAirDate: null,
 		version: 0,
 		seasons: null,
-		episodes: null
+		episodes: null,
+		credits: null
 	};
 }

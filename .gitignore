@@ -60,3 +60,5 @@ dev-assets/pwa-assets/
 
 # Playwright MCP scratch (snapshots/console dumps from local verification)
 .playwright-mcp/
+
+# OpenCode agent runtime data.omo/

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDb } from '$lib/server/db/test-db';
-import { episodes, media, seasons, tracking, users } from '$lib/server/db/schema';
-import { mediaId } from '$lib/sync/events';
+import { episodes, media, people, seasons, tracking, users } from '$lib/server/db/schema';
+import { mediaId, type CreditRole, type MediaCredit } from '$lib/sync/events';
 import type { ValidatedCustomMedia } from '$lib/sync/media-protocol';
 import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
+import { loadCredits } from './credits';
 import { storeCustomMedia } from './custom';
 import { resolveMediaSync } from './sync';
 
@@ -14,6 +15,27 @@ const USER = 'u1';
 const OTHER = 'u2';
 const T0 = 1_000_000_000_000;
 const CUSTOM_ID = '33333333-3333-4333-8333-333333333333';
+const PERSON_A = 'aaaaaaaa-0000-4000-8000-aaaaaaaaaaaa';
+const PERSON_B = 'bbbbbbbb-0000-4000-8000-bbbbbbbbbbbb';
+
+/** A credit as the author's own client sends it: a name they typed, no provider identity. */
+function credit(
+	personId: string,
+	name: string,
+	role: CreditRole,
+	over: Partial<MediaCredit> = {}
+): MediaCredit {
+	return {
+		personId,
+		externalId: null,
+		name,
+		profilePath: null,
+		role,
+		character: null,
+		sortOrder: 0,
+		...over
+	};
+}
 
 /** A TMDB client that must never be reached — custom media has nothing to hydrate from. */
 const noTmdb = {
@@ -46,9 +68,10 @@ function push(over: Partial<ValidatedCustomMedia> = {}): ValidatedCustomMedia {
 		version: 0,
 		seasons: null,
 		episodes: null,
+		credits: [] as MediaCredit[],
 		editedAt: T0,
 		...over
-	};
+	} as ValidatedCustomMedia;
 }
 
 /** The show variant: two seasons of two episodes, dated in the past so they read as aired. */
@@ -206,6 +229,67 @@ describe('storeCustomMedia', () => {
 		expect(await db.select().from(seasons).where(eq(seasons.mediaId, CUSTOM_ID))).toHaveLength(1);
 		expect(await db.select().from(episodes).where(eq(episodes.mediaId, CUSTOM_ID))).toHaveLength(2);
 		expect((await row(db, CUSTOM_ID)).version).toBe(2);
+	});
+
+	it('stores the people the author credited, owner-scoped, and reconciles a later edit', async () => {
+		const director = credit(PERSON_A, 'Renata Voss', 'director');
+		const lead = credit(PERSON_B, 'Tomas Ilie', 'cast', { character: 'The Courier' });
+		await storeCustomMedia(db, USER, [push({ credits: [director, lead] })], new Set([CUSTOM_ID]));
+
+		expect(await db.select().from(people).where(eq(people.ownerUserId, USER))).toHaveLength(2);
+		expect(await loadCredits(db, CUSTOM_ID)).toMatchObject([
+			{ name: 'Tomas Ilie', role: 'cast', character: 'The Courier', externalId: null },
+			{ name: 'Renata Voss', role: 'director' }
+		]);
+
+		// A later edit drops the lead — the credit goes, the person row stays (another entry may
+		// credit them), exactly as the provider path behaves.
+		await storeCustomMedia(
+			db,
+			USER,
+			[push({ credits: [director], editedAt: T0 + 1 })],
+			new Set([CUSTOM_ID])
+		);
+		expect((await loadCredits(db, CUSTOM_ID)).map((c) => c.role)).toEqual(['director']);
+		expect(await db.select().from(people).where(eq(people.id, PERSON_B))).toHaveLength(1);
+		expect((await row(db, CUSTOM_ID)).version).toBe(2);
+	});
+
+	it('treats a credit change alone as an edit worth a new version', async () => {
+		await storeCustomMedia(
+			db,
+			USER,
+			[push({ credits: [credit(PERSON_A, 'Renata Voss', 'director')] })],
+			new Set([CUSTOM_ID])
+		);
+		await storeCustomMedia(
+			db,
+			USER,
+			[push({ credits: [credit(PERSON_A, 'Renata Voss', 'producer')], editedAt: T0 + 1 })],
+			new Set([CUSTOM_ID])
+		);
+		expect((await row(db, CUSTOM_ID)).version).toBe(2);
+	});
+
+	it('drops a credit naming a person the pusher may not write', async () => {
+		// The other account's private person. Its id is the client's to mint, so a push can name it —
+		// and must neither rewrite the row nor end up crediting somebody else's name on this entry.
+		await db
+			.insert(people)
+			.values({ id: PERSON_A, provider: 'local', ownerUserId: OTHER, name: 'Theirs' });
+
+		await storeCustomMedia(
+			db,
+			USER,
+			[push({ credits: [credit(PERSON_A, 'Mine Now', 'director')] })],
+			new Set([CUSTOM_ID])
+		);
+
+		expect(await loadCredits(db, CUSTOM_ID)).toEqual([]);
+		expect((await db.select().from(people).where(eq(people.id, PERSON_A)))[0]).toMatchObject({
+			name: 'Theirs',
+			ownerUserId: OTHER
+		});
 	});
 
 	it('lets a newer stored edit win over an older push, and still reports it settled', async () => {

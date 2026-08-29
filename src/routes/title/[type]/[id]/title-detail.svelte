@@ -104,7 +104,8 @@
 		lastAirDate: detail.lastAirDate,
 		version: 0,
 		seasons: null,
-		episodes: null
+		episodes: null,
+		credits: null
 	});
 
 	// Reactive local tracking state (IndexedDB-backed); reloaded on sync pulls. Recreated **only when
