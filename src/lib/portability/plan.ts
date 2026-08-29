@@ -69,8 +69,7 @@ function mediaStub(entry: ExportedTitle, id: string, now: number): MediaRecord |
 				type: entry.type ?? 'movie',
 				year: entry.year,
 				overview: entry.overview ?? '',
-				seasons: entry.type === 'show' ? (entry.seasons ?? []) : [],
-				credits: []
+				seasons: entry.type === 'show' ? (entry.seasons ?? []) : []
 			},
 			// The exported id, so the restored entry is the same title the events already name.
 			{ id, now }
