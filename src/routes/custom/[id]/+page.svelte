@@ -86,7 +86,7 @@
 		if (!entry || saving) return;
 		saving = true;
 		try {
-		// Same id — rewrites the entry; seasons/episodes rebuilt from form, server reconciles child rows.
+			// Same id — rewrites the entry; seasons/episodes rebuilt from form, server reconciles child rows.
 			await putCustomMedia(createCustomMedia(input, { id: entry.id }));
 			sync.requestSync();
 			editOpen = false;

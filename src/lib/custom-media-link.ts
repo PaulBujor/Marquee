@@ -101,7 +101,7 @@ export function buildLinkEvents(
 		});
 	}
 
-		// Retire the custom entry: unwatch, then tombstone — both at `now` so they beat every clock above.
+	// Retire the custom entry: unwatch, then tombstone — both at `now` so they beat every clock above.
 	for (const w of watched) {
 		events.push({
 			type: 'episode.unwatched',
