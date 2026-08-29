@@ -62,9 +62,9 @@ const customEpisodeSchema = z.object({
  */
 const customCreditSchema = z.object({
 	personId: uuid,
-	externalId: z.null(),
+	externalId: z.string().nullable(),
 	name: z.string().min(1).max(CUSTOM_NAME_MAX),
-	profilePath: z.null(),
+	profilePath: z.string().nullable(),
 	role: z.enum(CREDIT_ROLES),
 	character: z.string().max(CUSTOM_NAME_MAX).nullable(),
 	sortOrder: z.number().int().nonnegative()

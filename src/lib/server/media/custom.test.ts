@@ -68,10 +68,10 @@ function push(over: Partial<ValidatedCustomMedia> = {}): ValidatedCustomMedia {
 		version: 0,
 		seasons: null,
 		episodes: null,
-		credits: [],
+		credits: [] as MediaCredit[],
 		editedAt: T0,
 		...over
-	};
+	} as ValidatedCustomMedia;
 }
 
 /** The show variant: two seasons of two episodes, dated in the past so they read as aired. */
