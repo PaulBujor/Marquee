@@ -36,6 +36,7 @@ export {
 	getMedia,
 	getAllMedia,
 	searchLocalMedia,
+	searchCustomMedia,
 	getSeasons,
 	getEpisodes,
 	getLinkedMediaRefs,

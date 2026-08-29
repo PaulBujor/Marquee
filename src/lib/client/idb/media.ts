@@ -47,6 +47,9 @@ async function writeMedia(
 		return;
 	}
 	await mediaStore.put({
+		// Carry the backup fields forward: an unrelated write (a tracking snapshot, say) must not
+		// silently drop the edit clock a later push compares against.
+		...(existing ? { pendingPush: existing.pendingPush, editedAt: existing.editedAt } : {}),
 		...scalars,
 		updatedAt: Date.now(),
 		...(opts.pending ? { pendingPush: 1 as const, editedAt: opts.pending.editedAt } : {})
@@ -149,6 +152,21 @@ export async function searchLocalMedia(query: string, limit = 20): Promise<Searc
 		});
 	}
 	return matches.sort((a, b) => a.title.localeCompare(b.title)).slice(0, limit);
+}
+
+/**
+ * The user's own authored entries matching a title substring. Separate from
+ * {@link searchLocalMedia}, which backs the *offline* fallback for provider-backed titles: these
+ * are searchable in every network mode, because nothing upstream has ever heard of them, so this
+ * is the only way to reach one.
+ */
+export async function searchCustomMedia(query: string, limit = 20): Promise<ClientMedia[]> {
+	const q = query.trim().toLowerCase();
+	if (!q) return [];
+	return (await getAllMedia())
+		.filter((m) => m.source === 'custom' && m.title.toLowerCase().includes(q))
+		.sort((a, b) => a.title.localeCompare(b.title))
+		.slice(0, limit);
 }
 
 /** A title's cached seasons — the source for the season selector when rendering offline. */
