@@ -18,5 +18,3 @@ worker-configuration.d.ts
 dev-assets/
 
 # OpenCode agent runtime data.omo/
-# OpenCode agent runtime data
-.omo/
