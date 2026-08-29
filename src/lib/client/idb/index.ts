@@ -32,6 +32,7 @@ export {
 export {
 	putMedia,
 	putMediaBatch,
+	putCustomMedia,
 	getMedia,
 	getAllMedia,
 	searchLocalMedia,
@@ -41,6 +42,8 @@ export {
 	getMediaVersions,
 	getReferencedMediaIds,
 	getUnsyncedMediaIds,
+	getPendingCustomMedia,
+	clearPendingPush,
 	pruneStaleMedia
 } from './media';
 export {
