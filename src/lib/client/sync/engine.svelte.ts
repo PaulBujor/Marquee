@@ -6,6 +6,8 @@ import { runSync, SyncError, toSyncErrorInfo, type SyncErrorInfo } from './sync'
 import { runMediaSync } from './media-sync';
 import { runImageSync } from './image-sync';
 import { isFullMediaCheckDue, nextFullMediaCheckStamp, shouldRunMediaSync } from './media-gate';
+import { SessionExpiredError } from '$lib/client/session';
+import { session } from '$lib/client/session.svelte';
 import { CircuitBreaker, withRetry, type RetryOptions } from '$lib/resilience';
 import { syncLog } from './log.svelte';
 import {
@@ -19,7 +21,7 @@ import {
 import { pruneMediaImages } from '$lib/client/idb/images';
 import { reportClientError } from '$lib/client/report-error';
 
-export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
+export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline' | 'signed-out';
 
 /** Coalesce bursts of trigger/nudge calls into one run this many ms later. */
 const NUDGE_MS = 300;
@@ -32,7 +34,8 @@ const CIRCUIT = { maxFailures: 3, cooldownMs: 60_000 };
 
 /** Retry a `/api/sync` failure only when it's transient — network error, or 5xx/429, not a 4xx. */
 const retriableSync = (err: unknown) =>
-	!(err instanceof SyncError) || err.status >= 500 || err.status === 429;
+	!(err instanceof SyncError) ||
+	(err.status >= 500 || err.status === 429);
 
 /**
  * On a 429 with a `Retry-After`, wait exactly that long instead of exponential backoff — honor the
@@ -140,6 +143,15 @@ class SyncEngine {
 	}
 
 	/**
+	 * Permanently stop syncing and mark the status as signed-out. Called by the root layout when
+	 * `session.expired` flips. Killing the 60s interval is what ends the storm of 401 retries.
+	 */
+	markSignedOut(): void {
+		this.stop();
+		this.status = 'signed-out';
+	}
+
+	/**
 	 * Run one channel through its breaker: `null` when the breaker is open (skipped this cycle),
 	 * the resolved value on success; throws — after in-cycle retries — on failure (tripping it).
 	 */
@@ -154,6 +166,9 @@ class SyncEngine {
 			circuit.recordSuccess();
 			return value;
 		} catch (err) {
+			// An expiry is not a channel fault — rethrow before tripping the breaker so a catch-up sync
+			// right after the user signs back in isn't blocked by a 60s cooldown.
+			if (err instanceof SessionExpiredError) throw err;
 			circuit.recordFailure();
 			throw err;
 		}
@@ -177,6 +192,11 @@ class SyncEngine {
 	}
 
 	async #sync(): Promise<void> {
+		if (session.expired) {
+			this.status = 'signed-out';
+			syncLog.add('cycle', 'signed out — sync paused', 'warn');
+			return;
+		}
 		if (typeof navigator !== 'undefined' && !navigator.onLine) {
 			this.online = false;
 			this.status = 'offline';
@@ -224,6 +244,12 @@ class SyncEngine {
 				pushed = res.pushed;
 				if (pulled > 0) changed = true;
 			} catch (err) {
+				if (err instanceof SessionExpiredError) {
+					session.expire('sync');
+					syncLog.add('events', 'session expired — sync paused', 'warn');
+					this.status = 'signed-out';
+					return;
+				}
 				this.lastError = toSyncErrorInfo(err, this.#events.failures, Date.now());
 				syncLog.add('events', `failed — ${this.lastError.message}`, 'error');
 				// Browser-visible; also forward to the observability sink — client-side
@@ -275,6 +301,12 @@ class SyncEngine {
 					}
 					if (mediaRes.applied > 0 || mediaRes.pushed > 0) changed = true;
 				} catch (err) {
+					if (err instanceof SessionExpiredError) {
+						session.expire('media-sync');
+						syncLog.add('media', 'session expired — sync paused', 'warn');
+						this.status = 'signed-out';
+						return;
+					}
 					this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
 					syncLog.add('media', `failed — ${this.lastError.message}`, 'error');
 					console.error('[sync] media sync failed', this.lastError);
@@ -297,6 +329,11 @@ class SyncEngine {
 				if (res && res.stored > 0) changed = true;
 				syncLog.add('images', `stored ${res?.stored ?? 0} in ${Date.now() - startedAt}ms`);
 			} catch (err) {
+				if (err instanceof SessionExpiredError) {
+					session.expire('image-sync');
+					syncLog.add('images', 'session expired — sync paused', 'warn');
+					return;
+				}
 				syncLog.add('images', `failed — ${String(err)}`, 'warn');
 				console.warn('[sync] image sync failed (will retry later)', err);
 			}

@@ -11,6 +11,7 @@
 	import TabBar from '$lib/components/tab-bar.svelte';
 	import { Toaster } from '$lib/components/ui/sonner';
 	import ErrorReporter from '$lib/components/error-reporter.svelte';
+	import SessionExpiredToast from '$lib/components/session-expired-toast.svelte';
 	import { goto } from '$app/navigation';
 	import { theme } from '$lib/state/theme.svelte.js';
 	import { activeTab } from '$lib/state/tabs';
@@ -21,6 +22,7 @@
 	import { pruneMediaImages } from '$lib/client/idb/images';
 	import { pruneStaleMedia } from '$lib/client/idb/media';
 	import { requestPersistentStorage } from '$lib/client/storage';
+	import { session } from '$lib/client/session.svelte';
 	import { sync } from '$lib/client/sync/engine.svelte.js';
 	import { navigation } from '$lib/state/navigation.svelte.js';
 	import type { LayoutData } from './$types';
@@ -101,14 +103,20 @@
 		return () => sync.stop();
 	});
 
-	// When the account changes (logout or switching users), drop the previous user's cached page
-	// shells so they can't be served offline to the next session on a shared device — the service
-	// worker owns the `pages-*` cache and clears it on this message. Seeded from the initial user so a
-	// normal signed-in boot doesn't wipe the shell it just cached.
+	// When the session expires (detected by a 401 on any sync channel), stop the engine and show
+	// the signed-out status. The toast component handles the sonner. Runs from the layout rather than
+	// from `session.svelte.ts` to avoid the import cycle `session.svelte.ts → engine.svelte.ts → session.svelte.ts`.
+	$effect(() => {
+		if (session.expired) sync.markSignedOut();
+	});
+
+	// When the account changes (logout or switching users), also reset the session-expiry state so a
+	// fresh login doesn't inherit the old expiry. Drop the previous user's cached page shells too.
 	let cachedForUser = untrack(() => data.user?.id ?? null);
 	$effect(() => {
 		const uid = data.user?.id ?? null;
 		if (uid !== cachedForUser) {
+			session.reset();
 			navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PAGES' });
 			library.reset(); // the previous user's titles must not carry into the new session
 			tabs.reset(); // nor their per-destination filters, query and scroll offsets
@@ -270,6 +278,7 @@ movie/show page's immersive layout uncluttered. Navigation itself lives in the b
 <!-- Surfaces reported errors: a toast when something breaks, the full message and stack behind it.
 Mounted here so it covers every route, including the ones that fail before their own UI renders. -->
 <ErrorReporter />
+<SessionExpiredToast />
 <InstallPrompt />
 <NotificationPrompt />
 <PwaUpdatePrompt />

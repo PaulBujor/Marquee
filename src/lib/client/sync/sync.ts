@@ -10,6 +10,7 @@ import {
 	markSynced,
 	setCursor
 } from '$lib/client/idb';
+import { assertAuthed } from '$lib/client/session';
 import { fetchWithTimeout } from '$lib/resilience';
 import { SYNC_MAX_PUSH, type SyncRequest, type SyncResponse } from '$lib/sync/protocol';
 
@@ -111,7 +112,10 @@ export async function runSync(
 			},
 			fetchFn
 		);
-		if (!res.ok) throw new SyncError(res.status, parseRetryAfter(res.headers.get('retry-after')));
+		if (!res.ok) {
+				assertAuthed(res, 'sync');
+				throw new SyncError(res.status, parseRetryAfter(res.headers.get('retry-after')));
+			}
 
 		const data = (await res.json()) as SyncResponse;
 		if (data.applied.length > 0) await markSynced(data.applied);
