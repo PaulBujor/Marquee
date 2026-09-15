@@ -8,7 +8,6 @@
  * this module layers the reactive state on top.
  */
 import { reportClientError } from './report-error';
-import type { SessionExpiredError } from './session';
 
 class SessionState {
 	/** Whether a session expiry has been detected in this page life. */
