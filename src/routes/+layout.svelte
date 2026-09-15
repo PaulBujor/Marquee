@@ -167,9 +167,25 @@
 	const showTabBar = $derived(!!data.user && page.url.pathname !== '/login');
 	// Lift bottom-anchored toasts clear of the bar, tracking its *live* height so the gap stays put
 	// when the bar collapses on scroll. Sonner uses the mobile set below 600px, so both must be given.
+	// At lg+ the bar is a side panel, so --toast-left (set in layout.css) clears it reactively.
 	const toastOffset = $derived(
-		showTabBar ? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)' } : undefined
+		showTabBar
+			? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)', left: 'var(--toast-left)' }
+			: undefined
 	);
+
+	// Sidebar collapse state, persisted across reloads.
+	let sidebarCollapsed = $state(false);
+	$effect(() => {
+		if (typeof localStorage === 'undefined') return;
+		const stored = localStorage.getItem('marquee:sidebar-collapsed');
+		if (stored === 'true') sidebarCollapsed = true;
+	});
+	$effect(() => {
+		if (typeof localStorage === 'undefined') return;
+		localStorage.setItem('marquee:sidebar-collapsed', String(sidebarCollapsed));
+		document.documentElement.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+	});
 </script>
 
 <svelte:head>
@@ -268,11 +284,13 @@ movie/show page's immersive layout uncluttered. Navigation itself lives in the b
 {#if data.user && page.url.pathname === '/'}
 	<AppHeader />
 {/if}
-{@render children()}
+<div class={sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-56'}>
+	{@render children()}
+</div>
 <!-- After the content, so the bar comes last in tab order — matching where it sits on screen. -->
 {#if showTabBar}
 	<ScrollUndoPill />
-	<TabBar />
+	<TabBar bind:sidebarCollapsed />
 {/if}
 <Toaster offset={toastOffset} mobileOffset={toastOffset} />
 <!-- Surfaces reported errors: a toast when something breaks, the full message and stack behind it.

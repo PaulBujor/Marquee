@@ -384,7 +384,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 	<HeaderScrim strong show={!titleInView} />
 	<!-- Inset equally on all three sides that frame the control, matching the app header. -->
 	<div
-		class="relative mx-auto flex w-full max-w-2xl items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
+		class="relative mx-auto flex w-full items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
 	>
 		<!-- Ghost: no plate, so it sits as lightly as possible on the hero artwork. `icon-lg` is 44px —
 		a full touch target even though nothing is drawn around it. -->
@@ -409,7 +409,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 	</div>
 </header>
 
-<main class="mx-auto w-full max-w-2xl">
+<main class="mx-auto w-full">
 	{#if detail.backdropPath}
 		<div class="relative">
 			<MediaImage
@@ -418,7 +418,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				kind="backdrop"
 				size="w780"
 				alt={`${detail.title} backdrop`}
-				class="aspect-video w-full object-cover"
+				class="aspect-video max-h-[300px] w-full object-cover"
 			/>
 			<div
 				class="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent"

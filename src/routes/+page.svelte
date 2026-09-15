@@ -170,6 +170,16 @@
 	}
 
 	// Infinite scroll: PAGE_SIZE at a time; reset to the top on view change, keep position on sync grow.
+	const SWIPE_THRESHOLD = 50;
+	const SWIPE_VERTICAL_ABORT = 20;
+	const TAB_ORDER: LibraryTab[] = ['want_to_watch', 'watching', 'completed', 'favorites'];
+
+	function cycleTab(current: LibraryTab, direction: -1 | 1): LibraryTab {
+		const idx = TAB_ORDER.indexOf(current);
+		const next = (idx + direction + TAB_ORDER.length) % TAB_ORDER.length;
+		return TAB_ORDER[next];
+	}
+
 	const PAGE_SIZE = 30;
 	let visibleCount = $state(PAGE_SIZE);
 	const visible = $derived(list.slice(0, visibleCount));
@@ -228,6 +238,40 @@
 		}, 650);
 	}
 
+	// Swipe gesture state for cycling dashboard tabs.
+	let touchStartX = $state<number | null>(null);
+	let touchMovedVertically = $state(false);
+
+	function onTouchStart(e: TouchEvent) {
+		if (e.touches.length !== 1) return;
+		touchStartX = e.touches[0].clientX;
+		touchMovedVertically = false;
+	}
+
+	function onTouchMove(e: TouchEvent) {
+		if (touchStartX === null || e.touches.length !== 1) return;
+		const dy = Math.abs(e.touches[0].clientY - touchStartX);
+		// Abort swipe detection when the user scrolls vertically.
+		if (dy > SWIPE_VERTICAL_ABORT) {
+			touchMovedVertically = true;
+			touchStartX = null;
+		}
+	}
+
+	function onTouchEnd(e: TouchEvent) {
+		if (touchStartX === null || touchMovedVertically) return;
+		const dx = touchStartX - e.changedTouches[0].clientX;
+		touchStartX = null;
+		if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+		if (dx > 0) {
+			// Swipe left: advance to the next tab.
+			tab = cycleTab(tab, 1);
+		} else {
+			// Swipe right: go to the previous tab.
+			tab = cycleTab(tab, -1);
+		}
+	}
+
 	// Honour the OS "reduce motion" setting: durations collapse to 0 (instant, no jank) when set.
 	// This is the app's first reduced-motion guard, so it also covers the pre-existing card motion.
 	const reduced = $derived(prefersReducedMotion.current);
@@ -241,7 +285,12 @@
 
 {#if data.user}
 	<!-- No top padding: the header owns the gap below itself, so it stays equal to the column inset. -->
-	<main class="mx-auto w-full max-w-3xl px-5 pb-tab-bar">
+	<main
+		class="mx-auto w-full px-5 pb-tab-bar"
+		ontouchstart={onTouchStart}
+		ontouchmove={onTouchMove}
+		ontouchend={onTouchEnd}
+	>
 		<!-- Continue watching — in-progress shows only (movies have no next episode) -->
 		{#if inProgress.length > 0}
 			<!-- Slide the whole section (heading + row) so the rest of the page eases up when the last
@@ -402,7 +451,9 @@
 
 		<!-- Poster grid -->
 		{#if list.length > 0}
-			<div class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5">
+			<div
+				class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7"
+			>
 				<!-- flip reflows survivors; fade eases items in/out on sync add/remove or status change -->
 				{#each visible as item (item.mediaId)}
 					{@const dnf = item.status === 'did_not_finish'}

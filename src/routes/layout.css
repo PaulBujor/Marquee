@@ -29,9 +29,36 @@
 		--tab-bar-space: calc(3.5rem + 1rem);
 	}
 }
+@media (min-width: 64rem) {
+	:root {
+		--tab-bar-space: 0;
+	}
+}
 
 @utility pb-tab-bar {
 	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
+}
+
+/* Sidebar label visibility — collapsed at lg hides the label spans. Labels on the
+   brand header and the collapse toggle itself are always visible. */
+@media (min-width: 64rem) {
+	.sidebar-collapsed .sidebar-label {
+		display: none;
+	}
+}
+
+/* Toast left offset: clears the sidebar on lg+, zero below it. The collapse effect
+   also updates this via the .sidebar-collapsed class toggle on <html>. */
+:root {
+	--toast-left: 0;
+}
+@media (min-width: 64rem) {
+	:root {
+		--toast-left: calc(14rem + 1rem);
+	}
+	.sidebar-collapsed {
+		--toast-left: calc(4rem + 1rem);
+	}
 }
 
 /* The app's frosted-glass material, shared by every surface that floats over scrolling content: the

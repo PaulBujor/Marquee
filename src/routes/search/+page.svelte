@@ -356,7 +356,7 @@ h-10 holds the header at the same height as the other pages'. -->
 	</div>
 </PageHeader>
 
-<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-tab-bar">
+<main class="mx-auto flex w-full flex-col gap-4 px-5 pt-3 pb-tab-bar">
 	{#if loading}
 		<ul class="flex flex-col gap-3">
 			{#each [0, 1, 2, 3] as i (i)}
