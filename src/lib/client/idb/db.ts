@@ -216,7 +216,9 @@ export async function wipeLocalData(): Promise<void> {
 /** Open (once per active user) that user's database, creating stores/indexes on first use. */
 export function openDb(): Promise<MarqueeDatabase> {
 	if (!activeUserId) {
-		throw new Error('openDb: no active user — call setActiveUser() first');
+		return Promise.reject(
+			new Error('openDb: no active user — call setActiveUser() first')
+		);
 	}
 	if (!dbPromise) {
 		dbPromise = openDB<MarqueeDB>(`${DB_NAME}-${activeUserId}`, DB_VERSION, {
