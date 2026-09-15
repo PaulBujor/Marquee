@@ -47,6 +47,20 @@
 	}
 }
 
+/* Toast left offset: clears the sidebar on lg+, zero below it. The collapse effect
+   also updates this via the .sidebar-collapsed class toggle on <html>. */
+:root {
+	--toast-left: 0;
+}
+@media (min-width: 64rem) {
+	:root {
+		--toast-left: calc(14rem + 1rem);
+	}
+	.sidebar-collapsed {
+		--toast-left: calc(4rem + 1rem);
+	}
+}
+
 /* The app's frosted-glass material, shared by every surface that floats over scrolling content: the
  * tab bar, the scroll-undo pill, the search field, and Sonner's toasts. Blur alone is not enough:
  * over a poster or a full-bleed backdrop the artwork reads straight through and the labels lose

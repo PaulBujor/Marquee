@@ -165,7 +165,7 @@ fire a TMDB request on every pass of the cursor. -->
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
-	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity,width] duration-200 motion-reduce:transition-none lg:pointer-events-auto lg:inset-x-auto lg:inset-y-0 lg:left-0 lg:flex lg:flex-col lg:border-r lg:border-border lg:bg-background lg:px-0 lg:pt-[max(1.25rem,env(safe-area-inset-top))] lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] {sidebarCollapsed
+	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none lg:pointer-events-auto lg:inset-x-auto lg:inset-y-0 lg:left-0 lg:flex lg:flex-col lg:overflow-hidden lg:border-r lg:border-border lg:bg-background lg:px-0 lg:pt-[max(1.25rem,env(safe-area-inset-top))] lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] {sidebarCollapsed
 		? 'lg:w-16'
 		: 'lg:w-56'} {keyboard ? 'translate-y-full opacity-0 lg:translate-y-0 lg:opacity-100' : ''}"
 >
