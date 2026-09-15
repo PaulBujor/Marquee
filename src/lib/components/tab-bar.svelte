@@ -237,7 +237,9 @@ fire a TMDB request on every pass of the cursor. -->
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
 			<li class="flex min-w-0 flex-1 sm:flex-none xl:w-full xl:flex-none">
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- a remembered destination
+				carries a query string, which drops resolve()'s branded type; `tabHref` has already
+				validated the value as an own-tab, same-origin path. -->
 				<a
 					href={tabs.href(def.id)}
 					data-sveltekit-noscroll
@@ -271,6 +273,7 @@ fire a TMDB request on every pass of the cursor. -->
 						</span>
 					</span>
 				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</li>
 		{/each}
 	</ul>
