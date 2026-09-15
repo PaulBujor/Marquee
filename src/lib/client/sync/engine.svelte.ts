@@ -32,10 +32,13 @@ const RETRY: RetryOptions = { maxAttempts: 3, baseMs: 2000, maxMs: 60000 };
 /** Trip a channel's breaker after this many consecutive cycle failures, then pause for the cooldown. */
 const CIRCUIT = { maxFailures: 3, cooldownMs: 60_000 };
 
-/** Retry a `/api/sync` failure only when it's transient — network error, or 5xx/429, not a 4xx. */
+/** Retry a `/api/sync` failure only when it's transient — network error, or 5xx/429, not a 4xx.
+ * A SessionExpiredError must never be retried: the session is gone and every retry is a doomed 401. */
 const retriableSync = (err: unknown) =>
-	!(err instanceof SyncError) ||
-	(err.status >= 500 || err.status === 429);
+	err instanceof SessionExpiredError
+		? false
+		: !(err instanceof SyncError) ||
+			(err.status >= 500 || err.status === 429);
 
 /**
  * On a 429 with a `Retry-After`, wait exactly that long instead of exponential backoff — honor the
@@ -300,25 +303,25 @@ class SyncEngine {
 						void setLastFullMediaCheck(nextCheck);
 					}
 					if (mediaRes.applied > 0 || mediaRes.pushed > 0) changed = true;
-				} catch (err) {
-					if (err instanceof SessionExpiredError) {
-						session.expire('media-sync');
-						syncLog.add('media', 'session expired — sync paused', 'warn');
-						this.status = 'signed-out';
-						return;
-					}
-					this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
-					syncLog.add('media', `failed — ${this.lastError.message}`, 'error');
-					console.error('[sync] media sync failed', this.lastError);
-					reportClientError({
-						message: this.lastError.message,
-						status: this.lastError.status,
-						source: 'media-sync',
-						at: this.lastError.at
-					});
-					this.status = 'error';
+} catch (err) {
+				if (err instanceof SessionExpiredError) {
+					session.expire('media-sync');
+					syncLog.add('media', 'session expired — sync paused', 'warn');
+					this.status = 'signed-out';
 					return;
 				}
+				this.lastError = toSyncErrorInfo(err, this.#media.failures, Date.now());
+				syncLog.add('media', `failed — ${this.lastError.message}`, 'error');
+				console.error('[sync] media sync failed', this.lastError);
+				reportClientError({
+					message: this.lastError.message,
+					status: this.lastError.status,
+					source: 'media-sync',
+					at: this.lastError.at
+				});
+				this.status = 'error';
+				return;
+			}
 			}
 
 			// Image channel — best-effort (blobs for already-known media); never flips the status.

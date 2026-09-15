@@ -113,9 +113,9 @@ export async function runSync(
 			fetchFn
 		);
 		if (!res.ok) {
-				assertAuthed(res, 'sync');
-				throw new SyncError(res.status, parseRetryAfter(res.headers.get('retry-after')));
-			}
+			assertAuthed(res, 'sync');
+			throw new SyncError(res.status, parseRetryAfter(res.headers.get('retry-after')));
+		}
 
 		const data = (await res.json()) as SyncResponse;
 		if (data.applied.length > 0) await markSynced(data.applied);

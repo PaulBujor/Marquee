@@ -1,6 +1,6 @@
 /**
  * Client half of the media reference channel. Two cadences: **light** (every cycle, only ids with
- * no local copy ÔÇö empty in steady state) and **Full** (every referenced id's version, slower).
+ * no local copy — empty in steady state) and **Full** (every referenced id's version, slower).
  * Also pushes user-authored custom media. Runs after event sync.
  */
 import {
@@ -12,8 +12,8 @@ import {
 	getUnsyncedMediaIds,
 	putMedia
 } from '$lib/client/idb';
-import { reportClientError } from '$lib/client/report-error';
 import { isAuthFailure, SessionExpiredError } from '$lib/client/session';
+import { reportClientError } from '$lib/client/report-error';
 import { fetchWithTimeout } from '$lib/resilience';
 import {
 	customMediaPushSchema,
@@ -77,7 +77,7 @@ export async function runMediaSync(
 	const queue = targetIds.length > 0 ? chunk(targetIds, MEDIA_SYNC_MAX) : [[]];
 	let applied = 0;
 	let pushed = 0;
-	// Rides the first request only ÔÇö the push is a fixed set, not something to repeat per chunk.
+	// Rides the first request only — the push is a fixed set, not something to repeat per chunk.
 	let toPush: ValidatedCustomMedia[] = pendingCustom;
 
 	for (let i = 0; i < MAX_DRAIN_ITERATIONS && queue.length > 0; i++) {
