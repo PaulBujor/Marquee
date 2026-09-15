@@ -5,7 +5,8 @@
  */
 import { getAllMedia } from '$lib/client/idb';
 import { getMediaImages, putMediaImages, type MediaImageBlobs } from '$lib/client/idb/images';
-import { BACKDROP_SIZE, POSTER_SIZE, proxiedImageUrl } from '$lib/media';
+import { isAuthFailure, SessionExpiredError } from '$lib/client/session';
+import { proxiedImageUrl, BACKDROP_SIZE, POSTER_SIZE } from '$lib/media';
 import { fetchWithTimeout } from '$lib/resilience';
 
 /** Wall-clock budget per image. Best-effort channel, so a stall just skips that image this cycle. */
@@ -18,12 +19,14 @@ async function fetchBlob(fetchFn: typeof fetch, url: string): Promise<Blob | nul
 	try {
 		const res = await fetchWithTimeout(url, { timeoutMs: IMAGE_TIMEOUT_MS }, fetchFn);
 		if (!res.ok) {
+			if (isAuthFailure(res.status)) throw new SessionExpiredError('image-sync');
 			console.warn(`image sync: fetch ${res.status} for ${url}`);
 			return null;
 		}
 		const blob = await res.blob();
 		return blob.size > 0 ? blob : null;
-	} catch {
+	} catch (err) {
+		if (err instanceof SessionExpiredError) throw err;
 		// A network throw here is usually just offline — expected for a best-effort channel, stay quiet.
 		return null;
 	}
