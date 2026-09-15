@@ -170,6 +170,19 @@
 	const toastOffset = $derived(
 		showTabBar ? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)' } : undefined
 	);
+
+	// Sidebar collapse state, persisted across reloads.
+	let sidebarCollapsed = $state(false);
+	$effect(() => {
+		if (typeof localStorage === 'undefined') return;
+		const stored = localStorage.getItem('marquee:sidebar-collapsed');
+		if (stored === 'true') sidebarCollapsed = true;
+	});
+	$effect(() => {
+		if (typeof localStorage === 'undefined') return;
+		localStorage.setItem('marquee:sidebar-collapsed', String(sidebarCollapsed));
+		document.documentElement.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+	});
 </script>
 
 <svelte:head>
@@ -268,13 +281,13 @@ movie/show page's immersive layout uncluttered. Navigation itself lives in the b
 {#if data.user && page.url.pathname === '/'}
 	<AppHeader />
 {/if}
-<div class="content-with-sidebar">
+<div class={sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-56'}>
 	{@render children()}
 </div>
 <!-- After the content, so the bar comes last in tab order — matching where it sits on screen. -->
 {#if showTabBar}
 	<ScrollUndoPill />
-	<TabBar />
+	<TabBar bind:sidebarCollapsed />
 {/if}
 <Toaster offset={toastOffset} mobileOffset={toastOffset} />
 <!-- Surfaces reported errors: a toast when something breaks, the full message and stack behind it.

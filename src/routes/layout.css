@@ -23,7 +23,6 @@
 :root {
 	--tab-bar-space: calc(4.875rem + max(0.75rem, env(safe-area-inset-bottom)));
 	--tab-bar-live: var(--tab-bar-space);
-	--side-panel-width: 14rem;
 }
 @media (min-width: 40rem) {
 	:root {
@@ -40,14 +39,11 @@
 	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
 }
 
-/* Padding the page content needs to clear the side panel. Applied unconditionally but only
-   takes effect at lg+ via the media query, so no per-page responsive class needed. */
-.content-with-sidebar {
-	padding-left: 0;
-}
+/* Sidebar label visibility — collapsed at lg hides the label spans. Labels on the
+   brand header and the collapse toggle itself are always visible. */
 @media (min-width: 64rem) {
-	.content-with-sidebar {
-		padding-left: var(--side-panel-width);
+	.sidebar-collapsed .sidebar-label {
+		display: none;
 	}
 }
 

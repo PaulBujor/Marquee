@@ -35,6 +35,9 @@
 		search: SearchIcon
 	};
 
+	// Collapse state: bindable so the layout drives it and persists to localStorage.
+	let { sidebarCollapsed = $bindable(false) }: { sidebarCollapsed?: boolean } = $props();
+
 	// A title page belongs to no tab, so it keeps the tab it was opened from lit — the detail view is
 	// a push within that tab's stack, and a title is reachable from the dashboard, search and upcoming
 	// alike. `current` (null there) drives what a tap *does*; `selected` only drives what looks active.
@@ -162,14 +165,33 @@ fire a TMDB request on every pass of the cursor. -->
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
-	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none lg:pointer-events-auto lg:inset-x-auto lg:inset-y-0 lg:left-0 lg:flex lg:w-[--side-panel-width] lg:flex-col lg:border-r lg:border-border lg:bg-background lg:px-0 lg:pt-[max(1.25rem,env(safe-area-inset-top))] lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] {keyboard
-		? 'translate-y-full opacity-0 lg:translate-y-0 lg:opacity-100'
-		: ''}"
+	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity,width] duration-200 motion-reduce:transition-none lg:pointer-events-auto lg:inset-x-auto lg:inset-y-0 lg:left-0 lg:flex lg:flex-col lg:border-r lg:border-border lg:bg-background lg:px-0 lg:pt-[max(1.25rem,env(safe-area-inset-top))] lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] {sidebarCollapsed
+		? 'lg:w-16'
+		: 'lg:w-56'} {keyboard ? 'translate-y-full opacity-0 lg:translate-y-0 lg:opacity-100' : ''}"
 >
 	<ul
 		bind:this={card}
 		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5 lg:mx-0 lg:w-auto lg:max-w-none lg:flex-1 lg:flex-col lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-3 lg:shadow-none"
 	>
+		<!-- Brand header: Marquee wordmark, only on the side panel (lg+). -->
+		<li
+			class="hidden lg:mb-1 lg:flex lg:items-center lg:gap-2 lg:border-b lg:border-border lg:px-3 lg:pb-3"
+			class:lg:justify-center={sidebarCollapsed}
+		>
+			<img
+				src="/icons/favicon-48.png"
+				alt=""
+				aria-hidden="true"
+				class="size-6 shrink-0 dark:hidden"
+			/>
+			<img
+				src="/icons/favicon-48-dark.png"
+				alt=""
+				aria-hidden="true"
+				class="hidden size-6 shrink-0 dark:block"
+			/>
+			<span class="sidebar-label font-serif text-lg leading-none font-semibold">Marquee</span>
+		</li>
 		{#each topTabs as def (def.id)}
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
@@ -217,7 +239,7 @@ fire a TMDB request on every pass of the cursor. -->
 						above clips the descenders off "Upcoming" and "Settings". Unitless, so it holds at the
 						larger `sm:` size too. -->
 						<span
-							class="overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
+							class="sidebar-label overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
 								? 'font-semibold'
 								: ''}"
 						>
@@ -262,7 +284,7 @@ fire a TMDB request on every pass of the cursor. -->
 							: 'grid-rows-[1fr] opacity-100'}"
 					>
 						<span
-							class="overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
+							class="sidebar-label overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
 								? 'font-semibold'
 								: ''}"
 						>
@@ -273,5 +295,30 @@ fire a TMDB request on every pass of the cursor. -->
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</li>
 		{/each}
+		<!-- Collapse toggle: only on the side panel (lg+). Chevrons point left when expanded,
+		right when collapsed. -->
+		<li
+			class="hidden lg:mt-1 lg:flex lg:items-center lg:justify-center lg:border-t lg:border-border lg:pt-2"
+		>
+			<button
+				type="button"
+				onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
+				aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+				class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="size-4 transition-transform duration-200 {sidebarCollapsed ? 'rotate-180' : ''}"
+				>
+					<path d="m15 18-6-6 6-6" />
+				</svg>
+			</button>
+		</li>
 	</ul>
 </nav>
