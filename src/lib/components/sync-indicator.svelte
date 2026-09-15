@@ -9,10 +9,6 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
-	// Sync status light. Dashboard-cluster-light model: nothing is *drawn* on the happy path
-	// (online + idle). It only lights up for an exception worth knowing about — offline, a session
-	// expiry, an in-flight sync, or a failure. Offline takes priority (being offline means you can't
-	// sign in either); then signed-out; then a hard error; then a transient in-flight sync.
 	const indicator = $derived.by(() => {
 		if (!sync.online)
 			return {
@@ -51,9 +47,8 @@
 	let logOpen = $state(false);
 </script>
 
-<!-- Always rendered, empty when idle: the hidden double-tap has to work in every sync state.
-`touch-manipulation` keeps it from zooming the page. In the signed-out state, the double-tap sync-log
-gesture is dropped to avoid a collision: a double-tap would both navigate and open the log behind it. -->
+<!-- Always rendered, empty when idle: the hidden double-tap has to work in every sync state. Dropped
+when signed out — a single tap navigates, and the collision would swallow the gesture. -->
 <Tooltip.Provider delayDuration={200}>
 	<Tooltip.Root>
 		<Tooltip.Trigger
