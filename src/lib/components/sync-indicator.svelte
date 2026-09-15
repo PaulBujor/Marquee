@@ -24,7 +24,8 @@
 		if (sync.status === 'signed-out')
 			return {
 				icon: LogOutIcon,
-				label: "You're signed out — your changes are saved on this device and will sync when you sign in again.",
+				label:
+					"You're signed out — your changes are saved on this device and will sync when you sign in again.",
 				tone: 'text-destructive',
 				spin: false
 			};
