@@ -41,6 +41,10 @@
 	const current = $derived(activeTab(page.url.pathname));
 	const selected = $derived(current ?? tabs.owner);
 
+	// Split tabs into top group (dashboard, timeline, search) and settings (pinned at bottom on xl).
+	const topTabs = $derived(TABS.filter((t) => t.id !== 'settings'));
+	const bottomTabs = $derived(TABS.filter((t) => t.id === 'settings'));
+
 	let compact = $state(false);
 	let phase: ScrollPhase = initialScrollPhase;
 
@@ -158,8 +162,8 @@ fire a TMDB request on every pass of the cursor. -->
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
-	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none {keyboard
-		? 'translate-y-full opacity-0'
+	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none xl:inset-x-auto xl:inset-y-0 xl:left-0 xl:w-[--side-panel-width] xl:px-0 xl:pt-[max(1.25rem,env(safe-area-inset-top))] xl:pb-0 {keyboard
+		? 'translate-y-full opacity-0 xl:translate-y-0 xl:opacity-100'
 		: ''}"
 >
 	<!-- `glass` is the shared frosted material (see layout.css) — it carries the tint, blur and the
@@ -167,12 +171,12 @@ fire a TMDB request on every pass of the cursor. -->
 	scroll-undo pill so the two read as one surface. -->
 	<ul
 		bind:this={card}
-		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5"
+		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5 xl:mx-0 xl:h-full xl:w-full xl:max-w-none xl:flex-col xl:items-stretch xl:gap-0 xl:rounded-none xl:border-x-0 xl:border-t-0 xl:p-3 xl:shadow-none"
 	>
-		{#each TABS as def (def.id)}
+		{#each topTabs as def (def.id)}
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
-			<li class="flex min-w-0 flex-1 sm:flex-none">
+			<li class="flex min-w-0 flex-1 sm:flex-none xl:w-full xl:flex-none">
 				<!-- eslint-disable svelte/no-navigation-without-resolve -- a remembered destination
 				carries a query string, which drops resolve()'s branded type; `tabHref` has already
 				validated the value as an own-tab, same-origin path. -->
@@ -184,19 +188,17 @@ fire a TMDB request on every pass of the cursor. -->
 					data-sveltekit-noscroll
 					aria-current={current === def.id ? 'page' : undefined}
 					onclick={(event) => onTabClick(event, def)}
-					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 {compact
-						? 'gap-0'
-						: 'gap-1'} {isSelected
+					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 xl:justify-start xl:gap-2! xl:rounded-lg xl:px-3 xl:py-2.5 {isSelected
 						? 'text-primary sm:bg-primary/10'
 						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
 				>
 					<span
-						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto"
+						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto xl:h-auto xl:w-auto"
 					>
 						<!-- Active indicator: the tint alone can't carry the state at this size, and Lucide
 						has no filled variants to switch to. -->
 						<span
-							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden {isSelected
+							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden xl:hidden {isSelected
 								? 'opacity-100'
 								: 'opacity-0'}"
 						></span>
@@ -210,7 +212,7 @@ fire a TMDB request on every pass of the cursor. -->
 					past itself under border-box, and the few pixels left behind push the icon off centre.
 					Kept out of the `hidden` family so the label stays in the accessibility tree. -->
 					<span
-						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! {compact
+						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! xl:grid-rows-[1fr]! xl:opacity-100! {compact
 							? 'grid-rows-[0fr] opacity-0'
 							: 'grid-rows-[1fr] opacity-100'}"
 					>
@@ -227,6 +229,47 @@ fire a TMDB request on every pass of the cursor. -->
 					</span>
 				</a>
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			</li>
+		{/each}
+		<!-- Spacer: pushes settings to the bottom on the side panel at xl. -->
+		<li class="hidden xl:block xl:flex-1" aria-hidden="true"></li>
+		{#each bottomTabs as def (def.id)}
+			{@const Icon = ICONS[def.id]}
+			{@const isSelected = selected === def.id}
+			<li class="flex min-w-0 flex-1 sm:flex-none xl:w-full xl:flex-none">
+				<a
+					href={tabs.href(def.id)}
+					data-sveltekit-noscroll
+					aria-current={current === def.id ? 'page' : undefined}
+					onclick={(event) => onTabClick(event, def)}
+					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 xl:justify-start xl:gap-2! xl:rounded-lg xl:px-3 xl:py-2.5 {isSelected
+						? 'text-primary sm:bg-primary/10'
+						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
+				>
+					<span
+						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto xl:h-auto xl:w-auto"
+					>
+						<span
+							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden xl:hidden {isSelected
+								? 'opacity-100'
+								: 'opacity-0'}"
+						></span>
+						<Icon class="relative size-5" />
+					</span>
+					<span
+						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! xl:grid-rows-[1fr]! xl:opacity-100! {compact
+							? 'grid-rows-[0fr] opacity-0'
+							: 'grid-rows-[1fr] opacity-100'}"
+					>
+						<span
+							class="overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
+								? 'font-semibold'
+								: ''}"
+						>
+							{def.label}
+						</span>
+					</span>
+				</a>
 			</li>
 		{/each}
 	</ul>

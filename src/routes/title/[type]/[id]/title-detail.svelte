@@ -418,7 +418,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				kind="backdrop"
 				size="w780"
 				alt={`${detail.title} backdrop`}
-				class="aspect-video w-full object-cover"
+				class="aspect-video max-h-[300px] w-full object-cover"
 			/>
 			<div
 				class="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent"

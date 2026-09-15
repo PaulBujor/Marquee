@@ -6,7 +6,7 @@
 </script>
 
 <main class="mx-auto w-full max-w-2xl" aria-busy="true" aria-label="Loading title">
-	<Skeleton class="aspect-video w-full rounded-none" />
+	<Skeleton class="aspect-video max-h-[300px] w-full rounded-none" />
 	<div class="-mt-14 flex flex-col gap-4 px-5 pb-10">
 		<div class="flex items-end gap-4">
 			<Skeleton class="aspect-[2/3] w-24 shrink-0 rounded-md ring-4 ring-background" />

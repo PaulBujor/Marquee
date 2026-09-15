@@ -23,15 +23,30 @@
 :root {
 	--tab-bar-space: calc(4.875rem + max(0.75rem, env(safe-area-inset-bottom)));
 	--tab-bar-live: var(--tab-bar-space);
+	--side-panel-width: 14rem;
 }
 @media (min-width: 40rem) {
 	:root {
 		--tab-bar-space: calc(3.5rem + 1rem);
 	}
 }
+@media (min-width: 80rem) {
+	:root {
+		--tab-bar-space: 0;
+	}
+}
 
 @utility pb-tab-bar {
 	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
+}
+
+@utility pl-side-panel {
+	padding-left: 0;
+}
+@media (min-width: 80rem) {
+	.pl-side-panel {
+		padding-left: var(--side-panel-width);
+	}
 }
 
 /* The app's frosted-glass material, shared by every surface that floats over scrolling content: the

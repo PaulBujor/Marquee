@@ -268,7 +268,9 @@ movie/show page's immersive layout uncluttered. Navigation itself lives in the b
 {#if data.user && page.url.pathname === '/'}
 	<AppHeader />
 {/if}
-{@render children()}
+<div class="xl:pl-[--side-panel-width]">
+	{@render children()}
+</div>
 <!-- After the content, so the bar comes last in tab order — matching where it sits on screen. -->
 {#if showTabBar}
 	<ScrollUndoPill />
