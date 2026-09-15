@@ -30,7 +30,7 @@
 		--tab-bar-space: calc(3.5rem + 1rem);
 	}
 }
-@media (min-width: 80rem) {
+@media (min-width: 64rem) {
 	:root {
 		--tab-bar-space: 0;
 	}
@@ -40,11 +40,13 @@
 	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
 }
 
-@utility pl-side-panel {
+/* Padding the page content needs to clear the side panel. Applied unconditionally but only
+   takes effect at lg+ via the media query, so no per-page responsive class needed. */
+.content-with-sidebar {
 	padding-left: 0;
 }
-@media (min-width: 80rem) {
-	.pl-side-panel {
+@media (min-width: 64rem) {
+	.content-with-sidebar {
 		padding-left: var(--side-panel-width);
 	}
 }

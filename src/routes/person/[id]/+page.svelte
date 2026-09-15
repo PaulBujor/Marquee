@@ -160,7 +160,7 @@
 	</div>
 </PageHeader>
 
-<main class="mx-auto flex w-full max-w-2xl flex-col gap-5 px-5 pt-3 pb-tab-bar">
+<main class="mx-auto flex w-full flex-col gap-5 px-5 pt-3 pb-tab-bar">
 	{#if !data.reachable}
 		<OfflineState message="Cast and crew details need a connection." />
 	{:else if person}

@@ -25,7 +25,9 @@ same height as the ones that do carry a 40px control, so the sticky offsets stay
 	</div>
 </PageHeader>
 
-<main class="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pt-3 pb-tab-bar">
+<main
+	class="mx-auto grid w-full grid-cols-1 gap-4 px-5 pt-3 pb-tab-bar md:grid-cols-2 lg:grid-cols-3"
+>
 	<AccountCard user={data.user} codeTtlMinutes={data.codeTtlMinutes} {form} />
 	<AppearanceCard />
 	<NotificationsCard />

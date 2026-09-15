@@ -286,7 +286,7 @@
 {#if data.user}
 	<!-- No top padding: the header owns the gap below itself, so it stays equal to the column inset. -->
 	<main
-		class="mx-auto w-full max-w-3xl px-5 pb-tab-bar xl:max-w-none"
+		class="mx-auto w-full px-5 pb-tab-bar"
 		ontouchstart={onTouchStart}
 		ontouchmove={onTouchMove}
 		ontouchend={onTouchEnd}

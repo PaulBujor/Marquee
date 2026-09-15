@@ -5,7 +5,7 @@
 	// + title, meta row, action row, a few detail lines) so the page doesn't jump when content lands.
 </script>
 
-<main class="mx-auto w-full max-w-2xl" aria-busy="true" aria-label="Loading title">
+<main class="mx-auto w-full" aria-busy="true" aria-label="Loading title">
 	<Skeleton class="aspect-video max-h-[300px] w-full rounded-none" />
 	<div class="-mt-14 flex flex-col gap-4 px-5 pb-10">
 		<div class="flex items-end gap-4">

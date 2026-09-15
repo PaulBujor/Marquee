@@ -48,7 +48,7 @@
 	</div>
 </PageHeader>
 
-<main class="mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 pt-3 pb-tab-bar">
+<main class="mx-auto flex w-full flex-col gap-6 px-5 pt-3 pb-tab-bar">
 	{#if !data.user}
 		<div class="flex flex-col items-start gap-4 py-16">
 			<p class="text-muted-foreground">Sign in to see your upcoming releases.</p>
