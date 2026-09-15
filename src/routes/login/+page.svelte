@@ -9,6 +9,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as InputOTP from '$lib/components/ui/input-otp';
 	import { clearPendingLogout } from '$lib/client/logout';
+	import { session } from '$lib/client/session.svelte';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -71,8 +72,9 @@
 		return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
 			// A correct code redirects home — replace /login in history so Back doesn't land here.
 			if (result.type === 'redirect') {
-				// A fresh sign-in supersedes any logout that was queued offline — drop it so the new
-				// session isn't torn down on the next reconnect/boot.
+				// A fresh sign-in supersedes any expired-session state — reset so the next expiry
+				// can be detected, and drop any logout that was queued offline.
+				session.reset();
 				clearPendingLogout();
 				// eslint-disable-next-line svelte/no-navigation-without-resolve
 				await goto(result.location, { replaceState: true, invalidateAll: true });

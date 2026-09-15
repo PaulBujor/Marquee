@@ -12,6 +12,7 @@ import {
 	getUnsyncedMediaIds,
 	putMedia
 } from '$lib/client/idb';
+import { isAuthFailure, SessionExpiredError } from '$lib/client/session';
 import { reportClientError } from '$lib/client/report-error';
 import { fetchWithTimeout } from '$lib/resilience';
 import {
@@ -102,7 +103,10 @@ export async function runMediaSync(
 			},
 			fetchFn
 		);
-		if (!res.ok) throw new Error(`media sync failed: HTTP ${res.status}`);
+		if (!res.ok) {
+			if (isAuthFailure(res.status)) throw new SessionExpiredError('media-sync');
+			throw new Error(`media sync failed: HTTP ${res.status}`);
+		}
 
 		const data = (await res.json()) as MediaSyncResponse;
 		// Clear backup markers before applying: `putMedia` refuses to overwrite a row still marked pending.
