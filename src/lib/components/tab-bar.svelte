@@ -237,6 +237,7 @@ fire a TMDB request on every pass of the cursor. -->
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
 			<li class="flex min-w-0 flex-1 sm:flex-none xl:w-full xl:flex-none">
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 				<a
 					href={tabs.href(def.id)}
 					data-sveltekit-noscroll
