@@ -39,11 +39,6 @@
 	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
 }
 
-/* Shared content-width constraint for text-heavy pages: centers content and caps at ~896px for readability. */
-@utility content-width {
-	@apply mx-auto w-full max-w-4xl;
-}
-
 /* Toast top offset: clears the app header on home page and general top-of-page area. */
 :root {
 	--toast-top: auto;

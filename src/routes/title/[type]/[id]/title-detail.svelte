@@ -427,7 +427,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 	{/if}
 
 	<div
-		class="content-width flex flex-col gap-4 px-5 pb-tab-bar {detail.backdropPath
+		class="flex flex-col gap-4 px-5 pb-tab-bar {detail.backdropPath
 			? '-mt-14'
 			: 'pt-[calc(4.75rem+env(safe-area-inset-top))]'}"
 	>

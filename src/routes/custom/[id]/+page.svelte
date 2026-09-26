@@ -202,7 +202,7 @@
 	</div>
 </PageHeader>
 
-<main class="content-width mx-auto flex w-full flex-col gap-5 px-5 pt-3 pb-tab-bar">
+<main class="mx-auto flex w-full flex-col gap-5 px-5 pt-3 pb-tab-bar">
 	{#if !entry}
 		<EmptyState
 			icon={FileQuestionIcon}
