@@ -186,19 +186,6 @@
 			? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)', left: 'var(--toast-left)' }
 			: undefined
 	);
-
-	// Sidebar collapse state, persisted across reloads.
-	let sidebarCollapsed = $state(false);
-	$effect(() => {
-		if (typeof localStorage === 'undefined') return;
-		const stored = localStorage.getItem('marquee:sidebar-collapsed');
-		if (stored === 'true') sidebarCollapsed = true;
-	});
-	$effect(() => {
-		if (typeof localStorage === 'undefined') return;
-		localStorage.setItem('marquee:sidebar-collapsed', String(sidebarCollapsed));
-		document.documentElement.classList.toggle('sidebar-collapsed', sidebarCollapsed);
-	});
 </script>
 
 <svelte:head>
@@ -292,18 +279,14 @@
 		href="/splash/ipadair-landscape-dark.png"
 	/>
 </svelte:head>
-{#if data.user && page.url.pathname === '/' && !sidebarCollapsed && page.url.search === ''}
-	<div class="md:hidden">
-		<AppHeader />
-	</div>
+{#if data.user && page.url.pathname === '/'}
+	<AppHeader />
 {/if}
-<div class={sidebarCollapsed ? 'md:ml-16' : 'md:ml-56'}>
-	{@render children()}
-</div>
+{@render children()}
 <!-- After the content, so the bar comes last in tab order — matching where it sits on screen. -->
 {#if showTabBar}
 	<ScrollUndoPill />
-	<TabBar bind:sidebarCollapsed />
+	<TabBar />
 {/if}
 <Toaster position={toastPosition} offset={toastOffset} mobileOffset={toastOffset} />
 <!-- Surfaces reported errors: a toast when something breaks, the full message and stack behind it.

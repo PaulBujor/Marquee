@@ -35,18 +35,13 @@
 		search: SearchIcon
 	};
 
-	// Collapse state: bindable so the layout drives it and persists to localStorage.
-	let { sidebarCollapsed = $bindable(false) }: { sidebarCollapsed?: boolean } = $props();
-
 	// A title page belongs to no tab, so it keeps the tab it was opened from lit — the detail view is
 	// a push within that tab's stack, and a title is reachable from the dashboard, search and upcoming
 	// alike. `current` (null there) drives what a tap *does*; `selected` only drives what looks active.
 	const current = $derived(activeTab(page.url.pathname));
 	const selected = $derived(current ?? tabs.owner);
 
-	// Split tabs into top group (dashboard, timeline, search) and settings (pinned at bottom on xl).
-	const topTabs = $derived(TABS.filter((t) => t.id !== 'settings'));
-	const bottomTabs = $derived(TABS.filter((t) => t.id === 'settings'));
+	const navTabs = $derived(TABS);
 
 	let compact = $state(false);
 	let phase: ScrollPhase = initialScrollPhase;
@@ -158,90 +153,47 @@
 	}
 </script>
 
-<!-- The wrapper is click-through (`pointer-events-none`) so the gap either side of the card doesn't
-swallow taps on the content behind it; the card itself takes pointer events back. `preload-data`
-narrows the body-level "hover" default to "tap": hovering Search would otherwise re-run its load and
-fire a TMDB request on every pass of the cursor. -->
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
-	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none md:pointer-events-auto md:inset-x-auto md:inset-y-0 md:left-0 md:flex md:flex-col md:border-r md:border-border/50 md:bg-background/95 md:px-0 {sidebarCollapsed
-		? 'md:w-16'
-		: 'md:w-56'} {keyboard ? 'translate-y-full opacity-0 md:translate-y-0 md:opacity-100' : ''}"
+	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none {keyboard
+		? 'translate-y-full opacity-0'
+		: ''}"
 >
 	<ul
 		bind:this={card}
-		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5 md:mx-0 md:w-auto md:max-w-none md:flex-1 md:flex-col md:items-stretch md:gap-0 md:rounded-none md:border-0 md:bg-transparent md:px-3 md:shadow-none"
+		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5"
 	>
-		<li class="hidden md:mb-1 md:flex md:items-center md:gap-2 md:px-3 md:pb-3">
-			<img
-				src="/icons/favicon-48.png"
-				alt=""
-				aria-hidden="true"
-				class="size-6 shrink-0 dark:hidden"
-			/>
-			<img
-				src="/icons/favicon-48-dark.png"
-				alt=""
-				aria-hidden="true"
-				class="hidden size-6 shrink-0 dark:block"
-			/>
-			<span class="sidebar-label font-serif text-lg leading-none font-semibold">Marquee</span>
-		</li>
-		{#each topTabs as def (def.id)}
+		{#each navTabs as def (def.id)}
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
-			<li class="flex min-w-0 flex-1 sm:flex-none md:w-full md:flex-none">
-				<!-- eslint-disable svelte/no-navigation-without-resolve -- a remembered destination
-				carries a query string, which drops resolve()'s branded type; `tabHref` has already
-				validated the value as an own-tab, same-origin path. -->
-				<!-- `aria-current` follows the route we're actually on, not the tinted tab: on a title
-				page the owning tab stays lit, but claiming it is the current page would be a lie to a
-				screen reader. -->
+			<li class="flex min-w-0 flex-1 sm:flex-none">
 				<a
 					href={tabs.href(def.id)}
 					data-sveltekit-noscroll
 					aria-current={current === def.id ? 'page' : undefined}
 					onclick={(event) => onTabClick(event, def)}
-					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 md:justify-{sidebarCollapsed
-						? 'center'
-						: 'between'} md:gap-2! md:rounded-lg md:px-3 md:py-2.5 {sidebarCollapsed
-						? 'md:py-4'
-						: ''} {isSelected
+					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 {isSelected
 						? 'text-primary sm:bg-primary/10'
 						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
 				>
 					<span
-						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto md:h-auto md:w-auto"
+						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto"
 					>
-						<!-- Active indicator: the tint alone can't carry the state at this size, and Lucide
-						has no filled variants to switch to. -->
 						<span
-							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden md:hidden {isSelected
+							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden {isSelected
 								? 'opacity-100'
 								: 'opacity-0'}"
 						></span>
 						<Icon class="relative size-5" />
 					</span>
-					<!-- Collapsing wrapper: animating grid-template-rows 1fr→0fr is the one way to ease to
-					an intrinsic height. `overflow-hidden` on the inner span is what lets the row actually
-					reach zero (a grid item's automatic minimum size only collapses when its overflow isn't
-					visible), and `min-h-0` does the same for the wrapper as a flex child. The gap above the
-					label lives on the anchor, not here — padding inside the collapsing box can't shrink
-					past itself under border-box, and the few pixels left behind push the icon off centre.
-					Kept out of the `hidden` family so the label stays in the accessibility tree. -->
 					<span
-						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! md:grid-rows-[{sidebarCollapsed
-							? '0fr'
-							: '1fr'}]! md:opacity-{sidebarCollapsed ? '0' : '100'}! {compact
+						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! {compact
 							? 'grid-rows-[0fr] opacity-0'
 							: 'grid-rows-[1fr] opacity-100'}"
 					>
-						<!-- `leading-none` would put the line box exactly at the font size, so `overflow-hidden`
-						above clips the descenders off "Upcoming" and "Settings". Unitless, so it holds at the
-						larger `sm:` size too. -->
 						<span
-							class="sidebar-label overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
+							class="overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
 								? 'font-semibold'
 								: ''}"
 						>
@@ -249,89 +201,7 @@ fire a TMDB request on every pass of the cursor. -->
 						</span>
 					</span>
 				</a>
-				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</li>
 		{/each}
-		<!-- Spacer: pushes settings to the bottom on the side panel at xl. -->
-		<li class="hidden md:block md:flex-1" aria-hidden="true"></li>
-		{#each bottomTabs as def (def.id)}
-			{@const Icon = ICONS[def.id]}
-			{@const isSelected = selected === def.id}
-			<li class="flex min-w-0 flex-1 sm:flex-none md:w-full md:flex-none">
-				<!-- eslint-disable svelte/no-navigation-without-resolve -- a remembered destination
-				carries a query string, which drops resolve()'s branded type; `tabHref` has already
-				validated the value as an own-tab, same-origin path. -->
-				<a
-					href={tabs.href(def.id)}
-					data-sveltekit-noscroll
-					aria-current={current === def.id ? 'page' : undefined}
-					onclick={(event) => onTabClick(event, def)}
-					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 md:justify-{sidebarCollapsed
-						? 'center'
-						: 'between'} md:gap-2! md:rounded-lg md:px-3 md:py-2.5 {sidebarCollapsed
-						? 'md:py-4'
-						: ''} {isSelected
-						? 'text-primary sm:bg-primary/10'
-						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
-				>
-					<span
-						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto md:h-auto md:w-auto"
-					>
-						<span
-							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden md:hidden {isSelected
-								? 'opacity-100'
-								: 'opacity-0'}"
-						></span>
-						<Icon class="relative size-5" />
-					</span>
-					<span
-						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! md:grid-rows-[{sidebarCollapsed
-							? '0fr'
-							: '1fr'}]! md:opacity-{sidebarCollapsed ? '0' : '100'}! {compact
-							? 'grid-rows-[0fr] opacity-0'
-							: 'grid-rows-[1fr] opacity-100'}"
-					>
-						<span
-							class="sidebar-label overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
-								? 'font-semibold'
-								: ''}"
-						>
-							{def.label}
-						</span>
-					</span>
-				</a>
-				<!-- eslint-enable svelte/no-navigation-without-resolve -->
-			</li>
-		{/each}
-		<li
-			class="hidden md:mt-1 md:flex md:items-center md:justify-center md:border-t md:border-border/30 md:pt-2"
-		>
-			<button
-				type="button"
-				onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
-				aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-				class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring {sidebarCollapsed
-					? 'md:justify-center md:px-0'
-					: ''}"
-			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					class="size-4 shrink-0 transition-transform duration-200 {sidebarCollapsed
-						? 'rotate-180'
-						: ''}"
-				>
-					<path d="m15 18-6-6 6-6" />
-				</svg>
-				<span class="sidebar-label {sidebarCollapsed ? 'md:hidden' : ''}"
-					>{sidebarCollapsed ? 'Expand' : 'Collapse'}</span
-				>
-			</button>
-		</li>
 	</ul>
 </nav>
