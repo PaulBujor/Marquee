@@ -293,8 +293,8 @@
 	/>
 </svelte:head>
 <!-- The branding header rides on the home page only; other pages carry their own title, keeping the
-movie/show page's immersive layout uncluttered. Navigation itself lives in the bottom bar below. -->
-{#if data.user && page.url.pathname === '/'}
+movie/show page's immersive layout uncluttered. Hidden when sidebar is expanded to avoid double branding. -->
+{#if data.user && page.url.pathname === '/' && !sidebarCollapsed}
 	<AppHeader />
 {/if}
 <div class={sidebarCollapsed ? 'md:ml-16' : 'md:ml-56'}>
