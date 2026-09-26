@@ -165,7 +165,7 @@ fire a TMDB request on every pass of the cursor. -->
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
- 	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none md:pointer-events-auto md:inset-x-auto md:inset-y-0 md:left-0 md:flex md:flex-col md:overflow-hidden md:border-r md:border-border/50 md:bg-background/95 md:px-0 md:pt-[max(1.25rem,env(safe-area-inset-top))] md:pb-[max(0.75rem,env(safe-area-inset-bottom))] {sidebarCollapsed
+	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none md:pointer-events-auto md:inset-x-auto md:inset-y-0 md:left-0 md:flex md:flex-col md:border-r md:border-border/50 md:bg-background/95 md:px-0 {sidebarCollapsed
 		? 'md:w-16'
 		: 'md:w-56'} {keyboard ? 'translate-y-full opacity-0 md:translate-y-0 md:opacity-100' : ''}"
 >
@@ -173,24 +173,21 @@ fire a TMDB request on every pass of the cursor. -->
 		bind:this={card}
 		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5 md:mx-0 md:w-auto md:max-w-none md:flex-1 md:flex-col md:items-stretch md:gap-0 md:rounded-none md:border-0 md:bg-transparent md:p-3 md:shadow-none"
 	>
-		<!-- Brand header: Marquee wordmark, only on the side panel when expanded. Hidden when collapsed. -->
-		{#if !sidebarCollapsed}
-			<li class="md:mb-1 md:flex md:items-center md:gap-2 md:px-3 md:pb-3">
-				<img
-					src="/icons/favicon-48.png"
-					alt=""
-					aria-hidden="true"
-					class="size-6 shrink-0 dark:hidden"
-				/>
-				<img
-					src="/icons/favicon-48-dark.png"
-					alt=""
-					aria-hidden="true"
-					class="hidden size-6 shrink-0 dark:block"
-				/>
-				<span class="sidebar-label font-serif text-lg leading-none font-semibold">Marquee</span>
-			</li>
-		{/if}
+		<li class="hidden md:mb-1 md:flex md:items-center md:gap-2 md:px-3 md:pb-3">
+			<img
+				src="/icons/favicon-48.png"
+				alt=""
+				aria-hidden="true"
+				class="size-6 shrink-0 dark:hidden"
+			/>
+			<img
+				src="/icons/favicon-48-dark.png"
+				alt=""
+				aria-hidden="true"
+				class="hidden size-6 shrink-0 dark:block"
+			/>
+			<span class="sidebar-label font-serif text-lg leading-none font-semibold">Marquee</span>
+		</li>
 		{#each topTabs as def (def.id)}
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
@@ -206,7 +203,11 @@ fire a TMDB request on every pass of the cursor. -->
 					data-sveltekit-noscroll
 					aria-current={current === def.id ? 'page' : undefined}
 					onclick={(event) => onTabClick(event, def)}
-					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 md:justify-{sidebarCollapsed ? 'center' : 'start'} md:gap-2! md:rounded-lg md:px-3 md:py-2.5 {sidebarCollapsed ? 'md:py-4' : ''} {isSelected
+					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 md:justify-{sidebarCollapsed
+						? 'center'
+						: 'between'} md:gap-2! md:rounded-lg md:px-3 md:py-2.5 {sidebarCollapsed
+						? 'md:py-4'
+						: ''} {isSelected
 						? 'text-primary sm:bg-primary/10'
 						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
 				>
@@ -263,7 +264,11 @@ fire a TMDB request on every pass of the cursor. -->
 					data-sveltekit-noscroll
 					aria-current={current === def.id ? 'page' : undefined}
 					onclick={(event) => onTabClick(event, def)}
-					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 md:justify-{sidebarCollapsed ? 'center' : 'start'} md:gap-2! md:rounded-lg md:px-3 md:py-2.5 {sidebarCollapsed ? 'md:py-4' : ''} {isSelected
+					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 md:justify-{sidebarCollapsed
+						? 'center'
+						: 'between'} md:gap-2! md:rounded-lg md:px-3 md:py-2.5 {sidebarCollapsed
+						? 'md:py-4'
+						: ''} {isSelected
 						? 'text-primary sm:bg-primary/10'
 						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
 				>
@@ -294,7 +299,6 @@ fire a TMDB request on every pass of the cursor. -->
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</li>
 		{/each}
-		<!-- Collapse toggle: only on the side panel. Chevrons point left when expanded, right when collapsed. -->
 		<li
 			class="hidden md:mt-1 md:flex md:items-center md:justify-center md:border-t md:border-border/30 md:pt-2"
 		>
@@ -302,7 +306,9 @@ fire a TMDB request on every pass of the cursor. -->
 				type="button"
 				onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
 				aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-				class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+				class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring {sidebarCollapsed
+					? 'md:justify-center md:px-0'
+					: ''}"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -312,10 +318,15 @@ fire a TMDB request on every pass of the cursor. -->
 					stroke-width="2"
 					stroke-linecap="round"
 					stroke-linejoin="round"
-					class="size-4 transition-transform duration-200 {sidebarCollapsed ? 'rotate-180' : ''}"
+					class="size-4 shrink-0 transition-transform duration-200 {sidebarCollapsed
+						? 'rotate-180'
+						: ''}"
 				>
 					<path d="m15 18-6-6 6-6" />
 				</svg>
+				<span class="sidebar-label {sidebarCollapsed ? 'md:hidden' : ''}"
+					>{sidebarCollapsed ? 'Expand' : 'Collapse'}</span
+				>
 			</button>
 		</li>
 	</ul>

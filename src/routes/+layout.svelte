@@ -292,9 +292,7 @@
 		href="/splash/ipadair-landscape-dark.png"
 	/>
 </svelte:head>
-<!-- The branding header rides on the home page only; other pages carry their own title, keeping the
-movie/show page's immersive layout uncluttered. Hidden when sidebar is expanded to avoid double branding. -->
-{#if data.user && page.url.pathname === '/' && !sidebarCollapsed}
+{#if data.user && page.url.pathname === '/' && !sidebarCollapsed && page.url.search === ''}
 	<AppHeader />
 {/if}
 <div class={sidebarCollapsed ? 'md:ml-16' : 'md:ml-56'}>

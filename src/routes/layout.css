@@ -49,13 +49,13 @@
 
 /* Shared content-width constraint for text-heavy pages: centers content and caps at ~896px for readability. */
 @utility content-width {
-  @apply mx-auto w-full max-w-4xl;
+	@apply mx-auto w-full max-w-4xl;
 }
 
 @media (min-width: 48rem) {
-  .pb-tab-bar {
-    padding-bottom: 0 !important;
-  }
+	.pb-tab-bar {
+		padding-bottom: 0 !important;
+	}
 }
 
 /* Toast left offset: clears the sidebar on md+, zero below it. The collapse effect
