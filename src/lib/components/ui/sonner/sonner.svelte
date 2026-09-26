@@ -8,7 +8,6 @@
 <Sonner
 	theme={theme.isDark ? 'dark' : 'light'}
 	class="toaster group"
-	position="bottom-center"
 	style="--normal-bg: var(--glass-bg); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-border);"
 	{...restProps}
 />

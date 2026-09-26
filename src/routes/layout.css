@@ -29,7 +29,7 @@
 		--tab-bar-space: calc(3.5rem + 1rem);
 	}
 }
-@media (min-width: 64rem) {
+@media (min-width: 48rem) {
 	:root {
 		--tab-bar-space: 0;
 	}
@@ -39,25 +39,40 @@
 	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
 }
 
-/* Sidebar label visibility — collapsed at lg hides the label spans. Labels on the
+/* Sidebar label visibility — collapsed at md hides the label spans. Labels on the
    brand header and the collapse toggle itself are always visible. */
-@media (min-width: 64rem) {
+@media (min-width: 48rem) {
 	.sidebar-collapsed .sidebar-label {
 		display: none;
 	}
 }
 
-/* Toast left offset: clears the sidebar on lg+, zero below it. The collapse effect
+/* Shared content-width constraint for text-heavy pages: centers content and caps at ~896px for readability. */
+@utility content-width {
+	@apply mx-auto w-full max-w-4xl;
+}
+
+/* Toast left offset: clears the sidebar on md+, zero below it. The collapse effect
    also updates this via the .sidebar-collapsed class toggle on <html>. */
 :root {
 	--toast-left: 0;
 }
-@media (min-width: 64rem) {
+@media (min-width: 48rem) {
 	:root {
 		--toast-left: calc(14rem + 1rem);
 	}
 	.sidebar-collapsed {
 		--toast-left: calc(4rem + 1rem);
+	}
+}
+
+/* Toast top offset: clears the app header on home page and general top-of-page area. */
+:root {
+	--toast-top: auto;
+}
+@media (min-width: 48rem) {
+	:root {
+		--toast-top: calc(4rem + env(safe-area-inset-top));
 	}
 }
 

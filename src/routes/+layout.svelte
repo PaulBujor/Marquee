@@ -158,6 +158,19 @@
 		return () => mq.removeEventListener('change', handler);
 	});
 
+	// Toast position: top-center on desktop, bottom-center on mobile.
+	let toastPosition = $state<'top-center' | 'bottom-center'>('bottom-center');
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const mq = window.matchMedia('(min-width: 48rem)');
+		toastPosition = mq.matches ? 'top-center' : 'bottom-center';
+		const handler = () => {
+			toastPosition = mq.matches ? 'top-center' : 'bottom-center';
+		};
+		mq.addEventListener('change', handler);
+		return () => mq.removeEventListener('change', handler);
+	});
+
 	// OS chrome matches the app background (not the accent); hex mirror `--background`.
 	const themeColor = $derived(theme.isDark ? '#000000' : '#ffffff');
 
@@ -284,7 +297,7 @@ movie/show page's immersive layout uncluttered. Navigation itself lives in the b
 {#if data.user && page.url.pathname === '/'}
 	<AppHeader />
 {/if}
-<div class={sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-56'}>
+<div class={sidebarCollapsed ? 'md:ml-16' : 'md:ml-56'}>
 	{@render children()}
 </div>
 <!-- After the content, so the bar comes last in tab order — matching where it sits on screen. -->
@@ -292,7 +305,7 @@ movie/show page's immersive layout uncluttered. Navigation itself lives in the b
 	<ScrollUndoPill />
 	<TabBar bind:sidebarCollapsed />
 {/if}
-<Toaster offset={toastOffset} mobileOffset={toastOffset} />
+<Toaster position={toastPosition} offset={toastOffset} mobileOffset={toastOffset} />
 <!-- Surfaces reported errors: a toast when something breaks, the full message and stack behind it.
 Mounted here so it covers every route, including the ones that fail before their own UI renders. -->
 <ErrorReporter />

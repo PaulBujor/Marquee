@@ -165,18 +165,18 @@ fire a TMDB request on every pass of the cursor. -->
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
-	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none lg:pointer-events-auto lg:inset-x-auto lg:inset-y-0 lg:left-0 lg:flex lg:flex-col lg:overflow-hidden lg:border-r lg:border-border lg:bg-background lg:px-0 lg:pt-[max(1.25rem,env(safe-area-inset-top))] lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] {sidebarCollapsed
-		? 'lg:w-16'
-		: 'lg:w-56'} {keyboard ? 'translate-y-full opacity-0 lg:translate-y-0 lg:opacity-100' : ''}"
+	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none md:pointer-events-auto md:inset-x-auto md:inset-y-0 md:left-0 md:flex md:flex-col md:overflow-hidden md:border-r md:border-border md:bg-background md:px-0 md:pt-[max(1.25rem,env(safe-area-inset-top))] md:pb-[max(0.75rem,env(safe-area-inset-bottom))] {sidebarCollapsed
+		? 'md:w-16'
+		: 'md:w-56'} {keyboard ? 'translate-y-full opacity-0 md:translate-y-0 md:opacity-100' : ''}"
 >
 	<ul
 		bind:this={card}
-		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5 lg:mx-0 lg:w-auto lg:max-w-none lg:flex-1 lg:flex-col lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-3 lg:shadow-none"
+		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5 md:mx-0 md:w-auto md:max-w-none md:flex-1 md:flex-col md:items-stretch md:gap-0 md:rounded-none md:border-0 md:bg-transparent md:p-3 md:shadow-none"
 	>
 		<!-- Brand header: Marquee wordmark, only on the side panel (lg+). -->
 		<li
-			class="hidden lg:mb-1 lg:flex lg:items-center lg:gap-2 lg:border-b lg:border-border lg:px-3 lg:pb-3"
-			class:lg:justify-center={sidebarCollapsed}
+			class="hidden md:mb-1 md:flex md:items-center md:gap-2 md:border-b md:border-border md:px-3 md:pb-3"
+			class:md:justify-center={sidebarCollapsed}
 		>
 			<img
 				src="/icons/favicon-48.png"
@@ -195,7 +195,7 @@ fire a TMDB request on every pass of the cursor. -->
 		{#each topTabs as def (def.id)}
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
-			<li class="flex min-w-0 flex-1 sm:flex-none lg:w-full lg:flex-none">
+			<li class="flex min-w-0 flex-1 sm:flex-none md:w-full md:flex-none">
 				<!-- eslint-disable svelte/no-navigation-without-resolve -- a remembered destination
 				carries a query string, which drops resolve()'s branded type; `tabHref` has already
 				validated the value as an own-tab, same-origin path. -->
@@ -207,17 +207,17 @@ fire a TMDB request on every pass of the cursor. -->
 					data-sveltekit-noscroll
 					aria-current={current === def.id ? 'page' : undefined}
 					onclick={(event) => onTabClick(event, def)}
-					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 lg:justify-start lg:gap-2! lg:rounded-lg lg:px-3 lg:py-2.5 {isSelected
+					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 md:justify-start md:gap-2! md:rounded-lg md:px-3 md:py-2.5 {isSelected
 						? 'text-primary sm:bg-primary/10'
 						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
 				>
 					<span
-						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto lg:h-auto lg:w-auto"
+						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto md:h-auto md:w-auto"
 					>
 						<!-- Active indicator: the tint alone can't carry the state at this size, and Lucide
 						has no filled variants to switch to. -->
 						<span
-							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden lg:hidden {isSelected
+							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden md:hidden {isSelected
 								? 'opacity-100'
 								: 'opacity-0'}"
 						></span>
@@ -231,7 +231,7 @@ fire a TMDB request on every pass of the cursor. -->
 					past itself under border-box, and the few pixels left behind push the icon off centre.
 					Kept out of the `hidden` family so the label stays in the accessibility tree. -->
 					<span
-						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! lg:grid-rows-[1fr]! lg:opacity-100! {compact
+						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! md:grid-rows-[1fr]! md:opacity-100! {compact
 							? 'grid-rows-[0fr] opacity-0'
 							: 'grid-rows-[1fr] opacity-100'}"
 					>
@@ -251,11 +251,11 @@ fire a TMDB request on every pass of the cursor. -->
 			</li>
 		{/each}
 		<!-- Spacer: pushes settings to the bottom on the side panel at xl. -->
-		<li class="hidden lg:block lg:flex-1" aria-hidden="true"></li>
+		<li class="hidden md:block md:flex-1" aria-hidden="true"></li>
 		{#each bottomTabs as def (def.id)}
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
-			<li class="flex min-w-0 flex-1 sm:flex-none lg:w-full lg:flex-none">
+			<li class="flex min-w-0 flex-1 sm:flex-none md:w-full md:flex-none">
 				<!-- eslint-disable svelte/no-navigation-without-resolve -- a remembered destination
 				carries a query string, which drops resolve()'s branded type; `tabHref` has already
 				validated the value as an own-tab, same-origin path. -->
@@ -264,22 +264,22 @@ fire a TMDB request on every pass of the cursor. -->
 					data-sveltekit-noscroll
 					aria-current={current === def.id ? 'page' : undefined}
 					onclick={(event) => onTabClick(event, def)}
-					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 lg:justify-start lg:gap-2! lg:rounded-lg lg:px-3 lg:py-2.5 {isSelected
+					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 md:justify-start md:gap-2! md:rounded-lg md:px-3 md:py-2.5 {isSelected
 						? 'text-primary sm:bg-primary/10'
 						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
 				>
 					<span
-						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto lg:h-auto lg:w-auto"
+						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto md:h-auto md:w-auto"
 					>
 						<span
-							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden lg:hidden {isSelected
+							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden md:hidden {isSelected
 								? 'opacity-100'
 								: 'opacity-0'}"
 						></span>
 						<Icon class="relative size-5" />
 					</span>
 					<span
-						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! lg:grid-rows-[1fr]! lg:opacity-100! {compact
+						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! md:grid-rows-[1fr]! md:opacity-100! {compact
 							? 'grid-rows-[0fr] opacity-0'
 							: 'grid-rows-[1fr] opacity-100'}"
 					>
@@ -298,7 +298,7 @@ fire a TMDB request on every pass of the cursor. -->
 		<!-- Collapse toggle: only on the side panel (lg+). Chevrons point left when expanded,
 		right when collapsed. -->
 		<li
-			class="hidden lg:mt-1 lg:flex lg:items-center lg:justify-center lg:border-t lg:border-border lg:pt-2"
+			class="hidden md:mt-1 md:flex md:items-center md:justify-center md:border-t md:border-border md:pt-2"
 		>
 			<button
 				type="button"

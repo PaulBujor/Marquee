@@ -452,7 +452,7 @@
 		<!-- Poster grid -->
 		{#if list.length > 0}
 			<div
-				class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7"
+				class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7"
 			>
 				<!-- flip reflows survivors; fade eases items in/out on sync add/remove or status change -->
 				{#each visible as item (item.mediaId)}
