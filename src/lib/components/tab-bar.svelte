@@ -171,7 +171,7 @@ fire a TMDB request on every pass of the cursor. -->
 >
 	<ul
 		bind:this={card}
-		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5 md:mx-0 md:w-auto md:max-w-none md:flex-1 md:flex-col md:items-stretch md:gap-0 md:rounded-none md:border-0 md:bg-transparent md:p-3 md:shadow-none"
+		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5 md:mx-0 md:w-auto md:max-w-none md:flex-1 md:flex-col md:items-stretch md:gap-0 md:rounded-none md:border-0 md:bg-transparent md:px-3 md:shadow-none"
 	>
 		<li class="hidden md:mb-1 md:flex md:items-center md:gap-2 md:px-3 md:pb-3">
 			<img
@@ -231,7 +231,9 @@ fire a TMDB request on every pass of the cursor. -->
 					past itself under border-box, and the few pixels left behind push the icon off centre.
 					Kept out of the `hidden` family so the label stays in the accessibility tree. -->
 					<span
-						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! md:grid-rows-[1fr]! md:opacity-100! {compact
+						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! md:grid-rows-[{sidebarCollapsed
+							? '0fr'
+							: '1fr'}]! md:opacity-{sidebarCollapsed ? '0' : '100'}! {compact
 							? 'grid-rows-[0fr] opacity-0'
 							: 'grid-rows-[1fr] opacity-100'}"
 					>
@@ -283,7 +285,9 @@ fire a TMDB request on every pass of the cursor. -->
 						<Icon class="relative size-5" />
 					</span>
 					<span
-						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! md:grid-rows-[1fr]! md:opacity-100! {compact
+						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! md:grid-rows-[{sidebarCollapsed
+							? '0fr'
+							: '1fr'}]! md:opacity-{sidebarCollapsed ? '0' : '100'}! {compact
 							? 'grid-rows-[0fr] opacity-0'
 							: 'grid-rows-[1fr] opacity-100'}"
 					>

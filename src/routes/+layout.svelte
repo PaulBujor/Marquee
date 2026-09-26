@@ -293,7 +293,9 @@
 	/>
 </svelte:head>
 {#if data.user && page.url.pathname === '/' && !sidebarCollapsed && page.url.search === ''}
-	<AppHeader />
+	<div class="md:hidden">
+		<AppHeader />
+	</div>
 {/if}
 <div class={sidebarCollapsed ? 'md:ml-16' : 'md:ml-56'}>
 	{@render children()}
