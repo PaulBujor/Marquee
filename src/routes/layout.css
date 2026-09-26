@@ -29,9 +29,24 @@
 		--tab-bar-space: calc(3.5rem + 1rem);
 	}
 }
+@media (min-width: 48rem) {
+	:root {
+		--tab-bar-space: calc(3.5rem + 1rem);
+	}
+}
 
 @utility pb-tab-bar {
 	padding-bottom: calc(var(--tab-bar-space) + 1.5rem);
+}
+
+/* Toast top offset: clears the app header on home page and general top-of-page area. */
+:root {
+	--toast-top: auto;
+}
+@media (min-width: 48rem) {
+	:root {
+		--toast-top: calc(4rem + env(safe-area-inset-top));
+	}
 }
 
 /* The app's frosted-glass material, shared by every surface that floats over scrolling content: the

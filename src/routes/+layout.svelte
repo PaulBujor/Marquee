@@ -158,6 +158,19 @@
 		return () => mq.removeEventListener('change', handler);
 	});
 
+	// Toast position: top-center on desktop, bottom-center on mobile.
+	let toastPosition = $state<'top-center' | 'bottom-center'>('bottom-center');
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const mq = window.matchMedia('(min-width: 48rem)');
+		toastPosition = mq.matches ? 'top-center' : 'bottom-center';
+		const handler = () => {
+			toastPosition = mq.matches ? 'top-center' : 'bottom-center';
+		};
+		mq.addEventListener('change', handler);
+		return () => mq.removeEventListener('change', handler);
+	});
+
 	// OS chrome matches the app background (not the accent); hex mirror `--background`.
 	const themeColor = $derived(theme.isDark ? '#000000' : '#ffffff');
 
@@ -167,8 +180,11 @@
 	const showTabBar = $derived(!!data.user && page.url.pathname !== '/login');
 	// Lift bottom-anchored toasts clear of the bar, tracking its *live* height so the gap stays put
 	// when the bar collapses on scroll. Sonner uses the mobile set below 600px, so both must be given.
+	// At lg+ the bar is a side panel, so --toast-left (set in layout.css) clears it reactively.
 	const toastOffset = $derived(
-		showTabBar ? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)' } : undefined
+		showTabBar
+			? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)', left: 'var(--toast-left)' }
+			: undefined
 	);
 </script>
 
@@ -263,8 +279,6 @@
 		href="/splash/ipadair-landscape-dark.png"
 	/>
 </svelte:head>
-<!-- The branding header rides on the home page only; other pages carry their own title, keeping the
-movie/show page's immersive layout uncluttered. Navigation itself lives in the bottom bar below. -->
 {#if data.user && page.url.pathname === '/'}
 	<AppHeader />
 {/if}
@@ -274,7 +288,7 @@ movie/show page's immersive layout uncluttered. Navigation itself lives in the b
 	<ScrollUndoPill />
 	<TabBar />
 {/if}
-<Toaster offset={toastOffset} mobileOffset={toastOffset} />
+<Toaster position={toastPosition} offset={toastOffset} mobileOffset={toastOffset} />
 <!-- Surfaces reported errors: a toast when something breaks, the full message and stack behind it.
 Mounted here so it covers every route, including the ones that fail before their own UI renders. -->
 <ErrorReporter />

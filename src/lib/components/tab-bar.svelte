@@ -41,6 +41,8 @@
 	const current = $derived(activeTab(page.url.pathname));
 	const selected = $derived(current ?? tabs.owner);
 
+	const navTabs = $derived(TABS);
+
 	let compact = $state(false);
 	let phase: ScrollPhase = initialScrollPhase;
 
@@ -151,10 +153,6 @@
 	}
 </script>
 
-<!-- The wrapper is click-through (`pointer-events-none`) so the gap either side of the card doesn't
-swallow taps on the content behind it; the card itself takes pointer events back. `preload-data`
-narrows the body-level "hover" default to "tap": hovering Search would otherwise re-run its load and
-fire a TMDB request on every pass of the cursor. -->
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
@@ -162,39 +160,30 @@ fire a TMDB request on every pass of the cursor. -->
 		? 'translate-y-full opacity-0'
 		: ''}"
 >
-	<!-- `glass` is the shared frosted material (see layout.css) — it carries the tint, blur and the
-	luminance wash that keeps these labels legible over artwork, and the same class is on the
-	scroll-undo pill so the two read as one surface. -->
 	<ul
 		bind:this={card}
 		class="glass pointer-events-auto mx-auto flex w-full max-w-md items-stretch justify-around gap-1 rounded-full border border-border p-1.5 shadow-[0_4px_12px_rgb(0_0_0/0.1)] sm:max-w-fit sm:gap-0.5"
 	>
-		{#each TABS as def (def.id)}
+		{#each navTabs as def (def.id)}
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
 			<li class="flex min-w-0 flex-1 sm:flex-none">
 				<!-- eslint-disable svelte/no-navigation-without-resolve -- a remembered destination
 				carries a query string, which drops resolve()'s branded type; `tabHref` has already
 				validated the value as an own-tab, same-origin path. -->
-				<!-- `aria-current` follows the route we're actually on, not the tinted tab: on a title
-				page the owning tab stays lit, but claiming it is the current page would be a lie to a
-				screen reader. -->
 				<a
 					href={tabs.href(def.id)}
 					data-sveltekit-noscroll
 					aria-current={current === def.id ? 'page' : undefined}
 					onclick={(event) => onTabClick(event, def)}
-					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 {compact
-						? 'gap-0'
-						: 'gap-1'} {isSelected
+					class="flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center rounded-full px-1 py-2 transition-[gap] duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 {isSelected
 						? 'text-primary sm:bg-primary/10'
 						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
 				>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
 					<span
 						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto"
 					>
-						<!-- Active indicator: the tint alone can't carry the state at this size, and Lucide
-						has no filled variants to switch to. -->
 						<span
 							class="absolute inset-0 rounded-full bg-primary/12 transition-opacity duration-200 motion-reduce:transition-none sm:hidden {isSelected
 								? 'opacity-100'
@@ -202,21 +191,11 @@ fire a TMDB request on every pass of the cursor. -->
 						></span>
 						<Icon class="relative size-5" />
 					</span>
-					<!-- Collapsing wrapper: animating grid-template-rows 1fr→0fr is the one way to ease to
-					an intrinsic height. `overflow-hidden` on the inner span is what lets the row actually
-					reach zero (a grid item's automatic minimum size only collapses when its overflow isn't
-					visible), and `min-h-0` does the same for the wrapper as a flex child. The gap above the
-					label lives on the anchor, not here — padding inside the collapsing box can't shrink
-					past itself under border-box, and the few pixels left behind push the icon off centre.
-					Kept out of the `hidden` family so the label stays in the accessibility tree. -->
 					<span
 						class="grid min-h-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none sm:grid-rows-[1fr]! sm:opacity-100! {compact
 							? 'grid-rows-[0fr] opacity-0'
 							: 'grid-rows-[1fr] opacity-100'}"
 					>
-						<!-- `leading-none` would put the line box exactly at the font size, so `overflow-hidden`
-						above clips the descenders off "Upcoming" and "Settings". Unitless, so it holds at the
-						larger `sm:` size too. -->
 						<span
 							class="overflow-hidden text-[0.6875rem] leading-[1.35] font-medium sm:text-sm {isSelected
 								? 'font-semibold'
@@ -226,7 +205,6 @@ fire a TMDB request on every pass of the cursor. -->
 						</span>
 					</span>
 				</a>
-				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</li>
 		{/each}
 	</ul>
