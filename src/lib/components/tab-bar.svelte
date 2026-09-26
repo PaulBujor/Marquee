@@ -168,6 +168,9 @@
 			{@const Icon = ICONS[def.id]}
 			{@const isSelected = selected === def.id}
 			<li class="flex min-w-0 flex-1 sm:flex-none">
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- a remembered destination
+				carries a query string, which drops resolve()'s branded type; `tabHref` has already
+				validated the value as an own-tab, same-origin path. -->
 				<a
 					href={tabs.href(def.id)}
 					data-sveltekit-noscroll
@@ -177,6 +180,7 @@
 						? 'text-primary sm:bg-primary/10'
 						: 'text-muted-foreground sm:hover:bg-accent sm:hover:text-foreground'}"
 				>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
 					<span
 						class="relative flex h-8 w-14 shrink-0 items-center justify-center sm:h-auto sm:w-auto"
 					>
