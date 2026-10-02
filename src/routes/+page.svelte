@@ -38,6 +38,7 @@
 	// The home library reads local IndexedDB (works offline); reloads whenever a sync pulls. It's a
 	// module singleton, so navigating back from a detail page finds it already populated.
 	$effect(() => {
+		if (!data.user) return;
 		void sync.revision;
 		library.load();
 	});

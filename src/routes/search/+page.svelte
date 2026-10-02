@@ -47,6 +47,7 @@
 	let tracked = $state<Map<string, TrackingStatus>>(new Map());
 	const writing = new SvelteSet<string>();
 	$effect(() => {
+		if (!data.user) return;
 		void sync.revision;
 		refreshTracked();
 	});
