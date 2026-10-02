@@ -14,6 +14,7 @@
 	// Reads local IndexedDB (works offline); reloads whenever a sync pulls — same pattern as home.
 	const library = new LibraryState();
 	$effect(() => {
+		if (!data.user) return;
 		void sync.revision;
 		library.load();
 	});

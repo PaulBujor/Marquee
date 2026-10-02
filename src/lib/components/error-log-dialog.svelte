@@ -54,10 +54,6 @@
 								{/if}
 							</div>
 							<p class="text-sm break-words text-destructive">{entry.message}</p>
-							{#if entry.stack}
-								<pre
-									class="max-h-32 overflow-auto rounded-sm bg-muted p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">{entry.stack}</pre>
-							{/if}
 						</li>
 					{/each}
 				</ul>
