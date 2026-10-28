@@ -64,8 +64,7 @@ export async function shareLink(
 }
 
 /** What a share asks the server to store a preview for. */
-export type ShareWarmTarget =
-	{ kind: 'title'; type: 'movie' | 'show'; id: number } | { kind: 'person'; id: number };
+export type ShareWarmTarget = { type: 'movie' | 'show'; id: number };
 
 /**
  * How long a share waits for the preview to be stored before opening the sheet. The recipient's
@@ -75,7 +74,7 @@ export type ShareWarmTarget =
 export const WARM_TIMEOUT_MS = 1500;
 
 /**
- * Ask the server to store this link's preview so the recipient's app has a card to render.
+ * Ask the server to store this link's preview so the recipient's app has a page to render.
  * Best-effort by design: a failure, a timeout or being offline still shares the link, just without
  * a guaranteed preview. The server side is the only place that calls TMDB, and it requires a
  * session — that separation is what stops a crawler spending provider quota.

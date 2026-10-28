@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
 	integer,
+	real,
 	sqliteTable,
 	text,
 	index,
@@ -531,33 +532,47 @@ export const notificationLog = sqliteTable(
 export type NotificationLogRow = typeof notificationLog.$inferSelect;
 
 /**
- * A public share preview: the small catalogue-only snapshot a shared link renders from. Only an
+ * A public share preview: the catalogue-only snapshot a shared link renders its page from. Only an
  * authenticated client writes one (see `POST /api/share/preview`), so the public read path never
  * has to call TMDB itself — crawling a shared link can't spend provider quota.
+ *
+ * Sized for the whole title page rather than a card: the shared page shows the same hero, meta row,
+ * crew and cast the signed-in page does, minus the sections that need user data (tracking, similar,
+ * seasons) or a longer payload (the trailer).
  */
 export const sharePreviews = sqliteTable(
 	'share_previews',
 	{
-		// `<provider>:<kind>:<externalId>`, e.g. `tmdb:title:603`. Provider-scoped so a second
-		// provider can't collide with a TMDB id.
+		// `tmdb:title:<externalId>`, e.g. `tmdb:title:603`. Provider-scoped so a second provider
+		// can't collide with a TMDB id.
 		id: text('id').primaryKey(),
-		kind: text('kind', { enum: ['title', 'person'] }).notNull(),
 		provider: text('provider', { enum: MEDIA_PROVIDERS }).notNull().default('tmdb'),
 		externalId: text('external_id').notNull(),
-		// `movie` | `show` for a title; null for a person.
-		titleType: text('title_type', { enum: ['movie', 'show'] }),
-		// A title's name, or a person's.
+		titleType: text('title_type', { enum: ['movie', 'show'] }).notNull(),
 		name: text('name').notNull(),
 		year: integer('year'),
 		summary: text('summary'),
 		imagePath: text('image_path'),
-		// People only: up to three "known for" lines, JSON-encoded.
-		knownFor: text('known_for'),
+		backdropPath: text('backdrop_path'),
+		// TMDB vote average (0–10).
+		rating: real('rating'),
+		// Minutes — a movie's runtime, or a show's per-episode runtime.
+		runtime: integer('runtime'),
+		// `YYYY-MM-DD`: a movie's release date, or a show's first air date.
+		releasedOn: text('released_on'),
+		// Shows only: seasons excluding Specials, for the header badge the app also prints.
+		seasons: integer('seasons'),
+		// Shows only: `in_production` | `ended`, already reduced to the badge the page shows.
+		production: text('production', { enum: ['in_production', 'ended'] }),
+		// JSON, so the page renders a meta row, a crew list and a cast strip with no second read.
+		genres: text('genres'),
+		crew: text('crew'),
+		cast: text('cast'),
 		updatedAt: integer('updated_at', { mode: 'timestamp' })
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [index('share_previews_kind_idx').on(table.kind)]
+	(table) => [index('share_previews_title_type_idx').on(table.titleType)]
 );
 
 export type SharePreviewRow = typeof sharePreviews.$inferSelect;

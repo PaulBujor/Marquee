@@ -1,15 +1,17 @@
 /**
- * Share previews: the small catalogue-only snapshot a public shared link renders from.
+ * Share previews: the catalogue-only snapshot a public shared link renders its page from.
  *
  * *Warming* one is the only path that reaches TMDB for a share, and it requires an authenticated
  * account, so a crawler following a shared link can never spend provider quota; the public read
- * path (`readPreview`) touches D1 only. Warming is idempotent per title/person — re-warming
- * refreshes the same row — and capped per account so one session can't enumerate the catalogue.
+ * path (`readPreview`) touches D1 only. Warming is idempotent per title — a re-warm refreshes the
+ * same row — and capped per account so one session can't enumerate the catalogue.
  */
 import { and, count, eq, gte, lt } from 'drizzle-orm';
-import { createTmdbClient, TmdbError } from '$lib/server/tmdb';
+import { createTmdbClient, TmdbError, type MediaDetail } from '$lib/server/tmdb';
 import { sharePreviewWarms, sharePreviews, type SharePreviewRow } from '$lib/server/db/schema';
+import { productionState, seasonCount } from '$lib/tracking/actions';
 import type { createDb } from '$lib/server/db';
+import type { CastCredit, CrewCredits, SharePreview } from '$lib/share-preview';
 
 type Db = ReturnType<typeof createDb>;
 
@@ -18,32 +20,6 @@ export const WARM_MAX_PER_HOUR = 60;
 const WARM_WINDOW_MS = 60 * 60 * 1000;
 /** Warm rows exist only to count requests, so they're swept once past every window that reads them. */
 const WARM_RETENTION_MS = 24 * 60 * 60 * 1000;
-/** A person's preview carries the opening of their biography, not the biography. */
-const SUMMARY_MAX = 400;
-export const KNOWN_FOR_MAX = 3;
-
-export interface TitlePreview {
-	kind: 'title';
-	type: 'movie' | 'show';
-	externalId: number;
-	name: string;
-	year: number | null;
-	summary: string | null;
-	imagePath: string | null;
-	updatedAt: number;
-}
-
-export interface PersonPreview {
-	kind: 'person';
-	externalId: number;
-	name: string;
-	summary: string | null;
-	imagePath: string | null;
-	knownFor: string[];
-	updatedAt: number;
-}
-
-export type SharePreview = TitlePreview | PersonPreview;
 
 export type WarmResult =
 	| { kind: 'warmed'; preview: SharePreview }
@@ -54,8 +30,8 @@ export type WarmResult =
 const PROVIDER = 'tmdb' as const;
 
 /** The primary key: provider first, so a second provider can't collide with a TMDB id. */
-export function previewId(kind: 'title' | 'person', externalId: number): string {
-	return `${PROVIDER}:${kind}:${externalId}`;
+export function previewId(externalId: number): string {
+	return `${PROVIDER}:title:${externalId}`;
 }
 
 /** Positive integers only — the value arrives from the client and ends up in a TMDB path. */
@@ -89,67 +65,30 @@ export async function warmTitlePreview(
 
 	try {
 		const detail = await createTmdbClient(apiKey).getDetails(opts.type, opts.id);
-		const preview: TitlePreview = {
-			kind: 'title',
-			type: opts.type,
-			externalId: opts.id,
-			name: detail.title,
-			year: detail.year,
-			summary: detail.overview,
-			imagePath: detail.posterPath,
-			updatedAt: now
-		};
+		const preview = toPreviewShape(detail, now);
 		await db.batch([upsertPreview(db, preview), recordWarm(db, opts.userId, now)]);
 		return { kind: 'warmed', preview };
 	} catch (err) {
-		return warmFailure('title', err);
-	}
-}
-
-/** Warm a person's preview: name, photo and up to three "known for" lines. */
-export async function warmPersonPreview(
-	db: Db,
-	apiKey: string,
-	opts: { userId: string; id: number; now?: number }
-): Promise<WarmResult> {
-	if (!isValidExternalId(opts.id)) return { kind: 'not_found' };
-	const now = opts.now ?? Date.now();
-	if ((await countRecentWarms(db, opts.userId, now)) >= WARM_MAX_PER_HOUR)
-		return { kind: 'rate_limited' };
-
-	try {
-		const page = await createTmdbClient(apiKey).getPerson(opts.id, 1);
-		const preview: PersonPreview = {
-			kind: 'person',
-			externalId: opts.id,
-			name: page.person.name,
-			summary: page.person.biography.slice(0, SUMMARY_MAX).trim(),
-			imagePath: page.person.profilePath,
-			knownFor: page.credits.slice(0, KNOWN_FOR_MAX).map(knownForLine),
-			updatedAt: now
-		};
-		await db.batch([upsertPreview(db, preview), recordWarm(db, opts.userId, now)]);
-		return { kind: 'warmed', preview };
-	} catch (err) {
-		return warmFailure('person', err);
+		if (err instanceof TmdbError) {
+			if (err.status === 404) return { kind: 'not_found' };
+			console.error('share preview: TMDB warm failed', err.status, err.message);
+			return { kind: 'unavailable' };
+		}
+		throw err;
 	}
 }
 
 /** Read a warmed preview. D1 only — this is the public read path's entire data access. */
-export async function readPreview(
-	db: Db,
-	kind: 'title' | 'person',
-	externalId: number
-): Promise<SharePreview | null> {
+export async function readPreview(db: Db, externalId: number): Promise<SharePreview | null> {
 	if (!isValidExternalId(externalId)) return null;
 	const row = (
 		await db
 			.select()
 			.from(sharePreviews)
-			.where(eq(sharePreviews.id, previewId(kind, externalId)))
+			.where(eq(sharePreviews.id, previewId(externalId)))
 			.limit(1)
 	).at(0);
-	return row ? toPreview(row) : null;
+	return row ? fromRow(row) : null;
 }
 
 /** Delete warm rows past retention, so the counter table can't grow unbounded. */
@@ -161,14 +100,42 @@ export async function purgeSharePreviewWarms(db: Db, now: number = Date.now()): 
 	return removed.length;
 }
 
-/** An unknown id is `not_found`; any other provider failure is `unavailable` (the caller decides). */
-function warmFailure(what: 'title' | 'person', err: unknown): WarmResult {
-	if (err instanceof TmdbError) {
-		if (err.status === 404) return { kind: 'not_found' };
-		console.error(`share preview: TMDB ${what} warm failed`, err.status, err.message);
-		return { kind: 'unavailable' };
-	}
-	throw err;
+/** Everything the shared page prints, taken from the same TMDB detail the app's page uses. */
+function toPreviewShape(detail: MediaDetail, now: number): SharePreview {
+	return {
+		type: detail.type,
+		externalId: detail.tmdbId,
+		name: detail.title,
+		year: detail.year,
+		summary: detail.overview,
+		imagePath: detail.posterPath,
+		backdropPath: detail.backdropPath,
+		rating: detail.rating,
+		runtime: detail.runtime,
+		releasedOn: detail.type === 'movie' ? detail.releaseDate : detail.firstAirDate,
+		seasons: detail.type === 'show' ? seasonCount(detail.seasons) : 0,
+		production:
+			detail.type === 'show' && productionState(detail.inProduction) !== 'unknown'
+				? (productionState(detail.inProduction) as 'in_production' | 'ended')
+				: null,
+		genres: detail.genres,
+		crew: crewOf(detail),
+		// The TMDB client already trims cast to what the app's own page shows.
+		cast: detail.cast.map((member) => ({
+			name: member.name,
+			profilePath: member.profilePath
+		})),
+		updatedAt: now
+	};
+}
+
+function crewOf(detail: MediaDetail): CrewCredits {
+	return {
+		director: detail.director?.name ?? null,
+		creators: detail.creators.map((member) => member.name),
+		writers: detail.writers.map((member) => member.name),
+		producers: detail.producers.map((member) => member.name)
+	};
 }
 
 function recordWarm(db: Db, userId: string, now: number) {
@@ -179,16 +146,23 @@ function recordWarm(db: Db, userId: string, now: number) {
 
 function upsertPreview(db: Db, preview: SharePreview) {
 	const values = {
-		id: previewId(preview.kind, preview.externalId),
-		kind: preview.kind,
+		id: previewId(preview.externalId),
 		provider: PROVIDER,
 		externalId: String(preview.externalId),
-		titleType: preview.kind === 'title' ? preview.type : null,
+		titleType: preview.type,
 		name: preview.name,
-		year: preview.kind === 'title' ? preview.year : null,
+		year: preview.year,
 		summary: preview.summary,
 		imagePath: preview.imagePath,
-		knownFor: preview.kind === 'person' ? JSON.stringify(preview.knownFor) : null,
+		backdropPath: preview.backdropPath,
+		rating: preview.rating,
+		runtime: preview.runtime,
+		releasedOn: preview.releasedOn,
+		seasons: preview.seasons,
+		production: preview.production,
+		genres: JSON.stringify(preview.genres),
+		crew: JSON.stringify(preview.crew),
+		cast: JSON.stringify(preview.cast),
 		updatedAt: new Date(preview.updatedAt)
 	};
 	return db
@@ -201,50 +175,64 @@ function upsertPreview(db: Db, preview: SharePreview) {
 				year: values.year,
 				summary: values.summary,
 				imagePath: values.imagePath,
-				knownFor: values.knownFor,
+				backdropPath: values.backdropPath,
+				rating: values.rating,
+				runtime: values.runtime,
+				releasedOn: values.releasedOn,
+				seasons: values.seasons,
+				production: values.production,
+				genres: values.genres,
+				crew: values.crew,
+				cast: values.cast,
 				updatedAt: values.updatedAt
 			}
 		});
 }
 
-/** `Title (1999)` — a credit line the card can print as-is. */
-function knownForLine(credit: { title: string; year: number | null }): string {
-	return credit.year ? `${credit.title} (${credit.year})` : credit.title;
-}
-
-function toPreview(row: SharePreviewRow): SharePreview {
-	const updatedAt = row.updatedAt.getTime();
-	if (row.kind === 'person') {
-		return {
-			kind: 'person',
-			externalId: Number(row.externalId),
-			name: row.name,
-			summary: row.summary,
-			imagePath: row.imagePath,
-			knownFor: parseKnownFor(row.knownFor),
-			updatedAt
-		};
-	}
+function fromRow(row: SharePreviewRow): SharePreview {
 	return {
-		kind: 'title',
-		type: row.titleType === 'movie' ? 'movie' : 'show',
+		type: row.titleType,
 		externalId: Number(row.externalId),
 		name: row.name,
 		year: row.year,
 		summary: row.summary,
 		imagePath: row.imagePath,
-		updatedAt
+		backdropPath: row.backdropPath,
+		rating: row.rating,
+		runtime: row.runtime,
+		releasedOn: row.releasedOn,
+		seasons: row.seasons ?? 0,
+		production: row.production,
+		genres: parseList<string>(row.genres),
+		crew: parseCrew(row.crew),
+		cast: parseList<CastCredit>(row.cast),
+		updatedAt: row.updatedAt.getTime()
 	};
 }
 
-function parseKnownFor(value: string | null): string[] {
+/** JSON columns are written by us, but a hand-edited row shouldn't be able to break a page. */
+function parseList<T>(value: string | null): T[] {
 	if (!value) return [];
 	try {
 		const parsed: unknown = JSON.parse(value);
-		return Array.isArray(parsed)
-			? parsed.filter((line): line is string => typeof line === 'string')
-			: [];
+		return Array.isArray(parsed) ? (parsed as T[]) : [];
 	} catch {
 		return [];
+	}
+}
+
+function parseCrew(value: string | null): CrewCredits {
+	const empty: CrewCredits = { director: null, creators: [], writers: [], producers: [] };
+	if (!value) return empty;
+	try {
+		const parsed = JSON.parse(value) as Partial<CrewCredits>;
+		return {
+			director: parsed.director ?? null,
+			creators: parsed.creators ?? [],
+			writers: parsed.writers ?? [],
+			producers: parsed.producers ?? []
+		};
+	} catch {
+		return empty;
 	}
 }

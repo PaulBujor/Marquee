@@ -73,7 +73,7 @@ describe('shareLink', () => {
 });
 
 describe('warmPreview', () => {
-	const target = { kind: 'title', type: 'movie', id: 603 } as const;
+	const target = { type: 'movie', id: 603 } as const;
 
 	it('asks the server to store the preview, same-origin', async () => {
 		const calls: { url: string; init: RequestInit }[] = [];

@@ -414,7 +414,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			class="ml-auto shrink-0"
 			path={resolve('/title/[type]/[id]', { type: detail.type, id: String(detail.tmdbId) })}
 			title={shareTitle}
-			warm={{ kind: 'title', type: detail.type, id: detail.tmdbId }}
+			warm={{ type: detail.type, id: detail.tmdbId }}
 			label="Share this title"
 		/>
 	</div>

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f92bc67c-e7ab-4bf9-a6be-03dff89bbe90",
+  "id": "9b95a94d-1539-4910-8f2d-c5fc7293d5d0",
   "prevId": "20fb7fcc-a5ed-4e7c-8181-3ea0c3fddfb3",
   "tables": {
     "credits": {
@@ -1312,13 +1312,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "provider": {
           "name": "provider",
           "type": "text",
@@ -1338,7 +1331,7 @@
           "name": "title_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "name": {
@@ -1369,8 +1362,64 @@
           "notNull": false,
           "autoincrement": false
         },
-        "known_for": {
-          "name": "known_for",
+        "backdrop_path": {
+          "name": "backdrop_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rating": {
+          "name": "rating",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "runtime": {
+          "name": "runtime",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "released_on": {
+          "name": "released_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "seasons": {
+          "name": "seasons",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "production": {
+          "name": "production",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "genres": {
+          "name": "genres",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "crew": {
+          "name": "crew",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cast": {
+          "name": "cast",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1385,10 +1434,10 @@
         }
       },
       "indexes": {
-        "share_previews_kind_idx": {
-          "name": "share_previews_kind_idx",
+        "share_previews_title_type_idx": {
+          "name": "share_previews_title_type_idx",
           "columns": [
-            "kind"
+            "title_type"
           ],
           "isUnique": false
         }
