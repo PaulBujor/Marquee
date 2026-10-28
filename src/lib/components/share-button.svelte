@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { Button, type ButtonSize } from '$lib/components/ui/button';
-	import { shareLink } from '$lib/share';
+	import { shareLink, warmPreview, type ShareWarmTarget } from '$lib/share';
 	import ShareIcon from '@lucide/svelte/icons/share-2';
 
 	interface Props {
 		/** The path to share — the call site builds it with `resolve()`. */
 		path: string;
 		title: string;
+		/** The thing this link points at, so its preview is stored before the sheet opens. */
+		warm?: ShareWarmTarget;
 		label?: string;
 		size?: ButtonSize;
 		variant?: 'ghost' | 'outline';
@@ -16,6 +18,7 @@
 	let {
 		path,
 		title,
+		warm,
 		label = 'Share',
 		size = 'icon',
 		variant = 'ghost',
@@ -29,6 +32,8 @@
 		busy = true;
 		try {
 			const url = new URL(path, window.location.origin).toString();
+			// Warm first, capped and best-effort, so the recipient's unfurl finds a card waiting.
+			if (warm) await warmPreview(warm);
 			const outcome = await shareLink({ title, url });
 			if (outcome === 'copied') toast.success('Link copied');
 			else if (outcome === 'failed') toast.error("Couldn't share that link");

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { shareLink, type ShareEnvironment } from './share';
+import { shareLink, warmPreview, type ShareEnvironment } from './share';
 
 const content = { title: 'Severance (2022)', url: 'https://marquee.example/title/show/95396' };
 
@@ -69,5 +69,51 @@ describe('shareLink', () => {
 				}
 			})
 		).toBe('failed');
+	});
+});
+
+describe('warmPreview', () => {
+	const target = { kind: 'title', type: 'movie', id: 603 } as const;
+
+	it('asks the server to store the preview, same-origin', async () => {
+		const calls: { url: string; init: RequestInit }[] = [];
+		const fetchImpl = (async (url: string, init: RequestInit) => {
+			calls.push({ url, init });
+			return new Response(JSON.stringify({ status: 'warmed' }), { status: 200 });
+		}) as unknown as typeof fetch;
+
+		expect(await warmPreview(target, { fetchImpl })).toBe(true);
+		expect(calls[0].url).toBe('/api/share/preview');
+		expect(calls[0].init.method).toBe('POST');
+		expect(calls[0].init.credentials).toBe('same-origin');
+		expect(JSON.parse(String(calls[0].init.body))).toEqual(target);
+	});
+
+	it('reports anything the server refuses as a failure to warm', async () => {
+		for (const status of [400, 404, 429, 503]) {
+			const fetchImpl = (async () => new Response('{}', { status })) as unknown as typeof fetch;
+			expect(await warmPreview(target, { fetchImpl })).toBe(false);
+		}
+	});
+
+	it('reports being offline as a failure to warm, without throwing', async () => {
+		const fetchImpl = (async () => {
+			throw new TypeError('Failed to fetch');
+		}) as unknown as typeof fetch;
+		expect(await warmPreview(target, { fetchImpl })).toBe(false);
+	});
+
+	it('gives up at the cap and aborts the request', async () => {
+		let aborted = false;
+		const fetchImpl = ((_url: string, init: RequestInit) =>
+			new Promise((_resolve, reject) => {
+				init.signal?.addEventListener('abort', () => {
+					aborted = true;
+					reject(new Error('aborted'));
+				});
+			})) as unknown as typeof fetch;
+
+		expect(await warmPreview(target, { fetchImpl, timeoutMs: 20 })).toBe(false);
+		expect(aborted).toBe(true);
 	});
 });

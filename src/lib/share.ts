@@ -62,3 +62,43 @@ export async function shareLink(
 		return 'failed';
 	}
 }
+
+/** What a share asks the server to store a preview for. */
+export type ShareWarmTarget =
+	{ kind: 'title'; type: 'movie' | 'show'; id: number } | { kind: 'person'; id: number };
+
+/**
+ * How long a share waits for the preview to be stored before opening the sheet. The recipient's
+ * chat app unfurls the link within moments of the share, so the card is worth a short wait — but
+ * never a long one, and never a failed share.
+ */
+export const WARM_TIMEOUT_MS = 1500;
+
+/**
+ * Ask the server to store this link's preview so the recipient's app has a card to render.
+ * Best-effort by design: a failure, a timeout or being offline still shares the link, just without
+ * a guaranteed preview. The server side is the only place that calls TMDB, and it requires a
+ * session — that separation is what stops a crawler spending provider quota.
+ */
+export async function warmPreview(
+	target: ShareWarmTarget,
+	opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {}
+): Promise<boolean> {
+	const doFetch = opts.fetchImpl ?? fetch;
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? WARM_TIMEOUT_MS);
+	try {
+		const res = await doFetch('/api/share/preview', {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(target),
+			signal: controller.signal
+		});
+		return res.ok;
+	} catch {
+		return false;
+	} finally {
+		clearTimeout(timer);
+	}
+}
