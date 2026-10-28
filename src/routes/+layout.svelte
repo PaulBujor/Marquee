@@ -180,11 +180,13 @@
 	const showTabBar = $derived(!!data.user && page.url.pathname !== '/login');
 	// Lift bottom-anchored toasts clear of the bar, tracking its *live* height so the gap stays put
 	// when the bar collapses on scroll. Sonner uses the mobile set below 600px, so both must be given.
-	// At lg+ the bar is a side panel, so --toast-left (set in layout.css) clears it reactively.
+	// Only the vertical offset is ours: the horizontal insets have to stay Sonner's own defaults.
+	// Below 600px it derives the toast's width from `--mobile-offset-left` on *both* sides, so an
+	// unbalanced left inset doesn't just shift the stack — the toaster keeps `width: 100%` and hangs
+	// off the screen, clipping each toast's leading icon. Above 600px the offsets are ignored
+	// altogether: a centred toaster is placed at `left: 50%` / `translateX(-50%)`.
 	const toastOffset = $derived(
-		showTabBar
-			? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)', left: 'var(--toast-left)' }
-			: undefined
+		showTabBar ? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)' } : undefined
 	);
 </script>
 
