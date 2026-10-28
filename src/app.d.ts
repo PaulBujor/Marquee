@@ -16,6 +16,8 @@ declare global {
 		SMTP_HOST: string;
 		SMTP_PORT: string;
 		EMAIL_FROM: string;
+		// Set to '1' to withdraw the public share pages without a rollback (see `share/public.ts`).
+		SHARE_PUBLIC_DISABLED?: string;
 	}
 
 	namespace App {

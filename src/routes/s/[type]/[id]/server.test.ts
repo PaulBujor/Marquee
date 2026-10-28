@@ -1,0 +1,161 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createTestDb } from '$lib/server/db/test-db';
+import { sharePreviews, users } from '$lib/server/db/schema';
+import { previewId } from '$lib/server/share/preview';
+import { PUBLIC_SHARE_HEADERS, SIGNED_IN_REDIRECT_HEADERS } from '$lib/server/share/public';
+import { load } from './+page.server';
+
+type Event = Parameters<typeof load>[0];
+
+const MOVIE = {
+	id: 603,
+	title: 'The Matrix',
+	release_date: '1999-03-31',
+	overview: 'A hacker learns the truth.',
+	poster_path: '/matrix.jpg'
+};
+
+async function setup(
+	opts: {
+		user?: { id: string } | null;
+		type?: string;
+		id?: string;
+		withDb?: boolean;
+		disabled?: boolean;
+		warmed?: boolean;
+	} = {}
+) {
+	const db = createTestDb();
+	await db.insert(users).values({ id: 'user-1', email: 'sharer@example.com', status: 'enabled' });
+	if (opts.warmed) {
+		await db.insert(sharePreviews).values({
+			id: previewId(603),
+			provider: 'tmdb',
+			externalId: '603',
+			titleType: 'movie',
+			name: 'The Matrix',
+			year: 1999,
+			summary: 'A hacker learns the truth.',
+			imagePath: '/matrix.jpg',
+			backdropPath: '/matrix-backdrop.jpg',
+			rating: 8.2,
+			runtime: 136,
+			releasedOn: '1999-03-31',
+			seasons: 0,
+			genres: JSON.stringify(['Action', 'Science Fiction']),
+			crew: JSON.stringify({
+				director: 'Lana Wachowski',
+				creators: [],
+				writers: ['Lilly Wachowski'],
+				producers: []
+			}),
+			cast: JSON.stringify([{ name: 'Keanu Reeves', profilePath: '/keanu.jpg' }]),
+			updatedAt: new Date()
+		});
+	}
+
+	const headers: Record<string, string> = {};
+	const pending: Promise<unknown>[] = [];
+	const event = {
+		params: { type: opts.type ?? 'movie', id: opts.id ?? '603' },
+		locals: { user: opts.user ?? null, db: opts.withDb === false ? undefined : db },
+		platform: {
+			env: opts.disabled
+				? { SHARE_PUBLIC_DISABLED: '1', TMDB_API_KEY: 'key' }
+				: { TMDB_API_KEY: 'key' },
+			ctx: { waitUntil: (promise: Promise<unknown>) => pending.push(promise) }
+		},
+		setHeaders: (values: Record<string, string>) => Object.assign(headers, values)
+	} as unknown as Event;
+
+	return { event, headers, db, pending };
+}
+
+/** The load answers with page data, or throws an `error()`/`redirect()`. */
+async function outcome(run: () => unknown) {
+	try {
+		return { data: (await run()) as Record<string, unknown> };
+	} catch (err) {
+		return { err: err as { status?: number; location?: string } };
+	}
+}
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+});
+
+describe('GET /s/[type]/[id]', () => {
+	it('404s on a type that is not a movie or a show, and on a nonsense id', async () => {
+		for (const opts of [
+			{ type: 'book' },
+			{ id: 'abc' },
+			{ id: '0' },
+			{ id: '-3' },
+			{ id: '1.5' }
+		]) {
+			const { event } = await setup(opts);
+			expect((await outcome(() => load(event))).err?.status).toBe(404);
+		}
+	});
+
+	it('503s without the platform bindings', async () => {
+		const { event } = await setup({ withDb: false });
+		expect((await outcome(() => load(event))).err?.status).toBe(503);
+	});
+
+	it('renders a warmed card anonymously, and never calls the provider', async () => {
+		const fetchSpy = vi.fn();
+		vi.stubGlobal('fetch', fetchSpy);
+		const { event, headers } = await setup({ warmed: true });
+
+		const { data } = await outcome(() => load(event));
+
+		expect(data).toMatchObject({
+			state: 'ready',
+			preview: { name: 'The Matrix', rating: 8.2, genres: ['Action', 'Science Fiction'] }
+		});
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
+	});
+
+	it('serves the cold state for a link nothing has warmed — still without the provider', async () => {
+		const fetchSpy = vi.fn();
+		vi.stubGlobal('fetch', fetchSpy);
+		const { event, headers } = await setup();
+
+		const { data } = await outcome(() => load(event));
+
+		expect(data).toMatchObject({ state: 'cold', type: 'movie', id: 603 });
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
+	});
+
+	it('serves the disabled state when public sharing is switched off', async () => {
+		const { event, headers } = await setup({ disabled: true, warmed: true });
+		const { data } = await outcome(() => load(event));
+		expect(data?.state).toBe('disabled');
+		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
+	});
+
+	it('sends a signed-in reader to the real page, warming the card on the way', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify(MOVIE)))
+		);
+		const { event, headers, db, pending } = await setup({ user: { id: 'user-1' } });
+
+		const { err } = await outcome(() => load(event));
+
+		expect(err?.status).toBe(303);
+		expect(err?.location).toBe('/title/movie/603');
+		// A signed-in redirect must never be publicly cacheable — another reader would inherit it.
+		expect(headers).toEqual(SIGNED_IN_REDIRECT_HEADERS);
+		expect(headers['cache-control']).toContain('private');
+
+		// The warm was detached, and it lands: the card is there for the next reader.
+		expect(pending).toHaveLength(1);
+		await Promise.all(pending);
+		const rows = await db.select().from(sharePreviews);
+		expect(rows[0]?.name).toBe('The Matrix');
+	});
+});

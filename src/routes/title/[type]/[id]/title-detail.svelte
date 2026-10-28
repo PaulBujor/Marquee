@@ -412,7 +412,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 		<!-- Trailing action, so it holds the right edge whether or not the title is showing. -->
 		<ShareButton
 			class="ml-auto shrink-0"
-			path={resolve('/title/[type]/[id]', { type: detail.type, id: String(detail.tmdbId) })}
+			path={resolve('/s/[type]/[id]', { type: detail.type, id: String(detail.tmdbId) })}
 			title={shareTitle}
 			warm={{ type: detail.type, id: detail.tmdbId }}
 			label="Share this title"
