@@ -10,6 +10,7 @@ import {
 } from '$lib/server/auth';
 import { codeField, emailField, firstError, signInModeField } from '$lib/validation';
 import { createEmailSender } from '$lib/server/email';
+import { safeRedirectPath } from '$lib/redirect';
 import type { Actions, PageServerLoad } from './$types';
 
 const SERVICE_UNAVAILABLE = 'Service unavailable.';
@@ -49,7 +50,13 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	if (locals.user) redirect(303, '/');
 
 	const linkError = linkErrorMessage(url.searchParams.get('error'));
-	return { linkError, linkTtlMinutes: LINK_TTL_MINUTES, codeTtlMinutes: CODE_TTL_MINUTES };
+	return {
+		linkError,
+		linkTtlMinutes: LINK_TTL_MINUTES,
+		codeTtlMinutes: CODE_TTL_MINUTES,
+		// Where to land after sign-in: a shared link being followed, usually.
+		redirectTo: safeRedirectPath(url.searchParams.get('redirectTo'))
+	};
 };
 
 export const actions: Actions = {
@@ -72,7 +79,8 @@ export const actions: Actions = {
 				sender,
 				origin: url.origin,
 				mode: signInModeField.parse(data.get('mode')),
-				ip: getClientAddress()
+				ip: getClientAddress(),
+				redirectTo: safeRedirectPath(data.get('redirectTo'))
 			});
 			return {
 				step: 'request' as const,
@@ -96,6 +104,7 @@ export const actions: Actions = {
 		// Display-only: echoed back so the combined browser card (link + code) survives a
 		// wrong code instead of collapsing to a code-only view. Verification ignores it.
 		const method = data.get('method') === 'link_and_code' ? 'link_and_code' : 'code';
+		const redirectTo = safeRedirectPath(data.get('redirectTo'));
 		if (!codeField.safeParse(code).success) {
 			return fail(400, {
 				step: 'code' as const,
@@ -114,7 +123,7 @@ export const actions: Actions = {
 		}
 		if (result.ok) {
 			setSessionCookie(cookies, result.token, result.expiresAt);
-			redirect(303, '/');
+			redirect(303, redirectTo);
 		}
 
 		return fail(400, {

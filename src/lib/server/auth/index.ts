@@ -24,6 +24,7 @@ import {
 import { createSession } from './session';
 import { generateCode, generateToken, hashToken } from './tokens';
 import { normalizeEmail } from './validation';
+import { safeRedirectPath } from '$lib/redirect';
 
 type Db = ReturnType<typeof createDb>;
 
@@ -75,6 +76,8 @@ export async function requestSignIn(opts: {
 	origin: string;
 	mode: SignInMode;
 	ip?: string | null;
+	/** Where to land after sign-in — carried into the emailed link, re-validated on the way back. */
+	redirectTo?: string | null;
 }): Promise<RequestResult> {
 	const email = normalizeEmail(opts.email);
 	const user = (await opts.db.select().from(users).where(eq(users.email, email)).limit(1)).at(0);
@@ -97,7 +100,13 @@ export async function requestSignIn(opts: {
 
 	// Browser: one email with both, so a user can click the link or type the code.
 	const { code, supersede, insert: codeInsert } = await codeWrites(opts.db, email, opts.ip);
-	const { url, insert: linkInsert } = await linkWrite(opts.db, email, opts.origin, opts.ip);
+	const { url, insert: linkInsert } = await linkWrite(
+		opts.db,
+		email,
+		opts.origin,
+		opts.ip,
+		opts.redirectTo
+	);
 	await opts.db.batch([supersede, codeInsert, linkInsert]);
 	await opts.sender.send({
 		to: email,
@@ -141,7 +150,13 @@ async function codeWrites(db: Db, email: string, ip?: string | null) {
  * Build the write for a fresh magic-link token without running it (batched by the
  * caller). Returns the sign-in URL alongside the insert statement.
  */
-async function linkWrite(db: Db, email: string, origin: string, ip?: string | null) {
+async function linkWrite(
+	db: Db,
+	email: string,
+	origin: string,
+	ip?: string | null,
+	redirectTo?: string | null
+) {
 	const token = generateToken();
 	const insert = db.insert(loginTokens).values({
 		email,
@@ -150,7 +165,10 @@ async function linkWrite(db: Db, email: string, origin: string, ip?: string | nu
 		requestIp: ip ?? null,
 		expiresAt: new Date(Date.now() + LINK_TTL_MS)
 	});
-	return { url: `${origin}/auth/verify?token=${encodeURIComponent(token)}`, insert };
+	// Only a same-origin path is ever put in the email, and `/auth/verify` re-validates it anyway.
+	const path = safeRedirectPath(redirectTo, '');
+	const carried = path === '' || path === '/' ? '' : `&redirectTo=${encodeURIComponent(path)}`;
+	return { url: `${origin}/auth/verify?token=${encodeURIComponent(token)}${carried}`, insert };
 }
 
 export type JoinResult =

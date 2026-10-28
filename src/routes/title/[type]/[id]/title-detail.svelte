@@ -15,6 +15,7 @@
 	import MediaImage from '$lib/components/media/media-image.svelte';
 	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
 	import LinkedEntryNotice from '$lib/components/media/linked-entry-notice.svelte';
+	import ShareButton from '$lib/components/share-button.svelte';
 	import HeaderScrim from '$lib/components/header-scrim.svelte';
 	import OfflineState from '$lib/components/offline-state.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -183,6 +184,8 @@
 	}
 
 	let detailsOpen = $state(true);
+	// Year in the share sheet's title, so the recipient's app shows which one.
+	const shareTitle = $derived(detail.year ? `${detail.title} (${detail.year})` : detail.title);
 	let similarOpen = $state(true);
 	let showTrailer = $state(false);
 
@@ -406,6 +409,13 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				{detail.title}
 			</h2>
 		{/if}
+		<!-- Trailing action, so it holds the right edge whether or not the title is showing. -->
+		<ShareButton
+			class="ml-auto shrink-0"
+			path={resolve('/title/[type]/[id]', { type: detail.type, id: String(detail.tmdbId) })}
+			title={shareTitle}
+			label="Share this title"
+		/>
 	</div>
 </header>
 

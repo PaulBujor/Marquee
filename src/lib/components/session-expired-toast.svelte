@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { session } from '$lib/client/session.svelte';
+	import { loginPathWithRedirect } from '$lib/redirect';
 
 	/**
 	 * A persistent toast when the session expires. Mounted in the root layout beside `<ErrorReporter />`
@@ -20,7 +20,15 @@
 			duration: Infinity,
 			action: {
 				label: 'Sign in',
-				onClick: () => goto(resolve('/login'))
+				// Carry the current page through sign-in: an expiry mid-browse is the most common
+				// way to end up here, and losing the page is what makes it feel like a kick-out.
+				onClick: () => {
+					const target = loginPathWithRedirect(
+						`${window.location.pathname}${window.location.search}`
+					);
+					// eslint-disable-next-line svelte/no-navigation-without-resolve
+					goto(target);
+				}
 			}
 		});
 	});
