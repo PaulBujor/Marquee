@@ -5,10 +5,7 @@ export interface EmailSender {
 	send(opts: { to: string; subject: string; html: string }): Promise<void>;
 }
 
-/**
- * Resolve the email transport: SMTP (Mailpit in dev) when `SMTP_HOST` is set,
- * otherwise Resend. `EMAIL_FROM` must be a Resend-verified sender in prod.
- */
+/** `EMAIL_FROM` must be a Resend-verified sender in production. */
 export function createEmailSender(env: Env): EmailSender {
 	const from = env.EMAIL_FROM;
 	if (!from) throw new Error('EMAIL_FROM is not configured');

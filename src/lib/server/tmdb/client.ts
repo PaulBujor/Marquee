@@ -30,35 +30,20 @@ import type {
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
-/**
- * Module-level circuit breaker (persists across requests in a Worker isolate) so a sustained
- * TMDB outage fails fast instead of every request retrying into a wall. Retries use short
- * server-side backoff — a metadata fetch shouldn't hold a request open for long.
- */
+/** Module-level so it persists across requests in a Worker isolate — a sustained outage fails fast. */
 const tmdbBreaker = new CircuitBreaker({ maxFailures: 5, cooldownMs: 30_000, name: 'tmdb' });
 const TMDB_RETRY = { maxAttempts: 3, baseMs: 300, maxMs: 3000 };
-/**
- * Per-attempt wall-clock budget. A metadata fetch shouldn't hold a Worker invocation open on a
- * stalled connection — and with `maxAttempts: 3` an untimed stall could stack three times over.
- */
+/** Per-attempt: with `maxAttempts: 3` an untimed stall could hold a Worker invocation open three times over. */
 const TMDB_TIMEOUT_MS = 5_000;
 
-/** How many cast members the detail page shows (TMDB orders `cast` by billing). */
 const CAST_LIMIT = 10;
-
-/** How many "similar" titles the detail page's row shows (recommendations + similar, merged). */
 const SIMILAR_LIMIT = 20;
-
-/** How many names to keep per crew role (writers / producers / creators) — the detail page lists a few. */
 const CREW_LIMIT = 3;
 const DIRECTOR_JOBS = new Set(['Director']);
 const WRITER_JOBS = new Set(['Writer', 'Screenplay', 'Story', 'Teleplay']);
 const PRODUCER_JOBS = new Set(['Producer', 'Executive Producer']);
 
-/**
- * Unique crew whose `job` is in `jobs`, in TMDB order, capped at {@link CREW_LIMIT}. Deduped by
- * name — TMDB lists the same person once per job they held, and the detail page wants them once.
- */
+/** Deduped by name — TMDB lists the same person once per job they held. */
 function crewByJob(crew: TmdbCrewMember[], jobs: Set<string>): CrewMember[] {
 	const members: CrewMember[] = [];
 	for (const c of crew) {
@@ -70,10 +55,8 @@ function crewByJob(crew: TmdbCrewMember[], jobs: Set<string>): CrewMember[] {
 	return members;
 }
 
-/** How many released credits one page of a person's filmography carries. */
 const PERSON_CREDITS_PAGE_SIZE = 20;
 
-/** Thrown when TMDB responds with a non-2xx status, so callers can map it to a clean HTTP error. */
 export class TmdbError extends Error {
 	constructor(
 		message: string,
@@ -84,11 +67,7 @@ export class TmdbError extends Error {
 	}
 }
 
-/**
- * Validate a TMDB payload against its shape, turning a mismatch into a `TmdbError` so it flows
- * through the same handling as any other bad upstream response — 502 is retried by `shouldRetry`,
- * and the search endpoint's degraded fallback still returns the local catalog.
- */
+/** Throws a 502 `TmdbError` so `shouldRetry` treats a shape change like any other bad upstream response. */
 function parseTmdb<T>(schema: ZodType<T>, data: unknown, what: string): T {
 	const result = schema.safeParse(data);
 	if (!result.success) {
@@ -98,14 +77,12 @@ function parseTmdb<T>(schema: ZodType<T>, data: unknown, what: string): T {
 	return result.data;
 }
 
-/** Parse a leading 4-digit year out of a TMDB date string (`YYYY-MM-DD`). */
 function parseYear(date: string | undefined): number | null {
 	if (!date) return null;
 	const year = Number(date.slice(0, 4));
 	return Number.isFinite(year) && year > 0 ? year : null;
 }
 
-/** Normalize a raw multi-search row to the app shape, or null for a media_type we don't render. */
 function normalize(item: TmdbMultiSearchItem): SearchResult | null {
 	if (item.media_type === 'movie') {
 		return {
@@ -130,8 +107,7 @@ function normalize(item: TmdbMultiSearchItem): SearchResult | null {
 		};
 	}
 	if (item.media_type === 'person') {
-		// Every department, not just the three the ticket names: dropping a writer or a composer the
-		// user searched by name would look like the app simply doesn't know them.
+		// Every department, not the three the ticket names — dropping a writer would look like the app doesn't know them.
 		return {
 			kind: 'person',
 			tmdbId: item.id,
@@ -146,10 +122,7 @@ function normalize(item: TmdbMultiSearchItem): SearchResult | null {
 	return null;
 }
 
-/**
- * Normalize a `recommendations` / `similar` row. These endpoints don't send `media_type` (it's
- * implied by the movie-vs-tv endpoint), so the caller passes `type`.
- */
+/** These endpoints send no `media_type` — it's implied by the movie-vs-tv endpoint, so the caller passes `type`. */
 function normalizeSimilar(type: 'movie' | 'show', item: TmdbSimilarItem): MediaSearchResult {
 	const isMovie = type === 'movie';
 	return {
@@ -162,11 +135,7 @@ function normalizeSimilar(type: 'movie' | 'show', item: TmdbSimilarItem): MediaS
 	};
 }
 
-/**
- * Merge the appended `recommendations` + `similar` lists into one "more like this" row:
- * recommendations first (TMDB's curated picks), then similar (keyword/genre overlap) to backfill,
- * deduped by id, poster-only (a posterless tile is useless in the row), and capped.
- */
+/** Recommendations first (TMDB's curated picks), then similar to backfill; poster-only, since a posterless tile is useless. */
 function mergeSimilar(
 	type: 'movie' | 'show',
 	selfId: number,
@@ -184,7 +153,6 @@ function mergeSimilar(
 	return out;
 }
 
-/** Normalize a raw movie/tv detail response to the app-facing `MediaDetail` shape. */
 function normalizeDetails(
 	type: 'movie' | 'show',
 	data: TmdbMovieDetailsResponse | TmdbTvDetailsResponse
@@ -197,8 +165,7 @@ function normalizeDetails(
 		(v) => v.site === 'YouTube' && v.type === 'Trailer'
 	);
 
-	// Crew: movies carry a real director/writer in `credits.crew`; shows keep per-episode crew off
-	// this response, so their nearest equivalent is the top-level `created_by` (series creators).
+	// Shows keep per-episode crew off this response, so their nearest equivalent is `created_by`.
 	const crew = data.credits?.crew ?? [];
 
 	return {
@@ -252,7 +219,6 @@ function normalizeDetails(
 	};
 }
 
-/** Normalize a raw `/tv/{id}/season/{n}` response to the app-facing `SeasonDetail` shape. */
 function normalizeSeason(data: TmdbSeasonDetailResponse): SeasonDetail {
 	return {
 		seasonNumber: data.season_number,
@@ -269,7 +235,6 @@ function normalizeSeason(data: TmdbSeasonDetailResponse): SeasonDetail {
 	};
 }
 
-/** Normalize the biographical half of a `/person/{id}` response. */
 function normalizePerson(data: TmdbPersonResponse): PersonDetail {
 	return {
 		tmdbId: data.id,
@@ -283,7 +248,6 @@ function normalizePerson(data: TmdbPersonResponse): PersonDetail {
 	};
 }
 
-/** Normalize one `combined_credits` row; `role` is the character (cast) or the job (crew). */
 function normalizeCredit(item: TmdbCombinedCreditItem): PersonCredit {
 	const isMovie = item.media_type === 'movie';
 	const date = (isMovie ? item.release_date : item.first_air_date) || null;
@@ -299,15 +263,7 @@ function normalizeCredit(item: TmdbCombinedCreditItem): PersonCredit {
 	};
 }
 
-/**
- * Flatten a person's `combined_credits` into the two lists the person page renders, split on `today`
- * (`YYYY-MM-DD`) into work that's out and work that isn't yet.
- *
- * A person is often credited several times on the same title — as an actor *and* a producer, or
- * under two crew jobs — so rows are deduped by `(media_type, id)` with their roles merged into one
- * label. Released work sorts newest-first (the filmography reading order); upcoming work sorts
- * soonest-first with undated (unannounced) titles last, since those are the least concrete.
- */
+/** A person is often credited several times on one title, so rows are deduped by `(media_type, id)` with roles merged. */
 function normalizePersonCredits(
 	credits: TmdbCombinedCredits,
 	today: string
@@ -338,10 +294,6 @@ function normalizePersonCredits(
 	return { upcoming, released };
 }
 
-/**
- * TMDB API client. `createTmdbClient(apiKey)` is the single place the API key and base URL
- * live; the key is read off `env.TMDB_API_KEY` at the call site (see the search endpoint).
- */
 export function createTmdbClient(apiKey: string) {
 	async function request(path: string, params: Record<string, string>): Promise<unknown> {
 		if (!tmdbBreaker.canAttempt()) {
@@ -355,7 +307,7 @@ export function createTmdbClient(apiKey: string) {
 
 		try {
 			// Retry only transient failures (network error → 502, or 5xx/429); a 4xx (bad id/key)
-			// won't fix by retrying, so fail fast.
+			// won't fix by retrying.
 			const data = await withRetry(
 				async () => {
 					let res: Response;
@@ -387,10 +339,6 @@ export function createTmdbClient(apiKey: string) {
 	}
 
 	return {
-		/**
-		 * Live multi-search for movies, shows and people, in TMDB's own relevance order — the UI
-		 * filters that one list rather than issuing a request per kind.
-		 */
 		async search(query: string): Promise<SearchResult[]> {
 			const trimmed = query.trim();
 			if (!trimmed) return [];
@@ -405,7 +353,6 @@ export function createTmdbClient(apiKey: string) {
 			return (data.results ?? []).map(normalize).filter((r): r is SearchResult => r !== null);
 		},
 
-		/** Fetch a single movie/show with credits, images, videos, and similar titles appended. */
 		async getDetails(type: 'movie' | 'show', id: number): Promise<MediaDetail> {
 			const path = type === 'movie' ? `/movie/${id}` : `/tv/${id}`;
 			const raw = await request(path, {
@@ -418,13 +365,7 @@ export function createTmdbClient(apiKey: string) {
 			return normalizeDetails(type, data);
 		},
 
-		/**
-		 * Fetch a person with everything they've worked on, as one page of credits.
-		 *
-		 * TMDB has no paged filmography endpoint — `combined_credits` comes back whole (hundreds of
-		 * rows for a prolific actor), so the paging is ours: the caller asks for a page and only that
-		 * slice crosses the wire to the client.
-		 */
+		/** TMDB has no paged filmography endpoint — `combined_credits` comes back whole, so the paging is ours. */
 		async getPerson(id: number, page = 1): Promise<PersonCreditsPage> {
 			const raw = await request(`/person/${id}`, { append_to_response: 'combined_credits' });
 			const data = parseTmdb(personResponseSchema, raw, 'person') as unknown as TmdbPersonResponse;
@@ -446,7 +387,6 @@ export function createTmdbClient(apiKey: string) {
 			};
 		},
 
-		/** Fetch a single TV season with its episodes, normalized. */
 		async getSeason(showId: number, seasonNumber: number): Promise<SeasonDetail> {
 			const raw = await request(`/tv/${showId}/season/${seasonNumber}`, {});
 			const data = parseTmdb(

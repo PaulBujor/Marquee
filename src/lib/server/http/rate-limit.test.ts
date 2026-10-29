@@ -15,18 +15,18 @@ describe('slidingWindow', () => {
 	});
 
 	it('limits once the cap is reached within the window, with a Retry-After to the oldest ageing out', () => {
-		const hits = [1000, 2000, 3000]; // 3 hits, cap 3
+		const hits = [1000, 2000, 3000];
 		const { result, kept } = slidingWindow(hits, 3500, 60_000, 3);
 		expect(result.limited).toBe(true);
 		// oldest (1000) ages out at 1000 + 60000 = 61000; from now (3500) that's 57.5s → ceil 58.
 		expect(result.retryAfterSec).toBe(58);
-		expect(kept).toEqual(hits); // the rejected hit is not appended
+		expect(kept).toEqual(hits);
 	});
 
 	it('prunes hits outside the window so the cap only counts recent ones', () => {
-		const hits = [1000, 2000, 3000]; // all older than the window at now=70000
+		const hits = [1000, 2000, 3000];
 		const { result, kept } = slidingWindow(hits, 70_000, 60_000, 3);
-		expect(result.limited).toBe(false); // all pruned → under cap again
+		expect(result.limited).toBe(false);
 		expect(kept).toEqual([70_000]);
 	});
 
@@ -140,15 +140,13 @@ describe('wrangler configuration', () => {
 		return JSON.parse(out);
 	}
 
-	// `withinRateLimit` fails open, so a binding that goes missing in an environment is invisible at
-	// runtime — the only place to catch it is here.
+	// `withinRateLimit` fails open, so a binding missing from an environment is invisible at runtime — this is the only place to catch it.
 	it('declares both rate limits in production and in previews', () => {
 		const config = parseJsonc(readFileSync(join(process.cwd(), 'wrangler.jsonc'), 'utf8'));
 		expect(config.previews).toBeDefined();
 
 		for (const scope of [config, config.previews!]) {
-			// A binding declared in only one scope is invisible at runtime: the helper fails open, and
-			// Previews inherit nothing, so a preview would simply be unlimited.
+			// Previews inherit nothing, so a binding declared in one scope only means that environment is unlimited.
 			const names = (scope.ratelimits ?? []).map((b: { name: string }) => b.name).sort();
 			expect(names).toEqual(['APP_RATE_LIMITER', 'PUBLIC_SHARE_LIMITER']);
 		}

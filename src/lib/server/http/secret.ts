@@ -1,20 +1,8 @@
-/**
- * Constant-time secret comparison for request-authenticated endpoints (the cron routes).
- *
- * A plain `!==` short-circuits on the first differing character, so its runtime leaks how long a
- * shared prefix was. Over the public internet that signal is buried in network jitter and this is
- * not a practical attack — but the fix is three lines, and the habit matters more where a future
- * comparison might be reachable over a lower-noise path.
- */
+/** Constant-time comparison for the cron routes — `!==` short-circuits and leaks how long a shared prefix was. */
 
 const encoder = new TextEncoder();
 
-/**
- * Whether two secrets match, in time independent of *where* they differ.
- *
- * Both sides are hashed first so the comparison always runs over equal-length input: comparing raw
- * strings would still leak the length of the expected secret through the loop bound.
- */
+/** Both sides are hashed first so the loop bound can't leak the expected secret's length. */
 export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
 	const [da, db] = await Promise.all([
 		crypto.subtle.digest('SHA-256', encoder.encode(a)),
@@ -27,10 +15,7 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
 	return diff === 0;
 }
 
-/**
- * Validate a cron request's `x-cron-key` against `CRON_SECRET`. False when the secret isn't
- * configured, so a missing binding fails closed rather than accepting every caller.
- */
+/** False when the secret isn't configured, so a missing binding fails closed rather than accepting every caller. */
 export async function isAuthorizedCronRequest(
 	request: Request,
 	secret: string | undefined

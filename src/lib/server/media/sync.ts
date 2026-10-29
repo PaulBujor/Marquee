@@ -1,9 +1,4 @@
-/**
- * Core of the media reference channel (`POST /api/media/sync`). Client-driven: the client sends
- * identity hints + version-diffs, the server hydrates missing titles and returns what's behind.
- * Validates against the user's own tracking rows (anti-abuse). TTL refresh is cron-only.
- * The channel also carries user-authored media as whole records, stored owner-scoped.
- */
+/** Validates against the user's own tracking rows (anti-abuse); TTL refresh is cron-only. */
 import { and, eq, inArray } from 'drizzle-orm';
 import {
 	episodeWatches,
@@ -26,28 +21,13 @@ type Db = ReturnType<typeof createDb>;
 type SeasonRecord = NonNullable<MediaRecord['seasons']>[number];
 type EpisodeRecord = NonNullable<MediaRecord['episodes']>[number];
 
-/**
- * Max titles hydrated from TMDB in a single sync request. Each hydrate is a heavy TMDB pull
- * (details + every season) parsed + normalized on the isolate, so an unbounded pass over a large
- * backlog (a cold client, or a bulk import) blows the Worker CPU limit. Anything beyond the cap
- * is left for the next request — the response's `pending` flag tells the client to loop until it
- * drains.
- */
+/** An unbounded pass blows the Worker CPU limit on a cold client or bulk import; `pending` tells the client to loop. */
 export const MEDIA_SYNC_REFRESH_MAX = 25;
 
-/** Below any real `media.version` (versions start at 1), so an id absent from `have` is always
- *  treated as "the client has nothing" rather than needing special-cased undefined-handling. */
+/** Below any real `media.version` (versions start at 1), so an id absent from `have` reads as "the client has nothing". */
 const NO_VERSION = -1;
 
-/**
- * The anti-abuse gate: only ids the user's own `tracking`/`episode_watches` projections
- * reference are ever touched, regardless of what the request claims. `tracking` is looked up by
- * its own PK (`${userId}::${mediaId}`, see `trackingKey`) rather than an `eq(userId) +
- * inArray(mediaId)` filter — the latter has no supporting index (`tracking`'s only index is
- * `(user_id, status)`) and would scan the user's whole tracking table on every request instead of
- * doing point lookups. `episode_watches` has a genuine `(user_id, media_id)` compound index, so
- * that one stays a straightforward filter.
- */
+/** Only ids the user's own tracking/episode_watches reference are touched. `tracking` is looked up by PK because its only index is `(user_id, status)`, so an `eq` + `inArray` filter would scan the whole table. */
 async function validateReferencedIds(db: Db, userId: string, ids: string[]): Promise<Set<string>> {
 	const valid = new Set<string>();
 	for (const c of chunkIds(ids)) {
@@ -72,7 +52,7 @@ async function validateReferencedIds(db: Db, userId: string, ids: string[]): Pro
 	return valid;
 }
 
-/** Project a media row (+ its child rows) to the wire record (drops the server-only LWW clock). */
+/** Project a media row to the wire record, dropping the server-only LWW clock. */
 function toRecord(
 	row: Media,
 	seasonRows: SeasonRecord[],
@@ -100,14 +80,11 @@ function toRecord(
 		version: row.version,
 		seasons: isShow ? seasonRows : null,
 		episodes: isShow ? episodeRows : null,
-		// Always an array, never null: a row we've loaded is authoritative about its own credits, and
-		// null would tell the client "unknown, keep what you have" — which would strand a cast that
-		// was legitimately emptied upstream.
+		// Always an array, never null: null would tell the client "unknown, keep what you have", stranding a cast that was legitimately emptied upstream.
 		credits: creditRows
 	};
 }
 
-/** Attach each show's seasons/episodes and project the whole set to wire records. */
 async function withChildren(db: Db, rows: Media[]): Promise<MediaRecord[]> {
 	if (rows.length === 0) return [];
 	const showIds = rows.filter((r) => r.type === 'show').map((r) => r.id);
@@ -171,9 +148,7 @@ export async function resolveMediaSync(
 	req: MediaSyncRequest,
 	now: number = Date.now()
 ): Promise<MediaSyncResponse> {
-	// Identity refs let us hydrate; `have` reports the client's version per id; `custom` carries
-	// whole user-authored records to back up. The request's universe is whatever ids appear in any
-	// of them — no independent recomputation from the log.
+	// The request's universe is whatever ids appear in refs/have/custom — no recomputation from the log.
 	const refById = new Map(req.refs.map((ref) => [mediaId(ref.provider, ref.externalId), ref]));
 	const haveVersion = new Map(req.have.map((h) => [h.id, h.version]));
 	const pushedCustom = req.custom ?? [];
@@ -187,8 +162,7 @@ export async function resolveMediaSync(
 	const storedCustom =
 		pushedCustom.length > 0 ? await storeCustomMedia(db, userId, pushedCustom, validIds) : [];
 
-	// Chunk every `IN (...)` id list under D1's bound-parameter limit (a large tracked library
-	// otherwise overflows it — the media sync 500 this fixes).
+	// Chunked under D1's bound-parameter limit — a large tracked library otherwise overflows it.
 	const loadMedia = async (ids: string[]): Promise<Media[]> =>
 		(
 			await Promise.all(
@@ -198,8 +172,7 @@ export async function resolveMediaSync(
 
 	const existingById = new Map((await loadMedia([...validIds])).map((r) => [r.id, r]));
 
-	// Only a title with *no* stored row needs TMDB work here — an existing-but-stale row is the
-	// nightly cron's job (`enqueueStaleMedia`), not a request-time concern.
+	// Only a title with *no* stored row is hydrated here; an existing-but-stale row is the nightly cron's job.
 	const missing: typeof req.refs = [];
 	for (const id of validIds) {
 		const ref = refById.get(id);
@@ -214,8 +187,7 @@ export async function resolveMediaSync(
 		);
 	}
 
-	// Isolate per-title failures so one bad title doesn't fail the whole sync — the failed row keeps
-	// its old data and retries next cycle.
+	// Isolate per-title failures so one bad title doesn't fail the whole sync.
 	for (const ref of toRefresh) {
 		try {
 			await refreshMedia(db, tmdb, ref.provider, ref.externalId, now);
@@ -224,8 +196,6 @@ export async function resolveMediaSync(
 		}
 	}
 
-	// Re-read only the ids we just hydrated (not the whole request) and fold them in — everything
-	// else is unchanged since `existingById` was read above.
 	if (toRefresh.length > 0) {
 		const refreshedIds = toRefresh.map((ref) => mediaId(ref.provider, ref.externalId));
 		for (const row of await loadMedia(refreshedIds)) existingById.set(row.id, row);
@@ -234,9 +204,7 @@ export async function resolveMediaSync(
 	const staleForClient = [...validIds]
 		.map((id) => existingById.get(id))
 		.filter((r): r is Media => r !== undefined)
-		// A private row belongs to exactly one account. The `tracking` gate above proves the *asker*
-		// references the id, not that they may read it — an id can be referenced by minting an event
-		// for it, so ownership is checked separately and is the thing that actually protects the row.
+		// The tracking gate proves the *asker* references the id, not that they may read it — an id can be referenced by minting an event, so ownership is what protects the row.
 		.filter((r) => r.ownerUserId === null || r.ownerUserId === userId)
 		.filter((r) => (haveVersion.get(r.id) ?? NO_VERSION) < r.version);
 

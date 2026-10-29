@@ -48,7 +48,6 @@ describe('isAuthorizedCronRequest', () => {
 	});
 
 	it('fails closed when the secret is not configured', async () => {
-		// A missing binding must not authorize every caller.
 		await expect(isAuthorizedCronRequest(req({ 'x-cron-key': 'top' }), undefined)).resolves.toBe(
 			false
 		);
