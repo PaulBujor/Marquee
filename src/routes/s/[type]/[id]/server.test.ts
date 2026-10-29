@@ -118,6 +118,14 @@ describe('GET /s/[type]/[id]', () => {
 		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
 	});
 
+	it('never lets a shared page be cached, so a signed-in reader is not served an anonymous copy', async () => {
+		const { event, headers } = await setup({ warmed: true });
+		await outcome(() => load(event));
+
+		expect(headers['cache-control']).toBe('no-store');
+		expect(headers['x-robots-tag']).toBe('noindex, noarchive');
+	});
+
 	it('serves the cold state for a link nothing has warmed — still without the provider', async () => {
 		const fetchSpy = vi.fn();
 		vi.stubGlobal('fetch', fetchSpy);

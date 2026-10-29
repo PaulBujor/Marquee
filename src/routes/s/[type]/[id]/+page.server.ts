@@ -8,8 +8,8 @@ import {
 import type { PageServerLoad } from './$types';
 
 /**
- * The page a shared title link opens. Server-rendered and cacheable because a link unfurler does
- * not run JavaScript — the card has to be in the initial HTML.
+ * The page a shared title link opens. Server-rendered because a link unfurler does not run
+ * JavaScript — the card has to be in the initial HTML — and never cached; see PUBLIC_SHARE_HEADERS.
  *
  * It reads warmed previews only. Warming needs a session (see `/api/share/preview`), so following
  * a shared link can never cost a provider call, however many crawlers walk it.
