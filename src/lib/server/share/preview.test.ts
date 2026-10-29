@@ -117,7 +117,7 @@ describe('warming a preview', () => {
 		// The TMDB client caps cast at ten; the snapshot carries exactly what the page shows.
 		expect(result.preview.cast).toHaveLength(10);
 		expect(result.preview.cast[0]).toEqual({ name: 'Actor 0', profilePath: '/actor-0.jpg' });
-		// Cast faces carry no id: the shared page shows them, it never links to a person.
+		// Deliberate omission: the shared page never links to a person.
 		expect(Object.keys(result.preview.cast[0])).toEqual(['name', 'profilePath']);
 	});
 
@@ -261,7 +261,6 @@ describe('reading a preview', () => {
 		stubFetch(MOVIE);
 		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW });
 
-		// Drop the stub: anything that reached for the network here would throw.
 		vi.unstubAllGlobals();
 		const preview = await readPreview(db, 'movie', 603);
 		expect(preview).toMatchObject({ name: 'The Matrix' });
@@ -379,8 +378,7 @@ describe('the trailer', () => {
 		stubFetch(MOVIE);
 		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW });
 
-		// A key with no name, a value that isn't JSON at all, and keys that are not keys: the embed URL is
-		// built by interpolating this, and nothing user-shaped belongs in it.
+		// The embed URL interpolates this key, so nothing user-shaped may survive it.
 		for (const stored of [
 			'{"name":"Trailer"}',
 			'{oops',

@@ -5,11 +5,6 @@ import type { createDb } from '#lib/server/db/index.js';
 
 type Db = ReturnType<typeof createDb>;
 
-/**
- * Body of `POST /api/push/subscribe` — the browser `PushSubscription.toJSON()` shape plus the
- * device identity/label and the client-detected timezone. Re-validated server-side (the client is
- * never trusted); `endpoint` must be an https push-service URL.
- */
 export const pushSubscribeSchema = z.object({
 	endpoint: z
 		.string()
@@ -28,11 +23,6 @@ export const pushSubscribeSchema = z.object({
 
 export type PushSubscribeInput = z.infer<typeof pushSubscribeSchema>;
 
-/**
- * Store (or refresh) a push subscription for a user, keyed by its `endpoint`. Re-subscribing from
- * the same device is idempotent: the row is updated in place (keys can rotate, timezone can change)
- * and `lastUsedAt` bumped, rather than creating duplicates.
- */
 export async function upsertSubscription(
 	db: Db,
 	userId: string,
@@ -75,7 +65,6 @@ export interface SubscriptionListItem {
 	lastUsedAt: number;
 }
 
-/** List a user's own subscriptions, most-recently-used first (for the settings device list). */
 export async function listSubscriptions(db: Db, userId: string): Promise<SubscriptionListItem[]> {
 	const rows = await db
 		.select({
@@ -95,10 +84,7 @@ export async function listSubscriptions(db: Db, userId: string): Promise<Subscri
 	}));
 }
 
-/**
- * Delete one of the user's own subscriptions by id. Scoped to `userId` so a caller can never remove
- * another account's device. Returns true when a row was actually removed.
- */
+// Scoped to `userId` so a caller can never remove another account's device.
 export async function deleteSubscription(db: Db, userId: string, id: string): Promise<boolean> {
 	const deleted = await db
 		.delete(pushSubscriptions)

@@ -1,18 +1,4 @@
-/**
- * Server-side projection of the event log into the materialized user-state tables
- * (`tracking`, `episode_watches`). The log is authoritative; those tables are strictly
- * derivable from it (see {@link rebuildProjection}). Media is reference data synced on a
- * separate parallel channel, not through the event log.
- *
- * `media.deleted` is the single exception: a user-authored row is private and nothing can
- * re-hydrate it, so its removal is a user action and has to travel with the others. A rebuild
- * replaying it re-issues the same delete, which is both idempotent and right — the entry really was
- * deleted. It can only ever remove a row the user owns; every other media row stays outside the log.
- *
- * Idempotency and conflict resolution live in SQL: every write is an upsert guarded by
- * `ON CONFLICT DO UPDATE ... WHERE <clock> >= existing`, so re-applying is a no-op and
- * conflicts resolve per **field** last-write-wins keyed by `clientCreatedAt` (epoch ms).
- */
+// The event log is authoritative; `media.deleted` is the one media write in it, and every write is a per-field LWW upsert keyed by `clientCreatedAt`.
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
@@ -28,7 +14,6 @@ import {
 } from '#lib/sync/events.js';
 
 type Db = ReturnType<typeof createDb>;
-/** A runnable SQLite query that can be handed to `db.batch()`. */
 type Statement = BatchItem<'sqlite'>;
 type TrackingFields = Partial<typeof tracking.$inferInsert>;
 
@@ -40,12 +25,7 @@ function runBatch(db: Db, statements: Statement[]): Promise<unknown[]> {
 	return db.batch(statements as unknown as [Statement, ...Statement[]]);
 }
 
-/**
- * Atomically reserve a contiguous block of `count` sequence numbers for a user.
- * A single upsert-with-RETURNING is serialized by SQLite, so concurrent Worker
- * invocations receive disjoint blocks. Returns the new high-water mark; the
- * caller owns `[highWater - count + 1 .. highWater]`.
- */
+// One upsert-with-RETURNING, serialized by SQLite, so concurrent Worker invocations get disjoint blocks.
 async function reserveSequenceBlock(db: Db, userId: string, count: number): Promise<number> {
 	const [row] = await db
 		.insert(syncState)
@@ -58,10 +38,6 @@ async function reserveSequenceBlock(db: Db, userId: string, count: number): Prom
 	return row.lastSequence;
 }
 
-/**
- * Upsert one field-group of a user's tracking row under an LWW guard on `clockColumn`.
- * `fields` seeds a fresh row (insert branch) and is the winning update (conflict branch).
- */
 function trackingUpsert(
 	db: Db,
 	event: ServerEvent,
@@ -87,16 +63,13 @@ function trackingUpsert(
 		});
 }
 
-/** Build the materialized user-state upserts for a single (server-augmented) event. */
 export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 	const clock = event.clientCreatedAt;
 
 	switch (event.type) {
 		case 'tracking.added': {
 			const payload = event.payload as EventPayloadMap['tracking.added'];
-			// An add asserts the tracking entry: set the status and revive from any tombstone
-			// as two independent LWW fields, so a stale add can't un-remove a title a newer
-			// removal deleted. (Media is reference data, handled off the event log.)
+			// Two independent LWW fields, so a stale add can't un-remove a title a newer removal deleted.
 			return [
 				trackingUpsert(
 					db,
@@ -182,18 +155,11 @@ export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 		case 'media.linked':
 		case 'media.unlinked':
 		case 'media.match_declined': {
-			// Media links are resolved on the client. They still travel through the log — that is what
-			// carries a link or a dismissal to the user's other devices — but no server read path
-			// consults one: the media channel gates on `tracking`, and the notification digest joins
-			// `tracking` to `episodes`. So there is nothing to materialize here, and leaving these
-			// unprojected keeps the materialized tables exactly derivable by `rebuildProjection`.
+			// Client-resolved and never read server-side; leaving them unprojected keeps the tables derivable.
 			return [];
 		}
 		case 'media.deleted': {
-			// The `source` and `owner_user_id` predicates are the gate, not a filter: `entityId` is
-			// client-minted and untrusted, so an event naming a shared `linked` row or somebody else's
-			// entry has to delete nothing rather than be taken at its word. Seasons, episodes and
-			// credits cascade from the media row.
+			// A gate, not a filter: `entityId` is client-minted, so an event naming a shared or foreign row must delete nothing.
 			return [
 				db
 					.delete(media)
@@ -209,24 +175,7 @@ export function projectEvent(db: Db, event: ServerEvent): Statement[] {
 	}
 }
 
-/**
- * Lower a tracking row's `addedAt` to the earliest clock seen for it.
- *
- * `trackingUpsert` can only set `addedAt` on the insert branch — its conflict branch is gated by
- * that field-group's LWW guard, so an event older than the one that created the row updates
- * nothing. That made the server's `addedAt` the clock of whichever event *arrived* first, while
- * the client (`idb/state.ts`) takes the minimum across every event. Two devices adding the same
- * title offline would then disagree permanently, and the value would depend on network arrival
- * order — the one thing LWW is meant to make irrelevant.
- *
- * A plain unguarded `min()` is order-independent and idempotent, so replaying converges. Emitted
- * once per (row, batch) rather than per event: the min over a push's events for a title is known
- * up front, so bulk-marking a 200-episode series adds one statement, not 200.
- *
- * Runs as an UPDATE, not an upsert — the batch always projects the row's events first, so by the
- * time this executes the row exists. `added_at` is a `timestamp` column (Unix *seconds*), while
- * event clocks are epoch ms; convert before comparing.
- */
+// Unguarded `min()` is order-independent (the client takes the min too); `added_at` is Unix seconds, clocks epoch ms.
 function addedAtFloor(db: Db, userId: string, entityId: string, clockMs: number): Statement {
 	return db
 		.update(tracking)
@@ -234,11 +183,7 @@ function addedAtFloor(db: Db, userId: string, entityId: string, clockMs: number)
 		.where(eq(tracking.id, trackingKey(userId, entityId)));
 }
 
-/**
- * The earliest clock per tracked entity across `events`, considering only `tracking.*` events —
- * episode events project to `episode_watches` and never create or touch a tracking row, so they
- * are outside `addedAt`'s definition on both sides.
- */
+// Only `tracking.*` events: episode events never create or touch a tracking row, so they're outside `addedAt`.
 function earliestTrackingClocks(events: ServerEvent[]): Map<string, number> {
 	const earliest = new Map<string, number>();
 	for (const event of events) {
@@ -251,7 +196,6 @@ function earliestTrackingClocks(events: ServerEvent[]): Map<string, number> {
 	return earliest;
 }
 
-/** The append-only log insert for one event (dedup by the composite `(user_id, id)` PK). */
 function insertEventStatement(db: Db, event: ServerEvent): Statement {
 	return db
 		.insert(eventsTable)
@@ -270,17 +214,7 @@ function insertEventStatement(db: Db, event: ServerEvent): Statement {
 		.onConflictDoNothing();
 }
 
-/**
- * Persist a user's incoming events and return them with their server-assigned `sequence`
- * (in `clientCreatedAt` order). Dedup is per-user (PK is `(user_id, id)`): events already
- * stored are dropped up front, and duplicate ids *within* the push are collapsed (first
- * wins) — since only one row per id can persist, projecting a second would desync the
- * materialized state from the log (breaks {@link rebuildProjection}).
- *
- * Each event's log insert and its projection share one batch (chunked for D1 limits), so a
- * mid-way failure can't persist an event without its projection; committed batches are
- * idempotent on retry, and uncommitted events stay unsynced.
- */
+// Log insert and projection share one batch, so a mid-way failure can't persist an event without its projection.
 export async function applyEvents(
 	db: Db,
 	userId: string,
@@ -288,12 +222,11 @@ export async function applyEvents(
 ): Promise<ServerEvent[]> {
 	if (incoming.length === 0) return [];
 
-	// Collapse duplicate ids within this push (keep first occurrence) — see the doc note.
 	const byId = new Map<string, EventEnvelope>();
 	for (const e of incoming) if (!byId.has(e.id)) byId.set(e.id, e);
 	const unique = [...byId.values()];
 
-	// Dedup within this user's events (PK is composite), chunked for D1's param limit.
+	// Chunked for D1's parameter limit.
 	const seen = new Set<string>();
 	for (const ids of chunkIds(unique.map((e) => e.id))) {
 		const rows = await db
@@ -305,7 +238,6 @@ export async function applyEvents(
 	const fresh = unique.filter((e) => !seen.has(e.id));
 	if (fresh.length === 0) return [];
 
-	// Assign sequence in causal (clientCreatedAt) order.
 	fresh.sort((a, b) => a.clientCreatedAt - b.clientCreatedAt);
 	const highWater = await reserveSequenceBlock(db, userId, fresh.length);
 	const start = highWater - fresh.length + 1;
@@ -340,11 +272,7 @@ export async function applyEvents(
 	return serverEvents;
 }
 
-/**
- * Recovery / test oracle: drop a user's materialized rows and rebuild them by replaying
- * the event log in `sequence` order. Media is reference data (not derived from the log),
- * so it's untouched by a rebuild.
- */
+// Recovery/test oracle; media is reference data, so a rebuild leaves it alone.
 export async function rebuildProjection(db: Db, userId: string): Promise<void> {
 	await db.delete(tracking).where(eq(tracking.userId, userId));
 	await db.delete(episodeWatches).where(eq(episodeWatches.userId, userId));

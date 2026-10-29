@@ -58,8 +58,7 @@ describe('auditStatement', () => {
 		await expect(
 			db.batch([
 				db.update(users).set({ status: 'enabled' }).where(eq(users.id, 'user-1')),
-				// Duplicate primary key: fails at execution, not at prepare time, so the batch itself
-				// is what raises and the rollback is what the assertion below observes.
+				// Duplicate primary key: fails at execution, not prepare time, so the batch is what raises.
 				db.insert(users).values({ id: 'user-1', email: 'duplicate@example.com' })
 			])
 		).rejects.toThrow();

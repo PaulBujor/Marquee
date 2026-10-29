@@ -1,8 +1,4 @@
-/**
- * Share previews: the catalogue-only snapshot a public shared link renders from. Warming is the only
- * path that reaches TMDB for a share and needs a session, so a crawler spends no provider quota; the
- * read path touches D1 only. Warming is idempotent, and capped per account.
- */
+// Warming needs a session and is capped per account; the read path is D1-only, so crawlers cost no TMDB quota.
 import { and, count, eq, gte, lt } from 'drizzle-orm';
 import { createTmdbClient, TmdbError, type MediaDetail } from '#lib/server/tmdb/index.js';
 import { sharePreviewWarms, sharePreviews, type SharePreviewRow } from '#lib/server/db/schema.js';
@@ -61,8 +57,6 @@ export async function warmTitlePreview(
 	if (!isValidExternalId(opts.id)) return { kind: 'not_found' };
 	const now = opts.now ?? Date.now();
 
-	// A stored preview this fresh is what a warm would produce anyway, so don't spend a provider call
-	// on it — re-opening a shared link shouldn't cost TMDB anything.
 	const stored = await readPreview(db, opts.type, opts.id);
 	if (stored && now - stored.updatedAt < PREVIEW_FRESH_MS)
 		return { kind: 'warmed', preview: stored };
@@ -91,7 +85,7 @@ export async function warmTitlePreview(
 	}
 }
 
-/** Read a warmed preview. D1 only — this is the public read path's entire data access. */
+// D1 only — this is the public read path's entire data access.
 export async function readPreview(
 	db: Db,
 	type: 'movie' | 'show',
@@ -242,7 +236,7 @@ function isIsoDate(value: string | null): value is string {
 	return typeof value === 'string' && value.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-/** A YouTube key: letters, digits, `-` and `_`. Anything else is not one, and has no place in a URL. */
+/** A YouTube key: anything else has no place in an embed URL. */
 const TRAILER_KEY = /^[A-Za-z0-9_-]{6,20}$/;
 
 /** A malformed trailer is dropped rather than rendered: an embed needs a usable key. */

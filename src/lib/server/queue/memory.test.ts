@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { QueueConsumer, QueueEnvelope, QueueOutcome } from './types';
 import { createMemoryQueue } from './memory';
 
-/** A consumer that acks even ids, retries odd ids — enough to prove outcomes flow through. */
 function evenOddConsumer(): QueueConsumer<number> {
 	return {
 		async processBatch(envelopes) {

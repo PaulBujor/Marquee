@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Stub the crypto/encryption library — its VAPID + aes128gcm correctness is its own concern; here
-// we only verify the sender wires the request to `fetch` and maps the response status.
+// Stub the crypto library — its VAPID/aes128gcm correctness is its own concern; here we only verify fetch wiring and status mapping.
 vi.mock('@pushforge/builder', () => ({
 	buildPushHTTPRequest: vi.fn(async () => ({
 		endpoint: 'https://push.example/ep',

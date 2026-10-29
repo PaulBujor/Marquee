@@ -65,7 +65,6 @@ async function seedShowEpisode(db: Db, airDate: string, status: TrackingStatus):
 	await db.insert(tracking).values({ id: `${USER}::${SHOW}`, userId: USER, mediaId: SHOW, status });
 }
 
-/** Seed an additional episode on an already-inserted show (no media/tracking re-insert). */
 async function seedEpisode(
 	db: Db,
 	mediaId: string,
@@ -89,7 +88,6 @@ async function seedShow(
 	await db.insert(tracking).values({ id: `${USER}::${mediaId}`, userId: USER, mediaId, status });
 }
 
-/** Mark an episode watched for the user. */
 async function seedWatch(db: Db, mediaId: string, season: number, episode: number): Promise<void> {
 	await db.insert(episodeWatches).values({
 		id: `${USER}::${mediaId}::s${season}e${episode}`,
@@ -134,8 +132,7 @@ describe('selectNotifiableEpisodes', () => {
 	});
 
 	it('never notifies an abandoned show, even one watched and still running', () => {
-		// Watch records would otherwise wave this through; the query excludes it too, so this pins the
-		// rule to the function rather than the caller.
+		// Watch records would otherwise wave this through; pinned here, not left to the caller's filter.
 		const row = { mediaId: 'm1', airDate: '2026-07-27', status: 'did_not_finish' };
 		expect(selectNotifiableEpisodes([row], new Set(['m1']), LONG_RUNNING)).toEqual([]);
 		expect(
@@ -189,10 +186,7 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('never announces a title the user wrote themselves', async () => {
-		// A custom entry's episodes all share one synthesized air date, clamped to today so they stay
-		// watchable — which drops them straight into the digest window, and they all pass the premiere
-		// test because they share the date `min()` returns. Without the `source` filter, authoring a
-		// show pushed "N new episodes" about work the user had just typed in.
+		// A custom entry's clamped air dates land in this window and pass the premiere test, so only the `source` filter stops it.
 		const CUSTOM = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 		await seedSub(db, 'https://push.example/custom', MADRID);
 		await db.insert(media).values({
@@ -220,7 +214,6 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('stays silent for a new episode of a long-running show nothing has been watched of', async () => {
-		// The complaint: an unwatched show pushing an episode every week.
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'want_to_watch');
 		await seedEpisode(db, SHOW, 1, 1, '2020-01-20'); // the premiere, long past
@@ -271,7 +264,6 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('pushes a mid-run episode of a show marked watching without ticking episodes', async () => {
-		// Status is an intent signal in its own right.
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await seedShow(db, SHOW, 'Breaking Bad', 'show/1396', 'watching');
 		await seedEpisode(db, SHOW, 1, 1, '2020-01-20');
@@ -340,7 +332,7 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('treats a null timezone as UTC when determining due-ness', async () => {
-		const utcNow = new Date('2026-07-27T09:00:00Z'); // UTC hour 9 == SEND_HOUR
+		const utcNow = new Date('2026-07-27T09:00:00Z');
 		await seedSub(db, 'https://push.example/ep-1', null);
 		await seedShowEpisode(db, '2026-07-27', 'watching');
 		const { sender, calls } = fakeSender();
@@ -351,8 +343,7 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('notifies due users across a mix of a named due timezone and null (UTC) in the same run', async () => {
-		// 09:00 UTC in January — London has no DST offset then, so it's 9AM local too, alongside
-		// a null-timezone subscription (also UTC) being due at the same instant.
+		// 09:00 UTC in January — London has no DST offset then, so it's 9AM local, as is a null-timezone subscription.
 		const winterNow = new Date('2026-01-27T09:00:00Z');
 		const USER_2 = 'user-2';
 		await db.insert(users).values({ id: USER_2, email: 'u2@x.com', status: 'enabled' });
@@ -411,9 +402,7 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('notifies a completed show given a new release — tracking.status is never corrected server-side, so this query has to tolerate it being stale', async () => {
-		// A completed show getting a new season is exactly the case that motivated this: nothing
-		// ever writes `tracking.status` back to 'watching' server-side (see `deriveStatus` for the
-		// client-side, read-time correction) — the query includes `completed` shows itself instead.
+		// Nothing writes `tracking.status` back server-side (see `deriveStatus`); the query includes `completed` itself.
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await seedShowEpisode(db, '2026-07-27', 'completed');
 		const { sender, calls } = fakeSender();
@@ -463,9 +452,7 @@ describe('sendNewReleaseDigest', () => {
 	});
 
 	it('does not notify a completed movie — unlike shows, a movie release date never moves', async () => {
-		// Deliberately asymmetric: a show's stored `completed` can go stale (a new season lands with
-		// nothing correcting the column server-side), but a movie has no such drift — its release date
-		// is fixed once known, so `completed` staying excluded is never wrong the way it is for shows.
+		// Deliberately asymmetric: a movie's release date never drifts, so `completed` staying excluded is never wrong.
 		await seedSub(db, 'https://push.example/ep-1', MADRID);
 		await db.insert(media).values({
 			id: 'media-movie-1',
@@ -536,7 +523,6 @@ describe('sendNewReleaseDigest', () => {
 		const { sender: firstSender } = fakeSender();
 		await sendNewReleaseDigest(db, {} as Env, NOW, firstSender);
 
-		// A third episode airs later the same day, still within the grace window.
 		await seedEpisode(db, SHOW, 2, 3, '2026-07-27');
 		const { sender, calls } = fakeSender();
 		const result = await sendNewReleaseDigest(db, {} as Env, NOW, sender);
@@ -557,8 +543,7 @@ describe('sendNewReleaseDigest', () => {
 		const day1 = await sendNewReleaseDigest(db, {} as Env, NOW, fakeSender().sender);
 		expect(day1).toEqual({ dueUsers: 1, sent: 1, pruned: 0 });
 
-		// Next day, 9AM Madrid again; episode 4 airs today, 1-3 are still within GRACE_DAYS=2
-		// and so are re-candidates from findReleases, but the ledger must exclude them.
+		// Episode 4 airs today; 1-3 are still re-candidates from findReleases, but the ledger must exclude them.
 		await seedEpisode(db, SHOW, 2, 4, '2026-07-28');
 		const NEXT_DAY = new Date('2026-07-28T07:00:00Z');
 		const { sender, calls } = fakeSender();

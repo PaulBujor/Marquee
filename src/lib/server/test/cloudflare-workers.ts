@@ -1,5 +1,3 @@
-// Vitest stand-in for Cloudflare's module: tests set bindings via `setTestBindings`, and `waitUntil`
-// promises are drained rather than left to reject unnoticed.
 type Bindings = Record<string, unknown>;
 
 const state: { env: Bindings; pending: Promise<unknown>[] } = { env: {}, pending: [] };
