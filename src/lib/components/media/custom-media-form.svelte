@@ -1,11 +1,11 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as ToggleGroup from '$lib/components/ui/toggle-group';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Textarea } from '$lib/components/ui/textarea';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Textarea } from '#lib/components/ui/textarea/index.js';
 	import CreditRow from './credit-row.svelte';
-	import { reportClientError } from '$lib/client/report-error';
+	import { reportClientError } from '#lib/client/report-error.js';
 	import type { z } from 'zod';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -23,7 +23,7 @@
 		type CustomCreditInput,
 		type CustomMediaInput,
 		type CustomSeasonInput
-	} from '$lib/validation/custom-media';
+	} from '#lib/validation/custom-media.js';
 
 	/**
 	 * Create or edit a user-authored entry. Not a `<form method="POST">` — authoring has to work

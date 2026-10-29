@@ -1,3 +1,4 @@
+import { env, waitUntil } from '#lib/server/bindings.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	deleteAccount,
@@ -6,10 +7,13 @@ import {
 	requestEmailChange,
 	SESSION_COOKIE,
 	verifyEmailChange
-} from '$lib/server/auth';
-import { codeField } from '$lib/validation';
-import { createEmailSender } from '$lib/server/email';
-import { renderAccountDeletedEmail, renderEmailChangedNotice } from '$lib/server/email/templates';
+} from '#lib/server/auth/index.js';
+import { codeField } from '#lib/validation/index.js';
+import { createEmailSender } from '#lib/server/email/index.js';
+import {
+	renderAccountDeletedEmail,
+	renderEmailChangedNotice
+} from '#lib/server/email/templates.js';
 import type { Actions } from './$types';
 
 const SERVICE_UNAVAILABLE = 'Service unavailable.';
@@ -33,14 +37,14 @@ function verifyErrorMessage(reason: 'invalid' | 'expired' | 'too_many_attempts' 
 
 export const actions: Actions = {
 	// Step 1: email a confirmation code to the new address.
-	requestEmailChange: async ({ request, locals, platform, getClientAddress }) => {
-		if (!locals.db || !platform) return fail(503, { message: SERVICE_UNAVAILABLE });
+	requestEmailChange: async ({ request, locals, getClientAddress }) => {
+		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
 
 		const data = await request.formData();
 		const newEmail = String(data.get('newEmail') ?? '');
 
-		const sender = createEmailSender(platform.env);
+		const sender = createEmailSender(env);
 		let result;
 		try {
 			result = await requestEmailChange({
@@ -76,7 +80,7 @@ export const actions: Actions = {
 	},
 
 	// Step 2: verify the code and switch the account email.
-	verifyEmailChange: async ({ request, locals, platform, cookies }) => {
+	verifyEmailChange: async ({ request, locals, cookies }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
 
@@ -104,10 +108,10 @@ export const actions: Actions = {
 		if (result.ok) {
 			// Tell the address that just lost the account. Best-effort and fire-and-forget, like the
 			// deletion notice: the change is already committed, so a mail failure must not fail it.
-			if (platform) {
+			if (env.RESEND_API_KEY || env.SMTP_HOST) {
 				try {
-					const sender = createEmailSender(platform.env);
-					platform.ctx.waitUntil(
+					const sender = createEmailSender(env);
+					waitUntil(
 						sender
 							.send({
 								to: result.previousEmail,
@@ -130,7 +134,7 @@ export const actions: Actions = {
 	},
 
 	// Permanently delete the account. Requires typing the current email to confirm.
-	deleteAccount: async ({ request, locals, platform, cookies }) => {
+	deleteAccount: async ({ request, locals, cookies }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
 
@@ -146,11 +150,11 @@ export const actions: Actions = {
 
 		// Confirm the deletion by email — best-effort, so a mail failure can't undo (or fail) a
 		// deletion that's already committed. Fire-and-forget via the request's ExecutionContext so it
-		// doesn't delay the redirect. Only when the transport is configured (`platform` present).
-		if (platform) {
+		// doesn't delay the redirect. Only when the transport is configured.
+		if (env.RESEND_API_KEY || env.SMTP_HOST) {
 			try {
-				const sender = createEmailSender(platform.env);
-				platform.ctx.waitUntil(
+				const sender = createEmailSender(env);
+				waitUntil(
 					sender
 						.send({
 							to: email,

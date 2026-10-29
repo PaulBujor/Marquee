@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
-import { episodes, media, people, seasons, tracking, users } from '$lib/server/db/schema';
-import { mediaId, type CreditRole, type MediaCredit } from '$lib/sync/events';
-import type { ValidatedCustomMedia } from '$lib/sync/media-protocol';
-import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { episodes, media, people, seasons, tracking, users } from '#lib/server/db/schema.js';
+import { mediaId, type CreditRole, type MediaCredit } from '#lib/sync/events.js';
+import type { ValidatedCustomMedia } from '#lib/sync/media-protocol.js';
+import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import { loadCredits } from './credits';
 import { storeCustomMedia } from './custom';
 import { resolveMediaSync } from './sync';

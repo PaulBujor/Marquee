@@ -8,7 +8,7 @@ import {
 	primaryKey,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
-// Relative (not `$lib`) so drizzle-kit's esbuild bundler resolves it outside Vite.
+// Relative (not `#lib`) so drizzle-kit's esbuild bundler resolves it outside Vite.
 import {
 	MEDIA_PROVIDERS,
 	CREDIT_ROLES,

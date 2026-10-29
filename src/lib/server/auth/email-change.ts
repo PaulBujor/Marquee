@@ -1,16 +1,16 @@
 import { and, count, desc, eq, gte, isNull, sql, type SQL } from 'drizzle-orm';
-import type { createDb } from '$lib/server/db';
-import { emailChangeTokens, users, type User } from '$lib/server/db/schema';
-import type { EmailSender } from '$lib/server/email';
-import { renderEmailChangeCode } from '$lib/server/email/templates';
+import type { createDb } from '#lib/server/db/index.js';
+import { emailChangeTokens, users, type User } from '#lib/server/db/schema.js';
+import type { EmailSender } from '#lib/server/email/index.js';
+import { renderEmailChangeCode } from '#lib/server/email/templates.js';
 import { EMAIL_REGEX, normalizeEmail } from './validation';
 import { generateCode, hashToken } from './tokens';
 import { invalidateOtherSessions } from './session';
-import { EMAIL_CHANGE_TTL_MINUTES } from '$lib/email-change';
+import { EMAIL_CHANGE_TTL_MINUTES } from '#lib/email-change.js';
 
 type Db = ReturnType<typeof createDb>;
 
-// Re-exported so `$lib/server/auth` keeps exposing it; the value lives in the client-safe module.
+// Re-exported so `#lib/server/auth/index.js` keeps exposing it; the value lives in the client-safe module.
 export { EMAIL_CHANGE_TTL_MINUTES };
 const EMAIL_CHANGE_TTL_MS = EMAIL_CHANGE_TTL_MINUTES * 60 * 1000;
 /** Failed code entries before the change token is invalidated (online brute-force cap). */

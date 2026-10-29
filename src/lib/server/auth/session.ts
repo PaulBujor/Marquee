@@ -1,7 +1,7 @@
 import type { Cookies } from '@sveltejs/kit';
 import { and, eq, ne } from 'drizzle-orm';
-import type { createDb } from '$lib/server/db';
-import { sessions, users, type Session, type User } from '$lib/server/db/schema';
+import type { createDb } from '#lib/server/db/index.js';
+import { sessions, users, type Session, type User } from '#lib/server/db/schema.js';
 import { generateToken, hashToken } from './tokens';
 
 type Db = ReturnType<typeof createDb>;

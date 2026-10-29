@@ -1,6 +1,6 @@
 <script lang="ts">
 	import StarIcon from '@lucide/svelte/icons/star';
-	import { cn } from '$lib/utils.js';
+	import { cn } from '#lib/utils.js';
 
 	// The user's own 1–5 rating control, in amber so it reads as distinct from the single TMDB `/10`
 	// star in the meta row (which uses the primary accent). Five discrete stars, labelled "Your

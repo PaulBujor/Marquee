@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tmdbExternalId, tmdbMediaId } from '$lib/sync/events';
+import { tmdbExternalId, tmdbMediaId } from '#lib/sync/events.js';
 import { mediaRecordFromSearch, parseTmdbExternalId } from './media-record';
 
 describe('parseTmdbExternalId', () => {

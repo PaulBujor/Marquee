@@ -9,7 +9,7 @@
  * through `deriveStatus`) see a mostly-correct value; when the episode/production data it needs
  * hasn't synced locally yet, it just no-ops rather than guessing, same as `deriveStatus` does.
  */
-import { getEpisodeWatches, getTrackingByMediaId, recordEvent } from '$lib/client/idb';
+import { getEpisodeWatches, getTrackingByMediaId, recordEvent } from '#lib/client/idb/index.js';
 import {
 	airedEpisodes,
 	isAired,

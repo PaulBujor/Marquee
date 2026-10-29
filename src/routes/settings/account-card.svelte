@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import * as Card from '$lib/components/ui/card';
-	import * as InputOTP from '$lib/components/ui/input-otp';
-	import OfflineAction from '$lib/components/offline-action.svelte';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { signOutOffline } from '$lib/client/logout';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import * as InputOTP from '#lib/components/ui/input-otp/index.js';
+	import OfflineAction from '#lib/components/offline-action.svelte';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { signOutOffline } from '#lib/client/logout.js';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import type { ActionData, PageData } from './$types';
 

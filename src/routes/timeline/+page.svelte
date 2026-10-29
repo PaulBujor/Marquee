@@ -1,12 +1,16 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { buttonVariants } from '$lib/components/ui/button';
-	import PageHeader from '$lib/components/page-header.svelte';
-	import DetailLink from '$lib/components/media/detail-link.svelte';
-	import PosterTile from '$lib/components/media/poster-tile.svelte';
-	import { LibraryState } from '$lib/tracking/library.svelte';
-	import { filterUpcoming, groupUpcomingByYear, type UpcomingEntry } from '$lib/tracking/library';
-	import { sync } from '$lib/client/sync/engine.svelte';
+	import { buttonVariants } from '#lib/components/ui/button/index.js';
+	import PageHeader from '#lib/components/page-header.svelte';
+	import DetailLink from '#lib/components/media/detail-link.svelte';
+	import PosterTile from '#lib/components/media/poster-tile.svelte';
+	import { LibraryState } from '#lib/tracking/library.svelte.js';
+	import {
+		filterUpcoming,
+		groupUpcomingByYear,
+		type UpcomingEntry
+	} from '#lib/tracking/library.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -53,7 +57,7 @@
 	{#if !data.user}
 		<div class="flex flex-col items-start gap-4 py-16">
 			<p class="text-muted-foreground">Sign in to see your upcoming releases.</p>
-			<a href={resolve('/login')} class={buttonVariants()}>Sign in</a>
+			<a href={resolve('login')} class={buttonVariants()}>Sign in</a>
 		</div>
 	{:else if years.length > 0}
 		{#each years as { year, days } (year)}

@@ -7,7 +7,7 @@
 	import { afterNavigate } from '$app/navigation';
 	import { fly } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { tabs } from '$lib/state/tabs.svelte.js';
+	import { tabs } from '#lib/state/tabs.svelte.js';
 	import Undo2Icon from '@lucide/svelte/icons/undo-2';
 
 	const VISIBLE_MS = 3000;
@@ -22,7 +22,11 @@
 	});
 
 	// A navigation supersedes the offer — the position it points at belongs to a page we've left.
-	afterNavigate(() => tabs.clearUndo());
+	afterNavigate(({ shallow, type }) => {
+		if (shallow && type === 'goto') return;
+
+		return tabs.clearUndo();
+	});
 
 	function undo(y: number) {
 		tabs.clearUndo();

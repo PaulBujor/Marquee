@@ -1,19 +1,19 @@
-import type { Handle, HandleServerError } from '@sveltejs/kit';
-import { sequence } from '@sveltejs/kit/hooks';
-import { createDb } from '$lib/server/db';
-import { validateSession, deleteSessionCookie, SESSION_COOKIE } from '$lib/server/auth';
+import { env } from '#lib/server/bindings.js';
+import { sequence, type Handle, type HandleServerError } from '@sveltejs/kit/hooks';
+import { createDb } from '#lib/server/db/index.js';
+import { validateSession, deleteSessionCookie, SESSION_COOKIE } from '#lib/server/auth/index.js';
 import {
 	actorRateLimitKey,
 	noteRateLimited,
 	rateLimitKey,
 	withinRateLimit
-} from '$lib/server/http/rate-limit';
+} from '#lib/server/http/rate-limit.js';
 
-// Attach a per-request Drizzle client. Only available when running with the platform
-// bindings (dev proxy / deployed Worker) — absent during prerender/build, hence the guard.
+// Attach a per-request Drizzle client. Only available when the Worker's bindings are present
+// bindings  — absent during prerender/build, hence the guard.
 const database: Handle = async ({ event, resolve }) => {
-	if (event.platform) {
-		event.locals.db = createDb(event.platform.env.DB);
+	if (env.DB) {
+		event.locals.db = createDb(env.DB);
 	}
 	return resolve(event);
 };
@@ -51,9 +51,7 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 // Keyed by client IP, which is all we know before authenticating — see `rateLimitKey`. Loose on purpose
 // (wrangler.jsonc); the public share pages carry their own budget.
 const rateLimit: Handle = async ({ event, resolve }) => {
-	if (
-		!(await withinRateLimit(event.platform, 'APP_RATE_LIMITER', await rateLimitKey(event.request)))
-	) {
+	if (!(await withinRateLimit(env, 'APP_RATE_LIMITER', await rateLimitKey(event.request)))) {
 		noteRateLimited('app', event.url.pathname);
 		return new Response('Too many requests', {
 			status: 429,
@@ -70,7 +68,7 @@ const actorRateLimit: Handle = async ({ event, resolve }) => {
 	const key = actorRateLimitKey(event.locals.user?.id);
 	if (!key) return resolve(event);
 
-	if (!(await withinRateLimit(event.platform, 'APP_RATE_LIMITER', key))) {
+	if (!(await withinRateLimit(env, 'APP_RATE_LIMITER', key))) {
 		noteRateLimited('app', event.url.pathname);
 		return new Response('Too many requests', {
 			status: 429,
@@ -92,7 +90,9 @@ export const handle: Handle = sequence(
 // e.g. a failed `/api/sync` projection or a D1 error; `error(status)` throws are "expected" and
 // skip this). Logged structured so Cloudflare observability (logs/traces, see wrangler.jsonc)
 // picks them up; a correlation `id` goes to the log only, never leaking internals to the client.
-export const handleError: HandleServerError = ({ error, event }) => {
+export const handleError: HandleServerError = ({ kind, error, event }) => {
+	if (kind !== 'unknown') return;
+
 	const id = crypto.randomUUID();
 	console.error(`[server-error ${id}] ${event.request.method} ${event.url.pathname}`, error);
 	return { message: 'Something went wrong on our end.' };

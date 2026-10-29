@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tmdbExternalId, tmdbMediaId, validateEvent } from '$lib/sync/events';
+import { tmdbExternalId, tmdbMediaId, validateEvent } from '#lib/sync/events.js';
 import { planImport } from './plan';
 import {
 	EXPORT_FORMAT,

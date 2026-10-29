@@ -1,5 +1,5 @@
 import { and, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
-import type { createDb } from '$lib/server/db';
+import type { createDb } from '#lib/server/db/index.js';
 import {
 	emailChangeTokens,
 	episodeWatches,
@@ -15,17 +15,17 @@ import {
 	tracking,
 	users,
 	type User
-} from '$lib/server/db/schema';
-import type { EmailSender } from '$lib/server/email';
+} from '#lib/server/db/schema.js';
+import type { EmailSender } from '#lib/server/email/index.js';
 import {
 	renderCodeEmail,
 	renderMagicLinkAndCodeEmail,
 	renderWaitlistEmail
-} from '$lib/server/email/templates';
+} from '#lib/server/email/templates.js';
 import { createSession } from './session';
 import { generateCode, generateToken, hashToken } from './tokens';
 import { normalizeEmail } from './validation';
-import { safeRedirectPath } from '$lib/redirect';
+import { safeRedirectPath } from '#lib/redirect.js';
 
 type Db = ReturnType<typeof createDb>;
 

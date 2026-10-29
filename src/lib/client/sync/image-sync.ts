@@ -3,11 +3,11 @@
  * so tracked titles render with zero network and an offline export carries the artwork. Runs
  * after the media sync; bounded per run so a large list fills in over several cycles.
  */
-import { getAllMedia } from '$lib/client/idb';
-import { getMediaImages, putMediaImages, type MediaImageBlobs } from '$lib/client/idb/images';
-import { isAuthFailure, SessionExpiredError } from '$lib/client/session';
-import { proxiedImageUrl, BACKDROP_SIZE, POSTER_SIZE } from '$lib/media';
-import { fetchWithTimeout } from '$lib/resilience';
+import { getAllMedia } from '#lib/client/idb/index.js';
+import { getMediaImages, putMediaImages, type MediaImageBlobs } from '#lib/client/idb/images.js';
+import { isAuthFailure, SessionExpiredError } from '#lib/client/session.js';
+import { proxiedImageUrl, BACKDROP_SIZE, POSTER_SIZE } from '#lib/media.js';
+import { fetchWithTimeout } from '#lib/resilience.js';
 
 /** Wall-clock budget per image. Best-effort channel, so a stall just skips that image this cycle. */
 const IMAGE_TIMEOUT_MS = 20_000;

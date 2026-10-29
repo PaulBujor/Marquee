@@ -4,7 +4,7 @@
 	// and it clears the iOS status bar / Dynamic Island. `children` holds the header content (a
 	// title, or a search field). Aligned to the max-w-2xl content column.
 	import type { Snippet } from 'svelte';
-	import HeaderScrim from '$lib/components/header-scrim.svelte';
+	import HeaderScrim from '#lib/components/header-scrim.svelte';
 
 	let { children }: { children: Snippet } = $props();
 </script>

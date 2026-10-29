@@ -4,7 +4,7 @@
  * toggle direction) is unit-testable; the component composes these with
  * `recordEvent`. See `TrackingControls.svelte`.
  */
-import type { EpisodeCoord, TrackingStatus } from '$lib/sync/events';
+import type { EpisodeCoord, TrackingStatus } from '#lib/sync/events.js';
 
 /** An episode coordinate; re-exported from the event model so there's one canonical definition. */
 export type { EpisodeCoord };

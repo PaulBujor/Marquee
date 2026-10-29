@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
-import { createTestDb } from '$lib/server/db/test-db';
-import { events as eventsTable, users } from '$lib/server/db/schema';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { events as eventsTable, users } from '#lib/server/db/schema.js';
 import {
 	tmdbMediaId,
 	type EventEnvelope,
 	type EventPayloadMap,
 	type SyncEventType
-} from '$lib/sync/events';
-import type { SyncRequest, SyncResponse } from '$lib/sync/protocol';
+} from '#lib/sync/events.js';
+import type { SyncRequest, SyncResponse } from '#lib/sync/protocol.js';
 import { POST } from './+server';
 
 type Db = ReturnType<typeof createTestDb>;
@@ -157,7 +157,7 @@ describe('POST /api/sync push + pull', () => {
 		const rows = await db.select().from(eventsTable);
 		expect(rows).toHaveLength(2);
 		// The newer event (completed@200) wins the materialized status.
-		const { tracking } = await import('$lib/server/db/schema');
+		const { tracking } = await import('#lib/server/db/schema.js');
 		const [t] = await db.select().from(tracking);
 		expect(t.status).toBe('completed');
 	});

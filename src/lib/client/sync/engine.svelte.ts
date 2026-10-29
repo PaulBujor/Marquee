@@ -6,9 +6,9 @@ import { runSync, SyncError, toSyncErrorInfo, type SyncErrorInfo } from './sync'
 import { runMediaSync } from './media-sync';
 import { runImageSync } from './image-sync';
 import { isFullMediaCheckDue, nextFullMediaCheckStamp, shouldRunMediaSync } from './media-gate';
-import { SessionExpiredError } from '$lib/client/session';
-import { session } from '$lib/client/session.svelte';
-import { CircuitBreaker, withRetry, type RetryOptions } from '$lib/resilience';
+import { SessionExpiredError } from '#lib/client/session.js';
+import { session } from '#lib/client/session.svelte.js';
+import { CircuitBreaker, withRetry, type RetryOptions } from '#lib/resilience.js';
 import { syncLog } from './log.svelte';
 import {
 	getLastSyncAt,
@@ -17,9 +17,9 @@ import {
 	setLastFullMediaCheck,
 	getReferencedMediaIds,
 	pruneStaleMedia
-} from '$lib/client/idb';
-import { pruneMediaImages } from '$lib/client/idb/images';
-import { reportClientError } from '$lib/client/report-error';
+} from '#lib/client/idb/index.js';
+import { pruneMediaImages } from '#lib/client/idb/images.js';
+import { reportClientError } from '#lib/client/report-error.js';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline' | 'signed-out';
 

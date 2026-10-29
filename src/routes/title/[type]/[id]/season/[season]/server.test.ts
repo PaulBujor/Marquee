@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
 import { GET } from './+server';
+import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
 type GetFn = typeof GET;
 type RequestEvent = Parameters<GetFn>[0];
 
-/** Build a minimal event the handler reads (locals.user, params, platform.env). */
+/** Build a minimal event the handler reads (locals.user, params, bindings). */
 function makeEvent(opts: {
 	user?: unknown;
 	id?: string;
@@ -20,13 +21,10 @@ function makeEvent(opts: {
 		apiKey = 'key',
 		hasPlatform = true
 	} = opts;
-	const platform = hasPlatform
-		? { env: apiKey === null ? {} : { TMDB_API_KEY: apiKey } }
-		: undefined;
+	setTestBindings(hasPlatform && apiKey !== null ? { TMDB_API_KEY: apiKey } : {});
 	return {
 		locals: { user },
-		params: { type: 'show', id, season },
-		platform
+		params: { type: 'show', id, season }
 	} as unknown as RequestEvent;
 }
 

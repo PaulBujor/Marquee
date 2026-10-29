@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
-import { media } from '$lib/server/db/schema';
-import { mediaId } from '$lib/sync/events';
-import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
-import type { QueueEnvelope } from '$lib/server/queue/types';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { media } from '#lib/server/db/schema.js';
+import { mediaId } from '#lib/sync/events.js';
+import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
+import type { QueueEnvelope } from '#lib/server/queue/types.js';
 import {
 	MAX_DELIVERY_ATTEMPTS,
 	processMediaRefreshBatch,

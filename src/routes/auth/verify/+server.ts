@@ -1,6 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
-import { setSessionCookie, verifyMagicLink } from '$lib/server/auth';
-import { safeRedirectPath } from '$lib/redirect';
+import { setSessionCookie, verifyMagicLink } from '#lib/server/auth/index.js';
+import { safeRedirectPath } from '#lib/redirect.js';
 import type { RequestHandler } from './$types';
 
 // Single-use token in the query string (keeps the email link no-JS friendly);

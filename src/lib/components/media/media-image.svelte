@@ -2,10 +2,10 @@
 	// An offline-capable <img>: renders the cached image Blob (kept in IndexedDB by the media
 	// channel) when present, else the TMDB URL. Re-checks after each sync so a poster
 	// swaps to its local blob once fetched, and revokes its object URL on teardown / id change.
-	import { getMediaImages } from '$lib/client/idb/images';
-	import { posterUrl, POSTER_SIZE, type TmdbImageSize } from '$lib/media';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { cn } from '$lib/utils.js';
+	import { getMediaImages } from '#lib/client/idb/images.js';
+	import { posterUrl, POSTER_SIZE, type TmdbImageSize } from '#lib/media.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { cn } from '#lib/utils.js';
 	import ImageOff from '@lucide/svelte/icons/image-off';
 
 	interface Props {

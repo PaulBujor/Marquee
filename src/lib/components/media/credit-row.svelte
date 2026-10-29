@@ -1,14 +1,18 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { InputGroup, InputGroupInput, InputGroupSelect } from '$lib/components/ui/input-group';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import {
+		InputGroup,
+		InputGroupInput,
+		InputGroupSelect
+	} from '#lib/components/ui/input-group/index.js';
 	import PersonAvatar from './person-avatar.svelte';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { creditRoleLabel } from '$lib/credits';
-	import { CREDIT_ROLES } from '$lib/sync/events';
-	import { CUSTOM_NAME_MAX, type CustomCreditInput } from '$lib/validation/custom-media';
-	import type { PersonSearchResult, SearchResult } from '$lib/server/tmdb';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { creditRoleLabel } from '#lib/credits.js';
+	import { CREDIT_ROLES } from '#lib/sync/events.js';
+	import { CUSTOM_NAME_MAX, type CustomCreditInput } from '#lib/validation/custom-media.js';
+	import type { PersonSearchResult, SearchResult } from '#lib/server/tmdb/index.js';
 
 	/**
 	 * One credited person: role + name field with type-ahead against the provider's people catalog.

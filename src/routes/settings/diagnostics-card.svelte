@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import ErrorLogDialog from '$lib/components/error-log-dialog.svelte';
-	import { errorLog } from '$lib/client/errors.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import ErrorLogDialog from '#lib/components/error-log-dialog.svelte';
+	import { errorLog } from '#lib/client/errors.svelte.js';
 
 	// The way back to the log once the toast is gone — which is exactly when someone is willing to
 	// sit and read a stack trace.

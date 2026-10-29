@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import ErrorLogDialog from './error-log-dialog.svelte';
-	import { errorLog } from '$lib/client/errors.svelte';
-	import { admitToast } from '$lib/client/errors';
+	import { errorLog } from '#lib/client/errors.svelte.js';
+	import { admitToast } from '#lib/client/errors.js';
 
 	// Announces reported errors: a toast when something breaks, the full message and stack one tap
 	// behind it. Mounted once in the root layout; the log is started in `hooks.client.ts`.

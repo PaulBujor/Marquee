@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
-import { loginTokens, sessions, users } from '$lib/server/db/schema';
-import type { EmailSender } from '$lib/server/email';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { loginTokens, sessions, users } from '#lib/server/db/schema.js';
+import type { EmailSender } from '#lib/server/email/index.js';
 import { joinWaitlist, requestSignIn, verifyCode, verifyMagicLink } from './index';
 import { createSession, invalidateSession, validateSession } from './session';
 import { hashToken } from './tokens';

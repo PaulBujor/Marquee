@@ -1,5 +1,5 @@
-import { browser } from '$app/environment';
-import { setActiveUser } from '$lib/client/idb';
+import { browser } from '$app/env';
+import { setActiveUser } from '#lib/client/idb/index.js';
 import type { LayoutLoad } from './$types';
 
 /**

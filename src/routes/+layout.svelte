@@ -3,28 +3,28 @@
 	import { tick, untrack } from 'svelte';
 	import { afterNavigate, beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
-	import AppHeader from '$lib/components/app-header.svelte';
-	import InstallPrompt from '$lib/components/install-prompt.svelte';
-	import NotificationPrompt from '$lib/components/notification-prompt.svelte';
-	import PwaUpdatePrompt from '$lib/components/pwa-update-prompt.svelte';
-	import ScrollUndoPill from '$lib/components/scroll-undo-pill.svelte';
-	import TabBar from '$lib/components/tab-bar.svelte';
-	import { Toaster } from '$lib/components/ui/sonner';
-	import ErrorReporter from '$lib/components/error-reporter.svelte';
-	import SessionExpiredToast from '$lib/components/session-expired-toast.svelte';
+	import AppHeader from '#lib/components/app-header.svelte';
+	import InstallPrompt from '#lib/components/install-prompt.svelte';
+	import NotificationPrompt from '#lib/components/notification-prompt.svelte';
+	import PwaUpdatePrompt from '#lib/components/pwa-update-prompt.svelte';
+	import ScrollUndoPill from '#lib/components/scroll-undo-pill.svelte';
+	import TabBar from '#lib/components/tab-bar.svelte';
+	import { Toaster } from '#lib/components/ui/sonner/index.js';
+	import ErrorReporter from '#lib/components/error-reporter.svelte';
+	import SessionExpiredToast from '#lib/components/session-expired-toast.svelte';
 	import { goto } from '$app/navigation';
-	import { theme } from '$lib/state/theme.svelte.js';
-	import { activeTab } from '$lib/state/tabs';
-	import { tabs } from '$lib/state/tabs.svelte.js';
-	import { getReferencedMediaIds, setActiveUser } from '$lib/client/idb';
-	import { library } from '$lib/tracking/library.svelte';
-	import { flushPendingLogout } from '$lib/client/logout';
-	import { pruneMediaImages } from '$lib/client/idb/images';
-	import { pruneStaleMedia } from '$lib/client/idb/media';
-	import { requestPersistentStorage } from '$lib/client/storage';
-	import { session } from '$lib/client/session.svelte';
-	import { sync } from '$lib/client/sync/engine.svelte.js';
-	import { navigation } from '$lib/state/navigation.svelte.js';
+	import { theme } from '#lib/state/theme.svelte.js';
+	import { activeTab } from '#lib/state/tabs.js';
+	import { tabs } from '#lib/state/tabs.svelte.js';
+	import { getReferencedMediaIds, setActiveUser } from '#lib/client/idb/index.js';
+	import { library } from '#lib/tracking/library.svelte.js';
+	import { flushPendingLogout } from '#lib/client/logout.js';
+	import { pruneMediaImages } from '#lib/client/idb/images.js';
+	import { pruneStaleMedia } from '#lib/client/idb/media.js';
+	import { requestPersistentStorage } from '#lib/client/storage.js';
+	import { session } from '#lib/client/session.svelte.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { navigation } from '#lib/state/navigation.svelte.js';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
@@ -35,6 +35,8 @@
 	// search both mirror their state into the URL with `goto`, so their filters and query land here
 	// for free, with no per-page hook.
 	afterNavigate((nav) => {
+		if (nav.shallow && nav.type === 'goto') return;
+
 		navigation.record(nav.from?.url);
 		const to = nav.to?.url ?? page.url;
 		tabs.record(to);
@@ -43,15 +45,12 @@
 	});
 
 	// Remember the scroll offset of the destination being left.
-	beforeNavigate(() => tabs.captureScroll(page.url.pathname, window.scrollY));
+	beforeNavigate(({ shallow, type }) => {
+		if (shallow && type === 'goto') return;
 
-	/**
-	 * Scroll a freshly-entered tab back to where it was. Only ever called for a tab-bar navigation
-	 * (the arm/consume ticket above) — every other arrival keeps SvelteKit's own scroll handling.
-	 * Runs as a short convergence loop because a lazily-paginated page (the dashboard) remounts
-	 * shorter than it was: each clamped scroll pulls its load-more sentinel into range, growing the
-	 * list so the next frame can reach deeper. Bounded, so it can never spin.
-	 */
+		return tabs.captureScroll(page.url.pathname, window.scrollY);
+	});
+
 	async function restoreScroll(y: number) {
 		// Unconditional first: the loop below only ever scrolls *down* to reach a saved offset, and a
 		// tab being opened for the first time has none. Tab links carry `data-sveltekit-noscroll`, so
@@ -122,7 +121,7 @@
 			tabs.reset(); // nor their per-destination filters, query and scroll offsets
 
 			// Drop the previous user's "last synced" timestamp on the actual account change (not on
-			// every sync teardown, which invalidateAll() would trigger) so it can't briefly show for
+			// every sync teardown, which refreshAll() would trigger) so it can't briefly show for
 			// the next account; start() reloads the new user's value.
 			sync.lastSyncAt = null;
 			cachedForUser = uid;

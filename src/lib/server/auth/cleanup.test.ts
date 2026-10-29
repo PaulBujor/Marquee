@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
-import { loginTokens, sessions, users } from '$lib/server/db/schema';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { loginTokens, sessions, users } from '#lib/server/db/schema.js';
 import { hashToken } from './tokens';
 import { purgeExpiredAuth } from './cleanup';
 

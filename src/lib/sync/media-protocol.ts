@@ -18,7 +18,7 @@ import {
 	CUSTOM_NAME_MAX,
 	CUSTOM_OVERVIEW_MAX,
 	CUSTOM_TITLE_MAX
-} from '$lib/validation/custom-media';
+} from '#lib/validation/custom-media.js';
 
 /** Max identity refs / have-entries accepted in one media-sync call. */
 export const MEDIA_SYNC_MAX = 500;

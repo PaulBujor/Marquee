@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import { ButtonGroup } from '$lib/components/ui/button-group';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { ButtonGroup } from '#lib/components/ui/button-group/index.js';
+	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import MediaBadge from './media-badge.svelte';
 	import RatingStars from './rating-stars.svelte';
@@ -11,9 +11,9 @@
 		todayIso,
 		watchedAt as watchedAtFor,
 		watchedAtLabel
-	} from '$lib/tracking/actions';
-	import { formatExactDateTime, formatRelativeDay } from '$lib/date';
-	import type { TrackingState } from '$lib/tracking/tracking.svelte';
+	} from '#lib/tracking/actions.js';
+	import { formatExactDateTime, formatRelativeDay } from '#lib/date.js';
+	import type { TrackingState } from '#lib/tracking/tracking.svelte.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import HeartIcon from '@lucide/svelte/icons/heart';
 	import PlusIcon from '@lucide/svelte/icons/plus';

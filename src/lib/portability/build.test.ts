@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ClientEpisodeWatch, ClientMedia, ClientTracking } from '$lib/client/idb';
-import { tmdbExternalId, tmdbMediaId } from '$lib/sync/events';
+import type { ClientEpisodeWatch, ClientMedia, ClientTracking } from '#lib/client/idb/index.js';
+import { tmdbExternalId, tmdbMediaId } from '#lib/sync/events.js';
 import { buildExport } from './build';
 import { EXPORT_FORMAT, EXPORT_SCHEMA_VERSION } from './schema';
 

@@ -8,9 +8,9 @@
  * Invoked by the cron via `POST /api/cron/refresh`.
  */
 import { and, asc, eq, gte, inArray, isNull } from 'drizzle-orm';
-import { media } from '$lib/server/db/schema';
-import type { createDb } from '$lib/server/db';
-import type { QueueProducer } from '$lib/server/queue/types';
+import { media } from '#lib/server/db/schema.js';
+import type { createDb } from '#lib/server/db/index.js';
+import type { QueueProducer } from '#lib/server/queue/types.js';
 import { AIRING_STATUSES } from './hydrate';
 import type { MediaRefreshMessage } from './refresh-consumer';
 

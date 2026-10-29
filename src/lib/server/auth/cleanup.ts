@@ -6,9 +6,9 @@
  * nightly cron alongside the media refresh.
  */
 import { isNotNull, lt } from 'drizzle-orm';
-import type { createDb } from '$lib/server/db';
-import { loginTokens, notificationLog, sessions } from '$lib/server/db/schema';
-import { GRACE_DAYS } from '$lib/server/push/digest';
+import type { createDb } from '#lib/server/db/index.js';
+import { loginTokens, notificationLog, sessions } from '#lib/server/db/schema.js';
+import { GRACE_DAYS } from '#lib/server/push/digest.js';
 
 type Db = ReturnType<typeof createDb>;
 

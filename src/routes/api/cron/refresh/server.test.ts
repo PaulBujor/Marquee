@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
-import { createTestDb } from '$lib/server/db/test-db';
-import { media } from '$lib/server/db/schema';
-import { mediaId } from '$lib/sync/events';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { media } from '#lib/server/db/schema.js';
+import { mediaId } from '#lib/sync/events.js';
 import { POST } from './+server';
+import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
 type Handler = typeof POST;
 type RequestEvent = Parameters<Handler>[0];
@@ -43,14 +44,12 @@ function makeEvent(opts: {
 		headers: header === null ? {} : { 'x-cron-key': header }
 	});
 	const url = new URL(`https://app/api/cron/refresh${force ? '?force=1' : ''}`);
-	const platform = {
-		env: {
-			CRON_SECRET: SECRET,
-			MEDIA_REFRESH_QUEUE: queue,
-			...(tmdbKey === null ? {} : { TMDB_API_KEY: tmdbKey })
-		}
-	};
-	return { request, url, locals: { db }, platform } as unknown as RequestEvent;
+	setTestBindings({
+		CRON_SECRET: SECRET,
+		MEDIA_REFRESH_QUEUE: queue,
+		...(tmdbKey === null ? {} : { TMDB_API_KEY: tmdbKey })
+	});
+	return { request, url, locals: { db } } as unknown as RequestEvent;
 }
 
 async function thrownBy(run: () => unknown): Promise<{ status: number }> {

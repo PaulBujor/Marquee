@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTestDb } from '$lib/server/db/test-db';
-import { sharePreviewWarms, sharePreviews, users } from '$lib/server/db/schema';
-import { WARM_MAX_PER_HOUR } from '$lib/server/share/preview';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { sharePreviewWarms, sharePreviews, users } from '#lib/server/db/schema.js';
+import { WARM_MAX_PER_HOUR } from '#lib/server/share/preview.js';
 import { POST } from './+server';
+import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
 type Handler = typeof POST;
 type Event = Parameters<Handler>[0];
@@ -49,8 +50,8 @@ function makeEvent(opts: {
 		...(apiKey === null ? {} : { TMDB_API_KEY: apiKey }),
 		...(opts.disabled ? { SHARE_PUBLIC_DISABLED: '1' } : {})
 	};
-	const platform = { env };
-	return { locals: { user, db }, platform, request } as unknown as Event;
+	setTestBindings(env);
+	return { locals: { user, db }, request } as unknown as Event;
 }
 
 /** The handler answers with a Response or throws an `error()` — both are just a status here. */

@@ -7,11 +7,11 @@ import {
 	pushSubscriptions,
 	tracking as trackingTable,
 	type PushSubscriptionRow
-} from '$lib/server/db/schema';
-import { parseTmdbExternalId } from '$lib/server/media/hydrate';
+} from '#lib/server/db/schema.js';
+import { parseTmdbExternalId } from '#lib/server/media/hydrate.js';
 import { createPushSender, type PushSender, type PushPayload } from './index';
-import { chunkIds } from '$lib/server/db/chunk';
-import type { createDb } from '$lib/server/db';
+import { chunkIds } from '#lib/server/db/chunk.js';
+import type { createDb } from '#lib/server/db/index.js';
 
 type Db = ReturnType<typeof createDb>;
 

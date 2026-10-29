@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
-import type { PersonCreditsPage } from '$lib/server/tmdb';
+import type { PersonCreditsPage } from '#lib/server/tmdb/index.js';
 import { GET } from './+server';
+import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
 type Handler = typeof GET;
 type Event = Parameters<Handler>[0];
 
-/** Build a minimal event the handler actually reads (locals.user, params.id, platform.env, url). */
+/** Build a minimal event the handler actually reads (locals.user, params.id, bindings, url). */
 function makeEvent(opts: {
 	user?: unknown;
 	id?: string;
@@ -16,10 +17,8 @@ function makeEvent(opts: {
 }): Event {
 	const { user = { id: 'u1' }, id = '287', page = null, apiKey = 'key', hasPlatform = true } = opts;
 	const url = new URL(`http://localhost/api/person/${id}${page === null ? '' : `?page=${page}`}`);
-	const platform = hasPlatform
-		? { env: apiKey === null ? {} : { TMDB_API_KEY: apiKey } }
-		: undefined;
-	return { locals: { user }, params: { id }, platform, url } as unknown as Event;
+	setTestBindings(hasPlatform && apiKey !== null ? { TMDB_API_KEY: apiKey } : {});
+	return { locals: { user }, params: { id }, url } as unknown as Event;
 }
 
 /** Run the handler and return whatever it threw (error() is thrown, not returned). */
@@ -71,7 +70,7 @@ describe('GET /api/person/[id]', () => {
 		expect(err.status).toBe(404);
 	});
 
-	it('errors 503 when the platform is unavailable', async () => {
+	it('errors 503 when no bindings are present', async () => {
 		const err = await thrownBy(() => GET(makeEvent({ hasPlatform: false })));
 		expect(isHttpError(err)).toBe(true);
 		expect(err.status).toBe(503);

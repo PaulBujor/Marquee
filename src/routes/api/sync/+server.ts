@@ -1,11 +1,11 @@
 import { error, json } from '@sveltejs/kit';
 import { and, eq, gt } from 'drizzle-orm';
-import { events as eventsTable } from '$lib/server/db/schema';
-import { applyEvents } from '$lib/server/sync/projection';
-import type { EventEnvelope, ServerEvent } from '$lib/sync/events';
-import { syncRequestSchema, SYNC_PAGE_SIZE, type SyncResponse } from '$lib/sync/protocol';
-import { problem, zodProblem } from '$lib/server/http/problem';
-import { slidingWindow } from '$lib/server/http/rate-limit';
+import { events as eventsTable } from '#lib/server/db/schema.js';
+import { applyEvents } from '#lib/server/sync/projection.js';
+import type { EventEnvelope, ServerEvent } from '#lib/sync/events.js';
+import { syncRequestSchema, SYNC_PAGE_SIZE, type SyncResponse } from '#lib/sync/protocol.js';
+import { problem, zodProblem } from '#lib/server/http/problem.js';
+import { slidingWindow } from '#lib/server/http/rate-limit.js';
 import type { RequestHandler } from './$types';
 
 /**

@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer';
 import type { EmailSender } from './index';
 
 export class SmtpSender implements EmailSender {
-	private transporter: nodemailer.Transporter;
+	private transporter: ReturnType<typeof nodemailer.createTransport>;
 
 	constructor(
 		host: string,

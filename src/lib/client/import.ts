@@ -8,11 +8,11 @@ import {
 	getDeviceId,
 	putCustomMedia,
 	putMediaBatch
-} from '$lib/client/idb';
-import { reportClientError } from '$lib/client/report-error';
-import { sync } from '$lib/client/sync/engine.svelte';
-import { parseExport, type ParseFailure } from '$lib/portability/parse';
-import { planImport, type ImportPlan } from '$lib/portability/plan';
+} from '#lib/client/idb/index.js';
+import { reportClientError } from '#lib/client/report-error.js';
+import { sync } from '#lib/client/sync/engine.svelte.js';
+import { parseExport, type ParseFailure } from '#lib/portability/parse.js';
+import { planImport, type ImportPlan } from '#lib/portability/plan.js';
 
 export type { ParseFailure };
 

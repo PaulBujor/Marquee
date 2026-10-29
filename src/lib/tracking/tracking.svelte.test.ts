@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { getEpisodeWatches, getTrackingByMediaId, setActiveUser } from '$lib/client/idb';
+import { getEpisodeWatches, getTrackingByMediaId, setActiveUser } from '#lib/client/idb/index.js';
 import { TrackingState } from './tracking.svelte';
 import type { SeasonSummary } from './actions';
 

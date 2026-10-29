@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
-import { credits, media, people, users } from '$lib/server/db/schema';
-import { personId } from '$lib/sync/events';
-import type { MediaDetail } from '$lib/server/tmdb';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { credits, media, people, users } from '#lib/server/db/schema.js';
+import { personId } from '#lib/sync/events.js';
+import type { MediaDetail } from '#lib/server/tmdb/index.js';
 import {
 	creditRowsFromCustom,
 	creditRowsFromDetail,

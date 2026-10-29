@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import ConfirmDialog from './confirm-dialog.svelte';
 	import Link2OffIcon from '@lucide/svelte/icons/link-2-off';
-	import { getMedia, getMediaLinksTo, recordEvent } from '$lib/client/idb';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { guardedWrite } from '$lib/client/write-guard';
+	import { getMedia, getMediaLinksTo, recordEvent } from '#lib/client/idb/index.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { guardedWrite } from '#lib/client/write-guard.js';
 
 	/**
 	 * Shows matched custom entries on a linked title, with an unlink action. The only way back to

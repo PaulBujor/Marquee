@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { EMAIL_CHANGE_TTL_MINUTES } from '$lib/email-change';
+import { EMAIL_CHANGE_TTL_MINUTES } from '#lib/email-change.js';
 import type { PageLoad } from './$types';
 
 /**

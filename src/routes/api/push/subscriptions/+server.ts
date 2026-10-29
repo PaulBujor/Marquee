@@ -1,5 +1,5 @@
 import { error, json } from '@sveltejs/kit';
-import { listSubscriptions } from '$lib/server/push/subscriptions';
+import { listSubscriptions } from '#lib/server/push/subscriptions.js';
 import type { RequestHandler } from './$types';
 
 /** List the caller's own push subscriptions for the settings device list. */

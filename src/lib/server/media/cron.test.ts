@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createTestDb } from '$lib/server/db/test-db';
-import { media } from '$lib/server/db/schema';
-import { mediaId } from '$lib/sync/events';
-import { createMemoryQueue } from '$lib/server/queue/memory';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { media } from '#lib/server/db/schema.js';
+import { mediaId } from '#lib/sync/events.js';
+import { createMemoryQueue } from '#lib/server/queue/memory.js';
 import { ENQUEUE_MAX, enqueueStaleMedia } from './cron';
 import type { MediaRefreshMessage } from './refresh-consumer';
 

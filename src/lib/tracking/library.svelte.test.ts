@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { putCustomMedia, putMedia, recordEvent, setActiveUser } from '$lib/client/idb';
-import { tmdbMediaId, type MediaRecord } from '$lib/sync/events';
+import { putCustomMedia, putMedia, recordEvent, setActiveUser } from '#lib/client/idb/index.js';
+import { tmdbMediaId, type MediaRecord } from '#lib/sync/events.js';
 import { LibraryState } from './library.svelte';
 import { showProgress } from './library';
 

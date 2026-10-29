@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createTestDb } from '$lib/server/db/test-db';
-import { media, tracking, users } from '$lib/server/db/schema';
-import { mediaId, personExternalId, personId } from '$lib/sync/events';
-import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { media, tracking, users } from '#lib/server/db/schema.js';
+import { mediaId, personExternalId, personId } from '#lib/sync/events.js';
+import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import { MEDIA_SYNC_REFRESH_MAX, resolveMediaSync } from './sync';
 
 type Db = ReturnType<typeof createTestDb>;

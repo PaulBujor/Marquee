@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 
 	// A small controlled confirmation for actions that are awkward to undo (e.g. bulk "mark
 	// season/series watched"). An **alert** dialog (not a plain dialog): it takes role=alertdialog,

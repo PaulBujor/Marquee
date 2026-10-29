@@ -6,7 +6,7 @@ import {
 	foldName,
 	groupCredits
 } from './credits';
-import { personExternalId, personId, type MediaCredit } from '$lib/sync/events';
+import { personExternalId, personId, type MediaCredit } from '#lib/sync/events.js';
 
 function credit(over: Partial<MediaCredit> & Pick<MediaCredit, 'name' | 'role'>): MediaCredit {
 	return {

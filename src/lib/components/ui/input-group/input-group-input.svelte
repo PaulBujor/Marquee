@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn, type WithElementRef } from '$lib/utils.js';
+	import { cn, type WithElementRef } from '#lib/utils.js';
 	import type { HTMLInputAttributes } from 'svelte/elements';
 
 	/** The text field inside an {@link InputGroup} — borderless, because the group draws the border. */

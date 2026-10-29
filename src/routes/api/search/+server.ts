@@ -1,6 +1,7 @@
+import { env } from '#lib/server/bindings.js';
 import { error, json } from '@sveltejs/kit';
-import { createTmdbClient, TmdbError, type SearchResult } from '$lib/server/tmdb';
-import { searchLinkedMedia } from '$lib/server/media/search';
+import { createTmdbClient, TmdbError, type SearchResult } from '#lib/server/tmdb/index.js';
+import { searchLinkedMedia } from '#lib/server/media/search.js';
 import type { RequestHandler } from './$types';
 
 /**
@@ -11,14 +12,14 @@ import type { RequestHandler } from './$types';
  * Called by the search page's universal load; **offline** the client falls back to its own IndexedDB
  * catalog instead (this endpoint is never reached).
  */
-export const GET: RequestHandler = async ({ locals, platform, url }) => {
+export const GET: RequestHandler = async ({ locals, url }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 
 	const q = url.searchParams.get('q')?.trim() ?? '';
 	if (!q) return json({ results: [], degraded: false });
 
-	if (!platform) error(503, 'Service unavailable.');
-	const apiKey = platform.env.TMDB_API_KEY;
+	if (!env) error(503, 'Service unavailable.');
+	const apiKey = env.TMDB_API_KEY;
 	if (!apiKey) error(503, 'Search is not configured.');
 
 	try {

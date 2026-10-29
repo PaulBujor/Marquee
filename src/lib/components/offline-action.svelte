@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import { buttonVariants } from '$lib/components/ui/button';
-	import { cn } from '$lib/utils.js';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import { buttonVariants } from '#lib/components/ui/button/index.js';
+	import { cn } from '#lib/utils.js';
 
 	// A button-styled control that's inert while offline, explaining why on hover/focus. It renders a
 	// real (enabled) Tooltip trigger — `type="button"` with no action — styled to look disabled, which

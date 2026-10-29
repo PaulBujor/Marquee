@@ -4,14 +4,14 @@
  * Client-safe and pure (id and clock injectable), so the fan-out and the date derivation below are
  * testable without IndexedDB.
  */
-import { todayIso } from '$lib/tracking/actions';
-import type { MediaCredit, MediaEpisode, MediaRecord, MediaSeason } from '$lib/sync/events';
+import { todayIso } from '#lib/tracking/actions.js';
+import type { MediaCredit, MediaEpisode, MediaRecord, MediaSeason } from '#lib/sync/events.js';
 import {
 	CUSTOM_OVERVIEW_MAX,
 	type CustomCreditInput,
 	type CustomMediaInput,
 	type CustomSeasonInput
-} from '$lib/validation/custom-media';
+} from '#lib/validation/custom-media.js';
 
 /**
  * The air date every synthesized episode of a custom show gets.

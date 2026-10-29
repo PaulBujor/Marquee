@@ -7,11 +7,11 @@
 	//   - tapping the tab you're already on acts on the page — search focuses its field, everything
 	//     else scrolls to the top (the dashboard offers an undo, since its position is expensive);
 	//   - the labels collapse away as you scroll down and come back as you scroll up.
-	// The decisions behind all three live in `$lib/state/tabs` as pure, tested helpers.
+	// The decisions behind all three live in `#lib/state/tabs.js` as pure, tested helpers.
 	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { tabs } from '$lib/state/tabs.svelte.js';
+	import { tabs } from '#lib/state/tabs.svelte.js';
 	import {
 		TABS,
 		activeTab,
@@ -22,7 +22,7 @@
 		type ScrollPhase,
 		type TabDef,
 		type TabId
-	} from '$lib/state/tabs';
+	} from '#lib/state/tabs.js';
 	import CalendarDaysIcon from '@lucide/svelte/icons/calendar-days';
 	import LayoutGridIcon from '@lucide/svelte/icons/layout-grid';
 	import SearchIcon from '@lucide/svelte/icons/search';
@@ -68,7 +68,9 @@
 
 	// A new page starts at the top, so it must start expanded — inheriting the previous page's
 	// collapsed bar reads as broken.
-	afterNavigate(() => {
+	afterNavigate(({ shallow, type }) => {
+		if (shallow && type === 'goto') return;
+
 		phase = initialScrollPhase;
 		compact = false;
 	});

@@ -1,11 +1,11 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { createEvent, type ServerEvent } from '$lib/sync/events';
-import { setActiveUser } from '$lib/client/idb/db';
-import { enqueueEvent, getUnsynced } from '$lib/client/idb/outbox';
-import { getTracking } from '$lib/client/idb/state';
-import { getCursor } from '$lib/client/idb/meta';
-import type { SyncRequest, SyncResponse } from '$lib/sync/protocol';
+import { createEvent, type ServerEvent } from '#lib/sync/events.js';
+import { setActiveUser } from '#lib/client/idb/db.js';
+import { enqueueEvent, getUnsynced } from '#lib/client/idb/outbox.js';
+import { getTracking } from '#lib/client/idb/state.js';
+import { getCursor } from '#lib/client/idb/meta.js';
+import type { SyncRequest, SyncResponse } from '#lib/sync/protocol.js';
 import { parseRetryAfter, runSync, SyncError, toSyncErrorInfo } from './sync';
 
 setActiveUser('sync-test-user');

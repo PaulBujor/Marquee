@@ -5,7 +5,7 @@ import {
 	type EventEnvelope,
 	type EventPayloadMap,
 	type SyncEventType
-} from '$lib/sync/events';
+} from '#lib/sync/events.js';
 import { openDb, setActiveUser } from './db';
 import {
 	applyEventToIdb,

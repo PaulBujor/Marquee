@@ -11,10 +11,10 @@ import {
 	getReferencedMediaIds,
 	getUnsyncedMediaIds,
 	putMedia
-} from '$lib/client/idb';
-import { isAuthFailure, SessionExpiredError } from '$lib/client/session';
-import { reportClientError } from '$lib/client/report-error';
-import { fetchWithTimeout } from '$lib/resilience';
+} from '#lib/client/idb/index.js';
+import { isAuthFailure, SessionExpiredError } from '#lib/client/session.js';
+import { reportClientError } from '#lib/client/report-error.js';
+import { fetchWithTimeout } from '#lib/resilience.js';
 import {
 	customMediaPushSchema,
 	MEDIA_SYNC_CUSTOM_MAX,
@@ -22,7 +22,7 @@ import {
 	type MediaSyncRequest,
 	type MediaSyncResponse,
 	type ValidatedCustomMedia
-} from '$lib/sync/media-protocol';
+} from '#lib/sync/media-protocol.js';
 
 /** Validate local custom records against the wire schema; skip malformed ones with a warning. */
 function toWirePushes(records: { id: string }[]): ValidatedCustomMedia[] {

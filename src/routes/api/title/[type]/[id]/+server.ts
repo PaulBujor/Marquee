@@ -1,5 +1,6 @@
+import { env } from '#lib/server/bindings.js';
 import { error, json } from '@sveltejs/kit';
-import { createTmdbClient, TmdbError } from '$lib/server/tmdb';
+import { createTmdbClient, TmdbError } from '#lib/server/tmdb/index.js';
 import type { RequestHandler } from './$types';
 
 /**
@@ -8,15 +9,15 @@ import type { RequestHandler } from './$types';
  * fall back to IndexedDB when this is unreachable (offline) — so a tracked title still renders.
  * Auth-gated; the TMDB key stays server-side. `?season=N` selects which season's episodes to embed.
  */
-export const GET: RequestHandler = async ({ locals, params, platform, url }) => {
+export const GET: RequestHandler = async ({ locals, params, url }) => {
 	if (!locals.user) error(401, 'Unauthorized.');
 
 	const type = params.type === 'movie' || params.type === 'show' ? params.type : null;
 	const id = Number(params.id);
 	if (!type || !Number.isInteger(id) || id <= 0) error(404, 'Not found.');
 
-	if (!platform) error(503, 'Service unavailable.');
-	const apiKey = platform.env.TMDB_API_KEY;
+	if (!env) error(503, 'Service unavailable.');
+	const apiKey = env.TMDB_API_KEY;
 	if (!apiKey) error(503, 'Media details are not configured.');
 
 	try {

@@ -2,7 +2,7 @@
 // Source of truth for "is this device subscribed" is the live `pushManager.getSubscription()`;
 // we only persist the one-time "already asked" flag (localStorage), like the install prompt.
 
-import { getDeviceId } from '$lib/client/idb';
+import { getDeviceId } from '#lib/client/idb/index.js';
 import { deviceLabel, urlBase64ToUint8Array } from './notifications-util';
 
 const ASKED_KEY = 'marquee:notify-asked';

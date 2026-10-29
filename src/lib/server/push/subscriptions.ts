@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { pushSubscriptions } from '$lib/server/db/schema';
-import type { createDb } from '$lib/server/db';
+import { pushSubscriptions } from '#lib/server/db/schema.js';
+import type { createDb } from '#lib/server/db/index.js';
 
 type Db = ReturnType<typeof createDb>;
 

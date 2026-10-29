@@ -3,18 +3,18 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
-	import PageHeader from '$lib/components/page-header.svelte';
-	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
-	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
-	import * as Tabs from '$lib/components/ui/tabs';
-	import * as ToggleGroup from '$lib/components/ui/toggle-group';
-	import PosterTile from '$lib/components/media/poster-tile.svelte';
-	import SearchQuickAdd from '$lib/components/media/search-quick-add.svelte';
-	import CustomMediaForm from '$lib/components/media/custom-media-form.svelte';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { posterUrl } from '$lib/media.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import PageHeader from '#lib/components/page-header.svelte';
+	import MediaTypeLabel from '#lib/components/media/media-type-label.svelte';
+	import PersonAvatar from '#lib/components/media/person-avatar.svelte';
+	import * as Tabs from '#lib/components/ui/tabs/index.js';
+	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
+	import PosterTile from '#lib/components/media/poster-tile.svelte';
+	import SearchQuickAdd from '#lib/components/media/search-quick-add.svelte';
+	import CustomMediaForm from '#lib/components/media/custom-media-form.svelte';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import { posterUrl } from '#lib/media.js';
 	import {
 		addRecentSearch,
 		clearRecentSearches,
@@ -26,15 +26,15 @@
 		searchCustomMedia,
 		searchLocalMedia,
 		type ClientMedia
-	} from '$lib/client/idb';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { guardedWrite } from '$lib/client/write-guard';
-	import { createCustomMedia } from '$lib/custom-media';
-	import { mediaRecordFromSearch, type SearchLikeMedia } from '$lib/tracking/media-record';
-	import type { CustomMediaInput } from '$lib/validation/custom-media';
-	import type { SearchResult } from '$lib/server/tmdb';
-	import { tabs } from '$lib/state/tabs.svelte.js';
-	import { tmdbMediaId, type TrackingStatus } from '$lib/sync/events';
+	} from '#lib/client/idb/index.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { guardedWrite } from '#lib/client/write-guard.js';
+	import { createCustomMedia } from '#lib/custom-media.js';
+	import { mediaRecordFromSearch, type SearchLikeMedia } from '#lib/tracking/media-record.js';
+	import type { CustomMediaInput } from '#lib/validation/custom-media.js';
+	import type { SearchResult } from '#lib/server/tmdb/index.js';
+	import { tabs } from '#lib/state/tabs.svelte.js';
+	import { tmdbMediaId, type TrackingStatus } from '#lib/sync/events.js';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import Link2Icon from '@lucide/svelte/icons/link-2';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -267,16 +267,17 @@
 	// Re-sync the input when the URL changes outside of typing (back/forward, direct load) so a
 	// restored `?q=` shows up in the box. Skip our own `goto` navigations (nav.type === 'goto').
 	afterNavigate((nav) => {
+		if (nav.shallow && nav.type === 'goto') return;
 		if (nav.type === 'popstate' || nav.type === 'enter') query = data.q;
 	});
 
 	function pushQuery(q: string) {
-		const path = resolve('/search');
+		const path = resolve('search');
 		const target = q ? `${path}?q=${encodeURIComponent(q)}` : path;
 		// The path is resolved; appending a query string drops resolve()'s branded type, which the
 		// rule keys on, and it has no escape for query-string navigation — so disable it here.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		return goto(target, { replaceState: true, keepFocus: true, noScroll: true });
+		return goto(target, { replace: true, reset: false });
 	}
 
 	async function commit() {
@@ -538,6 +539,7 @@ h-10 holds the header at the same height as the other pages'. -->
 				<ToggleGroup.Item value="movie" class="rounded-l-full!">Movie</ToggleGroup.Item>
 				<ToggleGroup.Item value="show" class="rounded-r-full!">Show</ToggleGroup.Item>
 			</ToggleGroup.Root>
+
 			<Button variant="outline" class="w-full" onclick={() => (createOpen = true)}>
 				<Link2Icon class="size-4" />
 				Add “{activeQuery}” manually

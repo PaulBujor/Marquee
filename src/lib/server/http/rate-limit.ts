@@ -21,14 +21,14 @@ export interface RateLimitResult {
  * that must not pass unnoticed.
  */
 export async function withinRateLimit(
-	platform: App.Platform | undefined,
+	env: Env | undefined,
 	binding: 'PUBLIC_SHARE_LIMITER' | 'APP_RATE_LIMITER',
 	key: string | null
 ): Promise<boolean> {
-	// No platform at all means build/prerender or a unit test, not a deployment missing a binding.
-	if (!platform) return true;
+	// No bindings at all means build/prerender or a unit test, not a deployment missing a binding.
+	if (!env) return true;
 
-	const limiter = platform.env[binding];
+	const limiter = env[binding];
 	if (!limiter) {
 		warnOnce(`rate limit: ${binding} is not bound here — no limit is being applied`);
 		return true;

@@ -3,7 +3,7 @@
  * the clock, is injected — so it unit-tests without IndexedDB and produces byte-identical output for
  * identical state.
  */
-import type { ClientEpisodeWatch, ClientMedia, ClientTracking } from '$lib/client/idb';
+import type { ClientEpisodeWatch, ClientMedia, ClientTracking } from '#lib/client/idb/index.js';
 import {
 	EXPORT_FORMAT,
 	EXPORT_SCHEMA_VERSION,

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { Button } from '$lib/components/ui/button';
-	import type { TrackingState } from '$lib/tracking/tracking.svelte';
-	import type { EpisodeCoord } from '$lib/tracking/actions';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import type { TrackingState } from '#lib/tracking/tracking.svelte.js';
+	import type { EpisodeCoord } from '#lib/tracking/actions.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 
 	// The fast path for shows: mark the next unwatched episode without scrolling to the list.

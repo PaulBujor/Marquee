@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { deleteSubscription } from '$lib/server/push/subscriptions';
+import { deleteSubscription } from '#lib/server/push/subscriptions.js';
 import type { RequestHandler } from './$types';
 
 /**

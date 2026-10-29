@@ -9,9 +9,9 @@
  * ever gets hot.
  */
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { media } from '$lib/server/db/schema';
-import type { createDb } from '$lib/server/db';
-import type { MediaSearchResult } from '$lib/server/tmdb';
+import { media } from '#lib/server/db/schema.js';
+import type { createDb } from '#lib/server/db/index.js';
+import type { MediaSearchResult } from '#lib/server/tmdb/index.js';
 
 type Db = ReturnType<typeof createDb>;
 

@@ -1,15 +1,14 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { browser } from '$app/environment';
+	import { enhance, type ActionResult } from '$app/forms';
+	import { browser } from '$app/env';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import type { ActionResult } from '@sveltejs/kit';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import * as Card from '$lib/components/ui/card';
-	import * as InputOTP from '$lib/components/ui/input-otp';
-	import { clearPendingLogout } from '$lib/client/logout';
-	import { session } from '$lib/client/session.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import * as InputOTP from '#lib/components/ui/input-otp/index.js';
+	import { clearPendingLogout } from '#lib/client/logout.js';
+	import { session } from '#lib/client/session.svelte.js';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -38,10 +37,12 @@
 	// drives the "check your inbox" header and is echoed through ?/verify so it survives
 	// a wrong-code retry.
 	const combined = $derived(method === 'link_and_code');
+
 	const onCodeStep = $derived(
 		(form && 'step' in form && form.step === 'code') ||
 			(result === 'sent' && (method === 'code' || method === 'link_and_code'))
 	);
+
 	// What the initial step will send, given the detected mode.
 	const sendNoun = $derived(mode === 'standalone' ? 'code' : 'email');
 	// Client-side mirror of the server's code check (the server stays authoritative).
@@ -79,7 +80,7 @@
 				session.reset();
 				clearPendingLogout();
 				// eslint-disable-next-line svelte/no-navigation-without-resolve
-				await goto(result.location, { replaceState: true, invalidateAll: true });
+				await goto(result.location, { replaceState: true, refreshAll: true });
 				return;
 			}
 			await update();
@@ -125,12 +126,14 @@
 		{#if codeError}
 			<p class="text-center text-sm text-destructive">{codeError}</p>
 		{/if}
-		<Button type="submit" disabled={submitting || !codeValid}>
-			{submitting ? 'Verifying…' : 'Verify code'}
-		</Button>
-		<a href={resolve('/login')} class="text-center text-sm text-muted-foreground underline">
-			Use a different email
-		</a>
+
+		<Button type="submit" disabled={submitting || !codeValid}
+			>{submitting ? 'Verifying…' : 'Verify code'}</Button
+		>
+
+		<a href={resolve('login')} class="text-center text-sm text-muted-foreground underline"
+			>Use a different email</a
+		>
 	</form>
 {/snippet}
 

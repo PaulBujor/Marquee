@@ -4,11 +4,11 @@
  * read path touches D1 only. Warming is idempotent, and capped per account.
  */
 import { and, count, eq, gte, lt } from 'drizzle-orm';
-import { createTmdbClient, TmdbError, type MediaDetail } from '$lib/server/tmdb';
-import { sharePreviewWarms, sharePreviews, type SharePreviewRow } from '$lib/server/db/schema';
-import { productionState, seasonCount } from '$lib/tracking/actions';
-import type { createDb } from '$lib/server/db';
-import type { CastCredit, CrewCredits, SharePreview, ShareTrailer } from '$lib/share-preview';
+import { createTmdbClient, TmdbError, type MediaDetail } from '#lib/server/tmdb/index.js';
+import { sharePreviewWarms, sharePreviews, type SharePreviewRow } from '#lib/server/db/schema.js';
+import { productionState, seasonCount } from '#lib/tracking/actions.js';
+import type { createDb } from '#lib/server/db/index.js';
+import type { CastCredit, CrewCredits, SharePreview, ShareTrailer } from '#lib/share-preview.js';
 
 type Db = ReturnType<typeof createDb>;
 

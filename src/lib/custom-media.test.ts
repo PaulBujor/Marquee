@@ -4,14 +4,14 @@ import {
 	CUSTOM_OVERVIEW_MAX,
 	customMediaInputSchema,
 	type CustomMediaInput
-} from '$lib/validation/custom-media';
+} from '#lib/validation/custom-media.js';
 import {
 	isAired,
 	isSeriesFullyWatched,
 	nextEpisode,
 	todayIso,
 	watchedKey
-} from '$lib/tracking/actions';
+} from '#lib/tracking/actions.js';
 
 const NOW = Date.UTC(2026, 7, 14); // 2026-08-14
 const TODAY = '2026-08-14';

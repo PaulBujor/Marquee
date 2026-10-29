@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createTestDb } from '$lib/server/db/test-db';
-import { pushSubscriptions, users } from '$lib/server/db/schema';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { pushSubscriptions, users } from '#lib/server/db/schema.js';
 import { eq } from 'drizzle-orm';
 import {
 	deleteSubscription,

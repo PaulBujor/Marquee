@@ -1,5 +1,5 @@
 import type { ZodType } from 'zod';
-import { CircuitBreaker, fetchWithTimeout, withRetry } from '$lib/resilience';
+import { CircuitBreaker, fetchWithTimeout, withRetry } from '#lib/resilience.js';
 import {
 	movieDetailsResponseSchema,
 	multiSearchResponseSchema,
@@ -340,7 +340,7 @@ function normalizePersonCredits(
 
 /**
  * TMDB API client. `createTmdbClient(apiKey)` is the single place the API key and base URL
- * live; the key is read off `platform.env.TMDB_API_KEY` at the call site (see the search endpoint).
+ * live; the key is read off `env.TMDB_API_KEY` at the call site (see the search endpoint).
  */
 export function createTmdbClient(apiKey: string) {
 	async function request(path: string, params: Record<string, string>): Promise<unknown> {

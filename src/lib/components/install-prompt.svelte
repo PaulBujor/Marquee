@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { pwa } from '$lib/state/pwa.svelte.js';
-	import { promptToast } from '$lib/state/prompt-toast.svelte.js';
+	import { pwa } from '#lib/state/pwa.svelte.js';
+	import { promptToast } from '#lib/state/prompt-toast.svelte.js';
 
 	promptToast({
 		id: 'pwa-install',

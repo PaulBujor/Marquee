@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import type { SearchResult } from '$lib/server/tmdb';
+import type { SearchResult } from '#lib/server/tmdb/index.js';
 import type { PageLoad } from './$types';
 
 /**

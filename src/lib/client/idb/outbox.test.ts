@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { createEvent } from '$lib/sync/events';
+import { createEvent } from '#lib/sync/events.js';
 import { setActiveUser } from './db';
 import { enqueueEvent, enqueueEvents, getUnsynced, markSynced } from './outbox';
 

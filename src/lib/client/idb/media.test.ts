@@ -25,7 +25,7 @@ import {
 	tmdbMediaId,
 	type MediaCredit,
 	type MediaRecord
-} from '$lib/sync/events';
+} from '#lib/sync/events.js';
 
 setActiveUser('media-search-test');
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { Button, type ButtonSize } from '$lib/components/ui/button';
-	import { shareAndWarm, type ShareWarmTarget } from '$lib/share';
+	import { Button, type ButtonSize } from '#lib/components/ui/button/index.js';
+	import { shareAndWarm, type ShareWarmTarget } from '#lib/share.js';
 	import ShareIcon from '@lucide/svelte/icons/share-2';
 
 	interface Props {

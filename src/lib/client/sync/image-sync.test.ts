@@ -1,9 +1,9 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { mediaId, type MediaRecord } from '$lib/sync/events';
-import { setActiveUser } from '$lib/client/idb/db';
-import { putMedia } from '$lib/client/idb/media';
-import { getMediaImages, putMediaImages } from '$lib/client/idb/images';
+import { mediaId, type MediaRecord } from '#lib/sync/events.js';
+import { setActiveUser } from '#lib/client/idb/db.js';
+import { putMedia } from '#lib/client/idb/media.js';
+import { getMediaImages, putMediaImages } from '#lib/client/idb/images.js';
 import { IMAGE_SYNC_MAX, runImageSync } from './image-sync';
 
 setActiveUser('image-sync-test');

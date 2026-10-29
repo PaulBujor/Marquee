@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
 import { GET } from './+server';
+import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
 type GetEvent = Parameters<typeof GET>[0];
 
 function call(user: { id: string } | null, publicKey?: string): ReturnType<typeof GET> {
-	return GET({
-		locals: { user },
-		platform: publicKey === undefined ? { env: {} } : { env: { VAPID_PUBLIC_KEY: publicKey } }
-	} as unknown as GetEvent);
+	setTestBindings(publicKey === undefined ? {} : { VAPID_PUBLIC_KEY: publicKey });
+	return GET({ locals: { user } } as unknown as GetEvent);
 }
 
 async function status(run: () => unknown): Promise<number> {

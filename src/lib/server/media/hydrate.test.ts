@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { eq, getTableName } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
-import { episodes, media, seasons } from '$lib/server/db/schema';
-import { mediaId } from '$lib/sync/events';
-import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { episodes, media, seasons } from '#lib/server/db/schema.js';
+import { mediaId } from '#lib/sync/events.js';
+import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import { needsRefresh, parseTmdbExternalId, refreshMedia } from './hydrate';
 
 type Db = ReturnType<typeof createTestDb>;

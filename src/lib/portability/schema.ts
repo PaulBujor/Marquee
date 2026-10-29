@@ -5,7 +5,7 @@
  *
  * Client-safe (no server imports).
  */
-import type { CreditRole, MediaProvider, MediaSource, TrackingStatus } from '$lib/sync/events';
+import type { CreditRole, MediaProvider, MediaSource, TrackingStatus } from '#lib/sync/events.js';
 
 /** Discriminator written into every file, so a foreign JSON can be rejected before parsing it. */
 export const EXPORT_FORMAT = 'marquee-export';

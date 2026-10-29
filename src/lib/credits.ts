@@ -8,9 +8,9 @@ import {
 	personId,
 	type CreditRole,
 	type MediaCredit
-} from '$lib/sync/events';
+} from '#lib/sync/events.js';
 // Type-only import of the API contract shape — erased at build, so no server code reaches the client.
-import type { MediaDetail } from '$lib/server/tmdb';
+import type { MediaDetail } from '#lib/server/tmdb/index.js';
 
 const ROLE_LABELS: Record<CreditRole, { one: string; many: string }> = {
 	cast: { one: 'Cast', many: 'Cast' },

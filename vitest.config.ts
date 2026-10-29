@@ -1,18 +1,20 @@
-import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
-// Unit tests run in the node environment; the `$lib` alias mirrors SvelteKit's so imports resolve.
+// Unit tests run in the node environment; `#lib` resolves through package.json `imports`.
 // The svelte plugin is needed even here (no DOM, no components rendered) because `.svelte.ts`
 // rune modules — e.g. `LibraryState`/`TrackingState` — use `$state`/`$derived`, which only exist
 // after the Svelte compiler transforms them; importing one without this plugin throws
-// `$state is not defined`. `runes: true` matches the project-wide setting in svelte.config.js
-// (which this standalone config doesn't read). Coverage focuses on the server logic under test.
+// `$state is not defined`. `runes: true` matches the project-wide setting in vite.config.ts, which
+// this standalone config doesn't read.
 export default defineConfig({
 	plugins: [svelte({ compilerOptions: { runes: true } })],
 	resolve: {
 		alias: {
-			$lib: fileURLToPath(new URL('./src/lib', import.meta.url))
+			'cloudflare:workers': fileURLToPath(
+				new URL('./src/lib/server/test/cloudflare-workers.ts', import.meta.url)
+			)
 		}
 	},
 	test: {

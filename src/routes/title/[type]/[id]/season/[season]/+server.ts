@@ -1,12 +1,13 @@
+import { env } from '#lib/server/bindings.js';
 import { error, json } from '@sveltejs/kit';
-import { createTmdbClient, TmdbError } from '$lib/server/tmdb';
+import { createTmdbClient, TmdbError } from '#lib/server/tmdb/index.js';
 import type { RequestHandler } from './$types';
 
 /**
  * Season episodes as JSON, fetched client-side by the detail page so switching seasons never
  * touches the URL or browser history. Auth-gated; the TMDB key stays server-side.
  */
-export const GET: RequestHandler = async ({ locals, params, platform }) => {
+export const GET: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) error(401, 'Unauthorized.');
 
 	const id = Number(params.id);
@@ -15,8 +16,8 @@ export const GET: RequestHandler = async ({ locals, params, platform }) => {
 		error(404, 'Not found.');
 	}
 
-	if (!platform) error(503, 'Service unavailable.');
-	const apiKey = platform.env.TMDB_API_KEY;
+	if (!env) error(503, 'Service unavailable.');
+	const apiKey = env.TMDB_API_KEY;
 	if (!apiKey) error(503, 'Media details are not configured.');
 
 	try {

@@ -2,13 +2,13 @@
  * Post-build step: attach `scheduled` and `queue` handlers to the worker adapter-cloudflare
  * emits. The adapter produces a fetch-only `_worker.js`, so we append handlers that self-fetch
  * the matching internal routes rather than importing app code (no build step here to compile TS
- * or resolve `$lib`). `scheduled` branches on the cron schedule; `queue` routes a batch by its
+ * or resolve `#lib`). `scheduled` branches on the cron schedule; `queue` routes a batch by its
  * Cloudflare queue name to an internal route, which returns per-message ack/retry outcomes that
  * this handler applies to the real `Message` objects — the only place that's possible, since it
  * requires the objects this invocation holds. The route map is derived from wrangler.jsonc bindings
  * so a rename can't silently desync. Appending is idempotent. Runs after `vite build`.
  */
-import { appendFile, readFile } from 'node:fs/promises';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
 
 const WORKER = '.svelte-kit/cloudflare/_worker.js';
 const WRANGLER = 'wrangler.jsonc';
@@ -18,12 +18,16 @@ const JOB_ROUTES = {
 	MEDIA_REFRESH_QUEUE: '/api/queue/media-refresh'
 };
 
-const src = await readFile(WORKER, 'utf8');
-if (!src.includes('worker_default')) {
+let src = await readFile(WORKER, 'utf8');
+// adapter-cloudflare v8 exports anonymously, and the appended handlers need a name.
+const defaultExports = src.split('export default {').length - 1;
+if (defaultExports !== 1) {
 	throw new Error(
-		`append-cron: expected \`worker_default\` in ${WORKER} — adapter-cloudflare output changed, update this script.`
+		`append-cron: expected exactly one \`export default {\` in ${WORKER}, found ${defaultExports} — adapter-cloudflare output changed, update this script.`
 	);
 }
+src = src.replace('export default {', 'const worker_default = {');
+await writeFile(WORKER, src, 'utf8');
 // Second append would duplicate a `const` declaration and break parsing. Vite rewrites _worker.js
 // on every build, so this only fires when re-run against an existing one.
 if (src.includes('QUEUE_ROUTES')) {
@@ -125,4 +129,5 @@ worker_default.queue = async (batch, env, ctx) => {
 `,
 	'utf8'
 );
+await appendFile(WORKER, '\nexport default worker_default;\n', 'utf8');
 console.log('append-cron: attached scheduled + queue handlers to', WORKER);

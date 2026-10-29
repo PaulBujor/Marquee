@@ -7,17 +7,17 @@
 	import { fade, slide } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { buttonVariants } from '$lib/components/ui/button';
-	import DetailLink from '$lib/components/media/detail-link.svelte';
-	import PosterTile from '$lib/components/media/poster-tile.svelte';
-	import ProgressRing from '$lib/components/media/progress-ring.svelte';
-	import * as Tabs from '$lib/components/ui/tabs';
-	import * as Popover from '$lib/components/ui/popover';
-	import * as NativeSelect from '$lib/components/ui/native-select';
-	import * as ToggleGroup from '$lib/components/ui/toggle-group';
+	import { buttonVariants } from '#lib/components/ui/button/index.js';
+	import DetailLink from '#lib/components/media/detail-link.svelte';
+	import PosterTile from '#lib/components/media/poster-tile.svelte';
+	import ProgressRing from '#lib/components/media/progress-ring.svelte';
+	import * as Tabs from '#lib/components/ui/tabs/index.js';
+	import * as Popover from '#lib/components/ui/popover/index.js';
+	import * as NativeSelect from '#lib/components/ui/native-select/index.js';
+	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import SlidersIcon from '@lucide/svelte/icons/sliders-horizontal';
-	import { library } from '$lib/tracking/library.svelte';
-	import { sync } from '$lib/client/sync/engine.svelte';
+	import { library } from '#lib/tracking/library.svelte.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
 	import {
 		availableGenres,
 		availableYears,
@@ -28,8 +28,8 @@
 		type LibrarySort,
 		type LibraryTab,
 		type ReleaseFilter
-	} from '$lib/tracking/library';
-	import { canRate } from '$lib/tracking/actions';
+	} from '#lib/tracking/library.js';
+	import { canRate } from '#lib/tracking/actions.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import type { PageData } from './$types';
 
@@ -128,12 +128,14 @@
 		const target = qs ? `/?${qs}` : '/';
 		if (page.url.pathname === '/' && target !== `${page.url.pathname}${page.url.search}`) {
 			// eslint-disable-next-line svelte/no-navigation-without-resolve -- own route + query string
-			goto(target, { replaceState: true, keepFocus: true, noScroll: true });
+			goto(target, { replace: true, reset: false });
 		}
 	});
 
 	// Re-seed from the URL on back/forward and direct entry (mirrors the search page).
 	afterNavigate((nav) => {
+		if (nav.shallow && nav.type === 'goto') return;
+
 		if (nav.type === 'popstate' || nav.type === 'enter') {
 			const s = readState();
 			tab = s.tab;
@@ -381,11 +383,9 @@
 					class="{buttonVariants({
 						variant: advancedActive ? 'default' : 'outline',
 						size: 'sm'
-					})} gap-1.5"
+					})} gap-1.5"><SlidersIcon class="size-4" />Filters & sort</Popover.Trigger
 				>
-					<SlidersIcon class="size-4" />
-					Filters &amp; sort
-				</Popover.Trigger>
+
 				<Popover.Content align="end" class="w-64 space-y-3">
 					<div class="flex flex-col gap-1 text-sm">
 						<span class="text-xs font-medium text-muted-foreground">Sort</span>
@@ -461,6 +461,7 @@
 					<!-- The animate/transition directives live on this wrapper because they have to be on an
 					element; the link itself is a component so every surface resolves a detail route the
 					same way. -->
+
 					<div animate:flip={{ duration: motionMs }} transition:fade={{ duration: introMs }}>
 						<DetailLink {item} class="block">
 							<PosterTile
@@ -503,6 +504,7 @@
 		<p class="text-muted-foreground">Track the movies and shows you're watching.</p>
 		<!-- Replace the index in history so, after login redirects back here, Back doesn't
 		bounce through /login or a stale signed-out landing page. -->
-		<a href={resolve('/login')} data-sveltekit-replacestate class={buttonVariants()}>Sign in</a>
+
+		<a href={resolve('login')} data-sveltekit-replacestate class={buttonVariants()}>Sign in</a>
 	</main>
 {/if}

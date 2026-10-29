@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
-	import ErrorState from '$lib/components/error-state.svelte';
-	import OfflineState from '$lib/components/offline-state.svelte';
-	import PageHeader from '$lib/components/page-header.svelte';
-	import BackButton from '$lib/components/back-button.svelte';
-	import ExpandableText from '$lib/components/expandable-text.svelte';
-	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
-	import PosterTile from '$lib/components/media/poster-tile.svelte';
-	import { posterUrl } from '$lib/media.js';
-	import type { PersonCredit, PersonCreditsPage } from '$lib/server/tmdb';
+	import ErrorState from '#lib/components/error-state.svelte';
+	import OfflineState from '#lib/components/offline-state.svelte';
+	import PageHeader from '#lib/components/page-header.svelte';
+	import BackButton from '#lib/components/back-button.svelte';
+	import ExpandableText from '#lib/components/expandable-text.svelte';
+	import PersonAvatar from '#lib/components/media/person-avatar.svelte';
+	import PosterTile from '#lib/components/media/poster-tile.svelte';
+	import { posterUrl } from '#lib/media.js';
+	import type { PersonCredit, PersonCreditsPage } from '#lib/server/tmdb/index.js';
 	import type { PageData } from './$types';
 
 	/**

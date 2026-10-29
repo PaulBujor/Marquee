@@ -17,11 +17,11 @@ import {
 	putMedia,
 	recordEvent,
 	recordEvents
-} from '$lib/client/idb';
-import { reportClientError } from '$lib/client/report-error';
-import { sync } from '$lib/client/sync/engine.svelte';
+} from '#lib/client/idb/index.js';
+import { reportClientError } from '#lib/client/report-error.js';
+import { sync } from '#lib/client/sync/engine.svelte.js';
 import { toast } from 'svelte-sonner';
-import type { MediaRecord, TrackingStatus } from '$lib/sync/events';
+import type { MediaRecord, TrackingStatus } from '#lib/sync/events.js';
 import {
 	episodesToMark,
 	hasSufficientEpisodeData,
@@ -38,7 +38,7 @@ import {
 } from './actions';
 import { toTrackingView } from './derive-status';
 import { reconcileStatus } from './reconcile';
-import { notifications } from '$lib/state/notifications.svelte.js';
+import { notifications } from '#lib/state/notifications.svelte.js';
 
 export class TrackingState {
 	readonly mediaId: string;

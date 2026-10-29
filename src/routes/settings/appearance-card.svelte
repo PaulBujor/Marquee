@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as Card from '$lib/components/ui/card';
-	import * as ToggleGroup from '$lib/components/ui/toggle-group';
-	import { theme } from '$lib/state/theme.svelte.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
+	import { theme } from '#lib/state/theme.svelte.js';
 
 	const themeModes = [
 		{ value: 'auto', label: 'Auto' },

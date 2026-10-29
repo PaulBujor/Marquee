@@ -13,7 +13,7 @@
  * half of the consumer adapter lives there, in plain JS, for the same reason `scheduled` self-fetches
  * instead of importing app code directly.
  */
-import { chunkBySize } from '$lib/server/db/chunk';
+import { chunkBySize } from '#lib/server/db/chunk.js';
 import type { QueueProducer } from './types';
 
 /** Cloudflare Queues caps `sendBatch` at 100 messages per call. */

@@ -4,7 +4,7 @@
  * authoritative server-side re-check (per the validate-on-both-sides convention).
  *
  * Endpoints/actions compose these fields into per-request schemas; JSON API
- * endpoints surface failures as problem+json (see `$lib/server/http/problem`),
+ * endpoints surface failures as problem+json (see `#lib/server/http/problem.js`),
  * form actions keep their inline `fail({ ... })` shape.
  */
 import { z } from 'zod';
