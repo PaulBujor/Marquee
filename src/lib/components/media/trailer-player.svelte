@@ -1,7 +1,4 @@
 <script lang="ts">
-	// Click-to-load: the poster is YouTube's own thumbnail and the iframe only mounts once the visitor
-	// asks for it, so a page nobody plays from never talks to YouTube. `playing` is bindable so a
-	// parent that resets view state on navigation (the title page) still owns that reset.
 	import PlayIcon from '@lucide/svelte/icons/play';
 
 	let {

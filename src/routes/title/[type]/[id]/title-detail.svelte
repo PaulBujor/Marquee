@@ -605,7 +605,6 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						</section>
 					{/if}
 
-					<!-- The trailer, click-to-load, exactly as the public share page shows it. -->
 					<TrailerPlayer trailer={detail.trailer} bind:playing={showTrailer} />
 				</div>
 			{/if}
