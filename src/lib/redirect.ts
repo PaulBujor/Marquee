@@ -8,7 +8,6 @@ const FALLBACK = '/';
 /** A sentinel origin for parsing: never redirected to, only compared against. */
 const PARSE_BASE = 'https://marquee.invalid';
 const MAX_LENGTH = 512;
-/** Destinations that would bounce straight back into the sign-in flow. */
 const LOOPING_PREFIXES = ['/login', '/auth'];
 
 /**
@@ -52,7 +51,6 @@ function hasControlCharacter(value: string): boolean {
 	return false;
 }
 
-/** Whether `path` *is* that segment or a child/query/hash of it. */
 function startsWithSegment(path: string, segment: string): boolean {
 	if (!path.startsWith(segment)) return false;
 	return ['', '/', '?', '#'].includes(path[segment.length] ?? '');

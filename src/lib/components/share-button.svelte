@@ -7,7 +7,6 @@
 	interface Props {
 		/** The path to share — the call site builds it with `resolve()`. */
 		path: string;
-		/** Title for the OS share sheet (and what the recipient's app shows). */
 		title: string;
 		label?: string;
 		size?: ButtonSize;

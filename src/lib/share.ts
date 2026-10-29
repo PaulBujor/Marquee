@@ -51,7 +51,6 @@ export async function shareLink(
 			return 'shared';
 		} catch (err) {
 			if (err instanceof Error && err.name === 'AbortError') return 'cancelled';
-			// Anything else (a blocked or broken sheet) falls through to the clipboard.
 		}
 	}
 
