@@ -8,15 +8,11 @@ type Db = ReturnType<typeof createDb>;
 
 export const SESSION_COOKIE = 'session';
 
-/** Sessions live 30 days; each authenticated request slides the expiry forward. */
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Refresh `lastUsedAt`/expiry at most once per day to avoid a write per request. */
 const SESSION_REFRESH_MS = 24 * 60 * 60 * 1000;
 
-/**
- * Mint a new session for a user. Returns the raw token to place in the cookie;
- * only its hash is stored server-side.
- */
+/** Returns the raw token for the cookie; only its hash is stored. */
 export async function createSession(
 	db: Db,
 	userId: string
@@ -28,11 +24,6 @@ export async function createSession(
 	return { token, expiresAt };
 }
 
-/**
- * Resolve a session cookie value to its user, or null if missing/expired.
- * Expired sessions are deleted; valid ones have their expiry slid forward
- * (throttled to once per day).
- */
 export async function validateSession(
 	db: Db,
 	token: string
@@ -49,8 +40,7 @@ export async function validateSession(
 	if (!row) return null;
 
 	const now = Date.now();
-	// Drop the session if it expired or the account is no longer enabled
-	// (e.g. blocked after signing in).
+	// A user blocked after signing in must lose their session on the next request.
 	if (row.session.expiresAt.getTime() <= now || row.user.status !== 'enabled') {
 		await db.delete(sessions).where(eq(sessions.id, id));
 		return null;
@@ -67,19 +57,11 @@ export async function validateSession(
 	return row;
 }
 
-/** Delete a session by its cookie token (used on logout). */
 export async function invalidateSession(db: Db, token: string): Promise<void> {
 	await db.delete(sessions).where(eq(sessions.id, await hashToken(token)));
 }
 
-/**
- * Drop every session for a user except the one presented, and report how many went. Used after a
- * credential change: sign-in is keyed entirely on the email address, so changing it is the
- * equivalent of a password change and should not leave older sessions live.
- *
- * `keepToken` is the raw cookie value of the session doing the changing, so the user isn't signed
- * out of the device they're using. Pass null to drop all of them.
- */
+/** Sign-in is keyed on email, so changing it revokes every other session; `keepToken` spares the caller's own. */
 export async function invalidateOtherSessions(
 	db: Db,
 	userId: string,

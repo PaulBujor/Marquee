@@ -29,35 +29,20 @@ import { safeRedirectPath } from '#lib/redirect.js';
 
 type Db = ReturnType<typeof createDb>;
 
-/**
- * A code lives shorter than a link on purpose: a 6-digit code is only ~20 bits
- * of entropy (vs the link token's 256), so a tighter window limits online
- * brute-forcing; a code is also typed straight back into the open app, while a
- * link may detour through an email client on another device.
- */
+/** A code is only ~20 bits vs the link's 256, so its TTL is shorter to limit online brute force. */
 export const LINK_TTL_MINUTES = 15;
 export const CODE_TTL_MINUTES = 10;
 const LINK_TTL_MS = LINK_TTL_MINUTES * 60 * 1000;
 const CODE_TTL_MS = CODE_TTL_MINUTES * 60 * 1000;
-/** Failed code entries before the code is invalidated (online brute-force cap). */
 const CODE_MAX_ATTEMPTS = 5;
-/** Email-bomb protection: cap sign-in requests per email and per IP within a window. */
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX_PER_EMAIL = 5;
 const RATE_MAX_PER_IP = 20;
-/** Per-IP cap on unauthenticated waitlist signups within RATE_WINDOW_MS. */
 const SIGNUP_MAX_PER_IP = 10;
 
-/** Where the sign-in request came from: an installed PWA vs a browser tab. */
 export type SignInMode = 'standalone' | 'browser';
 
-/**
- * Outcome of the request phase. Status-gated, so it deliberately reveals account
- * state (enabled / blocked / waitlisted / unknown) — not enumeration-resistant,
- * by design. On success, `method` is what was emailed: a link *and* a code for
- * browsers (click either), a code only for installed PWAs (which can't capture
- * the link).
- */
+/** Deliberately reveals account state — not enumeration-resistant, by design. */
 export type RequestResult =
 	| { kind: 'sent'; method: 'code' | 'link_and_code' }
 	| { kind: 'blocked' }
@@ -65,11 +50,6 @@ export type RequestResult =
 	| { kind: 'unknown' }
 	| { kind: 'rate_limited' };
 
-/**
- * Request phase: branch on account status; for an enabled user, email a magic
- * link *and* a 6-digit code (browser) or a code only (PWA) per `mode`. Unknown
- * addresses are invited to join the waitlist (see `joinWaitlist`), not created here.
- */
 export async function requestSignIn(opts: {
 	db: Db;
 	email: string;
@@ -99,7 +79,6 @@ export async function requestSignIn(opts: {
 		return { kind: 'sent', method: 'code' };
 	}
 
-	// Browser: one email with both, so a user can click the link or type the code.
 	const { code, supersede, insert: codeInsert } = await codeWrites(opts.db, email, opts.ip);
 	const { url, insert: linkInsert } = await linkWrite(
 		opts.db,
@@ -117,16 +96,11 @@ export async function requestSignIn(opts: {
 	return { kind: 'sent', method: 'link_and_code' };
 }
 
-/**
- * Build the writes for a fresh 6-digit code (superseding any live one) without
- * running them, so the caller can batch them into a single D1 round-trip. Returns
- * the raw code alongside the supersede + insert statements.
- */
+/** Builds (doesn't run) the writes so callers can batch them into a single D1 round-trip. */
 async function codeWrites(db: Db, email: string, ip?: string | null) {
 	const code = generateCode();
 	const tokenHash = await hashToken(code);
-	// Keep at most one live code per email so verify never has to disambiguate
-	// between two codes issued in the same second (createdAt is second-resolution).
+	// One live code per email: verify can't disambiguate two issued in the same second.
 	const supersede = db
 		.update(loginTokens)
 		.set({ consumedAt: new Date() })
@@ -147,10 +121,6 @@ async function codeWrites(db: Db, email: string, ip?: string | null) {
 	return { code, supersede, insert };
 }
 
-/**
- * Build the write for a fresh magic-link token without running it (batched by the
- * caller). Returns the sign-in URL alongside the insert statement.
- */
 async function linkWrite(
 	db: Db,
 	email: string,
@@ -175,12 +145,7 @@ async function linkWrite(
 export type JoinResult =
 	{ kind: 'waitlisted' } | { kind: 'blocked' } | { kind: 'already' } | { kind: 'rate_limited' };
 
-/**
- * Waitlist signup: create a `pending` user for a previously-unknown address and
- * email a confirmation. Unauthenticated, so it's rate-limited per IP to prevent
- * row-flooding / email-bombing. Promotion to `enabled` is a manual DB flip
- * during the private beta.
- */
+/** Promotion to `enabled` is a manual DB flip during the private beta. */
 export async function joinWaitlist(
 	db: Db,
 	rawEmail: string,
@@ -207,8 +172,7 @@ export async function joinWaitlist(
 		.insert(users)
 		.values({ email, status: 'pending', signupIp: ip ?? null })
 		.onConflictDoNothing();
-	// Confirmation email is best-effort — the signup already succeeded, so a send
-	// failure must not fail the request.
+	// Best-effort: the signup already succeeded, so a send failure must not fail the request.
 	try {
 		await sender.send({
 			to: email,
@@ -225,10 +189,6 @@ export type VerifyResult =
 	| { ok: true; user: User; token: string; expiresAt: Date }
 	| { ok: false; reason: 'invalid' | 'expired' | 'not_allowed' | 'too_many_attempts' };
 
-/**
- * Verify a magic link (browser flow): validate and consume the token, then mint
- * a session for the enabled user. Single-use — consumption is atomic.
- */
 export async function verifyMagicLink(db: Db, rawToken: string): Promise<VerifyResult> {
 	const tokenHash = await hashToken(rawToken);
 	const row = (
@@ -245,11 +205,6 @@ export async function verifyMagicLink(db: Db, rawToken: string): Promise<VerifyR
 	return consumeAndMint(db, row.id, row.email);
 }
 
-/**
- * Verify a 6-digit code (PWA flow): match the code against the latest unused
- * code for the email, minting a session for the enabled user. Single-use;
- * failed attempts are counted and the code is invalidated past the cap.
- */
 export async function verifyCode(db: Db, rawEmail: string, code: string): Promise<VerifyResult> {
 	const email = normalizeEmail(rawEmail);
 	const row = (
@@ -271,10 +226,7 @@ export async function verifyCode(db: Db, rawEmail: string, code: string): Promis
 	if (row.expiresAt.getTime() <= Date.now()) return { ok: false, reason: 'expired' };
 
 	if ((await hashToken(code)) !== row.tokenHash) {
-		// Increment atomically so concurrent wrong guesses can't lose a count. `returning` yields no
-		// row if the token vanished between the select and here — the nightly purge deletes expired
-		// and consumed tokens — so treat a missing row as "already gone" rather than destructuring
-		// undefined and throwing an opaque TypeError.
+		// Atomic increment so concurrent wrong guesses can't lose a count; a missing row was purged.
 		const incremented = await db
 			.update(loginTokens)
 			.set({ attempts: sql`${loginTokens.attempts} + 1` })
@@ -295,7 +247,6 @@ export async function verifyCode(db: Db, rawEmail: string, code: string): Promis
 	return consumeAndMint(db, row.id, email);
 }
 
-/** Atomically consume a validated login row and mint a session for an enabled user. */
 async function consumeAndMint(db: Db, id: string, email: string): Promise<VerifyResult> {
 	const consumed = await db
 		.update(loginTokens)
@@ -311,15 +262,7 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
 	return { ok: true, user, token, expiresAt };
 }
 
-/**
- * Permanently delete a user and everything they own — sessions, sign-in and email-change tokens,
- * the event log and sync cursor, the tracking + episode-watch projections, push subscriptions, the
- * notification ledger, and any media and people rows they authored — as one atomic D1 batch. The
- * *shared* media and people catalogs (provider-backed rows, `owner_user_id IS NULL`) are not
- * user-scoped and are intentionally left intact; only rows this user owns go, taking their
- * seasons/episodes/credits with them by cascade. Delete children before the `users` row so nothing
- * is orphaned even where D1 doesn't enforce the cascade.
- */
+/** Delete children before the `users` row: D1 doesn't enforce the cascade everywhere; shared catalog rows stay. */
 export async function deleteAccount(db: Db, user: User): Promise<void> {
 	await db.batch([
 		db.delete(emailChangeTokens).where(eq(emailChangeTokens.userId, user.id)),
@@ -340,8 +283,7 @@ export async function deleteAccount(db: Db, user: User): Promise<void> {
 
 async function isRateLimited(db: Db, email: string, ip?: string | null): Promise<boolean> {
 	const since = new Date(Date.now() - RATE_WINDOW_MS);
-	// Count the one `kind='code'` row every request writes, so a browser request
-	// (which also writes a `kind='link'` row) still counts as a single request.
+	// Count the one `kind='code'` row every request writes, so a browser request counts once.
 	const [{ n }] = await db
 		.select({ n: count() })
 		.from(loginTokens)

@@ -18,14 +18,7 @@ import {
 	type EventPayload
 } from '../../sync/events';
 
-/**
- * Account states for the gated (waitlist) auth flow:
- * - `pending`  — signed up, waiting for access; cannot receive a login link.
- * - `enabled`  — approved; can request links and sign in.
- * - `blocked`  — denied; cannot request links or hold a session.
- * New signups start `pending`; promotion to `enabled` is a manual DB flip
- * during the private beta.
- */
+/** `pending` users can't log in; promotion to `enabled` is a manual SQL flip during the beta. */
 export const USER_STATUSES = ['pending', 'enabled', 'blocked'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
@@ -33,11 +26,7 @@ export type UserStatus = (typeof USER_STATUSES)[number];
 export const USER_ROLES = ['user', 'admin'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
-/**
- * A registered user. Identity is the verified email address — there are no
- * passwords (auth is passwordless magic link). Users are created as `pending`
- * when they join the waitlist, not lazily at verify time.
- */
+/** Created at waitlist signup as `pending`, not lazily at verify time. */
 export const users = sqliteTable(
 	'users',
 	{
@@ -47,16 +36,12 @@ export const users = sqliteTable(
 		email: text('email').notNull().unique(),
 		status: text('status', { enum: USER_STATUSES }).notNull().default('pending'),
 		role: text('role', { enum: USER_ROLES }).notNull().default('user'),
-		// Optional free-text reason recorded when an account is blocked (audit trail).
 		blockedReason: text('blocked_reason'),
-		// Requesting client IP at waitlist signup, for per-IP signup rate limiting.
 		signupIp: text('signup_ip'),
 		createdAt: integer('created_at', { mode: 'timestamp' })
 			.notNull()
 			.$defaultFn(() => new Date()),
-		// Maintained by the `users_set_updated_at` DB trigger (see migration) so it
-		// tracks *every* change, including manual status flips via raw SQL. Stored as
-		// Unix seconds, matching Drizzle's `timestamp` mode.
+		// Maintained by a DB trigger so it tracks every change incl. raw SQL; Unix seconds, like Drizzle's `timestamp` mode.
 		updatedAt: integer('updated_at', { mode: 'timestamp' })
 			.notNull()
 			.default(sql`(unixepoch())`)
@@ -64,21 +49,11 @@ export const users = sqliteTable(
 	(table) => [index('users_signup_ip_idx').on(table.signupIp)]
 );
 
-/**
- * Delivery method for a sign-in secret: a `link` (long token in an emailed URL,
- * for browser tabs) or a `code` (6-digit OTP the user types, for installed PWAs
- * that can't capture the link). Chosen per request from the client display mode.
- */
+/** Installed PWAs can't capture an emailed link, so they get a 6-digit `code` instead. */
 export const LOGIN_KINDS = ['link', 'code'] as const;
 export type LoginKind = (typeof LOGIN_KINDS)[number];
 
-/**
- * A short-lived sign-in secret. We store only the SHA-256 hash — the raw
- * link-token/code travels only in the email — so a DB read can't reconstruct it.
- * Issued only to `enabled` users. Codes are looked up by email (a 6-digit code
- * isn't unique across users, so the hash can't be the primary key); `attempts`
- * caps online brute-forcing of a code before it's invalidated.
- */
+/** Codes are looked up by email since a 6-digit code isn't unique; `attempts` caps online brute force. */
 export const loginTokens = sqliteTable(
 	'login_tokens',
 	{
@@ -86,12 +61,9 @@ export const loginTokens = sqliteTable(
 			.primaryKey()
 			.$defaultFn(() => crypto.randomUUID()),
 		email: text('email').notNull(),
-		// SHA-256 hex of the raw link-token or code.
 		tokenHash: text('token_hash').notNull(),
 		kind: text('kind', { enum: LOGIN_KINDS }).notNull(),
-		// Requesting client IP, for per-IP email-bomb rate limiting (nullable if unknown).
 		requestIp: text('request_ip'),
-		// Failed code-verification attempts; the code is invalidated past a cap.
 		attempts: integer('attempts').notNull().default(0),
 		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
 		consumedAt: integer('consumed_at', { mode: 'timestamp' }),
@@ -103,14 +75,12 @@ export const loginTokens = sqliteTable(
 		index('login_tokens_email_idx').on(table.email),
 		index('login_tokens_token_hash_idx').on(table.tokenHash),
 		index('login_tokens_request_ip_idx').on(table.requestIp),
-		// Support the nightly purge's two branches (expired-by-time, already-consumed) as separate
-		// indexed deletes — an OR across both isn't reliably planned as a single index scan.
+		// Two indexed deletes rather than one OR across columns: an OR isn't planned as a single index scan.
 		index('login_tokens_expires_at_idx').on(table.expiresAt),
 		index('login_tokens_consumed_at_idx').on(table.consumedAt)
 	]
 );
 
-/** Confirms an account-email change: a hashed 6-digit code scoped to a user + target address. */
 export const emailChangeTokens = sqliteTable(
 	'email_change_tokens',
 	{
@@ -120,13 +90,9 @@ export const emailChangeTokens = sqliteTable(
 		userId: text('user_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
-		// The address the code was sent to and that we'll switch the account to.
 		newEmail: text('new_email').notNull(),
-		// SHA-256 hex of the raw 6-digit code.
 		tokenHash: text('token_hash').notNull(),
-		// Requesting client IP, for per-IP email-bomb rate limiting (nullable if unknown).
 		requestIp: text('request_ip'),
-		// Failed verification attempts; the token is invalidated past a cap.
 		attempts: integer('attempts').notNull().default(0),
 		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
 		consumedAt: integer('consumed_at', { mode: 'timestamp' }),
@@ -141,15 +107,10 @@ export const emailChangeTokens = sqliteTable(
 	]
 );
 
-/**
- * A server-side session. The cookie carries a random token; we store only its
- * SHA-256 hash (as the primary key), so a leaked DB cannot be used to forge a
- * session cookie. `lastUsedAt` is refreshed on each authenticated request.
- */
+/** Only the token's SHA-256 hash is stored, as the PK, so a leaked DB can't forge a cookie. */
 export const sessions = sqliteTable(
 	'sessions',
 	{
-		// SHA-256 hex of the raw session token held in the cookie.
 		id: text('id').primaryKey(),
 		userId: text('user_id')
 			.notNull()
@@ -174,26 +135,9 @@ export type Session = typeof sessions.$inferSelect;
 export type LoginToken = typeof loginTokens.$inferSelect;
 export type EmailChangeToken = typeof emailChangeTokens.$inferSelect;
 
-/* ------------------------------------------------------------------ *
- * Offline & Sync — event-sourced tracking model.
- *
- * The append-only `events` log is the source of truth for *what the user did*;
- * `tracking` and `episode_watches` are materialized *projections* of it (see
- * `src/lib/server/sync/projection.ts`). `media` is separate **reference data** — a
- * catalog cache synced on its own parallel channel, not derived from the log. Unlike
- * `users`, these tables have no `updated_at` trigger: every write flows through
- * projection code, which sets the LWW clocks explicitly — no raw-SQL edits to catch.
- * ------------------------------------------------------------------ */
+// Unlike `users`, these tables have no `updated_at` trigger: every write flows through projection code, which sets the LWW clocks explicitly.
 
-/**
- * Append-only event log. `id` is the **client-supplied** UUID (so it has no
- * `$defaultFn`) and the per-user dedup key — replaying a synced event is a no-op. The
- * primary key is **composite `(user_id, id)`**, not `id` alone: ids are client-minted and
- * untrusted, so scoping by user means a forced or colliding UUID from one user can never
- * collide with (and drop) another user's event — no id remapping needed. `sequence` is a
- * per-user monotonic counter assigned by the server (see `syncState`); the client sync
- * cursor is the highest `sequence` it has pulled.
- */
+/** `id` is client-minted and untrusted, so the PK is `(user_id, id)` — a forged UUID can't collide with another user's event. */
 export const events = sqliteTable(
 	'events',
 	{
@@ -205,17 +149,13 @@ export const events = sqliteTable(
 		type: text('type', { enum: SYNC_EVENT_TYPES }).notNull(),
 		// The aggregate the event targets — our own media id (see `mediaId()`).
 		entityId: text('entity_id').notNull(),
-		// Event payload as JSON — Drizzle (de)serializes it; SQLite has no native JSON
-		// type, so it's stored as text. Shape depends on `type` (see `EventPayloadMap`).
+		// SQLite has no JSON type, so it's stored as text; Drizzle (de)serializes it per `type`.
 		payload: text('payload', { mode: 'json' }).$type<EventPayload>().notNull(),
 		deviceId: text('device_id').notNull(),
 		schemaVersion: integer('schema_version').notNull().default(1),
-		// Epoch **ms** on the originating device — the LWW ordering clock. Plain integer
-		// (not `timestamp` mode, which is Unix seconds) to preserve millisecond precision.
+		// Epoch **ms** — the LWW ordering clock; `timestamp` mode would be seconds and lose precision.
 		clientCreatedAt: integer('client_created_at').notNull(),
-		// Audit-only wall-clock; `timestamp` mode stores Unix seconds, so it's coarser
-		// than the ms `clientCreatedAt`. Not used for ordering or LWW (that's `sequence` /
-		// `clientCreatedAt`), so the reduced precision is fine.
+		// Audit-only wall-clock, coarser (Unix seconds) than `clientCreatedAt`; not used for ordering.
 		serverReceivedAt: integer('server_received_at', { mode: 'timestamp' })
 			.notNull()
 			.$defaultFn(() => new Date())
@@ -226,11 +166,7 @@ export const events = sqliteTable(
 	]
 );
 
-/**
- * Per-user sequence allocator. A single upsert-with-RETURNING against this row
- * atomically reserves a disjoint block of `sequence` values, so concurrent sync
- * requests (separate Worker invocations) never collide on `events_user_sequence_idx`.
- */
+/** One upsert-with-RETURNING reserves a disjoint block, so concurrent Workers never collide on `events_user_sequence_idx`. */
 export const syncState = sqliteTable('sync_state', {
 	userId: text('user_id')
 		.primaryKey()
@@ -238,10 +174,7 @@ export const syncState = sqliteTable('sync_state', {
 	lastSequence: integer('last_sequence').notNull().default(0)
 });
 
-/**
- * Global media catalog cache (not user-scoped). Reference data synced on its own channel, keyed by
- * our own media id. `source` marks provider-backed (`linked`) vs. user-authored (`custom`) rows.
- */
+/** Global (not user-scoped) catalog cache; `source` marks provider-backed `linked` vs user-authored `custom`. */
 export const media = sqliteTable(
 	'media',
 	{
@@ -250,12 +183,10 @@ export const media = sqliteTable(
 		// e.g. `movie/603`; null for custom entries.
 		externalId: text('external_id'),
 		source: text('source', { enum: MEDIA_SOURCES }).notNull().default('linked'),
-		// Owner of a custom row; null for the shared `linked` catalog. Account deletion cascades.
 		ownerUserId: text('owner_user_id').references(() => users.id, { onDelete: 'cascade' }),
 		type: text('type', { enum: ['movie', 'show'] }).notNull(),
 		title: text('title').notNull(),
-		// Case-folded title for offline search. JS `toLowerCase()` (full Unicode) vs SQLite `LIKE`
-		// (ASCII-only) — folded in app code on hydrate, backfilled by the migration.
+		// Case-folded for offline search: JS `toLowerCase()` is full Unicode, SQLite `LIKE` is ASCII-only.
 		titleNormalized: text('title_normalized').notNull().default(''),
 		year: integer('year'),
 		posterPath: text('poster_path'),
@@ -269,31 +200,22 @@ export const media = sqliteTable(
 		inProduction: integer('in_production', { mode: 'boolean' }),
 		firstAirDate: text('first_air_date'),
 		lastAirDate: text('last_air_date'),
-		// Bumped whenever a refresh changes content, so clients can detect a stale copy.
 		version: integer('version').notNull().default(1),
-		// Epoch ms of the last TMDB pull (drives the refresh TTL). SQL default 0 backfills existing
-		// rows as stale; the refresh code always sets it explicitly.
+		// Epoch ms of the last TMDB pull (drives the refresh TTL); default 0 makes existing rows stale.
 		refreshedAt: integer('refreshed_at').notNull().default(0),
-		// Epoch ms (not timestamp/seconds) — an LWW clock compared against event `clientCreatedAt`,
-		// so units must match.
+		// Epoch ms, not seconds: an LWW clock compared against event `clientCreatedAt`, so units must match.
 		updatedAt: integer('updated_at')
 			.notNull()
 			.$defaultFn(() => Date.now())
 	},
-	// SQLite treats each NULL as distinct in a UNIQUE index, so multiple custom rows
-	// (`external_id = null`) never collide.
+	// SQLite treats each NULL as distinct in a UNIQUE index, so custom rows (`external_id = null`) never collide.
 	(table) => [
 		uniqueIndex('media_provider_external_idx').on(table.provider, table.externalId),
-		// The nightly cron's "unsettled" sweep (enqueueStaleMedia) filters shows and movies
-		// separately (type + in_production; type + release_date) rather than one OR'd query, so
-		// each branch gets its own supporting index instead of relying on SQLite to plan an OR.
+		// The nightly sweep's branches are separate queries rather than one OR'd query, so each gets its own index.
 		index('media_type_in_production_idx').on(table.type, table.inProduction),
 		index('media_type_release_date_idx').on(table.type, table.releaseDate),
-		// The nightly sweep also matches shows by TMDB status (a between-seasons show has
-		// `in_production` false but an airing status), so that branch needs its own index.
+		// A between-seasons show has `in_production` false but an airing status, so that branch needs its own index.
 		index('media_type_status_idx').on(table.type, table.status),
-		// Serves both owner-scoped reads (recovering a user's custom entries on a fresh device) and
-		// the account-deletion sweep.
 		index('media_owner_idx').on(table.ownerUserId)
 	]
 );
@@ -316,7 +238,7 @@ export const seasons = sqliteTable(
 	(table) => [primaryKey({ columns: [table.mediaId, table.seasonNumber] })]
 );
 
-/** A show's episode. A null `air_date` means it hasn't aired yet; indexed for calendar range scans. */
+/** A null `air_date` means it hasn't aired yet. */
 export const episodes = sqliteTable(
 	'episodes',
 	{
@@ -335,16 +257,12 @@ export const episodes = sqliteTable(
 	(table) => [
 		primaryKey({ columns: [table.mediaId, table.seasonNumber, table.episodeNumber] }),
 		index('episodes_air_date_idx').on(table.airDate),
-		// The notify digest joins tracking → episodes on media_id and range-filters air_date in the
-		// same query; a compound index covers both instead of a media_id-only index scan.
+		// The notify digest joins on media_id and range-filters air_date in one query, so this covers both.
 		index('episodes_media_air_date_idx').on(table.mediaId, table.airDate)
 	]
 );
 
-/**
- * A person who can be credited on a title. Provider-backed persons have a derived id; user-authored
- * ones are scoped by `ownerUserId`, same as `media`.
- */
+/** Provider-backed persons have a derived id; user-authored ones are scoped by `ownerUserId`, same as `media`. */
 export const people = sqliteTable(
 	'people',
 	{
@@ -356,17 +274,7 @@ export const people = sqliteTable(
 		name: text('name').notNull(),
 		profilePath: text('profile_path')
 	},
-	/**
-	 * Uniqueness is scoped by ownership, in two partial indexes rather than one.
-	 *
-	 * The shared catalogue must dedupe on `(provider, external_id)` so two titles crediting the same
-	 * actor converge on one row. An owned row can't join that index: a user who picks a real person
-	 * from search stores *their own* copy of that identity (we deliberately don't write them into the
-	 * shared catalogue), so two accounts picking the same person would collide on a key that is
-	 * supposed to be globally unique. Scoping the owned index by `owner_user_id` keeps both rules
-	 * true at once. Both still rely on the same NULL-distinctness as `media`: many rows can share a
-	 * null external id.
-	 */
+	/** Each user keeps their own copy of a person, so owned rows can't share the catalogue's `(provider, external_id)` index. */
 	(table) => [
 		uniqueIndex('people_provider_external_idx')
 			.on(table.provider, table.externalId)
@@ -378,9 +286,6 @@ export const people = sqliteTable(
 	]
 );
 
-/**
- * A person's credit on a title. PK is `(media_id, person_id, role)`. Cascades from both sides.
- */
 export const credits = sqliteTable(
 	'credits',
 	{
@@ -393,7 +298,6 @@ export const credits = sqliteTable(
 		role: text('role', { enum: CREDIT_ROLES }).notNull(),
 		// Who they played; cast only.
 		character: text('character'),
-		// Billing order within the role, so a rebuilt list keeps the provider's ranking.
 		sortOrder: integer('sort_order').notNull().default(0)
 	},
 	(table) => [
@@ -402,14 +306,7 @@ export const credits = sqliteTable(
 	]
 );
 
-/**
- * A user's tracking row for a title. `mediaId` intentionally has **no FK** to
- * `media`: a `tracking.status_changed` can arrive from another device before this
- * server has seen the corresponding `tracking.added`, so decoupling avoids FK
- * failures and keeps event ordering robust. Per-field LWW clocks (epoch ms of the
- * winning event's `clientCreatedAt`) let independent fields merge without clobber.
- * `removed` is a tombstone so a delete can lose to a later re-add deterministically.
- */
+/** `media_id` has no FK on purpose: a `status_changed` from another device can arrive before `tracking.added`. */
 export const tracking = sqliteTable(
 	'tracking',
 	{
@@ -438,10 +335,7 @@ export const tracking = sqliteTable(
 	(table) => [index('tracking_user_status_idx').on(table.userId, table.status)]
 );
 
-/**
- * Per-episode watched state for a user + show. Progress rings are *derived* from
- * these rows, never stored. `updatedAt` is the epoch-ms LWW clock.
- */
+/** Progress rings are derived from these rows, never stored; `updatedAt` is the epoch-ms LWW clock. */
 export const episodeWatches = sqliteTable(
 	'episode_watches',
 	{
@@ -469,18 +363,7 @@ export type EpisodeRow = typeof episodes.$inferSelect;
 export type Tracking = typeof tracking.$inferSelect;
 export type EpisodeWatch = typeof episodeWatches.$inferSelect;
 
-/* ------------------------------------------------------------------ *
- * Web Push — notification subscriptions.
- * ------------------------------------------------------------------ */
-
-/**
- * A Web Push subscription — one row per browser/device that has granted
- * notification permission. `endpoint` (the push service URL) is the natural
- * unique key; `p256dh`/`auth` are the client's encryption keys, and `timezone`
- * (auto-detected on the device, IANA string) lets the daily digest fire at 9AM
- * *local* to the user. A row is deleted when the user turns notifications off or
- * when the push service reports it gone (404/410) on send.
- */
+/** `timezone` (IANA) makes the digest fire at 9AM *local*; rows are deleted when the push service reports 404/410. */
 export const pushSubscriptions = sqliteTable(
 	'push_subscriptions',
 	{
@@ -490,14 +373,12 @@ export const pushSubscriptions = sqliteTable(
 		userId: text('user_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
-		// The push service URL the encrypted payload is POSTed to. Unique across users.
 		endpoint: text('endpoint').notNull().unique(),
 		// Client public key (base64url, 65-byte P-256 point) and auth secret (base64url, 16 bytes).
 		p256dh: text('p256dh').notNull(),
 		auth: text('auth').notNull(),
 		// The device that created the subscription (minted client-side, see idb `meta`).
 		deviceId: text('device_id').notNull(),
-		// Optional human label for the settings device list (e.g. "Chrome on Windows").
 		deviceLabel: text('device_label'),
 		// IANA timezone (e.g. `Europe/Madrid`), auto-detected client-side; null → treated as UTC.
 		timezone: text('timezone'),
@@ -513,13 +394,7 @@ export const pushSubscriptions = sqliteTable(
 
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 
-/**
- * Ledger of notifications already sent, so the daily digest is exactly-once per
- * release per user (across retries, a forced run, and missed days). `id` is a
- * deterministic key — `${userId}::${mediaId}::s{S}e{E}` for an episode,
- * `${userId}::${mediaId}::release` for a movie. Also the data foundation for the
- * future in-app notification inbox / badging.
- */
+/** Deterministic id makes the digest exactly-once per release across retries, forced runs and missed days. */
 export const notificationLog = sqliteTable(
 	'notification_log',
 	{
@@ -536,20 +411,11 @@ export const notificationLog = sqliteTable(
 
 export type NotificationLogRow = typeof notificationLog.$inferSelect;
 
-/**
- * A public share preview: the catalogue-only snapshot a shared link renders its page from. Only an
- * authenticated client writes one (see `POST /api/share/preview`), so the public read path never
- * has to call TMDB itself — crawling a shared link can't spend provider quota.
- *
- * Sized for the whole title page rather than a card: the shared page shows the same hero, meta row,
- * crew and cast the signed-in page does, minus the sections that need user data (tracking, similar,
- * seasons) or a longer payload (the trailer).
- */
+/** Snapshot for public share pages, so the unauthenticated read path never calls TMDB and can't spend provider quota. */
 export const sharePreviews = sqliteTable(
 	'share_previews',
 	{
-		// `tmdb:<type>:<externalId>`, e.g. `tmdb:movie:603`. The type is in the key because TMDB ids
-		// are per-type, so `movie/1399` and `show/1399` are different titles.
+		// `tmdb:<type>:<externalId>`; the type is in the key because TMDB ids are per-type, e.g. `movie/1399` ≠ `show/1399`.
 		id: text('id').primaryKey(),
 		provider: text('provider', { enum: MEDIA_PROVIDERS }).notNull().default('tmdb'),
 		externalId: text('external_id').notNull(),
@@ -564,7 +430,6 @@ export const sharePreviews = sqliteTable(
 		releasedOn: text('released_on'),
 		seasons: integer('seasons'),
 		production: text('production', { enum: ['in_production', 'ended'] }),
-		// JSON, so the page renders a meta row, a crew list and a cast strip with no second read.
 		genres: text('genres'),
 		crew: text('crew'),
 		cast: text('cast'),
@@ -578,10 +443,7 @@ export const sharePreviews = sqliteTable(
 
 export type SharePreviewRow = typeof sharePreviews.$inferSelect;
 
-/**
- * One row per preview warmed, purely so the per-account hourly cap can be counted. The preview rows
- * themselves are shared across users, so the cap has to live beside the request, not the data.
- */
+/** One row per warm purely to count the per-account hourly cap, which can't live on the shared preview rows. */
 export const sharePreviewWarms = sqliteTable(
 	'share_preview_warms',
 	{
@@ -593,19 +455,12 @@ export const sharePreviewWarms = sqliteTable(
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [
-		// The cap query is a count over one user's rows inside a window; the nightly sweep deletes
-		// by age, which this index also serves.
-		index('share_preview_warms_user_created_idx').on(table.userId, table.createdAt)
-	]
+	(table) => [index('share_preview_warms_user_created_idx').on(table.userId, table.createdAt)]
 );
 
 export type SharePreviewWarmRow = typeof sharePreviewWarms.$inferSelect;
 
-/**
- * One row per admin mutation. Deliberately has no foreign keys: an audit row must outlive the
- * account it acts on, and a cascade must not quietly delete the record of what was done.
- */
+/** No foreign keys on purpose: audit rows must outlive the account they act on. */
 export const adminAudit = sqliteTable(
 	'admin_audit',
 	{

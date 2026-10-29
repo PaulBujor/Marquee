@@ -13,14 +13,8 @@ type Db = ReturnType<typeof createDb>;
 // Re-exported so `#lib/server/auth/index.js` keeps exposing it; the value lives in the client-safe module.
 export { EMAIL_CHANGE_TTL_MINUTES };
 const EMAIL_CHANGE_TTL_MS = EMAIL_CHANGE_TTL_MINUTES * 60 * 1000;
-/** Failed code entries before the change token is invalidated (online brute-force cap). */
 const MAX_ATTEMPTS = 5;
-/**
- * Rate-limit change requests within an hour to limit email-bombing a third party (a code is emailed
- * to the *target* before it's confirmed). Three angles, mirroring `isRateLimited` in `./index`:
- * per requesting user, per **target address** (so multiple accounts can't hammer one inbox), and
- * per requesting IP.
- */
+// Rate-limit per user, per target address (so multiple accounts can't hammer one inbox) and per IP.
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const MAX_REQUESTS_PER_USER = 5;
 const MAX_REQUESTS_PER_EMAIL = 5;
@@ -37,12 +31,7 @@ export type EmailChangeVerifyResult =
 	| { ok: true; newEmail: string; previousEmail: string }
 	| { ok: false; reason: 'invalid' | 'expired' | 'too_many_attempts' | 'taken' };
 
-/**
- * Start a verified email change: validate the target address, then email a
- * 6-digit code to *that* address (proving the user controls it). Supersedes any
- * live change code for this user so verify never has to disambiguate. The switch
- * itself happens in `verifyEmailChange` once the code is confirmed.
- */
+/** Supersedes any live change code for this user so verify never has to disambiguate. */
 export async function requestEmailChange(opts: {
 	db: Db;
 	user: User;
@@ -59,7 +48,6 @@ export async function requestEmailChange(opts: {
 	).at(0);
 	if (taken) return { kind: 'taken' };
 
-	// Rate-limit before issuing: count recent requests per user, per target address, and per IP.
 	const since = new Date(Date.now() - RATE_WINDOW_MS);
 	const countSince = async (where: SQL): Promise<number> => {
 		const [{ n }] = await opts.db
@@ -79,7 +67,6 @@ export async function requestEmailChange(opts: {
 	)
 		return { kind: 'rate_limited' };
 
-	// Keep at most one live code per user.
 	await opts.db
 		.update(emailChangeTokens)
 		.set({ consumedAt: new Date() })
@@ -101,11 +88,6 @@ export async function requestEmailChange(opts: {
 	return { kind: 'sent' };
 }
 
-/**
- * Complete a verified email change: match the latest live code for the user and,
- * on success, switch `users.email` to the target address. Single-use; failed
- * attempts are counted and the code is invalidated past the cap.
- */
 export async function verifyEmailChange(opts: {
 	db: Db;
 	user: User;
@@ -126,9 +108,7 @@ export async function verifyEmailChange(opts: {
 	if (row.expiresAt.getTime() <= Date.now()) return { ok: false, reason: 'expired' };
 
 	if ((await hashToken(opts.code)) !== row.tokenHash) {
-		// Increment atomically so concurrent wrong guesses can't lose a count. A missing row means it
-		// was consumed or purged between the select and here; treat that as invalid rather than
-		// destructuring undefined.
+		// Atomic increment so concurrent wrong guesses can't lose a count; a missing row means consumed or purged.
 		const incremented = await opts.db
 			.update(emailChangeTokens)
 			.set({ attempts: sql`${emailChangeTokens.attempts} + 1` })
@@ -146,7 +126,6 @@ export async function verifyEmailChange(opts: {
 		return { ok: false, reason: 'invalid' };
 	}
 
-	// Consume atomically first; a lost race means it was already used.
 	const consumed = await opts.db
 		.update(emailChangeTokens)
 		.set({ consumedAt: new Date() })
@@ -154,8 +133,7 @@ export async function verifyEmailChange(opts: {
 		.returning({ id: emailChangeTokens.id });
 	if (consumed.length === 0) return { ok: false, reason: 'invalid' };
 
-	// Re-check uniqueness right before switching — the address may have been
-	// claimed since the request (users.email is unique).
+	// Re-check uniqueness: the address may have been claimed since the request (users.email is unique).
 	const taken = (
 		await opts.db.select({ id: users.id }).from(users).where(eq(users.email, row.newEmail)).limit(1)
 	).at(0);
@@ -164,9 +142,7 @@ export async function verifyEmailChange(opts: {
 	const previousEmail = opts.user.email;
 	await opts.db.update(users).set({ email: row.newEmail }).where(eq(users.id, opts.user.id));
 
-	// Sign-in is passwordless and keyed on the address, so moving it is a credential change: drop
-	// every other session. Best-effort — the address has already changed, and failing the request
-	// here would tell the user it didn't.
+	// Sign-in is keyed on the address, so an email change drops every other session; best-effort, since it's already committed.
 	try {
 		await invalidateOtherSessions(opts.db, opts.user.id, opts.keepSessionToken ?? null);
 	} catch (err) {
