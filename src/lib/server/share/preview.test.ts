@@ -379,8 +379,18 @@ describe('the trailer', () => {
 		stubFetch(MOVIE);
 		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW });
 
-		// A key with no name, and a value that isn't JSON at all: both must survive a read.
-		for (const stored of ['{"name":"Trailer"}', '{oops', '{"key":"x","name":42}']) {
+		// A key with no name, a value that isn't JSON at all, and keys that are not keys: the embed URL is
+		// built by interpolating this, and nothing user-shaped belongs in it.
+		for (const stored of [
+			'{"name":"Trailer"}',
+			'{oops',
+			'{"key":"x","name":42}',
+			'{"key":"ab","name":"Too short"}',
+			'{"key":"../../etc/passwd","name":"Path"}',
+			'{"key":"k?autoplay=1&x=","name":"Query"}',
+			'{"key":"k" onload=alert(1) x="","name":"Attribute"}',
+			'{"key":"k with spaces","name":"Spaces"}'
+		]) {
 			await db.update(sharePreviews).set({ trailer: stored });
 			expect((await readPreview(db, 'movie', 603))?.trailer).toBeNull();
 		}

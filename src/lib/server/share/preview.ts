@@ -8,7 +8,7 @@ import { createTmdbClient, TmdbError, type MediaDetail } from '$lib/server/tmdb'
 import { sharePreviewWarms, sharePreviews, type SharePreviewRow } from '$lib/server/db/schema';
 import { productionState, seasonCount } from '$lib/tracking/actions';
 import type { createDb } from '$lib/server/db';
-import type { CastCredit, CrewCredits, SharePreview } from '$lib/share-preview';
+import type { CastCredit, CrewCredits, SharePreview, ShareTrailer } from '$lib/share-preview';
 
 type Db = ReturnType<typeof createDb>;
 
@@ -242,12 +242,17 @@ function isIsoDate(value: string | null): value is string {
 	return typeof value === 'string' && value.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+/** A YouTube key: letters, digits, `-` and `_`. Anything else is not one, and has no place in a URL. */
+const TRAILER_KEY = /^[A-Za-z0-9_-]{6,20}$/;
+
 /** A malformed trailer is dropped rather than rendered: an embed needs a usable key. */
 function parseTrailer(value: string | null): ShareTrailer | null {
 	if (!value) return null;
 	try {
 		const parsed = JSON.parse(value) as Partial<ShareTrailer>;
-		return typeof parsed.key === 'string' && typeof parsed.name === 'string'
+		return typeof parsed.key === 'string' &&
+			TRAILER_KEY.test(parsed.key) &&
+			typeof parsed.name === 'string'
 			? { key: parsed.key, name: parsed.name }
 			: null;
 	} catch {
