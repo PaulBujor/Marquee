@@ -63,7 +63,6 @@ export async function shareLink(
 	}
 }
 
-/** What a share asks the server to store a preview for. */
 export type ShareWarmTarget = { type: 'movie' | 'show'; id: number };
 
 /**

@@ -54,7 +54,6 @@ export async function countRecentWarms(db: Db, userId: string, now: number): Pro
 	return rows.at(0)?.total ?? 0;
 }
 
-/** Warm a title's preview. `now` is injectable so the cap can be tested without waiting. */
 export async function warmTitlePreview(
 	db: Db,
 	apiKey: string,
@@ -97,7 +96,6 @@ export async function readPreview(db: Db, externalId: number): Promise<SharePrev
 	return row ? fromRow(row) : null;
 }
 
-/** Delete warm rows past retention, so the counter table can't grow unbounded. */
 export async function purgeSharePreviewWarms(db: Db, now: number = Date.now()): Promise<number> {
 	const removed = await db
 		.delete(sharePreviewWarms)
@@ -106,7 +104,6 @@ export async function purgeSharePreviewWarms(db: Db, now: number = Date.now()): 
 	return removed.length;
 }
 
-/** Evict previews nobody has refreshed inside the retention window; their links go back to cold. */
 export async function purgeSharePreviews(db: Db, now: number = Date.now()): Promise<number> {
 	const removed = await db
 		.delete(sharePreviews)
@@ -115,7 +112,6 @@ export async function purgeSharePreviews(db: Db, now: number = Date.now()): Prom
 	return removed.length;
 }
 
-/** Everything the shared page prints, taken from the same TMDB detail the app's page uses. */
 function toPreviewShape(detail: MediaDetail, now: number): SharePreview {
 	return {
 		type: detail.type,

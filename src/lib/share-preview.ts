@@ -4,13 +4,11 @@
  * it is catalogue data only — never a user's tracking state.
  */
 
-/** One cast member as the shared page shows them: a face and a name, deliberately without a link. */
 export interface CastCredit {
 	name: string;
 	profilePath: string | null;
 }
 
-/** Crew by role, names only — the shared page prints them, it does not link to them. */
 export interface CrewCredits {
 	director: string | null;
 	creators: string[];
@@ -18,7 +16,6 @@ export interface CrewCredits {
 	producers: string[];
 }
 
-/** Everything a shared title page renders, and nothing more. */
 export interface SharePreview {
 	type: 'movie' | 'show';
 	externalId: number;
@@ -35,7 +32,6 @@ export interface SharePreview {
 	releasedOn: string | null;
 	/** Shows only: seasons excluding Specials, for the header badge. */
 	seasons: number;
-	/** Shows only. */
 	production: 'in_production' | 'ended' | null;
 	genres: string[];
 	crew: CrewCredits;
@@ -43,7 +39,6 @@ export interface SharePreview {
 	updatedAt: number;
 }
 
-/** What the public page renders: a warmed snapshot, a link nothing has warmed, or sharing off. */
 export type PublicShareState =
 	{ state: 'ready'; preview: SharePreview } | { state: 'cold' } | { state: 'disabled' };
 

@@ -554,15 +554,10 @@ export const sharePreviews = sqliteTable(
 		summary: text('summary'),
 		imagePath: text('image_path'),
 		backdropPath: text('backdrop_path'),
-		// TMDB vote average (0–10).
 		rating: real('rating'),
-		// Minutes — a movie's runtime, or a show's per-episode runtime.
 		runtime: integer('runtime'),
-		// `YYYY-MM-DD`: a movie's release date, or a show's first air date.
 		releasedOn: text('released_on'),
-		// Shows only: seasons excluding Specials, for the header badge the app also prints.
 		seasons: integer('seasons'),
-		// Shows only: `in_production` | `ended`, already reduced to the badge the page shows.
 		production: text('production', { enum: ['in_production', 'ended'] }),
 		// JSON, so the page renders a meta row, a crew list and a cast strip with no second read.
 		genres: text('genres'),
