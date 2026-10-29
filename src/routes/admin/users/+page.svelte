@@ -10,6 +10,8 @@
 
 	// The input is the source of truth while typing; the URL follows 350ms after the last keystroke, so the
 	// form still works without JavaScript but nobody has to press a button with it on.
+	// The initial value is all we want from `data` here; the effect below keeps it current afterwards.
+	// svelte-ignore state_referenced_locally
 	let q = $state(data.q);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 
