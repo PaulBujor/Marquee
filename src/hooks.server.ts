@@ -23,15 +23,6 @@ const database: Handle = async ({ event, resolve }) => {
 // Resolve the session cookie to the current user. Runs after `database` so
 // `locals.db` is available; a missing/expired cookie clears itself and leaves
 // `locals.user` null. Load functions/actions read `locals.user` for auth.
-// The admin gate, ahead of routing so it covers every shape of request the surface can receive: page loads,
-// form actions, `+server.ts` endpoints (which never run layout loads) and the `__data.json` fetches a client
-// navigation makes. A route cannot ship unguarded by forgetting its own check.
-const adminOnly: Handle = async ({ event, resolve }) => {
-	if (!isAdminPath(event.url.pathname)) return resolve(event);
-	if (event.locals.user?.role !== 'admin') error(404, 'Not found');
-	return resolve(event);
-};
-
 const authentication: Handle = async ({ event, resolve }) => {
 	event.locals.user = null;
 	const token = event.cookies.get(SESSION_COOKIE);
@@ -46,6 +37,14 @@ const authentication: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
+// Ahead of routing, so endpoints and `__data.json` fetches are covered as well as pages and actions;
+// layout loads never run for those, which is why the gate cannot live in the layout alone.
+const adminOnly: Handle = async ({ event, resolve }) => {
+	if (!isAdminPath(event.url.pathname)) return resolve(event);
+	if (event.locals.user?.role !== 'admin') error(404, 'Not found');
+	return resolve(event);
+};
+
 // Baseline security headers on every response. CSP is configured separately via kit.csp
 // in svelte.config.js (it needs SvelteKit's nonce/hash augmentation for inline scripts).
 const securityHeaders: Handle = async ({ event, resolve }) => {
@@ -57,9 +56,8 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 	response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
 	// Cloudflare only marks the workers.dev preview URLs noindex; custom-domain Previews get it here.
 	if (env.PREVIEW_NOINDEX) response.headers.set('X-Robots-Tag', 'noindex');
-	// The admin surface reflects live account state: never store it, never index it. Set once, here,
-	// rather than in the admin layout — SvelteKit throws when one response sets a header twice.
-	if (event.url.pathname === '/admin' || event.url.pathname.startsWith('/admin/')) {
+	// Here rather than in the admin layout: SvelteKit throws when one response sets a header twice.
+	if (isAdminPath(event.url.pathname)) {
 		response.headers.set('Cache-Control', 'no-store');
 		response.headers.set('X-Robots-Tag', 'noindex');
 	}
