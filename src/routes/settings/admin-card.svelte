@@ -9,8 +9,11 @@
 	</Card.Header>
 	<Card.Content class="flex flex-col gap-3">
 		<p class="text-sm text-muted-foreground">Manage accounts and cached media.</p>
-		<a href={resolve('/admin')} class="self-start text-sm underline underline-offset-2"
-			>Open admin</a
+		<!-- Behind Access: a document load lets it answer instead of a __data.json fetch. -->
+		<a
+			href={resolve('/admin')}
+			data-sveltekit-reload
+			class="self-start text-sm underline underline-offset-2">Open admin</a
 		>
 	</Card.Content>
 </Card.Root>
