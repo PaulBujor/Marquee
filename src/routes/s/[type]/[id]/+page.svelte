@@ -16,7 +16,6 @@
 	);
 	const appIcon = $derived(`${page.url.origin}/icons/icon-512.png`);
 	const image = $derived(posterUrl(preview?.imagePath ?? null, 'w500') ?? appIcon);
-	// Where the reader lands once they're in — the app's own page for this title.
 	const loginHref = $derived(
 		`/login?redirectTo=${encodeURIComponent(`/title/${data.type}/${data.id}`)}`
 	);

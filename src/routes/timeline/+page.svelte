@@ -15,7 +15,6 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Reads local IndexedDB (works offline); reloads whenever a sync pulls — same pattern as home.
 	const library = new LibraryState();
 	$effect(() => {
 		if (!data.user) return;
@@ -37,7 +36,6 @@
 		return dateFmt.format(new Date(`${iso}T00:00:00Z`));
 	}
 
-	/** Head a run by year when every title in it lacks an exact date. */
 	function dayHeading(date: string, entries: UpcomingEntry[]): string {
 		if (entries.every((e) => !e.dateExact)) return `Later in ${date.slice(0, 4)}`;
 		return formatDate(date);
@@ -46,7 +44,6 @@
 
 <svelte:head><title>Upcoming · Marquee</title></svelte:head>
 
-<!-- No back control: this is a tab root. -->
 <PageHeader>
 	<div class="flex min-h-10 items-center gap-3">
 		<h1 class="font-serif text-xl font-semibold">Upcoming</h1>
@@ -62,7 +59,6 @@
 	{:else if years.length > 0}
 		{#each years as { year, days } (year)}
 			<div class="flex flex-col gap-6">
-				<!-- Sticky year divider. -->
 				<div class="sticky top-[4.25rem] z-10 -mb-2 flex justify-center">
 					<span
 						class="rounded-full border bg-background/80 px-3 py-0.5 text-xs font-bold tracking-widest text-muted-foreground uppercase backdrop-blur"

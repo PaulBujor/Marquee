@@ -7,7 +7,6 @@ import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 type Handler = typeof GET;
 type Event = Parameters<Handler>[0];
 
-/** Build a minimal event the handler actually reads (locals.user, params.id, bindings, url). */
 function makeEvent(opts: {
 	user?: unknown;
 	id?: string;

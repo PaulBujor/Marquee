@@ -2,9 +2,7 @@ import { json } from '@sveltejs/kit';
 import { isDbReachable } from '#lib/server/health.js';
 import type { RequestHandler } from './$types';
 
-// Generic readiness probe for uptime/observability. Exercises the critical dependency
-// (D1) rather than merely checking the guard; never leaks internals in the body.
-// See AGENTS.md for the readiness-vs-`locals.db`-guard distinction.
+// Readiness probe: exercises D1 rather than trusting the guard, and never leaks internals (see AGENTS.md).
 export const GET: RequestHandler = async ({ locals }) => {
 	if (locals.db && (await isDbReachable(locals.db))) {
 		return json({ status: 'ok' });

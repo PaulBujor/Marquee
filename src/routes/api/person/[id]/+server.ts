@@ -3,12 +3,7 @@ import { error, json } from '@sveltejs/kit';
 import { createTmdbClient, TmdbError } from '#lib/server/tmdb/index.js';
 import type { RequestHandler } from './$types';
 
-/**
- * A person (cast or crew) with one page of their filmography, for the person page.
- * Auth-gated so the TMDB key stays server-side. `?page=N` walks the credits — TMDB returns them
- * unpaginated, so the client asks for a page rather than pulling a prolific actor's whole history.
- * Not cached and not available offline: like cast and trailers, this is a live TMDB-only surface.
- */
+/** TMDB returns credits unpaginated, so the client asks for `?page=N` rather than pulling a whole filmography. */
 export const GET: RequestHandler = async ({ locals, params, url }) => {
 	if (!locals.user) error(401, 'Unauthorized.');
 

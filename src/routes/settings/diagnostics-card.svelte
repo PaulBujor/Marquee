@@ -4,8 +4,6 @@
 	import ErrorLogDialog from '#lib/components/error-log-dialog.svelte';
 	import { errorLog } from '#lib/client/errors.svelte.js';
 
-	// The way back to the log once the toast is gone — which is exactly when someone is willing to
-	// sit and read a stack trace.
 	let open = $state(false);
 	const count = $derived(errorLog.entries.length);
 	const suppressed = $derived(errorLog.suppressedCount);

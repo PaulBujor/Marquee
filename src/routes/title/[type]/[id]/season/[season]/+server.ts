@@ -3,10 +3,7 @@ import { error, json } from '@sveltejs/kit';
 import { createTmdbClient, TmdbError } from '#lib/server/tmdb/index.js';
 import type { RequestHandler } from './$types';
 
-/**
- * Season episodes as JSON, fetched client-side by the detail page so switching seasons never
- * touches the URL or browser history. Auth-gated; the TMDB key stays server-side.
- */
+/** Fetched client-side so switching seasons never touches the URL or browser history. */
 export const GET: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) error(401, 'Unauthorized.');
 

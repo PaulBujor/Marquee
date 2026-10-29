@@ -6,7 +6,6 @@
 
 	const usersPath = resolve('/admin/users');
 
-	// Each card is a filter submission, so the counts double as the way in to that slice of the list.
 	const cards = $derived([
 		{
 			status: 'pending',

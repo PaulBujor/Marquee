@@ -12,14 +12,9 @@
 	import type { PersonCredit, PersonCreditsPage } from '#lib/server/tmdb/index.js';
 	import type { PageData } from './$types';
 
-	/**
-	 * A person's biography and filmography. Network-only — people aren't part of the offline replica,
-	 * so there is no cached copy to fall back to and the page says so rather than sitting empty.
-	 */
 	let { data }: { data: PageData } = $props();
 
-	// Seeded once from the load (untrack marks the initial read as intentional, as the search page
-	// does); the effect below re-seeds on a navigation to another person.
+	// untrack: a deliberate one-shot read, like the search page; the effect below re-seeds on navigation.
 	const initial = untrack(() => data.initial);
 	let person = $state(initial?.person ?? null);
 	let upcoming = $state<PersonCredit[]>(initial?.upcoming ?? []);
@@ -29,12 +24,9 @@
 	let loadingMore = $state(false);
 	let errored = $state(false);
 
-	// Bumped on every load so a slow response for a person the user has already navigated away from
-	// can't append to the current one — the same guard the season switcher and MediaImage use.
+	// A slow response for a person already navigated away from must not append to the current one.
 	let seq = 0;
 
-	// Re-seed when the route changes to another person — this component is reused across those
-	// navigations, so leaving the previous filmography on screen would be wrong.
 	$effect(() => {
 		person = data.initial?.person ?? null;
 		upcoming = data.initial?.upcoming ?? [];
@@ -46,7 +38,6 @@
 		seq++;
 	});
 
-	/** Append the next page of released credits (also the retry for a failed append). */
 	async function loadMore() {
 		const mine = ++seq;
 		const wanted = page + 1;
@@ -69,10 +60,7 @@
 		}
 	}
 
-	// Pull the next page as the end of the list comes into view — the same sentinel + observer the
-	// dashboard grid uses, against the viewport now that this is a page rather than a dialog. Rebuilt
-	// per page so a sentinel still in range after an append fires again: a live observer only reports
-	// intersection *changes*.
+	// Rebuilt per page: a live observer only reports intersection *changes*, so an in-range sentinel must re-fire.
 	let sentinel = $state<HTMLElement | null>(null);
 	$effect(() => {
 		const el = sentinel;
@@ -101,7 +89,6 @@
 		[person?.knownForDepartment, lifespan].filter((part) => Boolean(part)).join(' · ')
 	);
 
-	/** A credit's one-line caption under the title — "2010 · Cobb". */
 	function creditMeta(credit: PersonCredit): string {
 		return [credit.year, credit.role].filter((part) => Boolean(part)).join(' · ');
 	}
@@ -125,8 +112,7 @@
 						posterUrl={posterUrl(credit.posterPath)}
 						alt={credit.title}
 					/>
-					<!-- Fixed two-line title box and a single meta line, so the captions across a row line
-					up whether or not a title wraps. -->
+					<!-- Fixed two-line box + single meta line so captions line up across a row whether a title wraps. -->
 					<p class="mt-1.5 line-clamp-2 h-[2.5em] text-[0.7rem] leading-tight font-medium">
 						{credit.title}
 					</p>
@@ -204,8 +190,7 @@
 			</p>
 		{/if}
 	{:else}
-		<!-- The load reported success but sent nothing renderable, so there is nothing to wait for —
-		say so rather than leaving a skeleton pulsing forever. -->
+		<!-- Load succeeded but sent nothing renderable: say so rather than pulsing a skeleton forever. -->
 		<ErrorState message="Couldn't load this person." class="py-6" />
 	{/if}
 </main>

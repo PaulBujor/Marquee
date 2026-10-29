@@ -2,15 +2,6 @@ import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 
-/**
- * The client-error sink: browser-side errors (uncaught client exceptions, sync failures)
- * POST here and are logged **structured** so Cloudflare observability (logs/traces, see
- * wrangler.jsonc) ingests them — the browser console alone never reaches any backend.
- *
- * Deliberately tolerant: a reporting endpoint must not itself be noisy. It logs and returns 200 for
- * a signed-in user, silently 204s an unauthenticated caller (so an open endpoint can't be used to
- * spam logs), and 400s only a malformed body. It never echoes anything sensitive back.
- */
 const clientErrorSchema = z.object({
 	message: z.string().min(1).max(2000),
 	source: z.string().max(200).optional(),

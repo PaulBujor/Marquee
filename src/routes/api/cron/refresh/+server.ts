@@ -12,9 +12,7 @@ import type { RequestHandler } from './$types';
 
 type Db = ReturnType<typeof createDb>;
 
-/** Enqueue stale in-production media for re-hydration by the media-refresh queue consumer.
- * Self-contained: catches its own failures so a D1/queue outage can't prevent the other
- * maintenance jobs from running. */
+/** Self-contained: a D1/queue outage here must not stop the other maintenance jobs. */
 async function enqueueMedia(db: Db, queue: QueueProducer<MediaRefreshMessage>, force: boolean) {
 	try {
 		const result = await enqueueStaleMedia(db, queue, Date.now(), force);
@@ -29,8 +27,6 @@ async function enqueueMedia(db: Db, queue: QueueProducer<MediaRefreshMessage>, f
 	}
 }
 
-/** Drop expired/consumed login tokens and expired sessions so those tables don't grow unbounded.
- * Self-contained: catches its own failures so it can't trip the other jobs. */
 async function purgeAuth(db: Db) {
 	try {
 		const purged = await purgeExpiredAuth(db, Date.now());
@@ -45,10 +41,6 @@ async function purgeAuth(db: Db) {
 	}
 }
 
-/**
- * Drop rows past their retention windows: warm rows only exist to count requests, previews are cache
- * for links that may still be re-opened. Self-contained, like the others.
- */
 async function purgeShareData(db: Db) {
 	try {
 		const warms = await purgeSharePreviewWarms(db, Date.now());
@@ -63,14 +55,7 @@ async function purgeShareData(db: Db) {
 	}
 }
 
-/**
- * The daily maintenance sweep (media refresh + auth-token/session purge). The cron `scheduled`
- * handler self-`fetch`es this route for the `0 6 * * *` trigger (see scripts/append-cron.mjs); it's
- * HTTP-reachable and gated by `CRON_SECRET`, so it also doubles as a manual trigger — `POST` it with
- * an `x-cron-key: <CRON_SECRET>` header to run it on demand. The notifications digest is on its own
- * hourly schedule (see `/api/cron/notify`). Each job isolates its own errors so one failing never
- * prevents the others.
- */
+/** Self-`fetch`ed by the cron `scheduled` handler (see scripts/append-cron.mjs); `x-cron-key: <CRON_SECRET>` also runs it on demand. */
 export const POST: RequestHandler = async ({ request, url, locals }) => {
 	if (!(await isAuthorizedCronRequest(request, env.CRON_SECRET))) {
 		error(401, 'Unauthorized');
@@ -80,9 +65,7 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
 	// `?force=1` bypasses the per-row TTL — a manual re-hydrate (also useful for diagnostics).
 	const force = url.searchParams.get('force') === '1';
 
-	// Enqueueing itself never calls TMDB, but every message it produces will: without a key the
-	// consumer 503s on each batch, the relay retries the whole batch, and the entire backlog
-	// dead-letters. Check once here instead, and no-op the way the synchronous sweep used to.
+	// Without a key every message 503s, the relay retries the batch and the backlog dead-letters — so check once here.
 	const tmdbKey = env.TMDB_API_KEY;
 	if (!tmdbKey) console.error('cron: skipping media enqueue — TMDB is not configured.');
 	const media = tmdbKey

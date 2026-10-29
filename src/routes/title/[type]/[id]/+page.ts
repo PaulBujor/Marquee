@@ -4,14 +4,7 @@ import { buildOfflineDetail, type OfflineTitle } from '#lib/client/media/offline
 import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import type { PageLoad } from './$types';
 
-/**
- * Offline-first title load. Return the cached IndexedDB copy (`base`) immediately so the page renders
- * from local data with no wait, and stream the full network detail (`enriched`) — cast, trailer,
- * similar, rating — to fill in when it arrives. When truly offline the enrichment resolves to
- * `offline` and the page shows placeholders for those sections; a reconnect re-runs this load (it
- * `depends('app:title')`) to enrich in place. Auth is checked from the cached layout data, so
- * navigation stays offline-safe.
- */
+/** Returns the cached IndexedDB copy (`base`) beside the streamed enrichment; `depends('app:title')` lets a reconnect re-run it in place. */
 export type EnrichResult =
 	| {
 			status: 'ok';
@@ -33,7 +26,6 @@ export const load: PageLoad = async ({ params, url, fetch, parent, depends }) =>
 	const season = url.searchParams.get('season');
 	depends('app:title'); // a reconnect invalidates this to re-enrich in place
 
-	// The local copy renders instantly; the network copy streams in to enrich it.
 	const base: OfflineTitle | null = browser ? await buildOfflineDetail(type, id, season) : null;
 	return { type, id, season, base, enriched: fetchEnriched(fetch, type, id, season) };
 };
@@ -54,7 +46,6 @@ async function fetchEnriched(
 		if (res.status === 404) return { status: 'notfound' };
 		return { status: 'error' };
 	} catch {
-		// Network failure — offline. The page keeps showing the cached copy with offline placeholders.
 		return { status: 'offline' };
 	}
 }

@@ -26,12 +26,10 @@
 	const message = $derived(form && 'message' in form ? form.message : null);
 	const codeError = $derived(form && 'codeError' in form ? form.codeError : null);
 	const pendingEmail = $derived(form && 'newEmail' in form ? (form.newEmail ?? '') : '');
-	// After a successful change the request's `locals.user` is still the old snapshot,
-	// so trust the action's returned address until the reload lands.
+	// The request's `locals.user` is still the old snapshot, so trust the action's returned address until the reload lands.
 	const currentEmail = $derived(step === 'done' ? pendingEmail : user.email);
 	// Client-side mirror of the server's CODE_REGEX check (the server stays authoritative).
 	const codeValid = $derived(/^\d{6}$/.test(code));
-	// Changing email needs the server (it emails a code); offline, gate it with an explanation.
 	const online = $derived(sync.online);
 	const OFFLINE_EMAIL_MSG = 'You need an internet connection to change your email.';
 
@@ -55,15 +53,11 @@
 			await update();
 			submitting = false;
 			code = '';
-			// On success the account email changed; refetch so the header/page reflect it.
 			if (result.type === 'success') await invalidateAll();
 		};
 	};
 
-	// Logout redirects to /login; hold the button in a loading state until that navigation lands.
-	// Offline the server action can't run (it clears the httpOnly cookie + invalidates the session),
-	// so it would fail to an error page — instead cancel the network submit and sign out locally, and
-	// the real server logout is flushed on reconnect (see `signOutOffline`).
+	// Offline the action can't clear the httpOnly cookie, so cancel the submit and sign out locally; the real logout flushes on reconnect.
 	const trackLogout = ({ cancel }: { cancel: () => void }) => {
 		if (!online) {
 			cancel();
@@ -171,7 +165,6 @@
 				You're offline — you won't be able to log back in until you have an internet connection.
 			</p>
 		{/if}
-		<!-- Sign out submits the existing root `?/logout` action (redirects to /login). -->
 		<form method="POST" action="/?/logout" use:enhance={trackLogout}>
 			<Button
 				type="submit"

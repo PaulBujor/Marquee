@@ -1,6 +1,5 @@
 <script lang="ts">
-	// A public reader who hits a 404 or a 429 gets this, not the app's shell: nothing here is theirs to
-	// see, and the CTA is the only thing worth offering.
+	// Public readers get this instead of the app's shell: nothing here is theirs to see.
 	import { page } from '$app/state';
 	import ShareCta from '#lib/components/share/share-cta.svelte';
 	import { TMDB_ATTRIBUTION } from '#lib/share-preview.js';

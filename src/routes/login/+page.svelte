@@ -16,8 +16,7 @@
 	let code = $state('');
 	let codeForm = $state<HTMLFormElement | null>(null);
 
-	// Installed PWAs can't capture the emailed link, so ask the server for a code
-	// instead. Detected client-side (no server header exists); SSR/no-JS → browser.
+	// Installed PWAs can't capture the emailed link, so they get a code; no server header exists, so detection is client-side.
 	const mode = $derived(
 		browser &&
 			(window.matchMedia('(display-mode: standalone)').matches ||
@@ -31,11 +30,7 @@
 	const email = $derived(form && 'email' in form ? form.email : '');
 	const failMessage = $derived(form && 'message' in form ? form.message : null);
 	const codeError = $derived(form && 'codeError' in form ? form.codeError : null);
-	// Carried through both steps so a shared link survives the sign-in detour.
 	const redirectTo = $derived(data.redirectTo);
-	// Browser gets a link + code in one email; standalone gets a code only. `combined`
-	// drives the "check your inbox" header and is echoed through ?/verify so it survives
-	// a wrong-code retry.
 	const combined = $derived(method === 'link_and_code');
 
 	const onCodeStep = $derived(
@@ -43,13 +38,11 @@
 			(result === 'sent' && (method === 'code' || method === 'link_and_code'))
 	);
 
-	// What the initial step will send, given the detected mode.
 	const sendNoun = $derived(mode === 'standalone' ? 'code' : 'email');
 	// Client-side mirror of the server's code check (the server stays authoritative).
 	const codeValid = $derived(/^\d{6}$/.test(code));
 
-	// The login shell can be opened offline (it's cached), but signing in needs the server — track
-	// connectivity locally here (the sync engine only runs once signed in).
+	// The sync engine only runs once signed in, so connectivity is tracked locally here.
 	let online = $state(true);
 	$effect(() => {
 		online = navigator.onLine;
@@ -75,8 +68,7 @@
 		return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
 			// A correct code redirects home — replace /login in history so Back doesn't land here.
 			if (result.type === 'redirect') {
-				// A fresh sign-in supersedes any expired-session state — reset so the next expiry
-				// can be detected, and drop any logout that was queued offline.
+				// A fresh sign-in supersedes expired-session state and any logout queued offline.
 				session.reset();
 				clearPendingLogout();
 				// eslint-disable-next-line svelte/no-navigation-without-resolve
@@ -85,7 +77,7 @@
 			}
 			await update();
 			submitting = false;
-			code = ''; // clear on a failed attempt so the user can retype (success redirects away)
+			code = '';
 		};
 	};
 </script>

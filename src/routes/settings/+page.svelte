@@ -14,8 +14,6 @@
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
-	// The admin surface is network-only (see the `/admin` opt-out in the service worker), so offering the
-	// entry point while offline would only lead to a dead end.
 	let online = $state(true);
 	onMount(() => {
 		online = navigator.onLine;
@@ -28,8 +26,7 @@
 	<title>Settings · Marquee</title>
 </svelte:head>
 
-<!-- No back control: this is a tab root, reachable from anywhere. `min-h-10` holds the header at the
-same height as the ones that do carry a 40px control, so the sticky offsets stay uniform. -->
+<!-- No back control: tab root. `min-h-10` keeps the header height uniform so the sticky offsets line up. -->
 <PageHeader>
 	<div class="flex min-h-10 items-center gap-3">
 		<h1 class="font-serif text-xl font-semibold">Settings</h1>

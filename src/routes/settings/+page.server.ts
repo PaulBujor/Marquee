@@ -18,10 +18,8 @@ import type { Actions } from './$types';
 
 const SERVICE_UNAVAILABLE = 'Service unavailable.';
 
-// The page load is universal (`+page.ts`) so settings works offline — only the actions below need
-// the server (and the UI gates them offline).
+// No load here: `+page.ts` is universal so settings opens offline; only these actions need the server.
 
-/** Map a change-code verification failure to a message shown on the code step. */
 function verifyErrorMessage(reason: 'invalid' | 'expired' | 'too_many_attempts' | 'taken'): string {
 	switch (reason) {
 		case 'expired':
@@ -36,7 +34,6 @@ function verifyErrorMessage(reason: 'invalid' | 'expired' | 'too_many_attempts' 
 }
 
 export const actions: Actions = {
-	// Step 1: email a confirmation code to the new address.
 	requestEmailChange: async ({ request, locals, getClientAddress }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
@@ -79,7 +76,6 @@ export const actions: Actions = {
 		}
 	},
 
-	// Step 2: verify the code and switch the account email.
 	verifyEmailChange: async ({ request, locals, cookies }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
@@ -106,8 +102,7 @@ export const actions: Actions = {
 		}
 
 		if (result.ok) {
-			// Tell the address that just lost the account. Best-effort and fire-and-forget, like the
-			// deletion notice: the change is already committed, so a mail failure must not fail it.
+			// Tell the address that just lost the account; best-effort, since the change is already committed.
 			if (env.RESEND_API_KEY || env.SMTP_HOST) {
 				try {
 					const sender = createEmailSender(env);
@@ -133,7 +128,6 @@ export const actions: Actions = {
 		});
 	},
 
-	// Permanently delete the account. Requires typing the current email to confirm.
 	deleteAccount: async ({ request, locals, cookies }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
@@ -148,9 +142,7 @@ export const actions: Actions = {
 		await deleteAccount(locals.db, locals.user);
 		deleteSessionCookie(cookies);
 
-		// Confirm the deletion by email — best-effort, so a mail failure can't undo (or fail) a
-		// deletion that's already committed. Fire-and-forget via the request's ExecutionContext so it
-		// doesn't delay the redirect. Only when the transport is configured.
+		// Best-effort: a mail failure can't undo a committed deletion, and `waitUntil` keeps it off the redirect.
 		if (env.RESEND_API_KEY || env.SMTP_HOST) {
 			try {
 				const sender = createEmailSender(env);

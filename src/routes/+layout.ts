@@ -2,14 +2,7 @@ import { browser } from '$app/env';
 import { setActiveUser } from '#lib/client/idb/index.js';
 import type { LayoutLoad } from './$types';
 
-/**
- * Scope the offline IndexedDB store to the signed-in user **before any child `load` runs**. Child
- * loads (e.g. the title page's offline-first `buildOfflineDetail`) read the store during the load
- * phase — which happens *before* components mount — so scoping it in the layout component would be
- * too late on a fresh hydration, and `openDb` would throw "no active user" and 500 the page. A child
- * `await parent()` waits for this load, guaranteeing the store is scoped first. Server-side this is a
- * no-op (the store is browser-only); the component still owns the reactive logout/teardown.
- */
+/** Must run in the load phase, before any child `load`: a child reading the store earlier hits `openDb`'s "no active user" throw. */
 export const load: LayoutLoad = async ({ data }) => {
 	if (browser) setActiveUser(data.user?.id ?? null);
 	return data;

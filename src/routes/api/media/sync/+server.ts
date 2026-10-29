@@ -6,11 +6,7 @@ import { mediaSyncRequestSchema } from '#lib/sync/media-protocol.js';
 import { problem, zodProblem } from '#lib/server/http/problem.js';
 import type { RequestHandler } from './$types';
 
-/**
- * The media reference channel — separate from `/api/sync` (events), since media is heavier.
- * The client sends identity only; the server derives our id and hydrates from TMDB, so shared
- * `linked` rows can't be poisoned with client-supplied metadata. Auth-gated.
- */
+/** Client sends identity only; the server derives the id and hydrates from TMDB, so `linked` rows can't be poisoned with client metadata. */
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 	if (!locals.db) error(503, 'Service unavailable');

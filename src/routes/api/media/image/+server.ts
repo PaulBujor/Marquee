@@ -6,12 +6,7 @@ import type { RequestHandler } from './$types';
 /** Wall-clock budget for the upstream image fetch, so a stalled CDN can't hold the Worker open. */
 const IMAGE_TIMEOUT_MS = 10_000;
 
-/**
- * Same-origin proxy for TMDB images, so the client can fetch poster/backdrop **bytes** to cache
- * as offline blobs — `image.tmdb.org` sends no CORS headers, so a direct client fetch
- * is blocked. Locked down to the TMDB image CDN with an allow-listed size + path so it can't be
- * used as an open proxy. Auth-gated; long-cached (image paths are immutable).
- */
+/** `image.tmdb.org` sends no CORS headers, so bytes are proxied here; the size + path allow-list keeps it from being an open proxy. */
 const SIZES = new Set<string>(TMDB_IMAGE_SIZES);
 const PATH_RE = /^\/[A-Za-z0-9._-]+\.(jpg|jpeg|png|webp)$/i;
 
@@ -36,7 +31,6 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		error(502, 'Upstream image error');
 	}
 
-	// Defensive: only ever relay an actual image back, never some other content type.
 	const contentType = upstream.headers.get('content-type') ?? '';
 	if (!contentType.startsWith('image/')) {
 		console.error(`media/image: non-image content-type "${contentType}" for ${size}${path}`);

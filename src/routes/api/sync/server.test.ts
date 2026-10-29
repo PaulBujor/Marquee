@@ -156,7 +156,6 @@ describe('POST /api/sync push + pull', () => {
 		await post(reqEvent(db, { id: USER }, { deviceId: b.deviceId, cursor: 0, events: [b] }));
 		const rows = await db.select().from(eventsTable);
 		expect(rows).toHaveLength(2);
-		// The newer event (completed@200) wins the materialized status.
 		const { tracking } = await import('#lib/server/db/schema.js');
 		const [t] = await db.select().from(tracking);
 		expect(t.status).toBe('completed');

@@ -6,12 +6,7 @@ import { warmTitlePreview, type WarmResult } from '#lib/server/share/preview.js'
 import { publicSharingEnabled } from '#lib/server/share/public.js';
 import type { RequestHandler } from './$types';
 
-/**
- * Warm the preview for a title a user is about to share, so the recipient's link renders a page
- * instead of waiting on a cold read. Authenticated on purpose: this is the only route in the share
- * flow that talks to TMDB, which is what keeps the public read path free of provider calls (and
- * provider quota) no matter who follows a link. Idempotent — re-warming refreshes the same row.
- */
+/** Authenticated on purpose: the only route in the share flow that calls TMDB, which keeps the public read path quota-free. */
 const bodySchema = z.object({
 	type: z.enum(['movie', 'show']),
 	id: z.number().int().positive()

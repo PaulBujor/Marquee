@@ -12,22 +12,17 @@
 	import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 	import type { PageData } from './$types';
 
-	// Offline-first orchestrator: render the cached copy immediately, then upgrade to the streamed
-	// network detail when it lands (in place — one persistent TitleDetail, so the view doesn't reset).
-	// The rich page lives in TitleDetail; here we just pick base vs. enriched and the surrounding state.
+	// Upgrades in place into one persistent TitleDetail, so the view never resets between base and enriched.
 	let { data }: { data: PageData } = $props();
 
-	// Seed from the initial `data` (untracked — the effect below re-syncs on every later navigation).
 	let detail = $state<MediaDetail | null>(untrack(() => data.base?.detail ?? null));
 	let seasonData = $state<SeasonDetail | null>(untrack(() => data.base?.season ?? null));
-	// How the network-only sections (cast, trailer, similar) should render.
 	let enrichState = $state<'loading' | 'enriched' | 'offline'>('loading');
 
 	let pageState = $state<'content' | 'skeleton' | 'notfound' | 'unavailable'>(
 		untrack(() => (data.base ? 'content' : 'skeleton'))
 	);
 
-	// Resolve the streamed enrichment for the current navigation; reset to the cached base first.
 	$effect(() => {
 		const { base, enriched } = data;
 		detail = base?.detail ?? null;
@@ -38,11 +33,7 @@
 		let cancelled = false;
 		let enrichFailed = false;
 
-		// Hard online reload: the server load runs where it can't read IndexedDB, so `base` is null and
-		// we'd sit on the skeleton until the network enrichment lands — even for a fully-cached title.
-		// Rebuild the cached copy client-side and show it as soon as it's ready, unless the enrichment
-		// already delivered the full page. (Offline cold boots have no SSR, so `base` is
-		// already built there and this is a no-op.)
+		// A hard online reload has no IndexedDB, so `base` is null and a cached title would sit on the skeleton; rebuild it client-side.
 		if (!base && browser && (data.type === 'movie' || data.type === 'show')) {
 			buildOfflineDetail(data.type, data.id, data.season).then((built) => {
 				if (cancelled || !built || pageState === 'content') return;
@@ -56,9 +47,7 @@
 		enriched.then(async (e) => {
 			if (cancelled) return;
 			if (e.status === 'ok') {
-				// Nothing shown yet (still the skeleton): wait for the hero image to decode before
-				// revealing the content, so it doesn't paint into a blank hero for a frame.
-				// A cached copy (from `base` or the client rebuild above) is already up — upgrade in place.
+				// Only wait for the hero decode while still on the skeleton; an upgraded copy is already painted.
 				if (pageState === 'skeleton') await preloadHero(e.detail);
 				if (cancelled) return;
 				detail = e.detail;
@@ -66,8 +55,6 @@
 				enrichState = 'enriched';
 				pageState = 'content';
 			} else {
-				// Enrichment failed. If a cached copy is (or becomes) shown, keep it with offline
-				// placeholders; otherwise surface the terminal error.
 				enrichFailed = true;
 				if (pageState === 'content') enrichState = 'offline';
 				else if (e.status === 'notfound') pageState = 'notfound';
@@ -77,7 +64,6 @@
 		return () => (cancelled = true);
 	});
 
-	// Auto-refresh: when connectivity returns while we're still on the cached copy, re-enrich in place.
 	let wasOnline = sync.online;
 	$effect(() => {
 		const online = sync.online;
@@ -86,9 +72,7 @@
 		wasOnline = online;
 	});
 
-	// Decode the hero image (backdrop, else poster) before we swap the skeleton for the content, so
-	// the first painted frame already has artwork instead of a blank hero. Bounded by a
-	// short timeout so a slow or broken image can never strand the user on the skeleton.
+	// Decode before swapping the skeleton out, bounded by a timeout so a slow image can't strand the user.
 	function preloadHero(d: MediaDetail): Promise<void> {
 		if (!browser) return Promise.resolve();
 		const url = d.backdropPath ? posterUrl(d.backdropPath, 'w780') : posterUrl(d.posterPath);

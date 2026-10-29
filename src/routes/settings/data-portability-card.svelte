@@ -7,13 +7,10 @@
 
 	let busy = $state(false);
 	let exportError = $state(false);
-	// Set after a successful export so the user gets confirmation the file holds what they expect.
 	let exported = $state<number | null>(null);
 
 	let fileInput = $state<HTMLInputElement | null>(null);
-	// A read-but-not-yet-applied file — import is a bulk write, so the user confirms first.
-	// The plan is a plain `let`, deliberately NOT `$state`: Svelte proxies reactive values and
-	// IndexedDB's structured clone refuses a Proxy. Only the counts are rendered.
+	// A plain `let`, deliberately not `$state`: IndexedDB's structured clone refuses a Proxy.
 	let pendingPlan: ImportPlan | null = null;
 	let pendingCounts = $state<ImportPlan['counts'] | null>(null);
 	let importError = $state<string | null>(null);

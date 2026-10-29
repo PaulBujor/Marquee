@@ -35,17 +35,13 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// The home library reads local IndexedDB (works offline); reloads whenever a sync pulls. It's a
-	// module singleton, so navigating back from a detail page finds it already populated.
 	$effect(() => {
 		if (!data.user) return;
 		void sync.revision;
 		library.load();
 	});
 
-	// Suppress the poster intro transition on the first render after (re)mount — otherwise returning
-	// to the dashboard fades the whole grid up from transparent, reading as a blank flash even though
-	// the data is already there. Real add/remove/status changes still animate.
+	// 0 until mounted, else a back-nav remount fades the whole grid up from transparent.
 	let mounted = $state(false);
 	onMount(() => {
 		mounted = true;
@@ -87,8 +83,6 @@
 		upcoming: 'Upcoming'
 	};
 
-	// Selected tab + filters live in the URL (like the search page), so a view is shareable and
-	// survives reload / back-forward. Defaults are omitted from the query to keep it clean.
 	function readState() {
 		const p = page.url.searchParams;
 		const t = p.get('tab');
@@ -114,8 +108,7 @@
 	let sort = $state<LibrarySort>(initial.sort);
 	let release = $state<ReleaseFilter>(initial.release);
 
-	// Mirror state → URL. Skips when already in sync (so seeding / back-forward don't loop). Built
-	// as a plain string (tab/type/sort are enum-safe; genre is encoded) — no URLSearchParams.
+	// Skip when already in sync, or the seed / back-forward re-seed loops.
 	$effect(() => {
 		const parts: string[] = [];
 		if (tab !== 'want_to_watch') parts.push(`tab=${tab}`);
@@ -132,7 +125,6 @@
 		}
 	});
 
-	// Re-seed from the URL on back/forward and direct entry (mirrors the search page).
 	afterNavigate((nav) => {
 		if (nav.shallow && nav.type === 'goto') return;
 
@@ -153,8 +145,7 @@
 	const list = $derived(
 		filterAndSortLibrary(library.items, { tab, type: typeFilter, year, genre, release, sort })
 	);
-	// Type is surfaced as its own always-visible control; the popover badges when a year/genre
-	// narrowing is active (sort is a preference, not a narrowing, so it doesn't count).
+	// Sort is a preference, not a narrowing, so it doesn't badge the popover.
 	const advancedActive = $derived(year !== null || genre !== null || release !== 'released');
 
 	const filtersActive = $derived(
@@ -172,7 +163,6 @@
 		sort = 'date';
 	}
 
-	// Infinite scroll: PAGE_SIZE at a time; reset to the top on view change, keep position on sync grow.
 	const SWIPE_THRESHOLD = 50;
 	const SWIPE_VERTICAL_ABORT = 20;
 	const TAB_ORDER: LibraryTab[] = ['want_to_watch', 'watching', 'completed', 'favorites'];
@@ -188,10 +178,7 @@
 	const visible = $derived(list.slice(0, visibleCount));
 	const hasMore = $derived(visibleCount < list.length);
 
-	// Reset to the first page only on a *genuine* view change — not on the initial mount or the
-	// back/forward re-seed. The guard (skip when the key is unchanged) lets a restored snapshot's
-	// visibleCount survive a remount; the popstate re-seed writes the same filter values back, and
-	// Svelte skips equal assignments, so it never trips this.
+	// Skipping an unchanged key lets a restored snapshot's visibleCount survive the remount; popstate writes the same values back.
 	const viewKey = $derived(`${tab}|${typeFilter}|${year}|${genre}|${release}|${sort}`);
 	let lastViewKey = untrack(() => viewKey);
 	$effect(() => {
@@ -201,10 +188,7 @@
 		}
 	});
 
-	// Preserve pagination depth + scroll across navigation. Opening a title unmounts this route, so
-	// without a snapshot Back would reinitialize visibleCount to PAGE_SIZE and lose scroll.
-	// The `library` singleton is already populated on Back, so restoring visibleCount renders the full
-	// grid synchronously; we scroll after a tick so the page is tall enough to reach the saved offset.
+	// Without this, Back reinitialises visibleCount and loses scroll; scroll after a tick so the grid is tall enough.
 	export const snapshot = {
 		capture: () => ({ visibleCount, scrollY: window.scrollY }),
 		restore: (v: { visibleCount: number; scrollY: number }) => {
@@ -229,8 +213,7 @@
 		return () => io.disconnect();
 	});
 
-	// Quick-mark debounce (mirrors the detail page's next-episode row): fill the check, hold a
-	// beat, then mark + advance — so a mis-tap is visible and the card doesn't jump instantly.
+	// Fill the check, hold, then mark + advance, so a mis-tap is visible and the card doesn't jump.
 	const marking = new SvelteSet<string>();
 	function markNextSoon(item: LibraryItem) {
 		if (marking.has(item.mediaId) || library.busy) return;
@@ -241,7 +224,6 @@
 		}, 650);
 	}
 
-	// Swipe gesture state for cycling dashboard tabs.
 	let touchStartX = $state<number | null>(null);
 	let touchMovedVertically = $state(false);
 
@@ -254,7 +236,6 @@
 	function onTouchMove(e: TouchEvent) {
 		if (touchStartX === null || e.touches.length !== 1) return;
 		const dy = Math.abs(e.touches[0].clientY - touchStartX);
-		// Abort swipe detection when the user scrolls vertically.
 		if (dy > SWIPE_VERTICAL_ABORT) {
 			touchMovedVertically = true;
 			touchStartX = null;
@@ -267,20 +248,14 @@
 		touchStartX = null;
 		if (Math.abs(dx) < SWIPE_THRESHOLD) return;
 		if (dx > 0) {
-			// Swipe left: advance to the next tab.
 			tab = cycleTab(tab, 1);
 		} else {
-			// Swipe right: go to the previous tab.
 			tab = cycleTab(tab, -1);
 		}
 	}
 
-	// Honour the OS "reduce motion" setting: durations collapse to 0 (instant, no jank) when set.
-	// This is the app's first reduced-motion guard, so it also covers the pre-existing card motion.
 	const reduced = $derived(prefersReducedMotion.current);
 	const motionMs = $derived(reduced ? 0 : 300);
-	// Intro (enter) duration: 0 until mounted so the grid doesn't fade up on a back-nav remount, then
-	// the normal duration so real adds/removals animate. Outros always use `motionMs`.
 	const introMs = $derived(mounted ? motionMs : 0);
 </script>
 
@@ -296,8 +271,7 @@
 	>
 		<!-- Continue watching — in-progress shows only (movies have no next episode) -->
 		{#if inProgress.length > 0}
-			<!-- Slide the whole section (heading + row) so the rest of the page eases up when the last
-			in-progress show is marked, instead of the block popping out. -->
+			<!-- Slide the whole section so the rest of the page eases up rather than the block popping out. -->
 			<section class="mb-6" transition:slide={{ duration: introMs }}>
 				<h2 class="mb-2.5 text-xs font-bold tracking-widest text-muted-foreground uppercase">
 					Continue Watching
@@ -350,7 +324,6 @@
 			</section>
 		{/if}
 
-		<!-- Primary navigation: the four lists as tabs -->
 		<Tabs.Root bind:value={tab} class="mb-3">
 			<Tabs.List class="w-full">
 				{#each TABS as t (t.key)}
@@ -359,7 +332,6 @@
 			</Tabs.List>
 		</Tabs.Root>
 
-		<!-- Type is the common filter (always visible); year/genre/sort live behind a popover -->
 		<div class="mb-4 flex items-center justify-between gap-2">
 			<ToggleGroup.Root
 				type="single"
@@ -450,17 +422,13 @@
 			</Popover.Root>
 		</div>
 
-		<!-- Poster grid -->
 		{#if list.length > 0}
 			<div
 				class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7"
 			>
-				<!-- flip reflows survivors; fade eases items in/out on sync add/remove or status change -->
 				{#each visible as item (item.mediaId)}
 					{@const dnf = item.status === 'did_not_finish'}
-					<!-- The animate/transition directives live on this wrapper because they have to be on an
-					element; the link itself is a component so every surface resolves a detail route the
-					same way. -->
+					<!-- Directives have to sit on an element; the link itself is a component. -->
 
 					<div animate:flip={{ duration: motionMs }} transition:fade={{ duration: introMs }}>
 						<DetailLink {item} class="block">
@@ -502,8 +470,7 @@
 	<main class="mx-auto flex min-h-svh max-w-2xl flex-col items-start justify-center gap-4 p-6">
 		<h1 class="font-serif text-3xl font-semibold">Marquee</h1>
 		<p class="text-muted-foreground">Track the movies and shows you're watching.</p>
-		<!-- Replace the index in history so, after login redirects back here, Back doesn't
-		bounce through /login or a stale signed-out landing page. -->
+		<!-- Replace the index so Back after login doesn't bounce through /login or the stale landing. -->
 
 		<a href={resolve('login')} data-sveltekit-replacestate class={buttonVariants()}>Sign in</a>
 	</main>

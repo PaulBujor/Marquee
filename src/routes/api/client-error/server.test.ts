@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 
-/** Invoke the POST handler with a JSON body and a (possibly null) signed-in user. */
 function call(body: unknown, user: { id: string } | null) {
 	const request = new Request('http://localhost/api/client-error', {
 		method: 'POST',

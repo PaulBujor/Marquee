@@ -14,9 +14,7 @@
 	// The same 300ms the search page and credit-row use, so typing feels identical across the app.
 	const DEBOUNCE_MS = 300;
 
-	// The input is the source of truth while typing; the URL follows one debounce after the last keystroke,
-	// so the form still works without JavaScript but nobody has to press a button with it on.
-	// Writable derived: it tracks `data.q` from navigations and also accepts local edits while typing.
+	// Writable derived: tracks `data.q` from navigations and also takes local edits while typing.
 	let q = $derived(data.q);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -44,8 +42,7 @@
 	const pillIdle = 'text-muted-foreground';
 </script>
 
-<!-- One pill at every state: with scripting the debounce drives the search and only the input shows; without
-     it the same pill gains an attached button, sharing the container's radius instead of floating beside it. -->
+<!-- With scripting the debounce drives search; the button only shows without it, in the same pill. -->
 <form method="GET" action={usersPath} role="search">
 	<div
 		class="flex items-center overflow-hidden rounded-full border border-input transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
@@ -73,8 +70,7 @@
 	<input type="hidden" name="sort" value={sortValue} />
 </form>
 
-<!-- Filters and sorting are GET forms rather than links: a query string appended to a resolve()d path loses
-     resolve()'s branded type, and forms keep both working without JavaScript. -->
+<!-- GET forms, not links: a query string drops resolve()'s branded type, and forms work without JavaScript. -->
 <form
 	class="mt-3 flex flex-wrap gap-1.5"
 	method="GET"
