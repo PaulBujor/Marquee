@@ -34,7 +34,7 @@
 	const statuses = ['pending', 'enabled', 'blocked'] as const;
 	const lastPage = $derived(Math.max(1, Math.ceil(data.total / data.pageSize)));
 	const sortValue = $derived(`${data.sort.key}:${data.sort.dir}`);
-	const pill = 'rounded-full border px-3 py-1 text-xs capitalize';
+	const pill = 'inline-flex min-h-10 items-center rounded-full border px-4 text-xs capitalize';
 	const pillActive = 'bg-foreground text-background';
 	const pillIdle = 'text-muted-foreground';
 </script>
@@ -153,7 +153,12 @@
 			<input type="hidden" name="q" value={data.q} />
 		{/if}
 		{#if data.page > 1}
-			<button type="submit" name="page" value={data.page - 1} class="underline underline-offset-2">
+			<button
+				type="submit"
+				name="page"
+				value={data.page - 1}
+				class="inline-flex min-h-11 items-center px-2 underline underline-offset-2"
+			>
 				Newer
 			</button>
 		{:else}
