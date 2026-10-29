@@ -105,6 +105,10 @@
 				"migrations_dir": "drizzle"
 			}
 		],
+		"vars": {
+			// Keeps Previews out of search results (see the securityHeaders hook). Production lacks it.
+			"PREVIEW_NOINDEX": "1"
+		},
 		"queues": {
 			"producers": [
 				{
@@ -117,6 +121,9 @@
 	"env": {
 		"preview": {
 			"name": "marquee-preview",
+			"vars": {
+				"PREVIEW_NOINDEX": "1"
+			},
 			"ratelimits": [
 				{
 					"name": "PUBLIC_SHARE_LIMITER",

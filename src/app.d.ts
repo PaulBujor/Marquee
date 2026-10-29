@@ -18,6 +18,8 @@ declare global {
 		EMAIL_FROM: string;
 		// Set to '1' to withdraw the public share pages without a rollback (see `share/public.ts`).
 		SHARE_PUBLIC_DISABLED?: string;
+		// Set only on Worker Previews, to keep them out of search results.
+		PREVIEW_NOINDEX?: string;
 	}
 
 	namespace App {

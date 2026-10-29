@@ -44,6 +44,8 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 	response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
+	// Cloudflare only marks the workers.dev preview URLs noindex; custom-domain Previews get it here.
+	if (env.PREVIEW_NOINDEX) response.headers.set('X-Robots-Tag', 'noindex');
 	return response;
 };
 
