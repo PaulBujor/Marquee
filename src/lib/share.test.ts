@@ -115,7 +115,6 @@ describe('warmPreview', () => {
 			new Promise((_resolve, reject) => {
 				init.signal?.addEventListener('abort', () => {
 					aborted = true;
-					// What the browser actually rejects with — the row may still land server-side.
 					reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
 				});
 			})) as unknown as typeof fetch;

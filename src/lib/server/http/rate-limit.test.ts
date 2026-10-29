@@ -47,7 +47,6 @@ function request(opts: { ip?: string; cookie?: string } = {}) {
 	});
 }
 
-/** The key the pre-auth limiter derives for a plain request. */
 async function ipKey(opts: { ip?: string; cookie?: string } = { ip: '203.0.113.9' }) {
 	return rateLimitKey(request(opts));
 }
@@ -121,7 +120,6 @@ describe('wrangler configuration', () => {
 		env?: { preview: WranglerEnv };
 	}
 
-	/** Enough JSONC to read this repo's config: line comments outside strings. */
 	function parseJsonc(text: string): WranglerEnv {
 		let out = '';
 		let inString = false;

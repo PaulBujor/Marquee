@@ -81,7 +81,6 @@ export type WarmOutcome = 'stored' | 'timeout' | 'failed';
  * a guaranteed preview. The server side is the only place that calls TMDB, and it requires a
  * session — that separation is what stops a crawler spending provider quota.
  */
-/** Both halves of a share: how the link went out, and whether its preview was stored. */
 export interface ShareReport {
 	outcome: ShareOutcome;
 	warmed: WarmOutcome;

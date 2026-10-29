@@ -56,7 +56,6 @@
 			? '-mt-14'
 			: 'pt-[calc(4.75rem+env(safe-area-inset-top))]'}"
 	>
-		<!-- Poster overlaps the bottom of the backdrop; title/badges sit alongside it. -->
 		<div class="flex items-end gap-4">
 			<div class="w-24 shrink-0">
 				<PosterTile
@@ -93,7 +92,6 @@
 		<!-- Where the signed-in page keeps its tracking controls. -->
 		<ShareCta href={loginHref} />
 
-		<!-- Collapsible details: overview, crew, cast. -->
 		<div class="flex flex-col gap-4">
 			<button
 				type="button"

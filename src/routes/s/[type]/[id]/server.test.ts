@@ -162,7 +162,6 @@ describe('GET /s/[type]/[id]', () => {
 		expect(limitKeys).toEqual(['ip:203.0.113.9']);
 		// Countable in Workers Logs, since rate-limit bindings aren't visible in the dashboard.
 		expect(warn).toHaveBeenCalledWith('rate limit: shed share request for /s/movie/603');
-		// The policy goes on before the guards, so even a refusal is no-store and noindex.
 		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
 		warn.mockRestore();
 	});
@@ -201,7 +200,6 @@ describe('GET /s/[type]/[id]', () => {
 		// signed-in reader gets needs nothing narrower — and setting a second header set would throw.
 		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
 
-		// The warm was detached, and it lands: the card is there for the next reader.
 		expect(pending).toHaveLength(1);
 		await Promise.all(pending);
 		const rows = await db.select().from(sharePreviews);
