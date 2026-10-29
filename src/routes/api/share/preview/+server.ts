@@ -38,11 +38,20 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	if (!apiKey) error(503, 'Shared links are not configured.');
 
 	const userId = locals.user.id;
-	const result = await warmTitlePreview(locals.db, apiKey, {
-		userId,
-		type: parsed.data.type,
-		id: parsed.data.id
-	});
+	let result: WarmResult;
+	try {
+		result = await warmTitlePreview(locals.db, apiKey, {
+			userId,
+			type: parsed.data.type,
+			id: parsed.data.id
+		});
+	} catch (err) {
+		// The cause carries D1's own message — the wrapper's stack alone does not name the column or
+		// constraint that failed, which cost a debugging round trip.
+		const wrapped = err as { message?: string; cause?: unknown };
+		console.error('share preview: warm failed', wrapped?.message, wrapped?.cause);
+		error(500, 'Could not store the preview.');
+	}
 
 	return json({ status: result.kind }, { status: STATUS[result.kind] });
 };

@@ -27,8 +27,11 @@ export const load: PageServerLoad = async ({ params, locals, platform, setHeader
 		const apiKey = platform?.env.TMDB_API_KEY;
 		if (platform && apiKey) {
 			platform.ctx.waitUntil(
-				warmTitlePreview(db, apiKey, { userId: locals.user.id, type, id }).catch((err) => {
-					console.error('share page: warm on view failed', err);
+				warmTitlePreview(db, apiKey, { userId: locals.user.id, type, id }).catch((err: unknown) => {
+					// The cause carries D1's own message; the wrapper's stack alone does not name the
+					// column or constraint that failed.
+					const wrapped = err as { message?: string; cause?: unknown };
+					console.error('share page: warm on view failed', wrapped?.message, wrapped?.cause);
 				})
 			);
 		}
