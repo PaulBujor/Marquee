@@ -116,8 +116,7 @@ describe('withinRateLimit', () => {
 describe('wrangler configuration', () => {
 	interface WranglerEnv {
 		ratelimits?: { name: string }[];
-		analytics_engine_datasets?: { binding: string }[];
-		env?: { preview: WranglerEnv };
+		previews?: WranglerEnv;
 	}
 
 	function parseJsonc(text: string): WranglerEnv {
@@ -143,14 +142,14 @@ describe('wrangler configuration', () => {
 
 	// `withinRateLimit` fails open, so a binding that goes missing in an environment is invisible at
 	// runtime — the only place to catch it is here.
-	it('declares both rate limits in every environment', () => {
+	it('declares both rate limits in production and in previews', () => {
 		const config = parseJsonc(readFileSync(join(process.cwd(), 'wrangler.jsonc'), 'utf8'));
-		const envs = [config, config.env!.preview];
+		expect(config.previews).toBeDefined();
 
-		for (const env of envs) {
-			// A binding declared in only one environment is invisible at runtime: the helper fails open
-			// and wrangler doesn't inherit bindings, so the preview env would simply be unlimited.
-			const names = (env.ratelimits ?? []).map((b: { name: string }) => b.name).sort();
+		for (const scope of [config, config.previews!]) {
+			// A binding declared in only one scope is invisible at runtime: the helper fails open, and
+			// Previews inherit nothing, so a preview would simply be unlimited.
+			const names = (scope.ratelimits ?? []).map((b: { name: string }) => b.name).sort();
 			expect(names).toEqual(['APP_RATE_LIMITER', 'PUBLIC_SHARE_LIMITER']);
 		}
 	});
