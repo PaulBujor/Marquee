@@ -26,8 +26,7 @@
 		"db:generate": "drizzle-kit generate",
 		"db:migrate:local": "wrangler d1 migrations apply marquee --local",
 		"db:migrate:remote": "wrangler d1 migrations apply marquee --remote",
-		"db:studio": "drizzle-kit studio",
-		"deploy:preview:env": "wrangler d1 migrations apply marquee-preview --remote --env preview && wrangler deploy --env preview"
+		"db:studio": "drizzle-kit studio"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
