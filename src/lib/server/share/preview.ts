@@ -215,7 +215,7 @@ function fromRow(row: SharePreviewRow): SharePreview {
 		backdropPath: row.backdropPath,
 		rating: row.rating,
 		runtime: row.runtime,
-		releasedOn: row.releasedOn,
+		releasedOn: isIsoDate(row.releasedOn) ? row.releasedOn : null,
 		seasons: row.seasons ?? 0,
 		production: row.production,
 		genres: parseList<string>(row.genres),
@@ -223,6 +223,11 @@ function fromRow(row: SharePreviewRow): SharePreview {
 		cast: parseList<CastCredit>(row.cast),
 		updatedAt: row.updatedAt.getTime()
 	};
+}
+
+/** A `YYYY-MM-DD` date or nothing: the page formats what it is given, and `Intl` throws on junk. */
+function isIsoDate(value: string | null): value is string {
+	return typeof value === 'string' && value.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 /** JSON columns are written by us, but a hand-edited row shouldn't be able to break a page. */

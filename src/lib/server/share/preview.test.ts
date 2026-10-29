@@ -318,3 +318,17 @@ describe('purging previews', () => {
 		expect(remaining.map((row) => row.name)).toEqual(['Recent']);
 	});
 });
+
+describe('values the page has to be able to format', () => {
+	it('drops a release date that is not a date, so a hand-edited row cannot take out the page', async () => {
+		const db = await seedDb();
+		stubFetch(MOVIE);
+		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW });
+
+		// `Intl.format(new Date(...))` throws on an invalid date, which would 500 the shared page.
+		for (const stored of ['whenever', '2024-1-1', '2024-01-01T00:00:00Z', '']) {
+			await db.update(sharePreviews).set({ releasedOn: stored });
+			expect((await readPreview(db, 603))?.releasedOn).toBeNull();
+		}
+	});
+});
