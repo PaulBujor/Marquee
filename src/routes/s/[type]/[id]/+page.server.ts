@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ params, locals, platform, request, 
 
 	// Before any read: this is the unauthenticated route that serves shared content.
 	if (!(await withinRateLimit(platform, 'PUBLIC_SHARE_LIMITER', request))) {
-		noteRateLimited(platform?.env, 'share', new URL(request.url).pathname);
+		noteRateLimited('share', new URL(request.url).pathname);
 		error(429, 'Too many requests.');
 	}
 

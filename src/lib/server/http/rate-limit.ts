@@ -91,24 +91,12 @@ async function sha256Hex(value: string): Promise<string> {
 }
 
 /**
- * Record that a request was shed. Rate-limit bindings aren't visible in the dashboard, so writing our
- * own event is the only way to see abuse early. Deliberately stores no identifier: the scope and the
- * path are what answer "how often, and where".
+ * Record that a request was shed, so abuse is visible early. Logged rather than counted: an Analytics
+ * Engine binding is the documented way to count them, and declaring one was rejected at deploy on this
+ * account. Connect one here when it's available.
  */
-export function noteRateLimited(
-	env: { RATE_LIMIT_EVENTS?: AnalyticsEngineDataset } | undefined,
-	scope: 'app' | 'share',
-	pathname: string
-): void {
-	try {
-		env?.RATE_LIMIT_EVENTS?.writeDataPoint({
-			blobs: [scope, pathname],
-			doubles: [1],
-			indexes: [scope]
-		});
-	} catch (err) {
-		console.error('rate limit: could not record the shed request', err);
-	}
+export function noteRateLimited(scope: 'app' | 'share', pathname: string): void {
+	console.warn(`rate limit: shed ${scope} request for ${pathname}`);
 }
 
 /**

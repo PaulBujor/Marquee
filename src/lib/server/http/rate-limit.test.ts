@@ -156,16 +156,15 @@ describe('wrangler configuration', () => {
 
 	// `withinRateLimit` fails open, so a binding that goes missing in an environment is invisible at
 	// runtime — the only place to catch it is here.
-	it('declares both rate limits, and the shed-request dataset, in every environment', () => {
+	it('declares both rate limits in every environment', () => {
 		const config = parseJsonc(readFileSync(join(process.cwd(), 'wrangler.jsonc'), 'utf8'));
 		const envs = [config, config.env!.preview];
 
 		for (const env of envs) {
+			// A binding declared in only one environment is invisible at runtime: the helper fails open
+			// and wrangler doesn't inherit bindings, so the preview env would simply be unlimited.
 			const names = (env.ratelimits ?? []).map((b: { name: string }) => b.name).sort();
 			expect(names).toEqual(['APP_RATE_LIMITER', 'PUBLIC_SHARE_LIMITER']);
-			expect(
-				(env.analytics_engine_datasets ?? []).map((b: { binding: string }) => b.binding)
-			).toEqual(['RATE_LIMIT_EVENTS']);
 		}
 	});
 });

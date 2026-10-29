@@ -47,7 +47,7 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 // purpose (wrangler.jsonc); the public share pages carry their own budget.
 const rateLimit: Handle = async ({ event, resolve }) => {
 	if (!(await withinRateLimit(event.platform, 'APP_RATE_LIMITER', event.request))) {
-		noteRateLimited(event.platform?.env, 'app', event.url.pathname);
+		noteRateLimited('app', event.url.pathname);
 		return new Response('Too many requests', {
 			status: 429,
 			headers: { 'content-type': 'text/plain', 'retry-after': '60' }

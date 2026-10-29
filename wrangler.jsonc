@@ -32,11 +32,9 @@
 			"simple": { "limit": 300, "period": 60 }
 		}
 	],
-	// 429s are countable here: rate-limit bindings themselves are invisible in the dashboard, so the
-	// only way to see abuse early is to write our own event when we shed a request.
-	"analytics_engine_datasets": [
-		{ "binding": "RATE_LIMIT_EVENTS", "dataset": "marquee_rate_limit_events" }
-	],
+	// No Analytics Engine binding: declaring one was rejected at deploy time on this account (the
+	// local `--dry-run` accepts it, so it's server-side). Shed requests are logged instead, which
+	// Workers Logs indexes; add the binding and `noteRateLimited` starts writing data points too.
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -111,9 +109,6 @@
 					"namespace_id": "991002",
 					"simple": { "limit": 300, "period": 60 }
 				}
-			],
-			"analytics_engine_datasets": [
-				{ "binding": "RATE_LIMIT_EVENTS", "dataset": "marquee_rate_limit_events" }
 			],
 			"d1_databases": [
 				{

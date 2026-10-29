@@ -58,7 +58,6 @@ async function setup(
 	const headers: Record<string, string> = {};
 	const pending: Promise<unknown>[] = [];
 	const limitKeys: string[] = [];
-	const rateLimitEvents: { blobs?: string[]; doubles?: number[]; indexes?: string[] }[] = [];
 	const event = {
 		params: { type: opts.type ?? 'movie', id: opts.id ?? '603' },
 		request: new Request('https://marquee.example/s/movie/603', {
@@ -74,10 +73,6 @@ async function setup(
 						limitKeys.push(key);
 						return { success: !opts.limited };
 					}
-				},
-				RATE_LIMIT_EVENTS: {
-					writeDataPoint: (point: { blobs?: string[]; doubles?: number[]; indexes?: string[] }) =>
-						rateLimitEvents.push(point)
 				}
 			},
 			ctx: { waitUntil: (promise: Promise<unknown>) => pending.push(promise) }
@@ -92,7 +87,7 @@ async function setup(
 		}
 	} as unknown as Event;
 
-	return { event, headers, db, pending, limitKeys, rateLimitEvents };
+	return { event, headers, db, pending, limitKeys };
 }
 
 /** The load answers with page data, or throws an `error()`/`redirect()`. */
@@ -150,22 +145,19 @@ describe('GET /s/[type]/[id]', () => {
 		expect(headers['x-robots-tag']).toBe('noindex, noarchive');
 	});
 
-	it('sheds a flood before reading anything, and records that it did', async () => {
-		const { event, headers, limitKeys, rateLimitEvents } = await setup({
-			warmed: true,
-			limited: true
-		});
+	it('sheds a flood before reading anything, and says so in the log', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const { event, headers, limitKeys } = await setup({ warmed: true, limited: true });
 
 		const { err } = await outcome(() => load(event));
 
 		expect(err?.status).toBe(429);
 		expect(limitKeys).toEqual(['ip:203.0.113.9']);
-		// Rate-limit bindings aren't visible in the dashboard, so the shed request is recorded here.
-		expect(rateLimitEvents).toEqual([
-			{ blobs: ['share', '/s/movie/603'], doubles: [1], indexes: ['share'] }
-		]);
+		// Countable in Workers Logs, since rate-limit bindings aren't visible in the dashboard.
+		expect(warn).toHaveBeenCalledWith('rate limit: shed share request for /s/movie/603');
 		// The policy goes on before the guards, so even a refusal is no-store and noindex.
 		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
+		warn.mockRestore();
 	});
 
 	it('serves the cold state for a link nothing has warmed — still without the provider', async () => {
