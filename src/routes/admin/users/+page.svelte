@@ -2,6 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import DataTable from '#lib/components/data-table/data-table.svelte';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import type { PageData } from './$types';
 
@@ -9,8 +11,11 @@
 
 	type Row = PageData['rows'][number];
 
-	// The input is the source of truth while typing; the URL follows 350ms after the last keystroke, so the
-	// form still works without JavaScript but nobody has to press a button with it on.
+	// The same 300ms the search page and credit-row use, so typing feels identical across the app.
+	const DEBOUNCE_MS = 300;
+
+	// The input is the source of truth while typing; the URL follows one debounce after the last keystroke,
+	// so the form still works without JavaScript but nobody has to press a button with it on.
 	// Writable derived: it tracks `data.q` from navigations and also accepts local edits while typing.
 	let q = $derived(data.q);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -27,7 +32,7 @@
 			// The path is resolved; appending a query string drops resolve()'s branded type, which the rule keys on.
 			// eslint-disable-next-line svelte/no-navigation-without-resolve
 			goto(target, { replace: true, reset: false });
-		}, 350);
+		}, DEBOUNCE_MS);
 	}
 
 	const usersPath = resolve('/admin/users');
@@ -103,16 +108,26 @@
 </p>
 
 {#snippet emailCell(row: Row)}
-	<span class="flex items-center gap-1.5">
-		<span class="truncate">{row.email}</span>
-		{#if row.role === 'admin'}
-			<span class="shrink-0 rounded-full border px-1.5 py-0.5 text-[0.625rem]">admin</span>
-		{/if}
-	</span>
+	<span class="truncate">{row.email}</span>
+{/snippet}
+
+{#snippet adminCell(row: Row)}
+	{#if row.role === 'admin'}
+		<Badge variant="outline">admin</Badge>
+	{:else}
+		<span class="text-muted-foreground">—</span>
+	{/if}
 {/snippet}
 
 {#snippet statusCell(row: Row)}
-	<span class="rounded-full border px-2 py-0.5 text-[0.6875rem] capitalize">{row.status}</span>
+	<Badge
+		variant={row.status === 'blocked'
+			? 'destructive'
+			: row.status === 'pending'
+				? 'secondary'
+				: 'outline'}
+		class="capitalize">{row.status}</Badge
+	>
 {/snippet}
 
 {#snippet joinedCell(row: Row)}
@@ -132,6 +147,7 @@
 	columns={[
 		{ key: 'email', label: 'Email', sortable: true, cell: emailCell },
 		{ key: 'status', label: 'Status', sortable: true, cell: statusCell },
+		{ key: 'role', label: 'Admin', sortable: true, cell: adminCell },
 		{ key: 'createdAt', label: 'Joined', sortable: true, cell: joinedCell },
 		{ key: 'signupIp', label: 'Signup IP', cell: ipCell }
 	]}
@@ -153,22 +169,17 @@
 			<input type="hidden" name="q" value={data.q} />
 		{/if}
 		{#if data.page > 1}
-			<button
-				type="submit"
-				name="page"
-				value={data.page - 1}
-				class="inline-flex min-h-11 items-center px-2 underline underline-offset-2"
+			<Button type="submit" name="page" value={data.page - 1} variant="ghost" size="sm"
+				>Newer</Button
 			>
-				Newer
-			</button>
 		{:else}
 			<span></span>
 		{/if}
 		<span class="text-xs text-muted-foreground">Page {data.page} of {lastPage}</span>
 		{#if data.page < lastPage}
-			<button type="submit" name="page" value={data.page + 1} class="underline underline-offset-2">
-				Older
-			</button>
+			<Button type="submit" name="page" value={data.page + 1} variant="ghost" size="sm"
+				>Older</Button
+			>
 		{:else}
 			<span></span>
 		{/if}

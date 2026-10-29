@@ -8,7 +8,12 @@ import { users, USER_STATUSES, type UserStatus } from '#lib/server/db/schema.js'
 const PAGE_SIZE = 25;
 
 // The only columns a `?sort=` value can reach: parseSort looks up this map, never the raw string.
-const SORTS = { createdAt: users.createdAt, email: users.email, status: users.status } as const;
+const SORTS = {
+	createdAt: users.createdAt,
+	email: users.email,
+	status: users.status,
+	role: users.role
+} as const;
 const SORT_KEYS = Object.keys(SORTS) as (keyof typeof SORTS)[];
 
 function parseStatus(raw: string | null): UserStatus | null {

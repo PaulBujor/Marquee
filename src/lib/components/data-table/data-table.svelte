@@ -60,7 +60,7 @@
 									type="submit"
 									name="sort"
 									value={nextValue(column.key)}
-									class="flex min-h-12 w-full items-center gap-1 px-3 -mx-3 font-medium hover:text-foreground {column.end
+									class="-mx-3 flex min-h-12 w-full items-center gap-1 px-3 font-medium hover:text-foreground {column.end
 										? 'justify-end'
 										: ''}"
 								>

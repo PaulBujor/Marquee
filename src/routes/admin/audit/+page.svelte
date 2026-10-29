@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import DataTable from '#lib/components/data-table/data-table.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -64,17 +65,17 @@
 	>
 		<input type="hidden" name="sort" value={sortValue} />
 		{#if data.page > 1}
-			<button type="submit" name="page" value={data.page - 1} class="underline underline-offset-2">
-				Newer
-			</button>
+			<Button type="submit" name="page" value={data.page - 1} variant="ghost" size="sm"
+				>Newer</Button
+			>
 		{:else}
 			<span></span>
 		{/if}
 		<span class="text-xs text-muted-foreground">Page {data.page} of {lastPage}</span>
 		{#if data.page < lastPage}
-			<button type="submit" name="page" value={data.page + 1} class="underline underline-offset-2">
-				Older
-			</button>
+			<Button type="submit" name="page" value={data.page + 1} variant="ghost" size="sm"
+				>Older</Button
+			>
 		{:else}
 			<span></span>
 		{/if}
