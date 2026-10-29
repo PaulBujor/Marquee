@@ -4,6 +4,7 @@ import type { MediaRefreshMessage } from '$lib/server/media/refresh-consumer';
 import { cloudflareQueueProducer } from '$lib/server/queue/cloudflare';
 import type { QueueProducer } from '$lib/server/queue/types';
 import { purgeExpiredAuth } from '$lib/server/auth/cleanup';
+import { purgeSharePreviewWarms, purgeSharePreviews } from '$lib/server/share/preview';
 import type { createDb } from '$lib/server/db';
 import { isAuthorizedCronRequest } from '$lib/server/http/secret';
 import type { RequestHandler } from './$types';
@@ -44,6 +45,24 @@ async function purgeAuth(db: Db) {
 }
 
 /**
+ * Drop rows past their retention windows: warm rows only exist to count requests, previews are cache
+ * for links that may still be re-opened. Self-contained, like the others.
+ */
+async function purgeShareData(db: Db) {
+	try {
+		const warms = await purgeSharePreviewWarms(db, Date.now());
+		const previews = await purgeSharePreviews(db, Date.now());
+		console.log(
+			`cron: purged ${warms} stale share-preview warm rows and ${previews} expired previews`
+		);
+		return { ok: true as const, purged: { warms, previews } };
+	} catch (err) {
+		console.error('cron: share-preview purge failed', err);
+		return { ok: false as const, error: 'share purge failed' };
+	}
+}
+
+/**
  * The daily maintenance sweep (media refresh + auth-token/session purge). The cron `scheduled`
  * handler self-`fetch`es this route for the `0 6 * * *` trigger (see scripts/append-cron.mjs); it's
  * HTTP-reachable and gated by `CRON_SECRET`, so it also doubles as a manual trigger — `POST` it with
@@ -75,6 +94,7 @@ export const POST: RequestHandler = async ({ request, url, locals, platform }) =
 			)
 		: { ok: false as const, error: 'TMDB is not configured.' };
 	const auth = await purgeAuth(locals.db);
+	const share = await purgeShareData(locals.db);
 
-	return json({ media, auth });
+	return json({ media, auth, share });
 };

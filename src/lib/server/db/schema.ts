@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
 	integer,
+	real,
 	sqliteTable,
 	text,
 	index,
@@ -529,3 +530,68 @@ export const notificationLog = sqliteTable(
 );
 
 export type NotificationLogRow = typeof notificationLog.$inferSelect;
+
+/**
+ * A public share preview: the catalogue-only snapshot a shared link renders its page from. Only an
+ * authenticated client writes one (see `POST /api/share/preview`), so the public read path never
+ * has to call TMDB itself — crawling a shared link can't spend provider quota.
+ *
+ * Sized for the whole title page rather than a card: the shared page shows the same hero, meta row,
+ * crew and cast the signed-in page does, minus the sections that need user data (tracking, similar,
+ * seasons) or a longer payload (the trailer).
+ */
+export const sharePreviews = sqliteTable(
+	'share_previews',
+	{
+		// `tmdb:title:<externalId>`, e.g. `tmdb:title:603`. Provider-scoped so a second provider
+		// can't collide with a TMDB id.
+		id: text('id').primaryKey(),
+		provider: text('provider', { enum: MEDIA_PROVIDERS }).notNull().default('tmdb'),
+		externalId: text('external_id').notNull(),
+		titleType: text('title_type', { enum: ['movie', 'show'] }).notNull(),
+		name: text('name').notNull(),
+		year: integer('year'),
+		summary: text('summary'),
+		imagePath: text('image_path'),
+		backdropPath: text('backdrop_path'),
+		rating: real('rating'),
+		runtime: integer('runtime'),
+		releasedOn: text('released_on'),
+		seasons: integer('seasons'),
+		production: text('production', { enum: ['in_production', 'ended'] }),
+		// JSON, so the page renders a meta row, a crew list and a cast strip with no second read.
+		genres: text('genres'),
+		crew: text('crew'),
+		cast: text('cast'),
+		updatedAt: integer('updated_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [index('share_previews_title_type_idx').on(table.titleType)]
+);
+
+export type SharePreviewRow = typeof sharePreviews.$inferSelect;
+
+/**
+ * One row per preview warmed, purely so the per-account hourly cap can be counted. The preview rows
+ * themselves are shared across users, so the cap has to live beside the request, not the data.
+ */
+export const sharePreviewWarms = sqliteTable(
+	'share_preview_warms',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		createdAt: integer('created_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [
+		// The cap query is a count over one user's rows inside a window; the nightly sweep deletes
+		// by age, which this index also serves.
+		index('share_preview_warms_user_created_idx').on(table.userId, table.createdAt)
+	]
+);
+
+export type SharePreviewWarmRow = typeof sharePreviewWarms.$inferSelect;
