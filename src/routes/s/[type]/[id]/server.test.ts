@@ -55,6 +55,7 @@ async function setup(
 				producers: []
 			}),
 			cast: JSON.stringify([{ name: 'Keanu Reeves', profilePath: '/keanu.jpg' }]),
+			trailer: JSON.stringify({ key: 'yt-trailer', name: 'Official Trailer' }),
 			updatedAt: new Date()
 		});
 	}
@@ -138,7 +139,12 @@ describe('GET /s/[type]/[id]', () => {
 
 		expect(data).toMatchObject({
 			state: 'ready',
-			preview: { name: 'The Matrix', rating: 8.2, genres: ['Action', 'Science Fiction'] }
+			preview: {
+				name: 'The Matrix',
+				rating: 8.2,
+				genres: ['Action', 'Science Fiction'],
+				trailer: { key: 'yt-trailer', name: 'Official Trailer' }
+			}
 		});
 		expect(fetchSpy).not.toHaveBeenCalled();
 		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);

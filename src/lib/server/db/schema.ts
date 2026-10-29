@@ -563,6 +563,7 @@ export const sharePreviews = sqliteTable(
 		genres: text('genres'),
 		crew: text('crew'),
 		cast: text('cast'),
+		trailer: text('trailer'),
 		updatedAt: integer('updated_at', { mode: 'timestamp' })
 			.notNull()
 			.$defaultFn(() => new Date())
