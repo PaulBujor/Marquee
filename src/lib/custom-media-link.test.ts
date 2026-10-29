@@ -44,15 +44,12 @@ const watch = (episode: number, over: Partial<LinkSourceWatch> = {}): LinkSource
 	...over
 });
 
-/** All events targeting an id, in the order the builder emitted them. */
 const forEntity = (events: ReturnType<typeof buildLinkEvents>, id: string) =>
 	events.filter((e) => e.entityId === id);
 
 describe('buildLinkEvents', () => {
 	it('revives a target the user removed more recently than the entry was added', () => {
-		// Otherwise the title vanishes outright: the target's revive is stamped with the entry's
-		// historical `addedAt` and loses to the newer tombstone, while the entry itself is tombstoned
-		// at `now`. Both projections agree, so nothing heals it.
+		// Otherwise the title vanishes: the revive carries the entry's historical `addedAt`, loses to the newer tombstone, and nothing heals it.
 		const addedAt = Date.UTC(2024, 0, 1);
 		const removedAt = Date.UTC(2025, 0, 1);
 		const events = buildLinkEvents(
@@ -67,8 +64,7 @@ describe('buildLinkEvents', () => {
 	});
 
 	it('does not re-stamp the status clock when the target carries no newer tombstone', () => {
-		// The extra revive re-asserts the status at its own clock, and the historical
-		// `status_changed` is what dates a completed title — so it must stay off the common path.
+		// Re-asserting status at `now` would rewrite the date a completed title displays.
 		const events = buildLinkEvents(source({ addedAt: Date.UTC(2024, 0, 1) }), [], TARGET, NOW);
 		expect(
 			forEntity(events, TARGET.targetId).filter((e) => e.type === 'tracking.added')
@@ -90,8 +86,7 @@ describe('buildLinkEvents', () => {
 	});
 
 	it('carries the added and status clocks, not today', () => {
-		// These clocks are the dates the app displays. Stamping them now would rewrite a decade of
-		// watch history into one afternoon.
+		// These clocks are the dates the app displays; stamping them `now` would rewrite years of history.
 		const events = buildLinkEvents(source(), [], TARGET, NOW);
 		const target = forEntity(events, TARGET.targetId);
 		expect(target).toContainEqual({
@@ -130,8 +125,7 @@ describe('buildLinkEvents', () => {
 	});
 
 	it('emits nothing for an unfavourited, unrated entry', () => {
-		// Emitting `favorite: false` would let a merge *clear* a flag the user set on the target from
-		// another device. Linking only ever adds to what the target knows.
+		// `favorite: false` would let a merge *clear* a flag another device set — linking only ever adds.
 		const events = buildLinkEvents(source(), [], TARGET, NOW);
 		expect(events.some((e) => e.type === 'tracking.favorite_toggled')).toBe(false);
 		expect(events.some((e) => e.type === 'tracking.rated')).toBe(false);
@@ -156,7 +150,6 @@ describe('buildLinkEvents', () => {
 	it('retires the custom entry last, at now, so it leaves the lists', () => {
 		const events = buildLinkEvents(source(), [watch(1), watch(2)], TARGET, NOW);
 		const onSource = forEntity(events, CUSTOM_ID);
-		// media.linked, then an unwatch per watched episode, then the tombstone.
 		expect(onSource.map((e) => e.type)).toEqual([
 			'media.linked',
 			'episode.unwatched',
@@ -169,8 +162,7 @@ describe('buildLinkEvents', () => {
 	});
 
 	it('substitutes now for a clock the projection never set', () => {
-		// A field's clock sits at 0 until something sets it, and the event schema rejects a
-		// non-positive clock — an unset clock has to become a real one or the server drops the event.
+		// The event schema rejects a non-positive clock, so an unset (0) clock must become a real one or the server drops the event.
 		const events = buildLinkEvents(
 			source({ addedAt: 0, statusUpdatedAt: 0, favorite: true, favoriteUpdatedAt: 0 }),
 			[watch(1, { updatedAt: 0 })],

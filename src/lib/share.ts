@@ -1,8 +1,3 @@
-/**
- * Sharing a link out of the app: the OS share sheet where the platform has one (iOS/Android),
- * otherwise the clipboard. The environment is injectable so the fallback logic is testable.
- */
-
 export interface ShareContent {
 	title: string;
 	text?: string;
@@ -22,7 +17,6 @@ interface ShareCapableNavigator {
 	canShare?: (content: ShareContent) => boolean;
 }
 
-/** What this browser can do. Empty outside a browser (SSR, tests). */
 export function browserShareEnvironment(): ShareEnvironment {
 	if (typeof navigator === 'undefined') return {};
 	const nav = navigator as unknown as ShareCapableNavigator;
@@ -37,10 +31,7 @@ export function browserShareEnvironment(): ShareEnvironment {
 	};
 }
 
-/**
- * Share `content`, reporting which route was taken. `cancelled` means the user dismissed the OS
- * sheet — a decision, so nothing is copied behind it; `failed` means no route worked.
- */
+// `cancelled` is the user dismissing the sheet — nothing is copied behind it; `failed` means no route worked.
 export async function shareLink(
 	content: ShareContent,
 	env: ShareEnvironment = browserShareEnvironment()
@@ -65,33 +56,17 @@ export async function shareLink(
 
 export type ShareWarmTarget = { type: 'movie' | 'show'; id: number };
 
-/**
- * How long the warm is given before it gives up and reports a timeout. It runs beside the sheet
- * rather than in front of it: the recipient's app unfurls the link seconds later, but the tap has to
- * be answered now, and `navigator.share` wants the user activation that waiting would risk.
- */
+// Runs beside the sheet, not in front of it: the tap must be answered now, and `navigator.share` wants the user activation that waiting would risk.
 export const WARM_TIMEOUT_MS = 1500;
 
 /** How a warm ended: `timeout` may still land server-side, so it isn't the same news as `failed`. */
 export type WarmOutcome = 'stored' | 'timeout' | 'failed';
 
-/**
- * Ask the server to store this link's preview so the recipient's app has a page to render.
- * Best-effort by design: a failure, a timeout or being offline still shares the link, just without
- * a guaranteed preview. The server side is the only place that calls TMDB, and it requires a
- * session — that separation is what stops a crawler spending provider quota.
- */
 export interface ShareReport {
 	outcome: ShareOutcome;
 	warmed: WarmOutcome;
 }
 
-/**
- * Share now, warm alongside. The card matters — the recipient's app unfurls the link moments after
- * the sheet closes — but not enough to delay the sheet for, so the warm is started and left to settle
- * while the sheet is open. Its outcome is still reported, because a link shared without its card is
- * the outcome worth knowing about.
- */
 export async function shareAndWarm(
 	content: ShareContent,
 	target: ShareWarmTarget | undefined,
@@ -104,6 +79,7 @@ export async function shareAndWarm(
 	return { outcome, warmed: await warming };
 }
 
+// Only the server calls TMDB, behind a session — that separation is what stops a crawler spending provider quota.
 export async function warmPreview(
 	target: ShareWarmTarget,
 	opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {}

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatExactDateTime, formatRelativeDay } from './date';
 
-// Local-time constructors throughout: the helper counts local calendar days, so building the
-// fixtures the same way keeps the assertions true in any timezone the suite runs in.
+// Local-time constructors throughout, or the assertions break in another timezone.
 const NOW = new Date(2026, 6, 24, 14, 30).getTime(); // 24 July 2026, early afternoon
 const at = (year: number, month: number, day: number, hour = 12) =>
 	new Date(year, month, day, hour).getTime();
@@ -14,7 +13,6 @@ describe('formatRelativeDay', () => {
 	});
 
 	it('counts calendar days, not elapsed hours', () => {
-		// Late yesterday to early today is a few hours, but it's still "Yesterday".
 		expect(formatRelativeDay(at(2026, 6, 23, 23), new Date(2026, 6, 24, 1).getTime())).toBe(
 			'Yesterday'
 		);

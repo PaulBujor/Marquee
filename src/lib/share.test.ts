@@ -132,8 +132,7 @@ describe('shareAndWarm', () => {
 
 		const pending = shareAndWarm(content, { type: 'movie', id: 603 }, { warm, share });
 
-		// Already called, with the warm still in flight — that is the property, not an implementation
-		// detail, and it is what keeps the sheet inside the gesture that opened it.
+		// The property, not an implementation detail: awaiting the warm would leave the sheet outside the gesture that opened it.
 		expect(share).toHaveBeenCalledTimes(1);
 		expect(warm).toHaveBeenCalledWith({ type: 'movie', id: 603 });
 

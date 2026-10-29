@@ -23,7 +23,6 @@ describe('creditRoleLabel', () => {
 	it('pluralizes by how many people hold the role', () => {
 		expect(creditRoleLabel('director')).toBe('Director');
 		expect(creditRoleLabel('director', 2)).toBe('Directors');
-		// "Cast" is already a collective noun — "Casts" would be wrong at any count.
 		expect(creditRoleLabel('cast', 5)).toBe('Cast');
 	});
 });
@@ -37,8 +36,6 @@ describe('groupCredits', () => {
 			credit({ name: 'A Director', role: 'director' })
 		]);
 
-		// Fixed role order, not arrival order — so a custom entry and a candidate line up section for
-		// section in the comparison view.
 		expect(groups.map((g) => g.role)).toEqual(['cast', 'director', 'producer']);
 		expect(groups[0].people.map((p) => p.name)).toEqual(['Top Billed', 'Second Billed']);
 		expect(groups[0].label).toBe('Cast');
@@ -91,8 +88,6 @@ describe('creditsFromDetail', () => {
 
 describe('compareCredits', () => {
 	it('counts the people on both sides regardless of the role each filed them under', () => {
-		// The user filed them as director, the provider as writer — still the same person turning up
-		// twice, which is the signal the comparison is for.
 		const overlap = compareCredits(
 			[credit({ name: 'Ana Petrescu', role: 'director' })],
 			[credit({ name: 'Ana Petrescu', role: 'writer' })]
@@ -110,7 +105,6 @@ describe('compareCredits', () => {
 	});
 
 	it('counts distinct people, not credits', () => {
-		// Someone credited in two roles is one person to cross-check, not two.
 		const overlap = compareCredits(
 			[
 				credit({ name: 'Ana Petrescu', role: 'director' }),

@@ -1,10 +1,3 @@
-/**
- * Generic, dependency-free resilience helpers for outgoing requests — a small "pipeline" shared
- * by the client sync channels (event/media/image) and the server TMDB client. Pure and
- * runtime-agnostic (browser + Workers); time and sleep are injectable so it's fully testable.
- */
-
-/** Options for {@link backoffDelay} / {@link withRetry}. */
 export interface RetryOptions {
 	/** Total attempts including the first (default 4). */
 	maxAttempts?: number;
@@ -14,15 +7,11 @@ export interface RetryOptions {
 	maxMs?: number;
 	/** Return false to fail fast without retrying (e.g. a 4xx). Default: always retry. */
 	shouldRetry?: (err: unknown) => boolean;
-	/**
-	 * Override the wait before the next attempt from the thrown error — e.g. honor a `Retry-After`
-	 * on a 429 instead of exponential backoff. Receives the error and the backoff the delay would
-	 * otherwise be; return the ms to sleep. Default: the computed backoff.
-	 */
+	/** Override the wait before the next attempt — e.g. honor a `Retry-After` on a 429 instead of exponential backoff. */
 	retryDelay?: (err: unknown, computedMs: number) => number;
 }
 
-/** Exponential backoff (ms) for a 0-based attempt index: `baseMs · 2^n`, capped at `maxMs`. */
+/** 0-based attempt index: `baseMs · 2^n`, capped at `maxMs`. */
 export function backoffDelay(
 	attempt: number,
 	opts: Pick<RetryOptions, 'baseMs' | 'maxMs'> = {}
@@ -33,10 +22,6 @@ export function backoffDelay(
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/**
- * Run `fn`, retrying transient failures with exponential backoff; throws the last error once
- * `maxAttempts` is reached or `shouldRetry` returns false. `sleep` is injectable for tests.
- */
 export async function withRetry<T>(
 	fn: () => Promise<T>,
 	opts: RetryOptions = {},
@@ -56,11 +41,7 @@ export async function withRetry<T>(
 	}
 }
 
-/**
- * Thrown when {@link fetchWithTimeout} aborts a request that took longer than its budget.
- * A distinct class (rather than the raw `AbortError`) so callers can tell a timeout apart from a
- * caller-initiated abort, and so `shouldRetry` predicates can treat it as transient.
- */
+// Distinct from the raw `AbortError` so callers can tell a timeout from a caller-initiated abort — and retry only the former.
 export class FetchTimeoutError extends Error {
 	constructor(readonly timeoutMs: number) {
 		super(`request timed out after ${timeoutMs}ms`);
@@ -68,15 +49,7 @@ export class FetchTimeoutError extends Error {
 	}
 }
 
-/**
- * `fetch` with a wall-clock budget. A bare `fetch` has no timeout in either workerd or the
- * browser, so a connection that opens and then stalls hangs until the platform gives up — which
- * on the client wedges the sync engine's in-flight guard and silently stops all further syncing.
- *
- * The abort surfaces as a thrown {@link FetchTimeoutError}, so existing retry/circuit-breaker
- * wrappers treat a stall like any other transient failure. A caller-supplied `signal` still works:
- * whichever fires first wins.
- */
+// A bare `fetch` has no timeout in workerd or the browser; a held-open stall wedges the sync engine's in-flight guard and silently stops all syncing.
 export async function fetchWithTimeout(
 	input: RequestInfo | URL,
 	init: RequestInit & { timeoutMs: number },
@@ -100,7 +73,6 @@ export async function fetchWithTimeout(
 	}
 }
 
-/** Options for {@link CircuitBreaker}. */
 export interface CircuitOptions {
 	/** Consecutive failures that trip the breaker open (default 5). */
 	maxFailures?: number;
@@ -108,18 +80,11 @@ export interface CircuitOptions {
 	cooldownMs?: number;
 	/** Clock source (injectable for tests). Default `Date.now`. */
 	now?: () => number;
-	/** Optional label identifying this breaker in diagnostics when it trips open. */
 	name?: string;
 }
 
 type CircuitState = 'closed' | 'open' | 'half-open';
 
-/**
- * A minimal circuit breaker: after `maxFailures` consecutive failures it **opens** and
- * {@link canAttempt} returns false (fail fast) until `cooldownMs` elapses, then it **half-opens**
- * to allow one probe — a success closes it, another failure re-opens it. Stops a sustained
- * outage (e.g. a persistently-failing sync channel or TMDB) from being hammered every cycle.
- */
 export class CircuitBreaker {
 	#failures = 0;
 	#openedAt = 0;
@@ -136,7 +101,6 @@ export class CircuitBreaker {
 		this.#name = opts.name;
 	}
 
-	/** Whether a call is allowed now. Transitions open → half-open once the cooldown has elapsed. */
 	canAttempt(): boolean {
 		if (this.#state === 'open') {
 			if (this.#now() - this.#openedAt >= this.#cooldownMs) {
@@ -148,13 +112,11 @@ export class CircuitBreaker {
 		return true;
 	}
 
-	/** Record a success: reset the failure count and close the breaker. */
 	recordSuccess(): void {
 		this.#failures = 0;
 		this.#state = 'closed';
 	}
 
-	/** Record a failure: trip open once the threshold is reached (or re-open from half-open). */
 	recordFailure(): void {
 		this.#failures++;
 		if (this.#failures >= this.#maxFailures && this.#state !== 'open') {
@@ -170,7 +132,6 @@ export class CircuitBreaker {
 		return this.#state;
 	}
 
-	/** Consecutive failures since the last success (0 when closed after a success). */
 	get failures(): number {
 		return this.#failures;
 	}
