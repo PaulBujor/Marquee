@@ -10,6 +10,7 @@
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import TitleMetaRow from '$lib/components/media/title-meta-row.svelte';
+	import TrailerPlayer from '$lib/components/media/trailer-player.svelte';
 	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
@@ -45,7 +46,6 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
-	import PlayIcon from '@lucide/svelte/icons/play';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import type { CrewMember, MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 
@@ -605,48 +605,8 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						</section>
 					{/if}
 
-					{#if detail.trailer}
-						<section class="flex flex-col gap-3">
-							<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-								Trailer
-							</h2>
-							{#if showTrailer}
-								<div class="aspect-video w-full overflow-hidden rounded-md">
-									<iframe
-										src={`https://www.youtube-nocookie.com/embed/${detail.trailer.key}?autoplay=1`}
-										title={detail.trailer.name}
-										allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-										allowfullscreen
-										class="h-full w-full border-0"
-									></iframe>
-								</div>
-							{:else}
-								<button
-									type="button"
-									onclick={() => (showTrailer = true)}
-									class="group relative aspect-video w-full overflow-hidden rounded-md bg-secondary"
-									aria-label={`Play trailer: ${detail.trailer.name}`}
-								>
-									<img
-										src={`https://img.youtube.com/vi/${detail.trailer.key}/hqdefault.jpg`}
-										alt=""
-										loading="lazy"
-										decoding="async"
-										class="absolute inset-0 h-full w-full object-cover"
-									/>
-									<span
-										class="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/30"
-									>
-										<span
-											class="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground"
-										>
-											<PlayIcon class="size-5 translate-x-0.5 fill-current" />
-										</span>
-									</span>
-								</button>
-							{/if}
-						</section>
-					{/if}
+					<!-- The trailer, click-to-load, exactly as the public share page shows it. -->
+					<TrailerPlayer trailer={detail.trailer} bind:playing={showTrailer} />
 				</div>
 			{/if}
 		</div>

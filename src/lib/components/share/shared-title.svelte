@@ -9,6 +9,7 @@
 	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
 	import TitleMetaRow from '$lib/components/media/title-meta-row.svelte';
+	import TrailerPlayer from '$lib/components/media/trailer-player.svelte';
 	import ShareCta from '$lib/components/share/share-cta.svelte';
 	import { BACKDROP_SIZE, posterUrl } from '$lib/media.js';
 	import type { SharePreview } from '$lib/share-preview';
@@ -163,6 +164,8 @@
 							</ul>
 						</section>
 					{/if}
+
+					<TrailerPlayer trailer={preview.trailer} />
 				</div>
 			{/if}
 		</div>
