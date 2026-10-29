@@ -14,12 +14,18 @@
 		{
 			"name": "PUBLIC_SHARE_LIMITER",
 			"namespace_id": "991001",
-			"simple": { "limit": 120, "period": 60 }
+			"simple": {
+				"limit": 120,
+				"period": 60
+			}
 		},
 		{
 			"name": "APP_RATE_LIMITER",
 			"namespace_id": "991002",
-			"simple": { "limit": 300, "period": 60 }
+			"simple": {
+				"limit": 300,
+				"period": 60
+			}
 		}
 	],
 	"d1_databases": [
@@ -31,8 +37,6 @@
 		}
 	],
 	"triggers": {
-		// Two schedules (append-cron.mjs routes each to its own endpoint): the hourly notifications
-		// digest (so 9AM lands in every timezone) and the daily maintenance sweep at 06:00 UTC.
 		"crons": ["0 * * * *", "0 6 * * *"]
 	},
 	"queues": {
@@ -45,21 +49,9 @@
 		"consumers": [
 			{
 				"queue": "marquee-media-refresh",
-				// Titles are refreshed one at a time, but each costs one TMDB detail call plus one
-				// *concurrent* call per season (refreshMedia fans seasons out with Promise.all), so a
-				// long-running series alone is dozens of requests. Small batches keep a single
-				// invocation well inside the Worker's CPU/wall-time budget.
 				"max_batch_size": 10,
 				"max_batch_timeout": 30,
-				// Backstop only: refresh-consumer.ts gives up (acks) after MAX_DELIVERY_ATTEMPTS (5),
-				// which must stay below this so *that* decision is what ends retries, not this one.
-				// The gap is wide because a batch-level failure retries every message, inflating each
-				// one's attempt count without it having been tried on its own merits.
 				"max_retries": 10,
-				// Conservative: the previous cron refresh was effectively single-flight. A full-backlog
-				// drain now concentrates requests into one nightly window instead of spreading across
-				// nights, so concurrency starts low pending real TMDB headroom data. Note the real
-				// peak is this times the season count of the widest title in flight, not this alone.
 				"max_concurrency": 2,
 				"dead_letter_queue": "marquee-media-refresh-dlq"
 			}
@@ -67,7 +59,9 @@
 	},
 	"observability": {
 		"enabled": true,
-		"issues": { "enabled": true },
+		"issues": {
+			"enabled": true
+		},
 		"head_sampling_rate": 1,
 		"logs": {
 			"enabled": true,
@@ -82,19 +76,22 @@
 		}
 	},
 	"previews": {
-		// Per-branch environments under this same Worker. Previews inherit nothing, so bindings are
-		// restated against the preview resources; queue consumers and cron triggers are omitted because
-		// neither targets a Preview.
 		"ratelimits": [
 			{
 				"name": "PUBLIC_SHARE_LIMITER",
 				"namespace_id": "991001",
-				"simple": { "limit": 120, "period": 60 }
+				"simple": {
+					"limit": 120,
+					"period": 60
+				}
 			},
 			{
 				"name": "APP_RATE_LIMITER",
 				"namespace_id": "991002",
-				"simple": { "limit": 300, "period": 60 }
+				"simple": {
+					"limit": 300,
+					"period": 60
+				}
 			}
 		],
 		"d1_databases": [
@@ -106,7 +103,6 @@
 			}
 		],
 		"vars": {
-			// Keeps Previews out of search results (see the securityHeaders hook). Production lacks it.
 			"PREVIEW_NOINDEX": "1"
 		},
 		"queues": {
@@ -116,6 +112,24 @@
 					"queue": "marquee-preview-media-refresh"
 				}
 			]
+		},
+		"observability": {
+			"enabled": true,
+			"issues": {
+				"enabled": true
+			},
+			"head_sampling_rate": 1,
+			"logs": {
+				"enabled": true,
+				"head_sampling_rate": 1,
+				"persist": true,
+				"invocation_logs": true
+			},
+			"traces": {
+				"enabled": true,
+				"persist": true,
+				"head_sampling_rate": 1
+			}
 		}
 	},
 	"env": {
@@ -128,12 +142,18 @@
 				{
 					"name": "PUBLIC_SHARE_LIMITER",
 					"namespace_id": "991001",
-					"simple": { "limit": 120, "period": 60 }
+					"simple": {
+						"limit": 120,
+						"period": 60
+					}
 				},
 				{
 					"name": "APP_RATE_LIMITER",
 					"namespace_id": "991002",
-					"simple": { "limit": 300, "period": 60 }
+					"simple": {
+						"limit": 300,
+						"period": 60
+					}
 				}
 			],
 			"d1_databases": [
@@ -145,7 +165,6 @@
 				}
 			],
 			"triggers": {
-				// Two schedules (see prod triggers above): hourly notifications + daily 06:00 maintenance.
 				"crons": ["0 * * * *", "0 6 * * *"]
 			},
 			"queues": {
@@ -157,8 +176,6 @@
 				],
 				"consumers": [
 					{
-						// Mirrors the prod consumer above — see the rationale for each value there.
-						// `max_retries` must stay above refresh-consumer.ts's MAX_DELIVERY_ATTEMPTS.
 						"queue": "marquee-preview-media-refresh",
 						"max_batch_size": 10,
 						"max_batch_timeout": 30,
@@ -170,6 +187,9 @@
 			},
 			"observability": {
 				"enabled": true,
+				"issues": {
+					"enabled": true
+				},
 				"head_sampling_rate": 1,
 				"logs": {
 					"enabled": true,
