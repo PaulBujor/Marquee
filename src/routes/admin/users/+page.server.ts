@@ -1,10 +1,15 @@
 import { error } from '@sveltejs/kit';
-import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { requireAdmin } from '#lib/server/admin/guard.js';
+import { orderBy, parseSort } from '#lib/server/admin/sort.js';
 import { users, USER_STATUSES, type UserStatus } from '#lib/server/db/schema.js';
 
 const PAGE_SIZE = 25;
+
+// The only columns a `?sort=` value can reach: parseSort looks up this map, never the raw string.
+const SORTS = { createdAt: users.createdAt, email: users.email, status: users.status } as const;
+const SORT_KEYS = Object.keys(SORTS) as (keyof typeof SORTS)[];
 
 function parseStatus(raw: string | null): UserStatus | null {
 	return USER_STATUSES.includes(raw as UserStatus) ? (raw as UserStatus) : null;
@@ -22,6 +27,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const status = parseStatus(url.searchParams.get('status'));
 	const q = (url.searchParams.get('q') ?? '').trim();
 	const page = Math.max(1, Number(url.searchParams.get('page') ?? '1') || 1);
+	const sort = parseSort(url.searchParams.get('sort'), SORT_KEYS, {
+		key: 'createdAt',
+		dir: 'desc'
+	});
 
 	const filters: SQL[] = [];
 	if (status) filters.push(eq(users.status, status));
@@ -41,7 +50,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			})
 			.from(users)
 			.where(where)
-			.orderBy(desc(users.createdAt))
+			.orderBy(orderBy(SORTS, sort))
 			.limit(PAGE_SIZE)
 			.offset((page - 1) * PAGE_SIZE),
 		locals.db
@@ -50,5 +59,5 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			.where(where)
 	]);
 
-	return { rows, page, pageSize: PAGE_SIZE, total: Number(totals?.total ?? 0), status, q };
+	return { rows, page, pageSize: PAGE_SIZE, total: Number(totals?.total ?? 0), status, q, sort };
 };
