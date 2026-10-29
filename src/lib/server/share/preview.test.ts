@@ -7,6 +7,7 @@ import {
 	countRecentWarms,
 	previewId,
 	purgeSharePreviewWarms,
+	purgeSharePreviews,
 	readPreview,
 	warmTitlePreview
 } from './preview';
@@ -203,6 +204,16 @@ describe('warming a preview', () => {
 		).toEqual({ kind: 'unavailable' });
 	});
 
+	it('counts the attempt even when the provider fails, so an outage is not free retries', async () => {
+		const db = await seedDb();
+		stubFetch({ status_message: 'boom' }, 500);
+
+		expect(
+			await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW })
+		).toEqual({ kind: 'unavailable' });
+		expect(await countRecentWarms(db, USER_ID, NOW)).toBe(1);
+	});
+
 	it('records the warm against the asking account only', async () => {
 		const db = await seedDb();
 		stubFetch(MOVIE);
@@ -276,5 +287,34 @@ describe('purging warm rows', () => {
 			.from(sharePreviewWarms)
 			.where(eq(sharePreviewWarms.userId, USER_ID));
 		expect(remaining.map((row) => row.id)).toEqual(['fresh']);
+	});
+});
+
+describe('purging previews', () => {
+	it('evicts a preview nobody has refreshed inside the retention window', async () => {
+		const db = await seedDb();
+		const day = 24 * 60 * 60 * 1000;
+		await db.insert(sharePreviews).values([
+			{
+				id: previewId(1),
+				provider: 'tmdb',
+				externalId: '1',
+				titleType: 'movie',
+				name: 'Forgotten',
+				updatedAt: new Date(NOW - 100 * day)
+			},
+			{
+				id: previewId(2),
+				provider: 'tmdb',
+				externalId: '2',
+				titleType: 'movie',
+				name: 'Recent',
+				updatedAt: new Date(NOW - 1 * day)
+			}
+		]);
+
+		expect(await purgeSharePreviews(db, NOW)).toBe(1);
+		const remaining = await db.select().from(sharePreviews);
+		expect(remaining.map((row) => row.name)).toEqual(['Recent']);
 	});
 });

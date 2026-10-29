@@ -4,7 +4,7 @@ import type { MediaRefreshMessage } from '$lib/server/media/refresh-consumer';
 import { cloudflareQueueProducer } from '$lib/server/queue/cloudflare';
 import type { QueueProducer } from '$lib/server/queue/types';
 import { purgeExpiredAuth } from '$lib/server/auth/cleanup';
-import { purgeSharePreviewWarms } from '$lib/server/share/preview';
+import { purgeSharePreviewWarms, purgeSharePreviews } from '$lib/server/share/preview';
 import type { createDb } from '$lib/server/db';
 import { isAuthorizedCronRequest } from '$lib/server/http/secret';
 import type { RequestHandler } from './$types';
@@ -45,17 +45,20 @@ async function purgeAuth(db: Db) {
 }
 
 /**
- * Drop warm rows past their retention window. They only exist to count an account's warm requests,
- * so once no window can still read them they're dead weight. Self-contained, like the others.
+ * Drop rows past their retention windows: warm rows only exist to count requests, previews are cache
+ * for links that may still be re-opened. Self-contained, like the others.
  */
-async function purgeShareWarms(db: Db) {
+async function purgeShareData(db: Db) {
 	try {
-		const purged = await purgeSharePreviewWarms(db, Date.now());
-		console.log(`cron: purged ${purged} stale share-preview warm rows`);
-		return { ok: true as const, purged };
+		const warms = await purgeSharePreviewWarms(db, Date.now());
+		const previews = await purgeSharePreviews(db, Date.now());
+		console.log(
+			`cron: purged ${warms} stale share-preview warm rows and ${previews} expired previews`
+		);
+		return { ok: true as const, purged: { warms, previews } };
 	} catch (err) {
-		console.error('cron: share-preview warm purge failed', err);
-		return { ok: false as const, error: 'share warm purge failed' };
+		console.error('cron: share-preview purge failed', err);
+		return { ok: false as const, error: 'share purge failed' };
 	}
 }
 
@@ -91,7 +94,7 @@ export const POST: RequestHandler = async ({ request, url, locals, platform }) =
 			)
 		: { ok: false as const, error: 'TMDB is not configured.' };
 	const auth = await purgeAuth(locals.db);
-	const shareWarms = await purgeShareWarms(locals.db);
+	const share = await purgeShareData(locals.db);
 
-	return json({ media, auth, shareWarms });
+	return json({ media, auth, share });
 };

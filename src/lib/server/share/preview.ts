@@ -20,6 +20,8 @@ export const WARM_MAX_PER_HOUR = 60;
 const WARM_WINDOW_MS = 60 * 60 * 1000;
 /** Warm rows exist only to count requests, so they're swept once past every window that reads them. */
 const WARM_RETENTION_MS = 24 * 60 * 60 * 1000;
+/** Preview rows are catalogue cache for links people may re-open, so they outlive the warm rows. */
+const PREVIEW_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 export type WarmResult =
 	| { kind: 'warmed'; preview: SharePreview }
@@ -63,10 +65,14 @@ export async function warmTitlePreview(
 	if ((await countRecentWarms(db, opts.userId, now)) >= WARM_MAX_PER_HOUR)
 		return { kind: 'rate_limited' };
 
+	// Counted before the provider call: a failing provider is exactly when the cap has to bite, and
+	// counting only successes would hand out unlimited retries while TMDB is down.
+	await recordWarm(db, opts.userId, now);
+
 	try {
 		const detail = await createTmdbClient(apiKey).getDetails(opts.type, opts.id);
 		const preview = toPreviewShape(detail, now);
-		await db.batch([upsertPreview(db, preview), recordWarm(db, opts.userId, now)]);
+		await upsertPreview(db, preview);
 		return { kind: 'warmed', preview };
 	} catch (err) {
 		if (err instanceof TmdbError) {
@@ -97,6 +103,15 @@ export async function purgeSharePreviewWarms(db: Db, now: number = Date.now()): 
 		.delete(sharePreviewWarms)
 		.where(lt(sharePreviewWarms.createdAt, new Date(now - WARM_RETENTION_MS)))
 		.returning({ id: sharePreviewWarms.id });
+	return removed.length;
+}
+
+/** Evict previews nobody has refreshed inside the retention window; their links go back to cold. */
+export async function purgeSharePreviews(db: Db, now: number = Date.now()): Promise<number> {
+	const removed = await db
+		.delete(sharePreviews)
+		.where(lt(sharePreviews.updatedAt, new Date(now - PREVIEW_RETENTION_MS)))
+		.returning({ id: sharePreviews.id });
 	return removed.length;
 }
 
