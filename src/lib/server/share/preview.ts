@@ -19,6 +19,8 @@ const WARM_WINDOW_MS = 60 * 60 * 1000;
 const WARM_RETENTION_MS = 24 * 60 * 60 * 1000;
 /** Preview rows are catalogue cache for links people may re-open, so they outlive the warm rows. */
 const PREVIEW_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+/** A warm younger than this isn't worth a provider call; re-opening a link shouldn't cost TMDB. */
+const PREVIEW_FRESH_MS = 12 * 60 * 60 * 1000;
 
 export type WarmResult =
 	| { kind: 'warmed'; preview: SharePreview }
@@ -28,9 +30,9 @@ export type WarmResult =
 
 const PROVIDER = 'tmdb' as const;
 
-/** The primary key: provider first, so a second provider can't collide with a TMDB id. */
-export function previewId(externalId: number): string {
-	return `${PROVIDER}:title:${externalId}`;
+/** The primary key: provider and type first, because a movie id and a show id are different titles. */
+export function previewId(type: 'movie' | 'show', externalId: number): string {
+	return `${PROVIDER}:${type}:${externalId}`;
 }
 
 /** Positive integers only — the value arrives from the client and ends up in a TMDB path. */
@@ -58,6 +60,15 @@ export async function warmTitlePreview(
 ): Promise<WarmResult> {
 	if (!isValidExternalId(opts.id)) return { kind: 'not_found' };
 	const now = opts.now ?? Date.now();
+
+	// A stored preview this fresh is what a warm would produce anyway, so don't spend a provider call
+	// on it — re-opening a shared link shouldn't cost TMDB anything.
+	const stored = await readPreview(db, opts.type, opts.id);
+	if (stored && now - stored.updatedAt < PREVIEW_FRESH_MS)
+		return { kind: 'warmed', preview: stored };
+
+	// Counted, then inserted, so concurrent requests can overshoot by however many are in flight:
+	// this is a limit against enumeration, not a hard quota.
 	if ((await countRecentWarms(db, opts.userId, now)) >= WARM_MAX_PER_HOUR)
 		return { kind: 'rate_limited' };
 
@@ -81,13 +92,17 @@ export async function warmTitlePreview(
 }
 
 /** Read a warmed preview. D1 only — this is the public read path's entire data access. */
-export async function readPreview(db: Db, externalId: number): Promise<SharePreview | null> {
+export async function readPreview(
+	db: Db,
+	type: 'movie' | 'show',
+	externalId: number
+): Promise<SharePreview | null> {
 	if (!isValidExternalId(externalId)) return null;
 	const row = (
 		await db
 			.select()
 			.from(sharePreviews)
-			.where(eq(sharePreviews.id, previewId(externalId)))
+			.where(eq(sharePreviews.id, previewId(type, externalId)))
 			.limit(1)
 	).at(0);
 	return row ? fromRow(row) : null;
@@ -154,7 +169,7 @@ function recordWarm(db: Db, userId: string, now: number) {
 
 function upsertPreview(db: Db, preview: SharePreview) {
 	const values = {
-		id: previewId(preview.externalId),
+		id: previewId(preview.type, preview.externalId),
 		provider: PROVIDER,
 		externalId: String(preview.externalId),
 		titleType: preview.type,

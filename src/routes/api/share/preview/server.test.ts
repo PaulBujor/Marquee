@@ -37,6 +37,7 @@ function makeEvent(opts: {
 	body?: unknown;
 	rawBody?: string;
 	apiKey?: string | null;
+	disabled?: boolean;
 }) {
 	const { db, user = { id: USER_ID }, apiKey = 'key' } = opts;
 	const request = new Request('http://localhost/api/share/preview', {
@@ -44,7 +45,11 @@ function makeEvent(opts: {
 		headers: { 'content-type': 'application/json' },
 		body: opts.rawBody ?? JSON.stringify(opts.body ?? { type: 'movie', id: 603 })
 	});
-	const platform = apiKey === null ? { env: {} } : { env: { TMDB_API_KEY: apiKey } };
+	const env = {
+		...(apiKey === null ? {} : { TMDB_API_KEY: apiKey }),
+		...(opts.disabled ? { SHARE_PUBLIC_DISABLED: '1' } : {})
+	};
+	const platform = { env };
 	return { locals: { user, db }, platform, request } as unknown as Event;
 }
 
@@ -70,6 +75,14 @@ afterEach(() => {
 });
 
 describe('POST /api/share/preview', () => {
+	it('503s when the surface is switched off, so nothing is stored for a dead surface', async () => {
+		const db = await makeDb();
+		const event = makeEvent({ db, disabled: true });
+
+		expect(await statusOf(() => POST(event))).toBe(503);
+		expect(await db.select().from(sharePreviews)).toHaveLength(0);
+	});
+
 	it('401s when signed out — warming requires an account', async () => {
 		const db = await makeDb();
 		expect(await statusOf(() => POST(makeEvent({ db, user: null })))).toBe(401);

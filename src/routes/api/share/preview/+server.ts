@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { problem, zodProblem } from '$lib/server/http/problem';
 import { warmTitlePreview, type WarmResult } from '$lib/server/share/preview';
+import { publicSharingEnabled } from '$lib/server/share/public';
 import type { RequestHandler } from './$types';
 
 /**
@@ -36,6 +37,8 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 
 	const apiKey = platform?.env.TMDB_API_KEY;
 	if (!apiKey) error(503, 'Shared links are not configured.');
+	// The kill switch has to cover the writes too, or previews accumulate for a surface that's off.
+	if (!publicSharingEnabled(platform?.env)) error(503, 'Shared links are not configured.');
 
 	const userId = locals.user.id;
 	let result: WarmResult;
@@ -46,8 +49,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			id: parsed.data.id
 		});
 	} catch (err) {
-		// The cause carries D1's own message — the wrapper's stack alone does not name the column or
-		// constraint that failed, which cost a debugging round trip.
+		// Log the cause: D1's own message names the column or constraint, the wrapper's stack doesn't.
 		const wrapped = err as { message?: string; cause?: unknown };
 		console.error('share preview: warm failed', wrapped?.message, wrapped?.cause);
 		error(500, 'Could not store the preview.');

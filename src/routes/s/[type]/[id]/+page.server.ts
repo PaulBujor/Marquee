@@ -13,7 +13,10 @@ import type { PageServerLoad } from './$types';
  * (see PUBLIC_SHARE_HEADERS). It reads warmed previews only, so a crawler costs no provider call.
  */
 export const load: PageServerLoad = async ({ params, locals, platform, request, setHeaders }) => {
-	// First, before any read: this is the only unauthenticated route in the app, and it's uncached.
+	// Set first so the guards below — and anything SvelteKit renders for them — carry the policy too.
+	setHeaders(PUBLIC_SHARE_HEADERS);
+
+	// Before any read: this is the unauthenticated route that serves shared content.
 	if (!(await withinRateLimit(platform?.env.PUBLIC_SHARE_LIMITER, request))) {
 		error(429, 'Too many requests.');
 	}
@@ -45,7 +48,7 @@ export const load: PageServerLoad = async ({ params, locals, platform, request, 
 	setHeaders(PUBLIC_SHARE_HEADERS);
 	if (!publicSharingEnabled(platform?.env)) return { state: 'disabled' as const, type, id };
 
-	const preview = await readPreview(db, id);
+	const preview = await readPreview(db, type, id);
 	return preview
 		? { state: 'ready' as const, type, id, preview }
 		: { state: 'cold' as const, type, id };

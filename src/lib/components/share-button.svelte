@@ -32,9 +32,8 @@
 		busy = true;
 		try {
 			const url = new URL(path, window.location.origin).toString();
-			// Warm first, capped and best-effort, so the recipient's unfurl finds a card waiting.
-			// The result is reported, not swallowed: a share whose preview never stored used to look
-			// identical to a good one, which is how a broken warm hid behind "Link copied".
+			// Warm first, capped and best-effort, so the recipient's unfurl finds a card waiting. The
+			// result is reported: a share whose preview never stored must not look like a good one.
 			const warmed = warm ? await warmPreview(warm) : 'stored';
 			const outcome = await shareLink({ title, url });
 			if (outcome === 'failed') toast.error("Couldn't share that link");

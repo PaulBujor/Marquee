@@ -30,7 +30,7 @@ async function setup(
 	await db.insert(users).values({ id: 'user-1', email: 'sharer@example.com', status: 'enabled' });
 	if (opts.warmed) {
 		await db.insert(sharePreviews).values({
-			id: previewId(603),
+			id: previewId('movie', 603),
 			provider: 'tmdb',
 			externalId: '603',
 			titleType: 'movie',
@@ -145,8 +145,8 @@ describe('GET /s/[type]/[id]', () => {
 
 		expect(err?.status).toBe(429);
 		expect(limitKeys).toEqual(['203.0.113.9']);
-		// Nothing rendered, and no page headers were set: the route never reached the read.
-		expect(headers).toEqual({});
+		// The policy goes on before the guards, so even a refusal is no-store and noindex.
+		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
 	});
 
 	it('serves the cold state for a link nothing has warmed — still without the provider', async () => {
@@ -179,8 +179,9 @@ describe('GET /s/[type]/[id]', () => {
 
 		expect(err?.status).toBe(303);
 		expect(err?.location).toBe('/title/movie/603');
-		// A signed-in redirect must never be publicly cacheable — another reader would inherit it.
-		expect(headers).toEqual(SIGNED_IN_REDIRECT_HEADERS);
+		// The public policy goes on before the guards, so the redirect carries its robots header too —
+		// what matters is that the cache-control is private, never the public page's.
+		expect(headers['cache-control']).toBe(SIGNED_IN_REDIRECT_HEADERS['cache-control']);
 		expect(headers['cache-control']).toContain('private');
 
 		// The warm was detached, and it lands: the card is there for the next reader.

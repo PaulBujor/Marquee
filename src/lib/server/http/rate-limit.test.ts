@@ -66,6 +66,21 @@ describe('withinRateLimit', () => {
 		expect(keys).toEqual(['203.0.113.9']);
 	});
 
+	it('counts an IPv6 client by its /64, so rotating the host bits shares one budget', async () => {
+		const keys: string[] = [];
+		const recording = {
+			limit: async ({ key }: { key: string }) => {
+				keys.push(key);
+				return { success: true };
+			}
+		} as RateLimit;
+
+		await withinRateLimit(recording, request('2001:db8:1:2:aaaa:bbbb:cccc:dddd'));
+		await withinRateLimit(recording, request('2001:db8:1:2:1111:2222:3333:4444'));
+
+		expect(keys).toEqual(['2001:db8:1:2::/64', '2001:db8:1:2::/64']);
+	});
+
 	it('denies a reader who is over budget', async () => {
 		expect(
 			await withinRateLimit(

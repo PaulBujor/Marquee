@@ -21,15 +21,30 @@ export async function withinRateLimit(
 	limiter: RateLimit | undefined,
 	request: Request
 ): Promise<boolean> {
-	const ip = request.headers.get('cf-connecting-ip');
-	if (!limiter || !ip) return true;
+	const key = rateLimitKey(request);
+	if (!limiter || !key) return true;
 
 	try {
-		return (await limiter.limit({ key: ip })).success;
+		return (await limiter.limit({ key })).success;
 	} catch (err) {
 		console.error('rate limit: binding failed', err);
 		return true;
 	}
+}
+
+/**
+ * The budget key for a request: an IPv6 client is counted by its /64, since a single host can rotate
+ * through its whole prefix for free and the binding counts per full address.
+ */
+export function rateLimitKey(request: Request): string | null {
+	const ip = request.headers.get('cf-connecting-ip');
+	if (!ip) return null;
+	if (!ip.includes(':')) return ip;
+
+	const groups = ip.split(':');
+	// `::` expansion isn't worth resolving: any prefix of the written form is still within the /64
+	// for the addresses a client actually rotates through, and this only decides who shares a budget.
+	return groups.slice(0, 4).join(':') + '::/64';
 }
 
 /**
