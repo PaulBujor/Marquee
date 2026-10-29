@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { Button, type ButtonSize } from '$lib/components/ui/button';
-	import { shareLink, warmPreview, type ShareWarmTarget } from '$lib/share';
+	import { shareAndWarm, type ShareWarmTarget } from '$lib/share';
 	import ShareIcon from '@lucide/svelte/icons/share-2';
 
 	interface Props {
@@ -32,10 +32,9 @@
 		busy = true;
 		try {
 			const url = new URL(path, window.location.origin).toString();
-			// Warm first, capped and best-effort, so the recipient's unfurl finds a card waiting. The
-			// result is reported: a share whose preview never stored must not look like a good one.
-			const warmed = warm ? await warmPreview(warm) : 'stored';
-			const outcome = await shareLink({ title, url });
+			// The warm runs alongside the sheet so the tap answers immediately; its outcome still picks the
+			// toast, because a share whose preview never stored must not look like a clean one.
+			const { outcome, warmed } = await shareAndWarm({ title, url }, warm);
 			if (outcome === 'failed') toast.error("Couldn't share that link");
 			else if (warmed === 'failed') toast.warning('Link shared, but no preview was stored');
 			else if (warmed === 'timeout') toast.info('Link shared — the preview may still be storing');

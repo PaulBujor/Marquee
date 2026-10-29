@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { shareLink, warmPreview, type ShareEnvironment } from './share';
+import {
+	shareAndWarm,
+	shareLink,
+	warmPreview,
+	type ShareEnvironment,
+	type WarmOutcome
+} from './share';
 
 const content = { title: 'Severance (2022)', url: 'https://marquee.example/title/show/95396' };
 
@@ -116,5 +122,39 @@ describe('warmPreview', () => {
 
 		expect(await warmPreview(target, { fetchImpl, timeoutMs: 20 })).toBe('timeout');
 		expect(aborted).toBe(true);
+	});
+});
+
+describe('shareAndWarm', () => {
+	it('opens the sheet without waiting for the warm to settle', async () => {
+		let settle: (outcome: WarmOutcome) => void = () => {};
+		const warm = vi.fn(() => new Promise<WarmOutcome>((resolve) => (settle = resolve)));
+		const share = vi.fn(async () => 'shared' as const);
+
+		const pending = shareAndWarm(content, { type: 'movie', id: 603 }, { warm, share });
+
+		// Already called, with the warm still in flight — that is the property, not an implementation
+		// detail, and it is what keeps the sheet inside the gesture that opened it.
+		expect(share).toHaveBeenCalledTimes(1);
+		expect(warm).toHaveBeenCalledWith({ type: 'movie', id: 603 });
+
+		settle('timeout');
+		expect(await pending).toEqual({ outcome: 'shared', warmed: 'timeout' });
+	});
+
+	it('still reports a preview that never stored, and skips the warm when there is nothing to warm', async () => {
+		const warm = vi.fn(async () => 'failed' as const);
+		const share = vi.fn(async () => 'copied' as const);
+
+		expect(await shareAndWarm(content, { type: 'show', id: 95396 }, { warm, share })).toEqual({
+			outcome: 'copied',
+			warmed: 'failed'
+		});
+
+		expect(await shareAndWarm(content, undefined, { warm, share })).toEqual({
+			outcome: 'copied',
+			warmed: 'stored'
+		});
+		expect(warm).toHaveBeenCalledTimes(1);
 	});
 });

@@ -66,9 +66,9 @@ export async function shareLink(
 export type ShareWarmTarget = { type: 'movie' | 'show'; id: number };
 
 /**
- * How long a share waits for the preview to be stored before opening the sheet. The recipient's
- * chat app unfurls the link within moments of the share, so the card is worth a short wait — but
- * never a long one, and never a failed share.
+ * How long the warm is given before it gives up and reports a timeout. It runs beside the sheet
+ * rather than in front of it: the recipient's app unfurls the link seconds later, but the tap has to
+ * be answered now, and `navigator.share` wants the user activation that waiting would risk.
  */
 export const WARM_TIMEOUT_MS = 1500;
 
@@ -81,6 +81,30 @@ export type WarmOutcome = 'stored' | 'timeout' | 'failed';
  * a guaranteed preview. The server side is the only place that calls TMDB, and it requires a
  * session — that separation is what stops a crawler spending provider quota.
  */
+/** Both halves of a share: how the link went out, and whether its preview was stored. */
+export interface ShareReport {
+	outcome: ShareOutcome;
+	warmed: WarmOutcome;
+}
+
+/**
+ * Share now, warm alongside. The card matters — the recipient's app unfurls the link moments after
+ * the sheet closes — but not enough to delay the sheet for, so the warm is started and left to settle
+ * while the sheet is open. Its outcome is still reported, because a link shared without its card is
+ * the outcome worth knowing about.
+ */
+export async function shareAndWarm(
+	content: ShareContent,
+	target: ShareWarmTarget | undefined,
+	impls: { warm?: typeof warmPreview; share?: typeof shareLink } = {}
+): Promise<ShareReport> {
+	const warming = target
+		? (impls.warm ?? warmPreview)(target)
+		: Promise.resolve<WarmOutcome>('stored');
+	const outcome = await (impls.share ?? shareLink)(content);
+	return { outcome, warmed: await warming };
+}
+
 export async function warmPreview(
 	target: ShareWarmTarget,
 	opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {}
