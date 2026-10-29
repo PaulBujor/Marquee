@@ -51,7 +51,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	} catch (err) {
 		// Log the cause: D1's own message names the column or constraint, the wrapper's stack doesn't.
 		const wrapped = err as { message?: string; cause?: unknown };
-		console.error('share preview: warm failed', wrapped?.message, wrapped?.cause);
+		console.error('share preview: warm failed', wrapped?.message, String(wrapped?.cause ?? ''));
 		error(500, 'Could not store the preview.');
 	}
 

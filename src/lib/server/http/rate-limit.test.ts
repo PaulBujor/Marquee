@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { rateLimitKey, slidingWindow, withinRateLimit } from './rate-limit';
+import { actorRateLimitKey, rateLimitKey, slidingWindow, withinRateLimit } from './rate-limit';
 
 describe('slidingWindow', () => {
 	it('allows hits under the cap and appends each to the kept list', () => {
@@ -47,6 +47,11 @@ function request(opts: { ip?: string; cookie?: string } = {}) {
 	});
 }
 
+/** The key the pre-auth limiter derives for a plain request. */
+async function ipKey(opts: { ip?: string; cookie?: string } = { ip: '203.0.113.9' }) {
+	return rateLimitKey(request(opts));
+}
+
 function platform(limiter: unknown) {
 	return { env: { APP_RATE_LIMITER: limiter } } as unknown as App.Platform;
 }
@@ -57,21 +62,15 @@ function limiter(impl: () => Promise<{ success: boolean }>) {
 
 describe('withinRateLimit', () => {
 	it('allows when there are no bindings at all — build, prerender and unit tests have no platform', async () => {
-		expect(
-			await withinRateLimit(undefined, 'APP_RATE_LIMITER', request({ ip: '203.0.113.9' }))
-		).toBe(true);
+		expect(await withinRateLimit(undefined, 'APP_RATE_LIMITER', await ipKey())).toBe(true);
 	});
 
 	it('allows but says so once when a deployed environment is missing the binding', async () => {
 		const bare = { env: {} } as unknown as App.Platform;
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-		expect(await withinRateLimit(bare, 'APP_RATE_LIMITER', request({ ip: '203.0.113.9' }))).toBe(
-			true
-		);
-		expect(await withinRateLimit(bare, 'APP_RATE_LIMITER', request({ ip: '203.0.113.9' }))).toBe(
-			true
-		);
+		expect(await withinRateLimit(bare, 'APP_RATE_LIMITER', await ipKey())).toBe(true);
+		expect(await withinRateLimit(bare, 'APP_RATE_LIMITER', await ipKey())).toBe(true);
 
 		// Once per isolate, not once per request.
 		expect(warn).toHaveBeenCalledTimes(1);
@@ -79,27 +78,19 @@ describe('withinRateLimit', () => {
 		warn.mockRestore();
 	});
 
-	it('keys a signed-in caller by session, hashed, so the token never reaches the limiter', async () => {
-		const keys: string[] = [];
-		const recording = {
-			limit: async ({ key }: { key: string }) => {
-				keys.push(key);
-				return { success: true };
-			}
-		} as RateLimit;
-
-		await withinRateLimit(
-			platform(recording),
-			'APP_RATE_LIMITER',
-			request({ ip: '203.0.113.9', cookie: 'session=secret-token-value' })
-		);
-
-		expect(keys).toHaveLength(1);
-		expect(keys[0]).toMatch(/^session:[0-9a-f]{64}$/);
-		expect(keys[0]).not.toContain('secret-token-value');
+	it('never keys a request on a cookie the caller chose', async () => {
+		// This runs before `authentication`, so a cookie here is unverified input: keying on it would
+		// hand anyone who sends a random one a fresh budget with every request.
+		expect(await ipKey({ ip: '203.0.113.9', cookie: 'session=forged' })).toBe('ip:203.0.113.9');
+		expect(await ipKey({ ip: '203.0.113.9' })).toBe('ip:203.0.113.9');
 	});
 
-	it('falls back to the client IP when there is no session, grouping IPv6 by its /64', async () => {
+	it('keys a verified caller by account, so two neighbours on one address do not share one budget', () => {
+		expect(actorRateLimitKey('user-1')).toBe('user:user-1');
+		expect(actorRateLimitKey(undefined)).toBeNull();
+	});
+
+	it('keys by the client IP, grouping IPv6 by its /64', async () => {
 		expect(await rateLimitKey(request({ ip: '203.0.113.9' }))).toBe('ip:203.0.113.9');
 		expect(await rateLimitKey(request({ ip: '2001:db8:1:2:aaaa:bbbb:cccc:dddd' }))).toBe(
 			'ip:2001:db8:1:2::/64'
@@ -112,16 +103,14 @@ describe('withinRateLimit', () => {
 			await withinRateLimit(
 				platform(limiter(async () => ({ success: false }))),
 				'APP_RATE_LIMITER',
-				request({ ip: '203.0.113.9' })
+				await ipKey()
 			)
 		).toBe(false);
 
 		const broken = limiter(async () => {
 			throw new Error('limiter unavailable');
 		});
-		expect(
-			await withinRateLimit(platform(broken), 'APP_RATE_LIMITER', request({ ip: '203.0.113.9' }))
-		).toBe(true);
+		expect(await withinRateLimit(platform(broken), 'APP_RATE_LIMITER', await ipKey())).toBe(true);
 	});
 });
 

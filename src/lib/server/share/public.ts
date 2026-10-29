@@ -14,7 +14,12 @@ export const PUBLIC_SHARE_HEADERS: Record<string, string> = {
 	'x-robots-tag': 'noindex, noarchive'
 };
 
-/** Off switch for the whole surface, so it can be withdrawn without a rollback. */
+/**
+ * Off switch for the whole surface, so it can be withdrawn without a rollback. `1`, `true`, `yes` and
+ * `on` all disable it, in any case: an emergency control that accepts one spelling fails silently while
+ * someone types another.
+ */
 export function publicSharingEnabled(env: { SHARE_PUBLIC_DISABLED?: string } | undefined): boolean {
-	return env?.SHARE_PUBLIC_DISABLED !== '1';
+	const value = env?.SHARE_PUBLIC_DISABLED?.trim().toLowerCase();
+	return !(value === '1' || value === 'true' || value === 'yes' || value === 'on');
 }

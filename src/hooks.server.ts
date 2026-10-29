@@ -2,7 +2,12 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { createDb } from '$lib/server/db';
 import { validateSession, deleteSessionCookie, SESSION_COOKIE } from '$lib/server/auth';
-import { noteRateLimited, withinRateLimit } from '$lib/server/http/rate-limit';
+import {
+	actorRateLimitKey,
+	noteRateLimited,
+	rateLimitKey,
+	withinRateLimit
+} from '$lib/server/http/rate-limit';
 
 // Attach a per-request Drizzle client. Only available when running with the platform
 // bindings (dev proxy / deployed Worker) — absent during prerender/build, hence the guard.
@@ -42,11 +47,13 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 	return response;
 };
 
-// Cloudflare's limiter, first in the chain so a flood is shed before it reaches D1 or the auth
-// lookup. Keyed per session when the caller has one, else per IP — see `rateLimitKey`. Loose on
-// purpose (wrangler.jsonc); the public share pages carry their own budget.
+// Cloudflare's limiter, first in the chain so a flood is shed before it reaches D1 or the auth lookup.
+// Keyed by client IP, which is all we know before authenticating — see `rateLimitKey`. Loose on purpose
+// (wrangler.jsonc); the public share pages carry their own budget.
 const rateLimit: Handle = async ({ event, resolve }) => {
-	if (!(await withinRateLimit(event.platform, 'APP_RATE_LIMITER', event.request))) {
+	if (
+		!(await withinRateLimit(event.platform, 'APP_RATE_LIMITER', await rateLimitKey(event.request)))
+	) {
 		noteRateLimited('app', event.url.pathname);
 		return new Response('Too many requests', {
 			status: 429,
@@ -56,7 +63,30 @@ const rateLimit: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
-export const handle: Handle = sequence(rateLimit, database, authentication, securityHeaders);
+// The same budget again, keyed by the account, once `authentication` has verified the session:
+// neighbours behind one NAT shouldn't spend each other's allowance, and only here is the key one the
+// caller cannot choose for themselves.
+const actorRateLimit: Handle = async ({ event, resolve }) => {
+	const key = actorRateLimitKey(event.locals.user?.id);
+	if (!key) return resolve(event);
+
+	if (!(await withinRateLimit(event.platform, 'APP_RATE_LIMITER', key))) {
+		noteRateLimited('app', event.url.pathname);
+		return new Response('Too many requests', {
+			status: 429,
+			headers: { 'content-type': 'text/plain', 'retry-after': '60' }
+		});
+	}
+	return resolve(event);
+};
+
+export const handle: Handle = sequence(
+	rateLimit,
+	database,
+	authentication,
+	actorRateLimit,
+	securityHeaders
+);
 
 // Central capture for **unexpected** server errors (uncaught throws in load/actions/endpoints —
 // e.g. a failed `/api/sync` projection or a D1 error; `error(status)` throws are "expected" and

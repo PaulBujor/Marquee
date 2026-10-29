@@ -359,7 +359,7 @@ describe('values the page has to be able to format', () => {
 		// `Intl.format(new Date(...))` throws on an invalid date, which would 500 the shared page.
 		for (const stored of ['whenever', '2024-1-1', '2024-01-01T00:00:00Z', '']) {
 			await db.update(sharePreviews).set({ releasedOn: stored });
-			expect((await readPreview(db, 603))?.releasedOn).toBeNull();
+			expect((await readPreview(db, 'movie', 603))?.releasedOn).toBeNull();
 		}
 	});
 });

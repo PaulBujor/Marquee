@@ -1,5 +1,3 @@
-import { SESSION_COOKIE } from '$lib/server/auth/session';
-
 /**
  * A tiny, pure sliding-window rate limiter. Given the timestamps of a key's recent hits, it prunes
  * those outside the window, decides whether this hit is allowed, and returns the list to store back.
@@ -16,15 +14,16 @@ export interface RateLimitResult {
 }
 
 /**
- * Ask Cloudflare's limiter whether this request may proceed, keyed by a stable actor rather than the
- * resource the caller is usually enumerating. It fails open — an anti-abuse backstop must not be what
- * takes the app down — but a binding that is missing in a deployed environment says so once per
- * isolate, because "silently unlimited" is the one failure that must not pass unnoticed.
+ * Ask Cloudflare's limiter whether this request may proceed, for a key the caller has decided
+ * identifies the caller: the client IP before we know who they are, the account afterwards. It fails
+ * open — an anti-abuse backstop must not be what takes the app down — but a binding that is missing in
+ * a deployed environment says so once per isolate, because "silently unlimited" is the one failure
+ * that must not pass unnoticed.
  */
 export async function withinRateLimit(
 	platform: App.Platform | undefined,
 	binding: 'PUBLIC_SHARE_LIMITER' | 'APP_RATE_LIMITER',
-	request: Request
+	key: string | null
 ): Promise<boolean> {
 	// No platform at all means build/prerender or a unit test, not a deployment missing a binding.
 	if (!platform) return true;
@@ -35,7 +34,6 @@ export async function withinRateLimit(
 		return true;
 	}
 
-	const key = await rateLimitKey(request);
 	if (!key) return true;
 
 	try {
@@ -54,14 +52,12 @@ function warnOnce(message: string): void {
 }
 
 /**
- * The budget key for a request: the session cookie when there is one — a stable actor, and hashed so
- * the token itself never reaches the limiter — otherwise the client IP, with IPv6 grouped by /64
- * because one host can rotate through its whole prefix for free.
+ * The budget key for a request we have not authenticated yet: the client IP, with IPv6 grouped by /64
+ * because one host can rotate through its whole prefix for free. Deliberately **not** the session
+ * cookie: this runs before `authentication`, so any cookie here is a value the caller chose, and keying
+ * on it would hand an attacker a fresh budget with every request.
  */
 export async function rateLimitKey(request: Request): Promise<string | null> {
-	const session = readCookie(request, SESSION_COOKIE);
-	if (session) return `session:${await sha256Hex(session)}`;
-
 	const ip = request.headers.get('cf-connecting-ip');
 	if (!ip) return null;
 	if (!ip.includes(':')) return `ip:${ip}`;
@@ -72,22 +68,12 @@ export async function rateLimitKey(request: Request): Promise<string | null> {
 	return `ip:${groups.slice(0, 4).join(':')}::/64`;
 }
 
-function readCookie(request: Request, name: string): string | null {
-	const header = request.headers.get('cookie');
-	if (!header) return null;
-
-	for (const part of header.split(';')) {
-		const [key, ...rest] = part.trim().split('=');
-		if (key === name) return rest.join('=') || null;
-	}
-	return null;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-	return Array.from(new Uint8Array(digest))
-		.map((byte) => byte.toString(16).padStart(2, '0'))
-		.join('');
+/**
+ * The budget key for a caller whose session we have verified: the account, so several people behind one
+ * NAT don't spend each other's budget. A user id is not a credential, so it isn't hashed here.
+ */
+export function actorRateLimitKey(userId: string | undefined): string | null {
+	return userId ? `user:${userId}` : null;
 }
 
 /**

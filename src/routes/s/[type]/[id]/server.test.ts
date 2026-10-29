@@ -22,6 +22,10 @@ async function setup(
 		id?: string;
 		withDb?: boolean;
 		disabled?: boolean;
+		/** A cookie to send, for the forged-session regression guard. */
+		cookie?: string;
+		/** The raw env value, for the spellings the kill switch has to accept. */
+		disabledValue?: string;
 		warmed?: boolean;
 		limited?: boolean;
 	} = {}
@@ -61,12 +65,15 @@ async function setup(
 	const event = {
 		params: { type: opts.type ?? 'movie', id: opts.id ?? '603' },
 		request: new Request('https://marquee.example/s/movie/603', {
-			headers: { 'cf-connecting-ip': '203.0.113.9' }
+			headers: {
+				'cf-connecting-ip': '203.0.113.9',
+				...(opts.cookie ? { cookie: opts.cookie } : {})
+			}
 		}),
 		locals: { user: opts.user ?? null, db: opts.withDb === false ? undefined : db },
 		platform: {
 			env: {
-				...(opts.disabled ? { SHARE_PUBLIC_DISABLED: '1' } : {}),
+				...(opts.disabled ? { SHARE_PUBLIC_DISABLED: opts.disabledValue ?? '1' } : {}),
 				TMDB_API_KEY: 'key',
 				PUBLIC_SHARE_LIMITER: {
 					limit: async ({ key }: { key: string }) => {
@@ -199,5 +206,45 @@ describe('GET /s/[type]/[id]', () => {
 		await Promise.all(pending);
 		const rows = await db.select().from(sharePreviews);
 		expect(rows[0]?.name).toBe('The Matrix');
+	});
+
+	it('treats any spelling of the kill switch as off, not just "1"', async () => {
+		for (const value of ['1', 'true', 'TRUE', 'yes', 'on', ' true ']) {
+			const { event } = await setup({ disabled: true, disabledValue: value, warmed: true });
+			const { data } = await outcome(() => load(event));
+			expect(data?.state, `SHARE_PUBLIC_DISABLED=${value}`).toBe('disabled');
+		}
+
+		// ...and anything else — including an explicit "0" — leaves the surface up.
+		for (const value of ['0', 'false', '']) {
+			const { event } = await setup({ disabled: true, disabledValue: value, warmed: true });
+			const { data } = await outcome(() => load(event));
+			expect(data?.state, `SHARE_PUBLIC_DISABLED=${value}`).toBe('ready');
+		}
+	});
+
+	it('cannot buy a fresh budget by inventing a session cookie', async () => {
+		// The limiter runs before authentication, so this cookie is unverified input: it must not become
+		// the budget key, or one client gets a new allowance with every request it makes.
+		const { event, limitKeys } = await setup({ warmed: true, cookie: 'session=forged-token' });
+		await outcome(() => load(event));
+
+		expect(limitKeys).toEqual(['ip:203.0.113.9']);
+	});
+
+	it('does not warm for a signed-in reader when the surface is off', async () => {
+		const fetchSpy = vi.fn(async () => new Response(JSON.stringify(MOVIE)));
+		vi.stubGlobal('fetch', fetchSpy);
+		const { event, db, pending } = await setup({ user: { id: 'user-1' }, disabled: true });
+
+		const { err } = await outcome(() => load(event));
+
+		// Still sent on to the title page: the reader asked for a title, not for a share page.
+		expect(err?.status).toBe(303);
+		expect(err?.location).toBe('/title/movie/603');
+		// The kill switch covers the write path too: no provider call, nothing stored.
+		expect(pending).toHaveLength(0);
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(await db.select().from(sharePreviews)).toHaveLength(0);
 	});
 });

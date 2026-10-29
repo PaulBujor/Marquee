@@ -1,6 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import { readPreview, warmTitlePreview } from '$lib/server/share/preview';
-import { noteRateLimited, withinRateLimit } from '$lib/server/http/rate-limit';
+import { noteRateLimited, rateLimitKey, withinRateLimit } from '$lib/server/http/rate-limit';
 import { PUBLIC_SHARE_HEADERS, publicSharingEnabled } from '$lib/server/share/public';
 import type { PageServerLoad } from './$types';
 
@@ -16,7 +16,7 @@ export const load: PageServerLoad = async ({ params, locals, platform, request, 
 	setHeaders(PUBLIC_SHARE_HEADERS);
 
 	// Before any read: this is the unauthenticated route that serves shared content.
-	if (!(await withinRateLimit(platform, 'PUBLIC_SHARE_LIMITER', request))) {
+	if (!(await withinRateLimit(platform, 'PUBLIC_SHARE_LIMITER', await rateLimitKey(request)))) {
 		noteRateLimited('share', new URL(request.url).pathname);
 		error(429, 'Too many requests.');
 	}
@@ -26,6 +26,13 @@ export const load: PageServerLoad = async ({ params, locals, platform, request, 
 	if (!type || !Number.isInteger(id) || id <= 0) error(404, 'Not found.');
 	if (!locals.db) error(503, 'Service unavailable');
 	const db = locals.db;
+
+	// The kill switch covers the writes too, not just what is served: with the surface off, a signed-in
+	// visitor is still sent on to the title page, but nothing is warmed for a page nobody can open.
+	if (!publicSharingEnabled(platform?.env)) {
+		if (locals.user) redirect(303, `/title/${type}/${id}`);
+		return { state: 'disabled' as const, type, id };
+	}
 
 	if (locals.user) {
 		// The sharer (or any signed-in reader) opening the link: warm it on the way past, so the
@@ -37,14 +44,16 @@ export const load: PageServerLoad = async ({ params, locals, platform, request, 
 					// The cause carries D1's own message; the wrapper's stack alone does not name the
 					// column or constraint that failed.
 					const wrapped = err as { message?: string; cause?: unknown };
-					console.error('share page: warm on view failed', wrapped?.message, wrapped?.cause);
+					console.error(
+						'share page: warm on view failed',
+						wrapped?.message,
+						String(wrapped?.cause ?? '')
+					);
 				})
 			);
 		}
 		redirect(303, `/title/${type}/${id}`);
 	}
-
-	if (!publicSharingEnabled(platform?.env)) return { state: 'disabled' as const, type, id };
 
 	const preview = await readPreview(db, type, id);
 	return preview
