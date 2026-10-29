@@ -14,6 +14,25 @@ export interface RateLimitResult {
 }
 
 /**
+ * Ask Cloudflare's limiter whether this request may proceed, keyed by client IP. Anything missing or
+ * broken (no binding, no IP, a throwing binding) allows: a backstop must not take the app down.
+ */
+export async function withinRateLimit(
+	limiter: RateLimit | undefined,
+	request: Request
+): Promise<boolean> {
+	const ip = request.headers.get('cf-connecting-ip');
+	if (!limiter || !ip) return true;
+
+	try {
+		return (await limiter.limit({ key: ip })).success;
+	} catch (err) {
+		console.error('rate limit: binding failed', err);
+		return true;
+	}
+}
+
+/**
  * @param hits Timestamps (epoch ms) of prior hits for this key.
  * @param now Current time (epoch ms).
  * @param windowMs Length of the sliding window.

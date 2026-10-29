@@ -23,6 +23,7 @@ async function setup(
 		withDb?: boolean;
 		disabled?: boolean;
 		warmed?: boolean;
+		limited?: boolean;
 	} = {}
 ) {
 	const db = createTestDb();
@@ -56,19 +57,30 @@ async function setup(
 
 	const headers: Record<string, string> = {};
 	const pending: Promise<unknown>[] = [];
+	const limitKeys: string[] = [];
 	const event = {
 		params: { type: opts.type ?? 'movie', id: opts.id ?? '603' },
+		request: new Request('https://marquee.example/s/movie/603', {
+			headers: { 'cf-connecting-ip': '203.0.113.9' }
+		}),
 		locals: { user: opts.user ?? null, db: opts.withDb === false ? undefined : db },
 		platform: {
-			env: opts.disabled
-				? { SHARE_PUBLIC_DISABLED: '1', TMDB_API_KEY: 'key' }
-				: { TMDB_API_KEY: 'key' },
+			env: {
+				...(opts.disabled ? { SHARE_PUBLIC_DISABLED: '1' } : {}),
+				TMDB_API_KEY: 'key',
+				PUBLIC_SHARE_LIMITER: {
+					limit: async ({ key }: { key: string }) => {
+						limitKeys.push(key);
+						return { success: !opts.limited };
+					}
+				}
+			},
 			ctx: { waitUntil: (promise: Promise<unknown>) => pending.push(promise) }
 		},
 		setHeaders: (values: Record<string, string>) => Object.assign(headers, values)
 	} as unknown as Event;
 
-	return { event, headers, db, pending };
+	return { event, headers, db, pending, limitKeys };
 }
 
 /** The load answers with page data, or throws an `error()`/`redirect()`. */
@@ -124,6 +136,17 @@ describe('GET /s/[type]/[id]', () => {
 
 		expect(headers['cache-control']).toBe('no-store');
 		expect(headers['x-robots-tag']).toBe('noindex, noarchive');
+	});
+
+	it('sheds a flood before reading anything, keyed by the client IP', async () => {
+		const { event, headers, limitKeys } = await setup({ warmed: true, limited: true });
+
+		const { err } = await outcome(() => load(event));
+
+		expect(err?.status).toBe(429);
+		expect(limitKeys).toEqual(['203.0.113.9']);
+		// Nothing rendered, and no page headers were set: the route never reached the read.
+		expect(headers).toEqual({});
 	});
 
 	it('serves the cold state for a link nothing has warmed — still without the provider', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { slidingWindow } from './rate-limit';
+import { slidingWindow, withinRateLimit } from './rate-limit';
 
 describe('slidingWindow', () => {
 	it('allows hits under the cap and appends each to the kept list', () => {
@@ -33,5 +33,52 @@ describe('slidingWindow', () => {
 		const { result } = slidingWindow([1000, 1000, 1000], 60_500, 60_000, 3);
 		expect(result.limited).toBe(true);
 		expect(result.retryAfterSec).toBe(1);
+	});
+});
+
+describe('withinRateLimit', () => {
+	const request = (ip?: string) =>
+		new Request('https://marquee.example/s/movie/603', {
+			headers: ip ? { 'cf-connecting-ip': ip } : {}
+		});
+	const limiter = (impl: () => Promise<{ success: boolean }>) => ({ limit: impl }) as RateLimit;
+
+	it('allows when there is no binding or no client IP, so dev and tests are unaffected', async () => {
+		expect(await withinRateLimit(undefined, request('203.0.113.9'))).toBe(true);
+		expect(
+			await withinRateLimit(
+				limiter(async () => ({ success: true })),
+				request()
+			)
+		).toBe(true);
+	});
+
+	it('keys the budget on the client IP', async () => {
+		const keys: string[] = [];
+		const recording = {
+			limit: async ({ key }: { key: string }) => {
+				keys.push(key);
+				return { success: true };
+			}
+		} as RateLimit;
+
+		await withinRateLimit(recording, request('203.0.113.9'));
+		expect(keys).toEqual(['203.0.113.9']);
+	});
+
+	it('denies a reader who is over budget', async () => {
+		expect(
+			await withinRateLimit(
+				limiter(async () => ({ success: false })),
+				request('203.0.113.9')
+			)
+		).toBe(false);
+	});
+
+	it('allows when the limiter itself fails — a backstop must not take the app down', async () => {
+		const broken = limiter(async () => {
+			throw new Error('limiter unavailable');
+		});
+		expect(await withinRateLimit(broken, request('203.0.113.9'))).toBe(true);
 	});
 });

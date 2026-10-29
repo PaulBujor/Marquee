@@ -5,15 +5,9 @@
  */
 
 /**
- * Headers for every public share page.
- *
- * Deliberately uncached, because a cache key ignores the session cookie: a stored anonymous copy
- * was served to signed-in readers (no redirect, no warm on view) and a cold card outlived the warm
- * that filled it. The service worker skips these paths for the same reason; caching can return once
- * a warm can purge its own URL.
- *
- * `noindex` rather than a `robots.txt` Disallow: a Disallow also blocks Twitter/Slack unfurling,
- * whereas `noindex` only keeps the page out of search results, which is what's wanted here.
+ * Headers for every public share page. Deliberately uncached: a cache key ignores the session
+ * cookie, so a stored copy served signed-in readers the anonymous page. `noindex` rather than a
+ * `robots.txt` Disallow, which would also block chat unfurling.
  */
 export const PUBLIC_SHARE_HEADERS: Record<string, string> = {
 	'cache-control': 'no-store',

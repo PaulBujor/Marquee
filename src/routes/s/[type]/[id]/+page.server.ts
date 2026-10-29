@@ -1,5 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import { readPreview, warmTitlePreview } from '$lib/server/share/preview';
+import { withinRateLimit } from '$lib/server/http/rate-limit';
 import {
 	PUBLIC_SHARE_HEADERS,
 	SIGNED_IN_REDIRECT_HEADERS,
@@ -8,13 +9,15 @@ import {
 import type { PageServerLoad } from './$types';
 
 /**
- * The page a shared title link opens. Server-rendered because a link unfurler does not run
- * JavaScript — the card has to be in the initial HTML — and never cached; see PUBLIC_SHARE_HEADERS.
- *
- * It reads warmed previews only. Warming needs a session (see `/api/share/preview`), so following
- * a shared link can never cost a provider call, however many crawlers walk it.
+ * The page a shared title link opens: server-rendered (an unfurler runs no JavaScript) and uncached
+ * (see PUBLIC_SHARE_HEADERS). It reads warmed previews only, so a crawler costs no provider call.
  */
-export const load: PageServerLoad = async ({ params, locals, platform, setHeaders }) => {
+export const load: PageServerLoad = async ({ params, locals, platform, request, setHeaders }) => {
+	// First, before any read: this is the only unauthenticated route in the app, and it's uncached.
+	if (!(await withinRateLimit(platform?.env.PUBLIC_SHARE_LIMITER, request))) {
+		error(429, 'Too many requests.');
+	}
+
 	const type = params.type === 'movie' || params.type === 'show' ? params.type : null;
 	const id = Number(params.id);
 	if (!type || !Number.isInteger(id) || id <= 0) error(404, 'Not found.');

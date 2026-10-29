@@ -10,6 +10,22 @@
 	},
 	"workers_dev": true,
 	"preview_urls": true,
+	// Public share pages are the only unauthenticated, cached-nothing route, so they get a tight
+	// per-IP budget; the app-wide limiter below is the backstop for everything else.
+	"ratelimits": [
+		{
+			"name": "PUBLIC_SHARE_LIMITER",
+			"namespace_id": "1001",
+			"simple": { "limit": 20, "period": 60 }
+		},
+		{
+			// Deliberately loose: a page load plus its API calls is a dozen requests, and a first
+			// sync can be chatty. This exists to stop a runaway, not to shape normal traffic.
+			"name": "APP_RATE_LIMITER",
+			"namespace_id": "1002",
+			"simple": { "limit": 300, "period": 60 }
+		}
+	],
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -71,6 +87,19 @@
 	"env": {
 		"preview": {
 			"name": "marquee-preview",
+			// Mirrors the prod bindings above — see the rationale there.
+			"ratelimits": [
+				{
+					"name": "PUBLIC_SHARE_LIMITER",
+					"namespace_id": "1001",
+					"simple": { "limit": 20, "period": 60 }
+				},
+				{
+					"name": "APP_RATE_LIMITER",
+					"namespace_id": "1002",
+					"simple": { "limit": 300, "period": 60 }
+				}
+			],
 			"d1_databases": [
 				{
 					"binding": "DB",
