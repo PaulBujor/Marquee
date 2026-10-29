@@ -41,6 +41,23 @@ describe('safeRedirectPath', () => {
 		expect(safeRedirectPath('/set\ntings')).toBe('/');
 	});
 
+	it('falls back on a scheme that is not a path, and on anything normalising into another origin', () => {
+		expect(safeRedirectPath('javascript:alert(1)')).toBe('/');
+		expect(safeRedirectPath('mailto:someone@example.com')).toBe('/');
+		expect(safeRedirectPath('/\tevil.example')).toBe('/');
+		// `..` segments, and their encoded forms, are resolved by the parser — so the result can start `//`.
+		expect(safeRedirectPath('/..//evil.example')).toBe('/');
+		expect(safeRedirectPath('/%2e%2e//evil.example')).toBe('/');
+		expect(safeRedirectPath('/./..//evil.example')).toBe('/');
+	});
+
+	it('returns the parser normalised path rather than the raw input', () => {
+		expect(safeRedirectPath('/title/./movie/603')).toBe('/title/movie/603');
+		expect(safeRedirectPath('/title/season/../movie/603')).toBe('/title/movie/603');
+		// A backslash is a slash to a browser, so the path it meant is the one returned.
+		expect(safeRedirectPath('/title\\movie\\603')).toBe('/title/movie/603');
+	});
+
 	it('honours a caller-supplied fallback', () => {
 		expect(safeRedirectPath('https://evil.example', '')).toBe('');
 	});
