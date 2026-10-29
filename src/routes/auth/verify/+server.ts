@@ -1,5 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import { setSessionCookie, verifyMagicLink } from '$lib/server/auth';
+import { safeRedirectPath } from '$lib/redirect';
 import type { RequestHandler } from './$types';
 
 // Single-use token in the query string (keeps the email link no-JS friendly);
@@ -14,5 +15,6 @@ export const GET: RequestHandler = async ({ url, locals, cookies }) => {
 	if (!result.ok) redirect(303, `/login?error=${result.reason}`);
 
 	setSessionCookie(cookies, result.token, result.expiresAt);
-	redirect(303, '/');
+	// Re-validated here: the query string is user-editable.
+	redirect(303, safeRedirectPath(url.searchParams.get('redirectTo')));
 };

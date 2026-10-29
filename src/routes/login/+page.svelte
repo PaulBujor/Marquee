@@ -32,6 +32,8 @@
 	const email = $derived(form && 'email' in form ? form.email : '');
 	const failMessage = $derived(form && 'message' in form ? form.message : null);
 	const codeError = $derived(form && 'codeError' in form ? form.codeError : null);
+	// Carried through both steps so a shared link survives the sign-in detour.
+	const redirectTo = $derived(data.redirectTo);
 	// Browser gets a link + code in one email; standalone gets a code only. `combined`
 	// drives the "check your inbox" header and is echoed through ?/verify so it survives
 	// a wrong-code retry.
@@ -102,6 +104,7 @@
 		<input type="hidden" name="email" value={email} />
 		<input type="hidden" name="code" value={code} />
 		<input type="hidden" name="method" value={method ?? 'code'} />
+		<input type="hidden" name="redirectTo" value={redirectTo} />
 		<InputOTP.Root
 			maxlength={6}
 			bind:value={code}
@@ -195,6 +198,7 @@
 			<Card.Content>
 				<form method="POST" action="?/request" class="flex flex-col gap-3" use:enhance={track}>
 					<input type="hidden" name="mode" value={mode} />
+					<input type="hidden" name="redirectTo" value={redirectTo} />
 					<Input
 						type="email"
 						name="email"
