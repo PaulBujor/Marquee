@@ -1,5 +1,7 @@
 import { env } from '#lib/server/bindings.js';
+import { error } from '@sveltejs/kit';
 import { sequence, type Handle, type HandleServerError } from '@sveltejs/kit/hooks';
+import { isAdminPath } from '#lib/server/admin/guard.js';
 import { createDb } from '#lib/server/db/index.js';
 import { validateSession, deleteSessionCookie, SESSION_COOKIE } from '#lib/server/auth/index.js';
 import {
@@ -35,6 +37,14 @@ const authentication: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
+// Ahead of routing, so endpoints and `__data.json` fetches are covered as well as pages and actions;
+// layout loads never run for those, which is why the gate cannot live in the layout alone.
+const adminOnly: Handle = async ({ event, resolve }) => {
+	if (!isAdminPath(event.url.pathname)) return resolve(event);
+	if (event.locals.user?.role !== 'admin') error(404, 'Not found');
+	return resolve(event);
+};
+
 // Baseline security headers on every response. CSP is configured separately via kit.csp
 // in svelte.config.js (it needs SvelteKit's nonce/hash augmentation for inline scripts).
 const securityHeaders: Handle = async ({ event, resolve }) => {
@@ -46,6 +56,11 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 	response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
 	// Cloudflare only marks the workers.dev preview URLs noindex; custom-domain Previews get it here.
 	if (env.PREVIEW_NOINDEX) response.headers.set('X-Robots-Tag', 'noindex');
+	// Here rather than in the admin layout: SvelteKit throws when one response sets a header twice.
+	if (isAdminPath(event.url.pathname)) {
+		response.headers.set('Cache-Control', 'no-store');
+		response.headers.set('X-Robots-Tag', 'noindex');
+	}
 	return response;
 };
 
@@ -84,6 +99,7 @@ export const handle: Handle = sequence(
 	rateLimit,
 	database,
 	authentication,
+	adminOnly,
 	actorRateLimit,
 	securityHeaders
 );

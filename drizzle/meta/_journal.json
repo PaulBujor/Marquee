@@ -176,13 +176,19 @@
 			"when": 1793258715143,
 			"tag": "0024_rekey_share_previews",
 			"breakpoints": true
-		}
-,
+		},
 		{
 			"idx": 25,
 			"version": "6",
 			"when": 1793264242538,
 			"tag": "0025_share_preview_trailer",
+			"breakpoints": true
+		},
+		{
+			"idx": 26,
+			"version": "6",
+			"when": 1793296497823,
+			"tag": "0026_admin_role_and_audit_log",
 			"breakpoints": true
 		}
 	]

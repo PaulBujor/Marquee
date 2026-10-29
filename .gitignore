@@ -63,3 +63,6 @@ dev-assets/pwa-assets/
 
 # OpenCode agent runtime data
 .omo/
+
+# Hermes Agent plans and local scratch
+.hermes/
