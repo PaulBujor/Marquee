@@ -17,7 +17,7 @@ import {
 	type TrackingRow,
 	type TrackingView
 } from './actions';
-import type { TrackingStatus } from '$lib/sync/events';
+import type { TrackingStatus } from '#lib/sync/events.js';
 
 /** The context `deriveStatus` needs beyond the projected status itself. */
 export interface StatusDerivationContext {

@@ -1,9 +1,9 @@
 import { error, json } from '@sveltejs/kit';
-import { createTmdbClient } from '$lib/server/tmdb';
-import { processMediaRefreshBatch } from '$lib/server/media/refresh-consumer';
-import type { MediaRefreshMessage } from '$lib/server/media/refresh-consumer';
-import type { QueueEnvelope, QueueOutcome } from '$lib/server/queue/types';
-import { isAuthorizedCronRequest } from '$lib/server/http/secret';
+import { createTmdbClient } from '#lib/server/tmdb/index.js';
+import { processMediaRefreshBatch } from '#lib/server/media/refresh-consumer.js';
+import type { MediaRefreshMessage } from '#lib/server/media/refresh-consumer.js';
+import type { QueueEnvelope, QueueOutcome } from '#lib/server/queue/types.js';
+import { isAuthorizedCronRequest } from '#lib/server/http/secret.js';
 import type { RequestHandler } from './$types';
 
 interface Body {

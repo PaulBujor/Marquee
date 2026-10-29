@@ -1,7 +1,7 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
-import type { createDb } from '$lib/server/db';
-import type { User } from '$lib/server/db/schema';
+import type { createDb } from '#lib/server/db/index.js';
+import type { User } from '#lib/server/db/schema.js';
 
 declare global {
 	// App-consumed env vars/secrets, declared explicitly so they're typed even

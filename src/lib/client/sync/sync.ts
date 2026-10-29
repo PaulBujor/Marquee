@@ -9,10 +9,10 @@ import {
 	getUnsynced,
 	markSynced,
 	setCursor
-} from '$lib/client/idb';
-import { assertAuthed } from '$lib/client/session';
-import { fetchWithTimeout } from '$lib/resilience';
-import { SYNC_MAX_PUSH, type SyncRequest, type SyncResponse } from '$lib/sync/protocol';
+} from '#lib/client/idb/index.js';
+import { assertAuthed } from '#lib/client/session.js';
+import { fetchWithTimeout } from '#lib/resilience.js';
+import { SYNC_MAX_PUSH, type SyncRequest, type SyncResponse } from '#lib/sync/protocol.js';
 
 /**
  * Wall-clock budget per sync round trip. Generous — a large push against a slow connection is

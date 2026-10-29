@@ -5,7 +5,7 @@ import {
 	type LinkSourceWatch,
 	type LinkTarget
 } from './custom-media-link';
-import { createEvent, tmdbMediaId, validateEvent, type EventPayloadMap } from '$lib/sync/events';
+import { createEvent, tmdbMediaId, validateEvent, type EventPayloadMap } from '#lib/sync/events.js';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 const CUSTOM_ID = '99999999-9999-4999-8999-999999999999';

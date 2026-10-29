@@ -3,10 +3,10 @@
  * hydrating from a provider. Custom rows are owner-scoped and never overwritten by shared data.
  */
 import { and, eq, inArray } from 'drizzle-orm';
-import { credits, episodes, media, seasons, type Media } from '$lib/server/db/schema';
-import { chunkIds } from '$lib/server/db/chunk';
-import type { createDb } from '$lib/server/db';
-import type { ValidatedCustomMedia } from '$lib/sync/media-protocol';
+import { credits, episodes, media, seasons, type Media } from '#lib/server/db/schema.js';
+import { chunkIds } from '#lib/server/db/chunk.js';
+import type { createDb } from '#lib/server/db/index.js';
+import type { ValidatedCustomMedia } from '#lib/sync/media-protocol.js';
 import { creditRowsFromCustom, creditSignature, syncCredits, syncOwnedPeople } from './credits';
 import {
 	episodeSignature,

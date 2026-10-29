@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Card from '$lib/components/ui/card';
+	import * as Card from '#lib/components/ui/card/index.js';
 </script>
 
 <Card.Root data-spec-ref="settings-credits-section">

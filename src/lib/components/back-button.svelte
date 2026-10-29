@@ -10,9 +10,9 @@
 	// link adds. The title-detail page keeps its own richer control (suggestion-chain origin).
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Button } from '$lib/components/ui/button';
-	import { navigation } from '$lib/state/navigation.svelte.js';
-	import { cn } from '$lib/utils.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { navigation } from '#lib/state/navigation.svelte.js';
+	import { cn } from '#lib/utils.js';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 
 	interface Props {

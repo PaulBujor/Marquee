@@ -1,6 +1,6 @@
 /** The local event outbox: enqueue local events, read the unsynced ones, ack pushed ones. */
 import { openDb } from './db';
-import type { EventEnvelope } from '$lib/sync/events';
+import type { EventEnvelope } from '#lib/sync/events.js';
 
 /** Add a locally-produced event to the outbox (pending push). */
 export async function enqueueEvent(event: EventEnvelope): Promise<void> {

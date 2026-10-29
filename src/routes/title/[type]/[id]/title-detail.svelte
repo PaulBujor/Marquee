@@ -4,31 +4,31 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { Button } from '$lib/components/ui/button';
-	import ExpandableText from '$lib/components/expandable-text.svelte';
-	import MediaBadge from '$lib/components/media/media-badge.svelte';
-	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
-	import PosterTile from '$lib/components/media/poster-tile.svelte';
-	import TitleMetaRow from '$lib/components/media/title-meta-row.svelte';
-	import TrailerPlayer from '$lib/components/media/trailer-player.svelte';
-	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
-	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
-	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
-	import MediaImage from '$lib/components/media/media-image.svelte';
-	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
-	import LinkedEntryNotice from '$lib/components/media/linked-entry-notice.svelte';
-	import ShareButton from '$lib/components/share-button.svelte';
-	import HeaderScrim from '$lib/components/header-scrim.svelte';
-	import OfflineState from '$lib/components/offline-state.svelte';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { hasDescription, posterUrl } from '$lib/media.js';
-	import { formatExactDateTime, formatRelativeDay } from '$lib/date.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import ExpandableText from '#lib/components/expandable-text.svelte';
+	import MediaBadge from '#lib/components/media/media-badge.svelte';
+	import MediaTypeLabel from '#lib/components/media/media-type-label.svelte';
+	import PosterTile from '#lib/components/media/poster-tile.svelte';
+	import TitleMetaRow from '#lib/components/media/title-meta-row.svelte';
+	import TrailerPlayer from '#lib/components/media/trailer-player.svelte';
+	import TrackingControls from '#lib/components/media/tracking-controls.svelte';
+	import NextEpisodeRow from '#lib/components/media/next-episode-row.svelte';
+	import ConfirmDialog from '#lib/components/media/confirm-dialog.svelte';
+	import MediaImage from '#lib/components/media/media-image.svelte';
+	import PersonAvatar from '#lib/components/media/person-avatar.svelte';
+	import LinkedEntryNotice from '#lib/components/media/linked-entry-notice.svelte';
+	import ShareButton from '#lib/components/share-button.svelte';
+	import HeaderScrim from '#lib/components/header-scrim.svelte';
+	import OfflineState from '#lib/components/offline-state.svelte';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import { hasDescription, posterUrl } from '#lib/media.js';
+	import { formatExactDateTime, formatRelativeDay } from '#lib/date.js';
 	import {
 		tmdbMediaId,
 		tmdbExternalId,
 		type MediaRecord,
 		type TrackingStatus
-	} from '$lib/sync/events';
+	} from '#lib/sync/events.js';
 	import {
 		productionState,
 		isAired,
@@ -36,18 +36,23 @@
 		todayIso,
 		watchedKey,
 		type DatedEpisode
-	} from '$lib/tracking/actions';
-	import { deriveStatus } from '$lib/tracking/derive-status';
-	import { TrackingState } from '$lib/tracking/tracking.svelte';
-	import { getTracking, getEpisodes, getAllMedia, getEpisodeWatches } from '$lib/client/idb';
-	import { offlineSeason } from '$lib/client/media/offline-detail';
-	import { sync } from '$lib/client/sync/engine.svelte.js';
-	import { navigation } from '$lib/state/navigation.svelte.js';
+	} from '#lib/tracking/actions.js';
+	import { deriveStatus } from '#lib/tracking/derive-status.js';
+	import { TrackingState } from '#lib/tracking/tracking.svelte.js';
+	import {
+		getTracking,
+		getEpisodes,
+		getAllMedia,
+		getEpisodeWatches
+	} from '#lib/client/idb/index.js';
+	import { offlineSeason } from '#lib/client/media/offline-detail.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { navigation } from '#lib/state/navigation.svelte.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import type { CrewMember, MediaDetail, SeasonDetail } from '$lib/server/tmdb';
+	import type { CrewMember, MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 
 	// `detail` is always present — the cached IndexedDB copy first, upgraded in place to the full
 	// network copy. `enrichState` says how to render the network-only sections (cast, trailer,
@@ -200,11 +205,13 @@
 	const currentSeason = $derived(
 		selectedSeason !== null ? (seasonCache[selectedSeason] ?? null) : null
 	);
+
 	const selectedSeasonSummary = $derived(
 		selectedSeason !== null
 			? (detail.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
 			: null
 	);
+
 	// The loaded season carries the real synopsis; the summary stands in until it resolves.
 	const selectedSeasonOverview = $derived(
 		[currentSeason?.overview, selectedSeasonSummary?.overview].find(hasDescription) ?? null
@@ -238,9 +245,11 @@
 	$effect(() => {
 		const el = titleEl;
 		if (!el || typeof IntersectionObserver === 'undefined') return;
+
 		const io = new IntersectionObserver(([entry]) => (titleInView = entry.isIntersecting), {
 			rootMargin: '-56px 0px 0px 0px'
 		});
+
 		io.observe(el);
 		return () => io.disconnect();
 	});
@@ -297,7 +306,9 @@
 	// Reset the per-title view state whenever the media changes — a title → title hop via a "Similar"
 	// link reuses this component. The entering navigation's origin lives in the shared `navigation`
 	// state (fed by the root layout), so it no longer needs to be captured here.
-	afterNavigate(() => {
+	afterNavigate(({ shallow, type }) => {
+		if (shallow && type === 'goto') return;
+
 		showTrailer = false;
 		titleInView = true;
 		preselectedFor = null;
@@ -372,7 +383,11 @@
 an entity because Svelte trims a literal trailing space at the end of an element. -->
 {#snippet crewNames(members: CrewMember[])}
 	{#each members as member, i (member.id)}
-		{#if i > 0}<span>,&#32;</span>{/if}<a
+		{#if i > 0}
+			<span>,</span>
+		{/if}
+
+		<a
 			href={personHref(member.id)}
 			class="underline decoration-dotted underline-offset-4 hover:decoration-solid">{member.name}</a
 		>
@@ -462,6 +477,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				</h1>
 				<div class="flex flex-wrap items-center gap-2">
 					<MediaTypeLabel type={detail.type} year={detail.year} {seasons} />
+
 					{#if production === 'in_production'}
 						<MediaBadge variant="production">
 							<span class="size-1.5 rounded-full bg-primary"></span>In production

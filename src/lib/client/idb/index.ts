@@ -7,7 +7,7 @@
 import { enqueueEvent, enqueueEvents } from './outbox';
 import { applyEventToIdb, applyEventsToIdb } from './state';
 import { getDeviceId } from './meta';
-import { createEvent, type EventPayloadMap, type SyncEventType } from '$lib/sync/events';
+import { createEvent, type EventPayloadMap, type SyncEventType } from '#lib/sync/events.js';
 
 export { openDb, setActiveUser, wipeLocalData } from './db';
 export type {

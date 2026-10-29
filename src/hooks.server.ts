@@ -1,13 +1,12 @@
-import type { Handle, HandleServerError } from '@sveltejs/kit';
-import { sequence } from '@sveltejs/kit/hooks';
-import { createDb } from '$lib/server/db';
-import { validateSession, deleteSessionCookie, SESSION_COOKIE } from '$lib/server/auth';
+import { sequence, type Handle, type HandleServerError } from '@sveltejs/kit/hooks';
+import { createDb } from '#lib/server/db/index.js';
+import { validateSession, deleteSessionCookie, SESSION_COOKIE } from '#lib/server/auth/index.js';
 import {
 	actorRateLimitKey,
 	noteRateLimited,
 	rateLimitKey,
 	withinRateLimit
-} from '$lib/server/http/rate-limit';
+} from '#lib/server/http/rate-limit.js';
 
 // Attach a per-request Drizzle client. Only available when running with the platform
 // bindings (dev proxy / deployed Worker) — absent during prerender/build, hence the guard.
@@ -92,7 +91,13 @@ export const handle: Handle = sequence(
 // e.g. a failed `/api/sync` projection or a D1 error; `error(status)` throws are "expected" and
 // skip this). Logged structured so Cloudflare observability (logs/traces, see wrangler.jsonc)
 // picks them up; a correlation `id` goes to the log only, never leaking internals to the client.
-export const handleError: HandleServerError = ({ error, event }) => {
+export const handleError: HandleServerError = ({ kind, error, event }) => {
+	// SvelteKit 3 tags every error it catches, including the ones this app raises on purpose with
+	// `error(...)`, and merges whatever this hook returns over its own status and message. So the
+	// expected kinds return nothing — their status and message survive — and only an unknown error
+	// (a genuine server fault) gets an id and the generic message.
+	if (kind !== 'unknown') return;
+
 	const id = crypto.randomUUID();
 	console.error(`[server-error ${id}] ${event.request.method} ${event.url.pathname}`, error);
 	return { message: 'Something went wrong on our end.' };

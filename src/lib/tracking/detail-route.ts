@@ -7,7 +7,7 @@
  * Returns the route's parts rather than a path, so the caller can run them through SvelteKit's
  * `resolve()` — and so this stays a pure decision, testable without the app's module graph.
  */
-import type { MediaSource } from '$lib/sync/events';
+import type { MediaSource } from '#lib/sync/events.js';
 import { parseTmdbExternalId } from './media-record';
 
 /** The minimum a row needs to carry to be addressable. */

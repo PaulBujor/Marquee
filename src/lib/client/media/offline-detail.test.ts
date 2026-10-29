@@ -1,8 +1,8 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { setActiveUser } from '$lib/client/idb/db';
-import { putMedia, type ClientEpisode } from '$lib/client/idb';
-import { personExternalId, personId, tmdbMediaId, type MediaRecord } from '$lib/sync/events';
+import { setActiveUser } from '#lib/client/idb/db.js';
+import { putMedia, type ClientEpisode } from '#lib/client/idb/index.js';
+import { personExternalId, personId, tmdbMediaId, type MediaRecord } from '#lib/sync/events.js';
 import { buildOfflineDetail, offlineSeason } from './offline-detail';
 
 setActiveUser('offline-detail-test'); // namespace the store before opening

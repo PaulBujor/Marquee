@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
-import { sharePreviewWarms, sharePreviews, users } from '$lib/server/db/schema';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { sharePreviewWarms, sharePreviews, users } from '#lib/server/db/schema.js';
 import {
 	WARM_MAX_PER_HOUR,
 	countRecentWarms,

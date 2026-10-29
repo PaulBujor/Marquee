@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { isDbReachable } from '$lib/server/health';
+import { isDbReachable } from '#lib/server/health.js';
 import type { RequestHandler } from './$types';
 
 // Generic readiness probe for uptime/observability. Exercises the critical dependency

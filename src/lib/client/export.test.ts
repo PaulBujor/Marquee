@@ -1,15 +1,15 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { setActiveUser } from '$lib/client/idb/db';
-import { applyEventToIdb } from '$lib/client/idb/state';
-import { putMedia } from '$lib/client/idb/media';
+import { setActiveUser } from '#lib/client/idb/db.js';
+import { applyEventToIdb } from '#lib/client/idb/state.js';
+import { putMedia } from '#lib/client/idb/media.js';
 import {
 	tmdbExternalId,
 	tmdbMediaId,
 	type EventEnvelope,
 	type SyncEventType
-} from '$lib/sync/events';
-import { mediaRecordFromSearch } from '$lib/tracking/media-record';
+} from '#lib/sync/events.js';
+import { mediaRecordFromSearch } from '#lib/tracking/media-record.js';
 import { collectExport, exportFilename } from './export';
 
 setActiveUser('export-test-user');

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import PageHeader from '$lib/components/page-header.svelte';
+	import PageHeader from '#lib/components/page-header.svelte';
 	import AccountCard from './account-card.svelte';
 	import AppearanceCard from './appearance-card.svelte';
 	import NotificationsCard from './notifications-card.svelte';

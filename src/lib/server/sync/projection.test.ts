@@ -1,20 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
+import { createTestDb } from '#lib/server/db/test-db.js';
 import {
 	episodeWatches,
 	events as eventsTable,
 	media,
 	tracking,
 	users
-} from '$lib/server/db/schema';
+} from '#lib/server/db/schema.js';
 import {
 	tmdbMediaId,
 	trackingKey,
 	type EventEnvelope,
 	type EventPayloadMap,
 	type SyncEventType
-} from '$lib/sync/events';
+} from '#lib/sync/events.js';
 import { applyEvents, rebuildProjection } from './projection';
 
 type Db = ReturnType<typeof createTestDb>;

@@ -1,9 +1,9 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { syncLog } from '$lib/client/sync/log.svelte';
-	import { formatLogText, formatTime } from '$lib/client/sync/log';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { syncLog } from '#lib/client/sync/log.svelte.js';
+	import { formatLogText, formatTime } from '#lib/client/sync/log.js';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import CheckIcon from '@lucide/svelte/icons/check';
 

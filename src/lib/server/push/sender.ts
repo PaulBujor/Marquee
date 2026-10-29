@@ -1,5 +1,5 @@
 import { buildPushHTTPRequest, type PushMessage } from '@pushforge/builder';
-import { fetchWithTimeout } from '$lib/resilience';
+import { fetchWithTimeout } from '#lib/resilience.js';
 import type { PushPayload, PushResult, PushSender, PushTarget } from './index';
 
 /**

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTestDb } from '$lib/server/db/test-db';
-import { sharePreviews, users } from '$lib/server/db/schema';
-import { previewId } from '$lib/server/share/preview';
-import { PUBLIC_SHARE_HEADERS } from '$lib/server/share/public';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { sharePreviews, users } from '#lib/server/db/schema.js';
+import { previewId } from '#lib/server/share/preview.js';
+import { PUBLIC_SHARE_HEADERS } from '#lib/server/share/public.js';
 import { load } from './+page.server';
 
 type Event = Parameters<typeof load>[0];

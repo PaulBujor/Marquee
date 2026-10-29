@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import type { TrackingStatus } from '$lib/sync/events';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import type { TrackingStatus } from '#lib/sync/events.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 

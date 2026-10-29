@@ -1,5 +1,5 @@
 import { error, isHttpError, redirect } from '@sveltejs/kit';
-import type { PersonCreditsPage } from '$lib/server/tmdb';
+import type { PersonCreditsPage } from '#lib/server/tmdb/index.js';
 import type { PageLoad } from './$types';
 
 /**

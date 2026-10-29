@@ -4,14 +4,19 @@
  * import seeds is re-validated server-side by `eventEnvelopeSchema`.
  */
 import { z } from 'zod';
-import { CREDIT_ROLES, MEDIA_PROVIDERS, MEDIA_SOURCES, TRACKING_STATUSES } from '$lib/sync/events';
+import {
+	CREDIT_ROLES,
+	MEDIA_PROVIDERS,
+	MEDIA_SOURCES,
+	TRACKING_STATUSES
+} from '#lib/sync/events.js';
 import {
 	CUSTOM_MAX_CREDITS,
 	CUSTOM_MAX_EPISODES_PER_SEASON,
 	CUSTOM_MAX_SEASONS,
 	CUSTOM_NAME_MAX,
 	CUSTOM_OVERVIEW_MAX
-} from '$lib/validation/custom-media';
+} from '#lib/validation/custom-media.js';
 import { EXPORT_FORMAT, EXPORT_SCHEMA_VERSION, type MarqueeExport } from './schema';
 
 /** Why a file couldn't be read, mapped to a message in the UI. */

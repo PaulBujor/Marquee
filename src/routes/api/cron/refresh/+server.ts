@@ -1,12 +1,12 @@
 import { error, json } from '@sveltejs/kit';
-import { enqueueStaleMedia } from '$lib/server/media/cron';
-import type { MediaRefreshMessage } from '$lib/server/media/refresh-consumer';
-import { cloudflareQueueProducer } from '$lib/server/queue/cloudflare';
-import type { QueueProducer } from '$lib/server/queue/types';
-import { purgeExpiredAuth } from '$lib/server/auth/cleanup';
-import { purgeSharePreviewWarms, purgeSharePreviews } from '$lib/server/share/preview';
-import type { createDb } from '$lib/server/db';
-import { isAuthorizedCronRequest } from '$lib/server/http/secret';
+import { enqueueStaleMedia } from '#lib/server/media/cron.js';
+import type { MediaRefreshMessage } from '#lib/server/media/refresh-consumer.js';
+import { cloudflareQueueProducer } from '#lib/server/queue/cloudflare.js';
+import type { QueueProducer } from '#lib/server/queue/types.js';
+import { purgeExpiredAuth } from '#lib/server/auth/cleanup.js';
+import { purgeSharePreviewWarms, purgeSharePreviews } from '#lib/server/share/preview.js';
+import type { createDb } from '#lib/server/db/index.js';
+import { isAuthorizedCronRequest } from '#lib/server/http/secret.js';
 import type { RequestHandler } from './$types';
 
 type Db = ReturnType<typeof createDb>;

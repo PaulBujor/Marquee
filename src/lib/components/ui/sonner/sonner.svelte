@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Toaster as Sonner, type ToasterProps } from 'svelte-sonner';
-	import { theme } from '$lib/state/theme.svelte.js';
+	import { theme } from '#lib/state/theme.svelte.js';
 
 	let { ...restProps }: ToasterProps = $props();
 </script>

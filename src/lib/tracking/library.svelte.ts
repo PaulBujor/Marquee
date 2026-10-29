@@ -11,12 +11,12 @@ import {
 	getEpisodes,
 	getTracking,
 	recordEvent
-} from '$lib/client/idb';
+} from '#lib/client/idb/index.js';
 import { watchedAt, watchedKey, type DatedEpisode } from './actions';
 import { deriveStatus } from './derive-status';
 import { showProgress, type LibraryItem } from './library';
 import { reconcileStatus } from './reconcile';
-import { sync } from '$lib/client/sync/engine.svelte';
+import { sync } from '#lib/client/sync/engine.svelte.js';
 
 export class LibraryState {
 	items = $state<LibraryItem[]>([]);

@@ -1,7 +1,7 @@
 import { error, json } from '@sveltejs/kit';
-import { problem, zodProblem } from '$lib/server/http/problem';
-import { slidingWindow } from '$lib/server/http/rate-limit';
-import { pushSubscribeSchema, upsertSubscription } from '$lib/server/push/subscriptions';
+import { problem, zodProblem } from '#lib/server/http/problem.js';
+import { slidingWindow } from '#lib/server/http/rate-limit.js';
+import { pushSubscribeSchema, upsertSubscription } from '#lib/server/push/subscriptions.js';
 import type { RequestHandler } from './$types';
 
 // Best-effort per-isolate cap on a runaway client (Cloudflare's edge limiter is the real backstop).

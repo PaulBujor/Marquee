@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { Button, buttonVariants } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { wipeLocalData } from '$lib/client/idb';
-	import { runSync } from '$lib/client/sync/sync';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { estimateStorage } from '$lib/client/storage';
+	import { Button, buttonVariants } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
+	import { wipeLocalData } from '#lib/client/idb/index.js';
+	import { runSync } from '#lib/client/sync/sync.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { estimateStorage } from '#lib/client/storage.js';
 
 	let open = $state(false);
 	let busy = $state(false);

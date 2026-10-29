@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
-import { createTestDb } from '$lib/server/db/test-db';
-import { users } from '$lib/server/db/schema';
-import { upsertSubscription } from '$lib/server/push/subscriptions';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { users } from '#lib/server/db/schema.js';
+import { upsertSubscription } from '#lib/server/push/subscriptions.js';
 import { GET } from './+server';
 
 type Db = ReturnType<typeof createTestDb>;

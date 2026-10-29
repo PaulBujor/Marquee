@@ -8,11 +8,11 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
-import { episodeWatches, tracking, users } from '$lib/server/db/schema';
-import { tmdbExternalId, tmdbMediaId } from '$lib/sync/events';
-import { applyEvents } from '$lib/server/sync/projection';
-import type { ClientEpisodeWatch, ClientMedia, ClientTracking } from '$lib/client/idb';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { episodeWatches, tracking, users } from '#lib/server/db/schema.js';
+import { tmdbExternalId, tmdbMediaId } from '#lib/sync/events.js';
+import { applyEvents } from '#lib/server/sync/projection.js';
+import type { ClientEpisodeWatch, ClientMedia, ClientTracking } from '#lib/client/idb/index.js';
 import { buildExport } from './build';
 import { parseExport } from './parse';
 import { planImport } from './plan';

@@ -12,12 +12,12 @@ import {
 	seasons,
 	tracking,
 	type Media
-} from '$lib/server/db/schema';
-import { mediaId, trackingKey, type MediaCredit, type MediaRecord } from '$lib/sync/events';
-import type { MediaSyncRequest, MediaSyncResponse } from '$lib/sync/media-protocol';
-import { chunkIds } from '$lib/server/db/chunk';
-import type { createDb } from '$lib/server/db';
-import type { TmdbClient } from '$lib/server/tmdb';
+} from '#lib/server/db/schema.js';
+import { mediaId, trackingKey, type MediaCredit, type MediaRecord } from '#lib/sync/events.js';
+import type { MediaSyncRequest, MediaSyncResponse } from '#lib/sync/media-protocol.js';
+import { chunkIds } from '#lib/server/db/chunk.js';
+import type { createDb } from '#lib/server/db/index.js';
+import type { TmdbClient } from '#lib/server/tmdb/index.js';
 import { loadCreditsForMedia } from './credits';
 import { storeCustomMedia } from './custom';
 import { refreshMedia } from './hydrate';

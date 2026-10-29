@@ -25,7 +25,7 @@ import {
 	type EventEnvelope,
 	type EventPayloadMap,
 	type ServerEvent
-} from '$lib/sync/events';
+} from '#lib/sync/events.js';
 
 type Db = ReturnType<typeof createDb>;
 /** A runnable SQLite query that can be handed to `db.batch()`. */

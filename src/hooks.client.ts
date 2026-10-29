@@ -1,6 +1,6 @@
-import type { HandleClientError } from '@sveltejs/kit';
-import { installGlobalErrorReporting, reportClientError } from '$lib/client/report-error';
-import { errorLog } from '$lib/client/errors.svelte';
+import type { HandleClientError } from '@sveltejs/kit/hooks';
+import { installGlobalErrorReporting, reportClientError } from '#lib/client/report-error.js';
+import { errorLog } from '#lib/client/errors.svelte.js';
 
 /**
  * The catch-all net, installed once when the client module loads. `handleError` below only fires

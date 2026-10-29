@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from '$lib/utils.js';
+	import { cn } from '#lib/utils.js';
 	import { Film, Tv, Heart, Star, FileQuestion } from '@lucide/svelte';
 	import MediaImage from './media-image.svelte';
 

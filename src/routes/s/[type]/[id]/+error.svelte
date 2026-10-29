@@ -2,8 +2,8 @@
 	// A public reader who hits a 404 or a 429 gets this, not the app's shell: nothing here is theirs to
 	// see, and the CTA is the only thing worth offering.
 	import { page } from '$app/state';
-	import ShareCta from '$lib/components/share/share-cta.svelte';
-	import { TMDB_ATTRIBUTION } from '$lib/share-preview';
+	import ShareCta from '#lib/components/share/share-cta.svelte';
+	import { TMDB_ATTRIBUTION } from '#lib/share-preview.js';
 
 	const title = $derived(
 		page.status === 429 ? 'Too many requests' : 'This link has nothing to show'

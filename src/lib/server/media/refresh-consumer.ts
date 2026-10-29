@@ -11,11 +11,11 @@
  * the widest title in flight — not `max_concurrency` — which is what to reason about before
  * raising either number in wrangler.jsonc.
  */
-import type { createDb } from '$lib/server/db';
-import type { MediaProvider } from '$lib/sync/events';
-import type { TmdbClient } from '$lib/server/tmdb';
+import type { createDb } from '#lib/server/db/index.js';
+import type { MediaProvider } from '#lib/sync/events.js';
+import type { TmdbClient } from '#lib/server/tmdb/index.js';
 import { refreshMedia } from './hydrate';
-import type { QueueEnvelope, QueueOutcome } from '$lib/server/queue/types';
+import type { QueueEnvelope, QueueOutcome } from '#lib/server/queue/types.js';
 
 type Db = ReturnType<typeof createDb>;
 type TmdbHydrator = Pick<TmdbClient, 'getDetails' | 'getSeason'>;

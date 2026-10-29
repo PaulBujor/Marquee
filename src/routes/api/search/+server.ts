@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
-import { createTmdbClient, TmdbError, type SearchResult } from '$lib/server/tmdb';
-import { searchLinkedMedia } from '$lib/server/media/search';
+import { createTmdbClient, TmdbError, type SearchResult } from '#lib/server/tmdb/index.js';
+import { searchLinkedMedia } from '#lib/server/media/search.js';
 import type { RequestHandler } from './$types';
 
 /**

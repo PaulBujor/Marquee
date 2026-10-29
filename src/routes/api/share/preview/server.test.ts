@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTestDb } from '$lib/server/db/test-db';
-import { sharePreviewWarms, sharePreviews, users } from '$lib/server/db/schema';
-import { WARM_MAX_PER_HOUR } from '$lib/server/share/preview';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { sharePreviewWarms, sharePreviews, users } from '#lib/server/db/schema.js';
+import { WARM_MAX_PER_HOUR } from '#lib/server/share/preview.js';
 import { POST } from './+server';
 
 type Handler = typeof POST;

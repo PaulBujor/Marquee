@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { invalidate } from '$app/navigation';
-	import ErrorState from '$lib/components/error-state.svelte';
-	import BackButton from '$lib/components/back-button.svelte';
+	import ErrorState from '#lib/components/error-state.svelte';
+	import BackButton from '#lib/components/back-button.svelte';
 	import DetailSkeleton from './detail-skeleton.svelte';
 	import TitleDetail from './title-detail.svelte';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { buildOfflineDetail } from '$lib/client/media/offline-detail';
-	import { posterUrl } from '$lib/media';
-	import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { buildOfflineDetail } from '#lib/client/media/offline-detail.js';
+	import { posterUrl } from '#lib/media.js';
+	import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 	import type { PageData } from './$types';
 
 	// Offline-first orchestrator: render the cached copy immediately, then upgrade to the streamed
@@ -22,6 +22,7 @@
 	let seasonData = $state<SeasonDetail | null>(untrack(() => data.base?.season ?? null));
 	// How the network-only sections (cast, trailer, similar) should render.
 	let enrichState = $state<'loading' | 'enriched' | 'offline'>('loading');
+
 	let pageState = $state<'content' | 'skeleton' | 'notfound' | 'unavailable'>(
 		untrack(() => (data.base ? 'content' : 'skeleton'))
 	);

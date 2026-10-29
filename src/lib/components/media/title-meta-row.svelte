@@ -3,7 +3,7 @@
 	// public shared page can't drift apart on what they show or how they lay it out.
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import StarIcon from '@lucide/svelte/icons/star';
-	import MediaBadge from '$lib/components/media/media-badge.svelte';
+	import MediaBadge from '#lib/components/media/media-badge.svelte';
 
 	interface Props {
 		type: 'movie' | 'show';

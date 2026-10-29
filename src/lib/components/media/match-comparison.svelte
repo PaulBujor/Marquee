@@ -2,13 +2,13 @@
 	import CreditList from './credit-list.svelte';
 	import MediaTypeLabel from './media-type-label.svelte';
 	import PosterTile from './poster-tile.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { compareCredits, creditsFromDetail } from '$lib/credits';
-	import { posterUrl } from '$lib/media.js';
-	import type { ClientMedia, ClientSeason } from '$lib/client/idb';
-	import type { MediaCredit } from '$lib/sync/events';
-	import type { MediaDetail, MediaSearchResult } from '$lib/server/tmdb';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import { compareCredits, creditsFromDetail } from '#lib/credits.js';
+	import { posterUrl } from '#lib/media.js';
+	import type { ClientMedia, ClientSeason } from '#lib/client/idb/index.js';
+	import type { MediaCredit } from '#lib/sync/events.js';
+	import type { MediaDetail, MediaSearchResult } from '#lib/server/tmdb/index.js';
 
 	/**
 	 * Side-by-side comparison of a custom entry and a database candidate, with credit overlap

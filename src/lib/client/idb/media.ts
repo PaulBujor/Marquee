@@ -9,9 +9,13 @@ import {
 	type ClientMedia,
 	type ClientSeason
 } from './db';
-import { isHydratableProvider, type HydratableProvider, type MediaRecord } from '$lib/sync/events';
-import type { CustomMediaPush } from '$lib/sync/media-protocol';
-import { parseTmdbExternalId, type SearchLikeMedia } from '$lib/tracking/media-record';
+import {
+	isHydratableProvider,
+	type HydratableProvider,
+	type MediaRecord
+} from '#lib/sync/events.js';
+import type { CustomMediaPush } from '#lib/sync/media-protocol.js';
+import { parseTmdbExternalId, type SearchLikeMedia } from '#lib/tracking/media-record.js';
 
 function seasonKey(mediaId: string, seasonNumber: number): string {
 	return `${mediaId}::s${seasonNumber}`;

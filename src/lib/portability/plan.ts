@@ -12,9 +12,9 @@ import {
 	mediaId as deriveMediaId,
 	type EventEnvelope,
 	type MediaRecord
-} from '$lib/sync/events';
-import { createCustomMedia } from '$lib/custom-media';
-import { mediaRecordFromSearch, parseTmdbExternalId } from '$lib/tracking/media-record';
+} from '#lib/sync/events.js';
+import { createCustomMedia } from '#lib/custom-media.js';
+import { mediaRecordFromSearch, parseTmdbExternalId } from '#lib/tracking/media-record.js';
 import type { ExportedTitle, MarqueeExport } from './schema';
 
 export interface ImportPlan {

@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { FULL_MEDIA_CHECK_MS, isFullMediaCheckDue } from '$lib/client/sync/media-gate';
+import { FULL_MEDIA_CHECK_MS, isFullMediaCheckDue } from '#lib/client/sync/media-gate.js';
 import { setActiveUser } from './db';
 import {
 	addRecentSearch,

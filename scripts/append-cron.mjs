@@ -8,7 +8,7 @@
  * requires the objects this invocation holds. The route map is derived from wrangler.jsonc bindings
  * so a rename can't silently desync. Appending is idempotent. Runs after `vite build`.
  */
-import { appendFile, readFile } from 'node:fs/promises';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
 
 const WORKER = '.svelte-kit/cloudflare/_worker.js';
 const WRANGLER = 'wrangler.jsonc';
@@ -18,12 +18,17 @@ const JOB_ROUTES = {
 	MEDIA_REFRESH_QUEUE: '/api/queue/media-refresh'
 };
 
-const src = await readFile(WORKER, 'utf8');
-if (!src.includes('worker_default')) {
+let src = await readFile(WORKER, 'utf8');
+// adapter-cloudflare v8 emits `export default { ... }`; earlier versions bound it to `worker_default`.
+// The handlers below are written against the name, so name it here and re-export at the end.
+const defaultExports = src.split('export default {').length - 1;
+if (defaultExports !== 1) {
 	throw new Error(
-		`append-cron: expected \`worker_default\` in ${WORKER} — adapter-cloudflare output changed, update this script.`
+		`append-cron: expected exactly one \`export default {\` in ${WORKER}, found ${defaultExports} — adapter-cloudflare output changed, update this script.`
 	);
 }
+src = src.replace('export default {', 'const worker_default = {');
+await writeFile(WORKER, src, 'utf8');
 // Second append would duplicate a `const` declaration and break parsing. Vite rewrites _worker.js
 // on every build, so this only fires when re-run against an existing one.
 if (src.includes('QUEUE_ROUTES')) {
@@ -125,4 +130,5 @@ worker_default.queue = async (batch, env, ctx) => {
 `,
 	'utf8'
 );
+await appendFile(WORKER, '\nexport default worker_default;\n', 'utf8');
 console.log('append-cron: attached scheduled + queue handlers to', WORKER);

@@ -1,5 +1,5 @@
 import { error, json } from '@sveltejs/kit';
-import { createTmdbClient, TmdbError } from '$lib/server/tmdb';
+import { createTmdbClient, TmdbError } from '#lib/server/tmdb/index.js';
 import type { RequestHandler } from './$types';
 
 /**

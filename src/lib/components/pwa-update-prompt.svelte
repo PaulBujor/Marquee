@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { toast } from 'svelte-sonner';
 
 	// Surface a waiting (freshly deployed) worker; swap only on user accept.

@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
-import { browser } from '$app/environment';
-import { buildOfflineDetail, type OfflineTitle } from '$lib/client/media/offline-detail';
-import type { MediaDetail, SeasonDetail } from '$lib/server/tmdb';
+import { browser } from '$app/env';
+import { buildOfflineDetail, type OfflineTitle } from '#lib/client/media/offline-detail.js';
+import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import type { PageLoad } from './$types';
 
 /**
@@ -13,7 +13,11 @@ import type { PageLoad } from './$types';
  * navigation stays offline-safe.
  */
 export type EnrichResult =
-	| { status: 'ok'; detail: MediaDetail; season: SeasonDetail | null }
+	| {
+			status: 'ok';
+			detail: MediaDetail;
+			season: SeasonDetail | null;
+	  }
 	| { status: 'notfound' }
 	| { status: 'offline' }
 	| { status: 'error' };

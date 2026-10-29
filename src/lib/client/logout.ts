@@ -7,11 +7,11 @@
  * a pending logout (scoped to the user id) that's flushed to the server the next time we're online, so
  * the account genuinely signs out. Online logout keeps using the plain form action.
  */
-import { goto, invalidateAll } from '$app/navigation';
+import { goto, refreshAll } from '$app/navigation';
 import { resolve } from '$app/paths';
-import { setActiveUser } from '$lib/client/idb';
-import { library } from '$lib/tracking/library.svelte';
-import { sync } from '$lib/client/sync/engine.svelte';
+import { setActiveUser } from '#lib/client/idb/index.js';
+import { library } from '#lib/tracking/library.svelte.js';
+import { sync } from '#lib/client/sync/engine.svelte.js';
 
 // Holds the id of the user whose logout is queued (not just a boolean) so a deferred flush can tell
 // "still the same session — finish signing it out" from "that session is already gone / a different
@@ -53,7 +53,7 @@ export async function signOutOffline(userId: string): Promise<void> {
 		// teardown + navigation below still sign the user out for this session.
 	}
 	teardownLocal();
-	await goto(resolve('/login'));
+	await goto(resolve('login'));
 }
 
 /**
@@ -82,7 +82,7 @@ export async function flushPendingLogout(currentUserId: string | null): Promise<
 		});
 		if (!res.ok) return; // reachable but the action didn't run — keep the flag, retry later
 		clearPendingLogout();
-		await invalidateAll(); // reflect the now-cleared session (data.user → null)
+		await refreshAll(); // reflect the now-cleared session (data.user → null)
 	} catch {
 		// Still unreachable — keep the pending flag for the next attempt.
 	}

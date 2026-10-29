@@ -1,7 +1,7 @@
 import { error, json } from '@sveltejs/kit';
-import { sendNewReleaseDigest } from '$lib/server/push/digest';
-import type { createDb } from '$lib/server/db';
-import { isAuthorizedCronRequest } from '$lib/server/http/secret';
+import { sendNewReleaseDigest } from '#lib/server/push/digest.js';
+import type { createDb } from '#lib/server/db/index.js';
+import { isAuthorizedCronRequest } from '#lib/server/http/secret.js';
 import type { RequestHandler } from './$types';
 
 type Db = ReturnType<typeof createDb>;

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
 
 	// Placeholder shown while the title detail streams in — mirrors the real layout (backdrop, poster
 	// + title, meta row, action row, a few detail lines) so the page doesn't jump when content lands.

@@ -2,9 +2,9 @@
  * Build the detail-page view model from cached IndexedDB data when offline. Returns null when the
  * title isn't cached at all.
  */
-import { getCredits, getEpisodes, getMedia, getSeasons } from '$lib/client/idb';
-import type { ClientCredit, ClientEpisode } from '$lib/client/idb';
-import { parsePersonExternalId, tmdbMediaId, type CreditRole } from '$lib/sync/events';
+import { getCredits, getEpisodes, getMedia, getSeasons } from '#lib/client/idb/index.js';
+import type { ClientCredit, ClientEpisode } from '#lib/client/idb/index.js';
+import { parsePersonExternalId, tmdbMediaId, type CreditRole } from '#lib/sync/events.js';
 // Type-only import of the API contract shape — erased at build, so no server code reaches the client.
 import type {
 	CastMember,
@@ -13,7 +13,7 @@ import type {
 	MediaDetail,
 	Season,
 	SeasonDetail
-} from '$lib/server/tmdb';
+} from '#lib/server/tmdb/index.js';
 
 export interface OfflineTitle {
 	detail: MediaDetail;

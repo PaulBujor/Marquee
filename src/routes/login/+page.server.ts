@@ -7,10 +7,10 @@ import {
 	requestSignIn,
 	setSessionCookie,
 	verifyCode
-} from '$lib/server/auth';
-import { codeField, emailField, firstError, signInModeField } from '$lib/validation';
-import { createEmailSender } from '$lib/server/email';
-import { safeRedirectPath } from '$lib/redirect';
+} from '#lib/server/auth/index.js';
+import { codeField, emailField, firstError, signInModeField } from '#lib/validation/index.js';
+import { createEmailSender } from '#lib/server/email/index.js';
+import { safeRedirectPath } from '#lib/redirect.js';
 import type { Actions, PageServerLoad } from './$types';
 
 const SERVICE_UNAVAILABLE = 'Service unavailable.';

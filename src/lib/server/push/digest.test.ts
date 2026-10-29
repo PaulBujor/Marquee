@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
+import { createTestDb } from '#lib/server/db/test-db.js';
 import {
 	episodes,
 	episodeWatches,
@@ -9,8 +9,8 @@ import {
 	pushSubscriptions,
 	tracking,
 	users
-} from '$lib/server/db/schema';
-import type { TrackingStatus } from '$lib/sync/events';
+} from '#lib/server/db/schema.js';
+import type { TrackingStatus } from '#lib/sync/events.js';
 import type { PushPayload, PushResult, PushSender, PushTarget } from './index';
 import { localDateHour, selectNotifiableEpisodes, sendNewReleaseDigest } from './digest';
 

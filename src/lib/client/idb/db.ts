@@ -13,7 +13,7 @@
  * Client-safe (browser only) — never imported from server code.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import { reportClientError } from '$lib/client/report-error';
+import { reportClientError } from '#lib/client/report-error.js';
 import type {
 	EventEnvelope,
 	HydratableProvider,
@@ -22,7 +22,7 @@ import type {
 	MediaRecord,
 	MediaSeason,
 	TrackingStatus
-} from '$lib/sync/events';
+} from '#lib/sync/events.js';
 
 /**
  * An outbox event: the envelope plus a `synced` flag (0 = pending push, 1 = acked).

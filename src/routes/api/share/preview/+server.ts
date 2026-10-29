@@ -1,8 +1,8 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { problem, zodProblem } from '$lib/server/http/problem';
-import { warmTitlePreview, type WarmResult } from '$lib/server/share/preview';
-import { publicSharingEnabled } from '$lib/server/share/public';
+import { problem, zodProblem } from '#lib/server/http/problem.js';
+import { warmTitlePreview, type WarmResult } from '#lib/server/share/preview.js';
+import { publicSharingEnabled } from '#lib/server/share/public.js';
 import type { RequestHandler } from './$types';
 
 /**

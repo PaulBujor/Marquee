@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
-	import { session } from '$lib/client/session.svelte';
-	import { loginPathWithRedirect } from '$lib/redirect';
+	import { session } from '#lib/client/session.svelte.js';
+	import { loginPathWithRedirect } from '#lib/redirect.js';
 
 	/**
 	 * A persistent toast when the session expires. Mounted in the root layout beside `<ErrorReporter />`

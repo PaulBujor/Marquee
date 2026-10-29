@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import HeaderScrim from '$lib/components/header-scrim.svelte';
-	import SyncIndicator from '$lib/components/sync-indicator.svelte';
+	import HeaderScrim from '#lib/components/header-scrim.svelte';
+	import SyncIndicator from '#lib/components/sync-indicator.svelte';
 </script>
 
 <!-- Sticky app header: content scrolls blurred beneath it, faded out by a top→transparent

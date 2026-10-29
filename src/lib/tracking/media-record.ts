@@ -1,4 +1,4 @@
-import { tmdbExternalId, tmdbMediaId, type MediaRecord } from '$lib/sync/events';
+import { tmdbExternalId, tmdbMediaId, type MediaRecord } from '#lib/sync/events.js';
 
 /** Split a TMDB external id (`movie/27205`) into its parts, or null if unparseable. */
 export function parseTmdbExternalId(

@@ -1,20 +1,20 @@
-/// <reference no-default-lib="true"/>
-/// <reference lib="esnext" />
-/// <reference lib="webworker" />
-/// <reference types="@sveltejs/kit" />
-
-import { build, files, version } from '$service-worker';
-import { runSync } from '$lib/client/sync/sync';
-import { setActiveUser } from '$lib/client/idb';
+import { self } from '$app/service-worker';
+import { version } from '$app/env';
+import { assets, immutable } from '$app/manifest';
+import { asset } from '$app/paths';
+import { runSync } from '#lib/client/sync/sync.js';
+import { setActiveUser } from '#lib/client/idb/index.js';
 
 const CACHE = `cache-${version}`;
 // Navigations (authed SSR HTML) live in their own cache so it can be cleared on logout without
 // dropping the precached build assets — keeps one user's cached shells off the next user's account.
 const PAGES = `pages-${version}`;
-// The app build + everything in static/ (icons, splash, manifest, offline.html).
-const ASSETS = [...build, ...files];
-const BUILD = new Set(build);
-const OFFLINE_URL = '/offline.html';
+// The app build + everything in static/ (icons, splash, manifest, offline.html). Build paths are already
+// cache-ready; static paths go through `asset()` to pick up the base path.
+const BUILD_PATHS = immutable.map(({ path }) => path);
+const ASSETS = [...BUILD_PATHS, ...assets.map(({ path }) => asset(path))];
+const BUILD = new Set(BUILD_PATHS);
+const OFFLINE_URL = asset('offline.html');
 /** Background Sync tag: flush queued offline writes when connectivity returns. */
 const SYNC_TAG = 'marquee-sync';
 

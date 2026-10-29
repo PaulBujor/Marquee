@@ -1,7 +1,13 @@
 import { redirect } from '@sveltejs/kit';
-import { browser } from '$app/environment';
-import { getCredits, getEpisodes, getMedia, getMediaLink, getSeasons } from '$lib/client/idb';
-import { detailRoute } from '$lib/tracking/detail-route';
+import { browser } from '$app/env';
+import {
+	getCredits,
+	getEpisodes,
+	getMedia,
+	getMediaLink,
+	getSeasons
+} from '#lib/client/idb/index.js';
+import { detailRoute } from '#lib/tracking/detail-route.js';
 import type { PageLoad } from './$types';
 
 /**

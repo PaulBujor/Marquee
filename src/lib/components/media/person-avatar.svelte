@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { cn } from '$lib/utils.js';
-	import { posterUrl, type TmdbImageSize } from '$lib/media.js';
+	import { cn } from '#lib/utils.js';
+	import { posterUrl, type TmdbImageSize } from '#lib/media.js';
 
 	/**
 	 * A person's circular profile photo, falling back to their initials. Profile images come straight

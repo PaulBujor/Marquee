@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { openDB } from 'idb';
 import { describe, expect, it } from 'vitest';
-import { createEvent } from '$lib/sync/events';
+import { createEvent } from '#lib/sync/events.js';
 import { openDb, setActiveUser, type OutboxEvent } from './db';
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';

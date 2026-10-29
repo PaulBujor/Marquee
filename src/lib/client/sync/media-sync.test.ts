@@ -1,24 +1,24 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyEventToIdb, applyEventsToIdb } from '$lib/client/idb';
-import { createEvent, mediaId, type EventEnvelope, type MediaRecord } from '$lib/sync/events';
-import { openDb, setActiveUser } from '$lib/client/idb/db';
+import { applyEventToIdb, applyEventsToIdb } from '#lib/client/idb/index.js';
+import { createEvent, mediaId, type EventEnvelope, type MediaRecord } from '#lib/sync/events.js';
+import { openDb, setActiveUser } from '#lib/client/idb/db.js';
 import {
 	getEpisodes,
 	getMedia,
 	getPendingCustomMedia,
 	putCustomMedia,
 	putMedia
-} from '$lib/client/idb/media';
-import { reportClientError } from '$lib/client/report-error';
+} from '#lib/client/idb/media.js';
+import { reportClientError } from '#lib/client/report-error.js';
 import {
 	MEDIA_SYNC_MAX,
 	type MediaSyncRequest,
 	type MediaSyncResponse
-} from '$lib/sync/media-protocol';
+} from '#lib/sync/media-protocol.js';
 import { MAX_DRAIN_ITERATIONS, runMediaSync } from './media-sync';
 
-vi.mock('$lib/client/report-error', () => ({ reportClientError: vi.fn() }));
+vi.mock('#lib/client/report-error.js', () => ({ reportClientError: vi.fn() }));
 
 setActiveUser('media-sync-test');
 

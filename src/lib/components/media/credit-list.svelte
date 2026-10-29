@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { foldName, groupCredits } from '$lib/credits';
-	import type { MediaCredit } from '$lib/sync/events';
+	import { foldName, groupCredits } from '#lib/credits.js';
+	import type { MediaCredit } from '#lib/sync/events.js';
 
 	/** Cast and crew as role-grouped text lines. `highlight` marks matching names in primary color. */
 	interface Props {

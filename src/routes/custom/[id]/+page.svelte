@@ -2,21 +2,21 @@
 	import { untrack } from 'svelte';
 	import { goto, invalidate } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import BackButton from '$lib/components/back-button.svelte';
-	import EmptyState from '$lib/components/empty-state.svelte';
-	import PageHeader from '$lib/components/page-header.svelte';
-	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
-	import CreditList from '$lib/components/media/credit-list.svelte';
-	import CustomMediaForm from '$lib/components/media/custom-media-form.svelte';
-	import MediaBadge from '$lib/components/media/media-badge.svelte';
-	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
-	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
-	import PosterTile from '$lib/components/media/poster-tile.svelte';
-	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { posterUrl } from '$lib/media.js';
-	import OfflineAction from '$lib/components/offline-action.svelte';
+	import BackButton from '#lib/components/back-button.svelte';
+	import EmptyState from '#lib/components/empty-state.svelte';
+	import PageHeader from '#lib/components/page-header.svelte';
+	import ConfirmDialog from '#lib/components/media/confirm-dialog.svelte';
+	import CreditList from '#lib/components/media/credit-list.svelte';
+	import CustomMediaForm from '#lib/components/media/custom-media-form.svelte';
+	import MediaBadge from '#lib/components/media/media-badge.svelte';
+	import MediaTypeLabel from '#lib/components/media/media-type-label.svelte';
+	import NextEpisodeRow from '#lib/components/media/next-episode-row.svelte';
+	import PosterTile from '#lib/components/media/poster-tile.svelte';
+	import TrackingControls from '#lib/components/media/tracking-controls.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
+	import { posterUrl } from '#lib/media.js';
+	import OfflineAction from '#lib/components/offline-action.svelte';
 	import {
 		getEpisodeWatches,
 		getTrackingByMediaId,
@@ -24,16 +24,16 @@
 		putMedia,
 		recordEvent,
 		recordEvents
-	} from '$lib/client/idb';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { createCustomMedia, toCustomMediaInput } from '$lib/custom-media';
-	import { buildLinkEvents } from '$lib/custom-media-link';
-	import { TrackingState } from '$lib/tracking/tracking.svelte';
-	import { isAired, todayIso } from '$lib/tracking/actions';
-	import { mediaRecordFromSearch } from '$lib/tracking/media-record';
-	import { tmdbExternalId, tmdbMediaId } from '$lib/sync/events';
-	import type { MediaSearchResult, SearchResult } from '$lib/server/tmdb';
-	import type { CustomMediaInput } from '$lib/validation/custom-media';
+	} from '#lib/client/idb/index.js';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { createCustomMedia, toCustomMediaInput } from '#lib/custom-media.js';
+	import { buildLinkEvents } from '#lib/custom-media-link.js';
+	import { TrackingState } from '#lib/tracking/tracking.svelte.js';
+	import { isAired, todayIso } from '#lib/tracking/actions.js';
+	import { mediaRecordFromSearch } from '#lib/tracking/media-record.js';
+	import { tmdbExternalId, tmdbMediaId } from '#lib/sync/events.js';
+	import type { MediaSearchResult, SearchResult } from '#lib/server/tmdb/index.js';
+	import type { CustomMediaInput } from '#lib/validation/custom-media.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import FileQuestionIcon from '@lucide/svelte/icons/file-question';
 	import Link2Icon from '@lucide/svelte/icons/link-2';

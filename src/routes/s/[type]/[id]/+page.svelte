@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import ShareCta from '$lib/components/share/share-cta.svelte';
-	import ShareMeta from '$lib/components/share/share-meta.svelte';
-	import SharedTitle from '$lib/components/share/shared-title.svelte';
-	import { posterUrl } from '$lib/media';
-	import { TMDB_ATTRIBUTION } from '$lib/share-preview';
+	import ShareCta from '#lib/components/share/share-cta.svelte';
+	import ShareMeta from '#lib/components/share/share-meta.svelte';
+	import SharedTitle from '#lib/components/share/shared-title.svelte';
+	import { posterUrl } from '#lib/media.js';
+	import { TMDB_ATTRIBUTION } from '#lib/share-preview.js';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();

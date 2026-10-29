@@ -1,14 +1,13 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { Button, buttonVariants } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import * as Card from '$lib/components/ui/card';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import OfflineAction from '$lib/components/offline-action.svelte';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { wipeLocalData } from '$lib/client/idb';
-	import { notifications } from '$lib/state/notifications.svelte.js';
-	import type { ActionResult } from '@sveltejs/kit';
+	import { enhance, type ActionResult } from '$app/forms';
+	import { Button, buttonVariants } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
+	import OfflineAction from '#lib/components/offline-action.svelte';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { wipeLocalData } from '#lib/client/idb/index.js';
+	import { notifications } from '#lib/state/notifications.svelte.js';
 	import type { ActionData } from './$types';
 
 	let { userEmail, form }: { userEmail: string; form: ActionData } = $props();

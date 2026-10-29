@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
-import { readPreview, warmTitlePreview } from '$lib/server/share/preview';
-import { noteRateLimited, rateLimitKey, withinRateLimit } from '$lib/server/http/rate-limit';
-import { PUBLIC_SHARE_HEADERS, publicSharingEnabled } from '$lib/server/share/public';
+import { readPreview, warmTitlePreview } from '#lib/server/share/preview.js';
+import { noteRateLimited, rateLimitKey, withinRateLimit } from '#lib/server/http/rate-limit.js';
+import { PUBLIC_SHARE_HEADERS, publicSharingEnabled } from '#lib/server/share/public.js';
 import type { PageServerLoad } from './$types';
 
 /**

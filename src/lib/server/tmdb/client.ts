@@ -1,5 +1,5 @@
 import type { ZodType } from 'zod';
-import { CircuitBreaker, fetchWithTimeout, withRetry } from '$lib/resilience';
+import { CircuitBreaker, fetchWithTimeout, withRetry } from '#lib/resilience.js';
 import {
 	movieDetailsResponseSchema,
 	multiSearchResponseSchema,

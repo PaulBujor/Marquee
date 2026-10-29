@@ -2,8 +2,8 @@
  * The events that link a custom entry to a provider-backed title: re-point the user's history
  * without deleting anything. Pure and unit-testable.
  */
-import type { EventSpec } from '$lib/client/idb';
-import type { HydratableProvider, TrackingStatus } from '$lib/sync/events';
+import type { EventSpec } from '#lib/client/idb/index.js';
+import type { HydratableProvider, TrackingStatus } from '#lib/sync/events.js';
 
 /** The custom entry's tracking row, as the local projection holds it. */
 export interface LinkSourceTracking {

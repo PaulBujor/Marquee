@@ -16,7 +16,7 @@ import {
 	type MarqueeDB
 } from './db';
 import { deleteLocalMedia } from './media';
-import type { EventEnvelope, EventPayloadMap } from '$lib/sync/events';
+import type { EventEnvelope, EventPayloadMap } from '#lib/sync/events.js';
 
 /** Client episode key — no userId prefix (the store is already single-user). */
 function localEpisodeId(mediaId: string, season: number, episode: number): string {

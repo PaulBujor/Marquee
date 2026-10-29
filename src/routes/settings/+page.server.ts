@@ -6,10 +6,13 @@ import {
 	requestEmailChange,
 	SESSION_COOKIE,
 	verifyEmailChange
-} from '$lib/server/auth';
-import { codeField } from '$lib/validation';
-import { createEmailSender } from '$lib/server/email';
-import { renderAccountDeletedEmail, renderEmailChangedNotice } from '$lib/server/email/templates';
+} from '#lib/server/auth/index.js';
+import { codeField } from '#lib/validation/index.js';
+import { createEmailSender } from '#lib/server/email/index.js';
+import {
+	renderAccountDeletedEmail,
+	renderEmailChangedNotice
+} from '#lib/server/email/templates.js';
 import type { Actions } from './$types';
 
 const SERVICE_UNAVAILABLE = 'Service unavailable.';

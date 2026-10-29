@@ -22,13 +22,13 @@ import {
 	type EpisodeRow,
 	type Media,
 	type SeasonRow
-} from '$lib/server/db/schema';
+} from '#lib/server/db/schema.js';
 import { creditRowsFromDetail, creditSignature, syncCredits, syncProviderPeople } from './credits';
-import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '$lib/server/db/chunk';
-import { hasDescription } from '$lib/media';
-import { mediaId, type MediaProvider } from '$lib/sync/events';
-import type { createDb } from '$lib/server/db';
-import type { MediaDetail, SeasonDetail, TmdbClient } from '$lib/server/tmdb';
+import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '#lib/server/db/chunk.js';
+import { hasDescription } from '#lib/media.js';
+import { mediaId, type MediaProvider } from '#lib/sync/events.js';
+import type { createDb } from '#lib/server/db/index.js';
+import type { MediaDetail, SeasonDetail, TmdbClient } from '#lib/server/tmdb/index.js';
 
 type Db = ReturnType<typeof createDb>;
 type TmdbHydrator = Pick<TmdbClient, 'getDetails' | 'getSeason'>;

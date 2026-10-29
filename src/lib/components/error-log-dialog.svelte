@@ -1,8 +1,8 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
-	import { errorLog } from '$lib/client/errors.svelte';
-	import { formatErrorText, formatTime } from '$lib/client/errors';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { errorLog } from '#lib/client/errors.svelte.js';
+	import { formatErrorText, formatTime } from '#lib/client/errors.js';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import CheckIcon from '@lucide/svelte/icons/check';
 

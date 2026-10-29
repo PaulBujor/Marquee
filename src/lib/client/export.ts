@@ -12,14 +12,14 @@ import {
 	getCredits,
 	getSeasons,
 	getTracking
-} from '$lib/client/idb';
-import { buildExport } from '$lib/portability/build';
+} from '#lib/client/idb/index.js';
+import { buildExport } from '#lib/portability/build.js';
 import {
 	EXPORT_FILENAME_PREFIX,
 	type ExportedCredit,
 	type ExportedSeason,
 	type MarqueeExport
-} from '$lib/portability/schema';
+} from '#lib/portability/schema.js';
 
 /** Gather local state into an export document. `now` is injectable so callers can pin the stamp. */
 export async function collectExport(now: Date = new Date()): Promise<MarqueeExport> {

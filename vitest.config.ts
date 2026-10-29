@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
-// Unit tests run in the node environment; the `$lib` alias mirrors SvelteKit's so imports resolve.
+// Unit tests run in the node environment; the `#lib` alias mirrors SvelteKit's so imports resolve.
 // The svelte plugin is needed even here (no DOM, no components rendered) because `.svelte.ts`
 // rune modules — e.g. `LibraryState`/`TrackingState` — use `$state`/`$derived`, which only exist
 // after the Svelte compiler transforms them; importing one without this plugin throws

@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import { downloadExport } from '$lib/client/export';
-	import { applyImport, parseFailureMessage, readImportFile } from '$lib/client/import';
-	import type { ImportPlan } from '$lib/portability/plan';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import { downloadExport } from '#lib/client/export.js';
+	import { applyImport, parseFailureMessage, readImportFile } from '#lib/client/import.js';
+	import type { ImportPlan } from '#lib/portability/plan.js';
 
 	let busy = $state(false);
 	let exportError = $state(false);

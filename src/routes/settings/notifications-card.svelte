@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as Card from '$lib/components/ui/card';
-	import { Button } from '$lib/components/ui/button';
-	import { notifications } from '$lib/state/notifications.svelte.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { notifications } from '#lib/state/notifications.svelte.js';
 	import XIcon from '@lucide/svelte/icons/x';
 
 	/** One row of the device list (shape of `GET /api/push/subscriptions`). */

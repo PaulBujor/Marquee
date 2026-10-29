@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createTestDb } from '$lib/server/db/test-db';
-import { media } from '$lib/server/db/schema';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { media } from '#lib/server/db/schema.js';
 import { searchLinkedMedia } from './search';
 
 /** Seed a handful of catalog rows: two linked TMDB titles + one private custom entry. */

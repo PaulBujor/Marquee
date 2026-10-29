@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { deleteSessionCookie, invalidateSession, SESSION_COOKIE } from '$lib/server/auth';
+import { deleteSessionCookie, invalidateSession, SESSION_COOKIE } from '#lib/server/auth/index.js';
 import type { Actions } from './$types';
 
 export const actions: Actions = {

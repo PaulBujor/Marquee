@@ -1,8 +1,8 @@
 import { error, json } from '@sveltejs/kit';
-import { createTmdbClient } from '$lib/server/tmdb';
-import { resolveMediaSync } from '$lib/server/media/sync';
-import { mediaSyncRequestSchema } from '$lib/sync/media-protocol';
-import { problem, zodProblem } from '$lib/server/http/problem';
+import { createTmdbClient } from '#lib/server/tmdb/index.js';
+import { resolveMediaSync } from '#lib/server/media/sync.js';
+import { mediaSyncRequestSchema } from '#lib/sync/media-protocol.js';
+import { problem, zodProblem } from '#lib/server/http/problem.js';
 import type { RequestHandler } from './$types';
 
 /**

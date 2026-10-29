@@ -7,7 +7,7 @@
  * Client-safe (no server imports).
  */
 import { z } from 'zod';
-import { CREDIT_ROLES } from '$lib/sync/events';
+import { CREDIT_ROLES } from '#lib/sync/events.js';
 
 export const CUSTOM_TITLE_MAX = 200;
 /**

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
-import type { PersonCreditsPage } from '$lib/server/tmdb';
+import type { PersonCreditsPage } from '#lib/server/tmdb/index.js';
 import { GET } from './+server';
 
 type Handler = typeof GET;

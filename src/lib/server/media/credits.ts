@@ -11,11 +11,11 @@
  * against what's stored, write only what changed, delete what disappeared.
  */
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
-import { credits, people, type CreditRow, type Person } from '$lib/server/db/schema';
-import { chunkBySize, chunkIds, chunkRows, D1_MAX_BOUND_PARAMS } from '$lib/server/db/chunk';
-import { personId, type CreditRole, type MediaCredit } from '$lib/sync/events';
-import type { createDb } from '$lib/server/db';
-import type { MediaDetail } from '$lib/server/tmdb';
+import { credits, people, type CreditRow, type Person } from '#lib/server/db/schema.js';
+import { chunkBySize, chunkIds, chunkRows, D1_MAX_BOUND_PARAMS } from '#lib/server/db/chunk.js';
+import { personId, type CreditRole, type MediaCredit } from '#lib/sync/events.js';
+import type { createDb } from '#lib/server/db/index.js';
+import type { MediaDetail } from '#lib/server/tmdb/index.js';
 
 type Db = ReturnType<typeof createDb>;
 type PersonInsert = typeof people.$inferInsert;

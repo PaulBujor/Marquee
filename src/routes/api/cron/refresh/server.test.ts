@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
-import { createTestDb } from '$lib/server/db/test-db';
-import { media } from '$lib/server/db/schema';
-import { mediaId } from '$lib/sync/events';
+import { createTestDb } from '#lib/server/db/test-db.js';
+import { media } from '#lib/server/db/schema.js';
+import { mediaId } from '#lib/sync/events.js';
 import { POST } from './+server';
 
 type Handler = typeof POST;

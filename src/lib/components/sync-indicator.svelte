@@ -1,10 +1,10 @@
 <script lang="ts">
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import SyncLogDialog from '$lib/components/sync-log-dialog.svelte';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import SyncLogDialog from '#lib/components/sync-log-dialog.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { sync } from '$lib/client/sync/engine.svelte';
-	import { syncLog } from '$lib/client/sync/log.svelte';
+	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import { syncLog } from '#lib/client/sync/log.svelte.js';
 	import CloudOffIcon from '@lucide/svelte/icons/cloud-off';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
@@ -56,7 +56,7 @@ when signed out — a single tap navigates, and the collision would swallow the 
 			aria-label={indicator?.label ?? 'Sync details'}
 			onclick={() => {
 				// Single tap → navigate to /login when signed out.
-				if (sync.status === 'signed-out') goto(resolve('/login'));
+				if (sync.status === 'signed-out') goto(resolve('login'));
 			}}
 			ondblclick={() => {
 				// Double-tap opens the sync log — but not in the signed-out state (single-tap navigates).

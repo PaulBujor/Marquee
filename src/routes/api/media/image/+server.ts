@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
-import { tmdbImageUrl, TMDB_IMAGE_SIZES, type TmdbImageSize } from '$lib/media';
-import { fetchWithTimeout } from '$lib/resilience';
+import { tmdbImageUrl, TMDB_IMAGE_SIZES, type TmdbImageSize } from '#lib/media.js';
+import { fetchWithTimeout } from '#lib/resilience.js';
 import type { RequestHandler } from './$types';
 
 /** Wall-clock budget for the upstream image fetch, so a stalled CDN can't hold the Worker open. */

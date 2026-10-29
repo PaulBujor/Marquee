@@ -10,7 +10,7 @@ import {
 	type DatedEpisode,
 	type EpisodeCoord
 } from './actions';
-import type { MediaSource, TrackingStatus } from '$lib/sync/events';
+import type { MediaSource, TrackingStatus } from '#lib/sync/events.js';
 
 /** A tracked title joined with its media reference + episode metadata + episode-watch state. */
 export interface LibraryItem {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '$lib/server/db/test-db';
+import { createTestDb } from '#lib/server/db/test-db.js';
 import {
 	emailChangeTokens,
 	episodeWatches,
@@ -15,7 +15,7 @@ import {
 	tracking,
 	type User,
 	users
-} from '$lib/server/db/schema';
+} from '#lib/server/db/schema.js';
 import { deleteAccount } from './index';
 
 type Db = ReturnType<typeof createTestDb>;
