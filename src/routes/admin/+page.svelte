@@ -6,26 +6,30 @@
 
 	const usersPath = resolve('/admin/users');
 
+	// Each card is a filter submission, so the counts double as the way in to that slice of the list.
 	const cards = $derived([
-		{ label: 'Pending', value: data.counts.pending, hint: 'waiting to be admitted' },
-		{ label: 'Enabled', value: data.counts.enabled, hint: 'can sign in' },
-		{ label: 'Blocked', value: data.counts.blocked, hint: 'denied access' }
+		{
+			status: 'pending',
+			label: 'Pending',
+			value: data.counts.pending,
+			hint: 'waiting to be admitted'
+		},
+		{ status: 'enabled', label: 'Enabled', value: data.counts.enabled, hint: 'can sign in' },
+		{ status: 'blocked', label: 'Blocked', value: data.counts.blocked, hint: 'denied access' }
 	]);
 </script>
 
-<div class="grid grid-cols-3 gap-3">
+<form class="grid grid-cols-3 gap-3" method="GET" action={usersPath}>
 	{#each cards as card (card.label)}
-		<div class="rounded-lg border p-4">
-			<p class="text-xs text-muted-foreground">{card.label}</p>
-			<p class="mt-1 font-serif text-2xl font-semibold tabular-nums">{card.value}</p>
-			<p class="mt-0.5 text-[0.6875rem] text-muted-foreground">{card.hint}</p>
-		</div>
+		<button
+			type="submit"
+			name="status"
+			value={card.status}
+			class="rounded-lg border p-4 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+		>
+			<span class="block text-xs text-muted-foreground">{card.label}</span>
+			<span class="mt-1 block font-serif text-2xl font-semibold tabular-nums">{card.value}</span>
+			<span class="mt-0.5 block text-[0.6875rem] text-muted-foreground">{card.hint}</span>
+		</button>
 	{/each}
-</div>
-
-{#if data.counts.pending > 0}
-	<p class="mt-4 text-sm text-muted-foreground">
-		{data.counts.pending} account{data.counts.pending === 1 ? '' : 's'} waiting on you —
-		<a class="underline underline-offset-2" href={usersPath}>review the waitlist</a>
-	</p>
-{/if}
+</form>

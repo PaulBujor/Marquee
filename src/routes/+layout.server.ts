@@ -9,6 +9,9 @@ import type { LayoutServerLoad } from './$types';
  */
 export const load: LayoutServerLoad = async ({ locals }) => {
 	return {
-		user: locals.user ? { id: locals.user.id, email: locals.user.email } : null
+		user: locals.user ? { id: locals.user.id, email: locals.user.email } : null,
+		// Only used to show the admin entry point in Settings — an installed PWA has no address bar,
+		// so without this the surface is unreachable in practice. The gate itself is server-side.
+		isAdmin: locals.user?.role === 'admin'
 	};
 };

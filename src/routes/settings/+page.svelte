@@ -7,6 +7,7 @@
 	import DataPortabilityCard from './data-portability-card.svelte';
 	import DiagnosticsCard from './diagnostics-card.svelte';
 	import CreditsCard from './credits-card.svelte';
+	import AdminCard from './admin-card.svelte';
 	import DeleteAccountCard from './delete-account-card.svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -28,6 +29,9 @@ same height as the ones that do carry a 40px control, so the sticky offsets stay
 <main
 	class="mx-auto grid w-full max-w-3xl grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 px-5 pt-3 pb-tab-bar"
 >
+	{#if data.isAdmin}
+		<AdminCard />
+	{/if}
 	<AccountCard user={data.user} codeTtlMinutes={data.codeTtlMinutes} {form} />
 	<AppearanceCard />
 	<NotificationsCard />
