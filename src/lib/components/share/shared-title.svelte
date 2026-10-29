@@ -4,12 +4,11 @@
 	// takes the tracking row's place.
 	import { slide } from 'svelte/transition';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-	import ClockIcon from '@lucide/svelte/icons/clock';
-	import StarIcon from '@lucide/svelte/icons/star';
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PersonAvatar from '$lib/components/media/person-avatar.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
+	import TitleMetaRow from '$lib/components/media/title-meta-row.svelte';
 	import ShareCta from '$lib/components/share/share-cta.svelte';
 	import { BACKDROP_SIZE, posterUrl } from '$lib/media.js';
 	import type { SharePreview } from '$lib/share-preview';
@@ -84,24 +83,12 @@
 			</div>
 		</div>
 
-		<div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-			{#if preview.rating !== null}
-				<span class="flex items-center gap-1.5">
-					<StarIcon class="size-4 fill-primary text-primary" />
-					<span class="font-semibold">{preview.rating.toFixed(1)}</span>
-					<span class="text-muted-foreground">/10</span>
-				</span>
-			{/if}
-			{#if preview.runtime !== null}
-				<span class="flex items-center gap-1.5 text-muted-foreground">
-					<ClockIcon class="size-4" />
-					{preview.runtime} min{preview.type === 'show' ? ' / ep' : ''}
-				</span>
-			{/if}
-			{#each preview.genres as genre (genre)}
-				<MediaBadge variant="genre">{genre}</MediaBadge>
-			{/each}
-		</div>
+		<TitleMetaRow
+			type={preview.type}
+			rating={preview.rating}
+			runtime={preview.runtime}
+			genres={preview.genres}
+		/>
 
 		<!-- Where the signed-in page keeps its tracking controls. -->
 		<ShareCta href={loginHref} />

@@ -1,10 +1,7 @@
 /**
- * Share previews: the catalogue-only snapshot a public shared link renders its page from.
- *
- * *Warming* one is the only path that reaches TMDB for a share, and it requires an authenticated
- * account, so a crawler following a shared link can never spend provider quota; the public read
- * path (`readPreview`) touches D1 only. Warming is idempotent per title — a re-warm refreshes the
- * same row — and capped per account so one session can't enumerate the catalogue.
+ * Share previews: the catalogue-only snapshot a public shared link renders from. Warming is the only
+ * path that reaches TMDB for a share and needs a session, so a crawler spends no provider quota; the
+ * read path touches D1 only. Warming is idempotent, and capped per account.
  */
 import { and, count, eq, gte, lt } from 'drizzle-orm';
 import { createTmdbClient, TmdbError, type MediaDetail } from '$lib/server/tmdb';
