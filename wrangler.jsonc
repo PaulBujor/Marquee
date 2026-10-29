@@ -33,7 +33,8 @@
 			"binding": "DB",
 			"database_name": "marquee",
 			"database_id": "a54537ab-09e0-48d7-ac8f-46c33cf631a2",
-			"migrations_dir": "drizzle"
+			"migrations_dir": "drizzle",
+			"preview_database_id": "72ed3d6e-b0a2-46cd-ad5e-00ec51f928a6"
 		}
 	],
 	"triggers": {

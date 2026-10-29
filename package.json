@@ -12,7 +12,7 @@
 		"build": "wrangler types && vite build && node scripts/append-cron.mjs",
 		"preview": "wrangler dev",
 		"deploy": "wrangler d1 migrations apply marquee --remote && wrangler deploy",
-		"deploy:preview": "wrangler d1 migrations apply marquee-preview --remote --env preview && wrangler preview",
+		"deploy:preview": "wrangler d1 migrations apply DB --remote --preview && wrangler preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "wrangler types && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc --noEmit -p ./src/service-worker/tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch && tsc --noEmit -p ./src/service-worker/tsconfig.json",
