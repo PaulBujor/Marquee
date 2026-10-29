@@ -72,6 +72,9 @@ export type ShareWarmTarget = { type: 'movie' | 'show'; id: number };
  */
 export const WARM_TIMEOUT_MS = 1500;
 
+/** How a warm ended: `timeout` may still land server-side, so it isn't the same news as `failed`. */
+export type WarmOutcome = 'stored' | 'timeout' | 'failed';
+
 /**
  * Ask the server to store this link's preview so the recipient's app has a page to render.
  * Best-effort by design: a failure, a timeout or being offline still shares the link, just without
@@ -81,7 +84,7 @@ export const WARM_TIMEOUT_MS = 1500;
 export async function warmPreview(
 	target: ShareWarmTarget,
 	opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {}
-): Promise<boolean> {
+): Promise<WarmOutcome> {
 	const doFetch = opts.fetchImpl ?? fetch;
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? WARM_TIMEOUT_MS);
@@ -93,9 +96,9 @@ export async function warmPreview(
 			body: JSON.stringify(target),
 			signal: controller.signal
 		});
-		return res.ok;
-	} catch {
-		return false;
+		return res.ok ? 'stored' : 'failed';
+	} catch (err) {
+		return (err as { name?: string })?.name === 'AbortError' ? 'timeout' : 'failed';
 	} finally {
 		clearTimeout(timer);
 	}

@@ -82,7 +82,7 @@ describe('warmPreview', () => {
 			return new Response(JSON.stringify({ status: 'warmed' }), { status: 200 });
 		}) as unknown as typeof fetch;
 
-		expect(await warmPreview(target, { fetchImpl })).toBe(true);
+		expect(await warmPreview(target, { fetchImpl })).toBe('stored');
 		expect(calls[0].url).toBe('/api/share/preview');
 		expect(calls[0].init.method).toBe('POST');
 		expect(calls[0].init.credentials).toBe('same-origin');
@@ -92,7 +92,7 @@ describe('warmPreview', () => {
 	it('reports anything the server refuses as a failure to warm', async () => {
 		for (const status of [400, 404, 429, 503]) {
 			const fetchImpl = (async () => new Response('{}', { status })) as unknown as typeof fetch;
-			expect(await warmPreview(target, { fetchImpl })).toBe(false);
+			expect(await warmPreview(target, { fetchImpl })).toBe('failed');
 		}
 	});
 
@@ -100,20 +100,21 @@ describe('warmPreview', () => {
 		const fetchImpl = (async () => {
 			throw new TypeError('Failed to fetch');
 		}) as unknown as typeof fetch;
-		expect(await warmPreview(target, { fetchImpl })).toBe(false);
+		expect(await warmPreview(target, { fetchImpl })).toBe('failed');
 	});
 
-	it('gives up at the cap and aborts the request', async () => {
+	it('gives up at the cap, and reports a timeout rather than a failure', async () => {
 		let aborted = false;
 		const fetchImpl = ((_url: string, init: RequestInit) =>
 			new Promise((_resolve, reject) => {
 				init.signal?.addEventListener('abort', () => {
 					aborted = true;
-					reject(new Error('aborted'));
+					// What the browser actually rejects with — the row may still land server-side.
+					reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
 				});
 			})) as unknown as typeof fetch;
 
-		expect(await warmPreview(target, { fetchImpl, timeoutMs: 20 })).toBe(false);
+		expect(await warmPreview(target, { fetchImpl, timeoutMs: 20 })).toBe('timeout');
 		expect(aborted).toBe(true);
 	});
 });

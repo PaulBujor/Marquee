@@ -35,10 +35,11 @@
 			// Warm first, capped and best-effort, so the recipient's unfurl finds a card waiting.
 			// The result is reported, not swallowed: a share whose preview never stored used to look
 			// identical to a good one, which is how a broken warm hid behind "Link copied".
-			const warmed = warm ? await warmPreview(warm) : true;
+			const warmed = warm ? await warmPreview(warm) : 'stored';
 			const outcome = await shareLink({ title, url });
 			if (outcome === 'failed') toast.error("Couldn't share that link");
-			else if (!warmed) toast.warning('Link shared, but no preview was stored');
+			else if (warmed === 'failed') toast.warning('Link shared, but no preview was stored');
+			else if (warmed === 'timeout') toast.info('Link shared — the preview may still be storing');
 			else if (outcome === 'copied') toast.success('Link copied');
 		} finally {
 			busy = false;
