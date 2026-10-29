@@ -1,11 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { readPreview, warmTitlePreview } from '$lib/server/share/preview';
-import { withinRateLimit } from '$lib/server/http/rate-limit';
-import {
-	PUBLIC_SHARE_HEADERS,
-	SIGNED_IN_REDIRECT_HEADERS,
-	publicSharingEnabled
-} from '$lib/server/share/public';
+import { noteRateLimited, withinRateLimit } from '$lib/server/http/rate-limit';
+import { PUBLIC_SHARE_HEADERS, publicSharingEnabled } from '$lib/server/share/public';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -13,11 +9,15 @@ import type { PageServerLoad } from './$types';
  * (see PUBLIC_SHARE_HEADERS). It reads warmed previews only, so a crawler costs no provider call.
  */
 export const load: PageServerLoad = async ({ params, locals, platform, request, setHeaders }) => {
-	// Set first so the guards below — and anything SvelteKit renders for them — carry the policy too.
+	// Exactly one call per response: SvelteKit throws if the same header is set twice (see its
+	// `respond.js`), so the policy has to be decided once, up front, for every outcome — including the
+	// refusals below. `no-store` is stricter than `private, no-store`, so one policy covers both the
+	// anonymous page and the redirect a signed-in reader gets.
 	setHeaders(PUBLIC_SHARE_HEADERS);
 
 	// Before any read: this is the unauthenticated route that serves shared content.
-	if (!(await withinRateLimit(platform?.env.PUBLIC_SHARE_LIMITER, request))) {
+	if (!(await withinRateLimit(platform, 'PUBLIC_SHARE_LIMITER', request))) {
+		noteRateLimited(platform?.env, 'share', new URL(request.url).pathname);
 		error(429, 'Too many requests.');
 	}
 
@@ -41,11 +41,9 @@ export const load: PageServerLoad = async ({ params, locals, platform, request, 
 				})
 			);
 		}
-		setHeaders(SIGNED_IN_REDIRECT_HEADERS);
 		redirect(303, `/title/${type}/${id}`);
 	}
 
-	setHeaders(PUBLIC_SHARE_HEADERS);
 	if (!publicSharingEnabled(platform?.env)) return { state: 'disabled' as const, type, id };
 
 	const preview = await readPreview(db, type, id);

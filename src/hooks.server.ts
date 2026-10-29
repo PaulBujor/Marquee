@@ -2,7 +2,7 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { createDb } from '$lib/server/db';
 import { validateSession, deleteSessionCookie, SESSION_COOKIE } from '$lib/server/auth';
-import { withinRateLimit } from '$lib/server/http/rate-limit';
+import { noteRateLimited, withinRateLimit } from '$lib/server/http/rate-limit';
 
 // Attach a per-request Drizzle client. Only available when running with the platform
 // bindings (dev proxy / deployed Worker) — absent during prerender/build, hence the guard.
@@ -42,10 +42,12 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 	return response;
 };
 
-// Cloudflare's per-IP limiter, first in the chain so a flood is shed before it reaches D1 or the auth
-// lookup. Loose on purpose (see wrangler.jsonc); the public share pages carry their own tight budget.
+// Cloudflare's limiter, first in the chain so a flood is shed before it reaches D1 or the auth
+// lookup. Keyed per session when the caller has one, else per IP — see `rateLimitKey`. Loose on
+// purpose (wrangler.jsonc); the public share pages carry their own budget.
 const rateLimit: Handle = async ({ event, resolve }) => {
-	if (!(await withinRateLimit(event.platform?.env.APP_RATE_LIMITER, event.request))) {
+	if (!(await withinRateLimit(event.platform, 'APP_RATE_LIMITER', event.request))) {
+		noteRateLimited(event.platform?.env, 'app', event.url.pathname);
 		return new Response('Too many requests', {
 			status: 429,
 			headers: { 'content-type': 'text/plain', 'retry-after': '60' }

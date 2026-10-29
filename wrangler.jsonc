@@ -10,15 +10,19 @@
 	},
 	"workers_dev": true,
 	"preview_urls": true,
-	// Public share pages are the only unauthenticated, cached-nothing route, so they get a tight
-	// per-IP budget; the app-wide limiter below is the backstop for everything else.
-	// Namespace ids are shared across an account, so these deliberately avoid the example values in
-	// Cloudflare's docs (1001/1002): another Worker on this account using those would share counters.
+	// Public share pages are the only unauthenticated, cached-nothing route, so they carry their own
+	// budget. Sized as a capacity guard, not as an anti-enumeration measure: enumeration is already
+	// defeated by the warm-only design (an unwarmed id carries nothing), while a budget tight enough
+	// to stop a scraper also throttles a legitimate crowd behind one NAT — see Cloudflare's own advice
+	// against IP-keyed limits. Still well under the app-wide budget below.
+	// Namespace ids are account-wide, so this is a deliberately documented block rather than a random
+	// pick: 9910xx is Marquee's, and the docs' example values (1001/1002) are avoided because any
+	// other Worker here that copied them would share our counters. Next binding takes 991003.
 	"ratelimits": [
 		{
 			"name": "PUBLIC_SHARE_LIMITER",
 			"namespace_id": "991001",
-			"simple": { "limit": 20, "period": 60 }
+			"simple": { "limit": 120, "period": 60 }
 		},
 		{
 			// Deliberately loose: a page load plus its API calls is a dozen requests, and a first
@@ -27,6 +31,11 @@
 			"namespace_id": "991002",
 			"simple": { "limit": 300, "period": 60 }
 		}
+	],
+	// 429s are countable here: rate-limit bindings themselves are invisible in the dashboard, so the
+	// only way to see abuse early is to write our own event when we shed a request.
+	"analytics_engine_datasets": [
+		{ "binding": "RATE_LIMIT_EVENTS", "dataset": "marquee_rate_limit_events" }
 	],
 	"d1_databases": [
 		{
@@ -95,13 +104,16 @@
 				{
 					"name": "PUBLIC_SHARE_LIMITER",
 					"namespace_id": "991001",
-					"simple": { "limit": 20, "period": 60 }
+					"simple": { "limit": 120, "period": 60 }
 				},
 				{
 					"name": "APP_RATE_LIMITER",
 					"namespace_id": "991002",
 					"simple": { "limit": 300, "period": 60 }
 				}
+			],
+			"analytics_engine_datasets": [
+				{ "binding": "RATE_LIMIT_EVENTS", "dataset": "marquee_rate_limit_events" }
 			],
 			"d1_databases": [
 				{

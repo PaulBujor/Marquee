@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { slidingWindow, withinRateLimit } from './rate-limit';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import { rateLimitKey, slidingWindow, withinRateLimit } from './rate-limit';
 
 describe('slidingWindow', () => {
 	it('allows hits under the cap and appends each to the kept list', () => {
@@ -36,24 +38,48 @@ describe('slidingWindow', () => {
 	});
 });
 
-describe('withinRateLimit', () => {
-	const request = (ip?: string) =>
-		new Request('https://marquee.example/s/movie/603', {
-			headers: ip ? { 'cf-connecting-ip': ip } : {}
-		});
-	const limiter = (impl: () => Promise<{ success: boolean }>) => ({ limit: impl }) as RateLimit;
+function request(opts: { ip?: string; cookie?: string } = {}) {
+	return new Request('https://marquee.example/s/movie/603', {
+		headers: {
+			...(opts.ip ? { 'cf-connecting-ip': opts.ip } : {}),
+			...(opts.cookie ? { cookie: opts.cookie } : {})
+		}
+	});
+}
 
-	it('allows when there is no binding or no client IP, so dev and tests are unaffected', async () => {
-		expect(await withinRateLimit(undefined, request('203.0.113.9'))).toBe(true);
+function platform(limiter: unknown) {
+	return { env: { APP_RATE_LIMITER: limiter } } as unknown as App.Platform;
+}
+
+function limiter(impl: () => Promise<{ success: boolean }>) {
+	return { limit: impl } as RateLimit;
+}
+
+describe('withinRateLimit', () => {
+	it('allows when there are no bindings at all — build, prerender and unit tests have no platform', async () => {
 		expect(
-			await withinRateLimit(
-				limiter(async () => ({ success: true })),
-				request()
-			)
+			await withinRateLimit(undefined, 'APP_RATE_LIMITER', request({ ip: '203.0.113.9' }))
 		).toBe(true);
 	});
 
-	it('keys the budget on the client IP', async () => {
+	it('allows but says so once when a deployed environment is missing the binding', async () => {
+		const bare = { env: {} } as unknown as App.Platform;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		expect(await withinRateLimit(bare, 'APP_RATE_LIMITER', request({ ip: '203.0.113.9' }))).toBe(
+			true
+		);
+		expect(await withinRateLimit(bare, 'APP_RATE_LIMITER', request({ ip: '203.0.113.9' }))).toBe(
+			true
+		);
+
+		// Once per isolate, not once per request.
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(String(warn.mock.calls[0][0])).toContain('APP_RATE_LIMITER');
+		warn.mockRestore();
+	});
+
+	it('keys a signed-in caller by session, hashed, so the token never reaches the limiter', async () => {
 		const keys: string[] = [];
 		const recording = {
 			limit: async ({ key }: { key: string }) => {
@@ -62,38 +88,84 @@ describe('withinRateLimit', () => {
 			}
 		} as RateLimit;
 
-		await withinRateLimit(recording, request('203.0.113.9'));
-		expect(keys).toEqual(['203.0.113.9']);
+		await withinRateLimit(
+			platform(recording),
+			'APP_RATE_LIMITER',
+			request({ ip: '203.0.113.9', cookie: 'session=secret-token-value' })
+		);
+
+		expect(keys).toHaveLength(1);
+		expect(keys[0]).toMatch(/^session:[0-9a-f]{64}$/);
+		expect(keys[0]).not.toContain('secret-token-value');
 	});
 
-	it('counts an IPv6 client by its /64, so rotating the host bits shares one budget', async () => {
-		const keys: string[] = [];
-		const recording = {
-			limit: async ({ key }: { key: string }) => {
-				keys.push(key);
-				return { success: true };
-			}
-		} as RateLimit;
-
-		await withinRateLimit(recording, request('2001:db8:1:2:aaaa:bbbb:cccc:dddd'));
-		await withinRateLimit(recording, request('2001:db8:1:2:1111:2222:3333:4444'));
-
-		expect(keys).toEqual(['2001:db8:1:2::/64', '2001:db8:1:2::/64']);
+	it('falls back to the client IP when there is no session, grouping IPv6 by its /64', async () => {
+		expect(await rateLimitKey(request({ ip: '203.0.113.9' }))).toBe('ip:203.0.113.9');
+		expect(await rateLimitKey(request({ ip: '2001:db8:1:2:aaaa:bbbb:cccc:dddd' }))).toBe(
+			'ip:2001:db8:1:2::/64'
+		);
+		expect(await rateLimitKey(request())).toBeNull();
 	});
 
-	it('denies a reader who is over budget', async () => {
+	it('denies a caller who is over budget, and allows one the limiter itself failed on', async () => {
 		expect(
 			await withinRateLimit(
-				limiter(async () => ({ success: false })),
-				request('203.0.113.9')
+				platform(limiter(async () => ({ success: false }))),
+				'APP_RATE_LIMITER',
+				request({ ip: '203.0.113.9' })
 			)
 		).toBe(false);
-	});
 
-	it('allows when the limiter itself fails — a backstop must not take the app down', async () => {
 		const broken = limiter(async () => {
 			throw new Error('limiter unavailable');
 		});
-		expect(await withinRateLimit(broken, request('203.0.113.9'))).toBe(true);
+		expect(
+			await withinRateLimit(platform(broken), 'APP_RATE_LIMITER', request({ ip: '203.0.113.9' }))
+		).toBe(true);
+	});
+});
+
+describe('wrangler configuration', () => {
+	interface WranglerEnv {
+		ratelimits?: { name: string }[];
+		analytics_engine_datasets?: { binding: string }[];
+		env?: { preview: WranglerEnv };
+	}
+
+	/** Enough JSONC to read this repo's config: line comments outside strings. */
+	function parseJsonc(text: string): WranglerEnv {
+		let out = '';
+		let inString = false;
+		for (let i = 0; i < text.length; i++) {
+			const char = text[i];
+			if (inString) {
+				out += char;
+				if (char === '\\') out += text[++i] ?? '';
+				else if (char === '"') inString = false;
+				continue;
+			}
+			if (char === '"') inString = true;
+			else if (char === '/' && text[i + 1] === '/') {
+				while (i < text.length && text[i] !== '\n') i++;
+				continue;
+			}
+			out += char;
+		}
+		return JSON.parse(out);
+	}
+
+	// `withinRateLimit` fails open, so a binding that goes missing in an environment is invisible at
+	// runtime — the only place to catch it is here.
+	it('declares both rate limits, and the shed-request dataset, in every environment', () => {
+		const config = parseJsonc(readFileSync(join(process.cwd(), 'wrangler.jsonc'), 'utf8'));
+		const envs = [config, config.env!.preview];
+
+		for (const env of envs) {
+			const names = (env.ratelimits ?? []).map((b: { name: string }) => b.name).sort();
+			expect(names).toEqual(['APP_RATE_LIMITER', 'PUBLIC_SHARE_LIMITER']);
+			expect(
+				(env.analytics_engine_datasets ?? []).map((b: { binding: string }) => b.binding)
+			).toEqual(['RATE_LIMIT_EVENTS']);
+		}
 	});
 });
