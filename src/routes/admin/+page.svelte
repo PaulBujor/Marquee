@@ -25,7 +25,7 @@
 			type="submit"
 			name="status"
 			value={card.status}
-			class="rounded-lg border p-4 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+			class="rounded-xl p-4 text-left ring-1 ring-foreground/10 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 		>
 			<span class="block text-xs text-muted-foreground">{card.label}</span>
 			<span class="mt-1 block font-serif text-2xl font-semibold tabular-nums">{card.value}</span>

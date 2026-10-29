@@ -43,7 +43,7 @@
 		{/if}
 	{/each}
 
-	<div class="relative mt-2 overflow-hidden rounded-lg border">
+	<div class="relative mt-2 overflow-hidden rounded-xl ring-1 ring-foreground/10">
 		<div class="overflow-x-auto overscroll-x-contain">
 			<table class="w-full border-collapse text-sm">
 				<thead>

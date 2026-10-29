@@ -63,9 +63,9 @@
 <main class="mx-auto w-full max-w-2xl px-5 pt-4 pb-24" aria-busy={pending}>
 	{#if pending}
 		<div class="space-y-2" aria-hidden="true">
-			<div class="h-9 animate-pulse rounded-lg border bg-muted/40"></div>
-			{#each Array(5) as _, index (index)}
-				<div class="h-12 animate-pulse rounded-lg border bg-muted/30"></div>
+			<div class="h-10 animate-pulse rounded-full bg-muted/40"></div>
+			{#each [0, 1, 2, 3, 4] as index (index)}
+				<div class="h-12 animate-pulse rounded-xl bg-muted/30"></div>
 			{/each}
 		</div>
 	{:else if online}
