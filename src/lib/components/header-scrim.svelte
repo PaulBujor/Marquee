@@ -1,19 +1,10 @@
 <script lang="ts">
-	// Progressive header blur, shared by every sticky/fixed header (home, search/settings via
-	// PageHeader, and the title page). A single backdrop-filter can't vary its blur *radius* over
-	// its height, so we stack several layers — each blurrier than the last and masked to a band that
-	// reaches progressively higher — giving a true 0→max blur ramp from the bottom edge up to the
-	// top. A separate tint layer fades the background colour solid→transparent over the same height,
-	// so content scrolls blurred beneath the header and both effects ease off with no hard line.
-	// `strong` scales the blur up over artwork (the title-page hero). `show` reveals the scrim: the
-	// title page keeps it hidden over the hero and fades it in on scroll. We animate the blur *radius*
-	// (down to 0 when hidden) rather than the container's opacity — an ancestor opacity fade doesn't
-	// interpolate backdrop-filter, so the blur would pop in while only the tint faded. Absolutely
-	// fills its (positioned) parent header; edit here, once.
+	// A single backdrop-filter can't vary its blur radius over its height, so layers are stacked and
+	// masked; the radius (not container opacity) is animated because an ancestor opacity fade doesn't
+	// interpolate backdrop-filter. `strong` scales the blur over artwork; `show` fades the scrim in.
 	let { strong = false, show = true }: { strong?: boolean; show?: boolean } = $props();
 
-	// Each layer: blur radius (px) plus the mask stops where it holds full then fades to transparent
-	// (top→bottom, %). Bands overlap so the ramp is smooth; the biggest blur is pinned nearest the top.
+	// Bands overlap so the ramp is smooth; the biggest blur is pinned nearest the top.
 	const layers = $derived(
 		[
 			{ blur: 0.5, solid: 78, end: 100 },

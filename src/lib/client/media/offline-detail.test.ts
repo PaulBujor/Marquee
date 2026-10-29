@@ -137,7 +137,6 @@ describe('buildOfflineDetail', () => {
 			{ id: 6384, name: 'Keanu Reeves', character: 'Neo', profilePath: '/keanu.jpg' }
 		]);
 		expect(detail?.director).toEqual({ id: 9339, name: 'Lana Wachowski' });
-		// A locally-minted person has no provider id, so there is no page to link them to.
 		expect(detail?.producers).toEqual([]);
 	});
 

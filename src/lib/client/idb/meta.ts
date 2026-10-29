@@ -1,4 +1,3 @@
-/** `meta` store accessors: the durable `deviceId`, the sync `cursor`, and the owning `userId`. */
 import { openDb, type MetaEntry, type MetaKey, type MetaValues } from './db';
 
 async function getMeta<K extends MetaKey>(key: K): Promise<MetaValues[K] | undefined> {
@@ -12,7 +11,6 @@ async function setMeta<K extends MetaKey>(key: K, value: MetaValues[K]): Promise
 	await db.put('meta', { key, value } as MetaEntry);
 }
 
-/** Stable per-device id, generated and persisted on first access. */
 export async function getDeviceId(): Promise<string> {
 	let id = await getMeta('deviceId');
 	if (!id) {
@@ -31,7 +29,6 @@ export async function setCursor(cursor: number): Promise<void> {
 	await setMeta('cursor', cursor);
 }
 
-/** Epoch ms of the last successful event sync, or null if never synced on this device. */
 export async function getLastSyncAt(): Promise<number | null> {
 	return (await getMeta('lastSyncAt')) ?? null;
 }
@@ -40,7 +37,6 @@ export async function setLastSyncAt(at: number): Promise<void> {
 	await setMeta('lastSyncAt', at);
 }
 
-/** Epoch ms of the last full media version-diff pass, or 0 if never run on this device. */
 export async function getLastFullMediaCheck(): Promise<number> {
 	return (await getMeta('lastFullMediaCheck')) ?? 0;
 }
@@ -51,17 +47,11 @@ export async function setLastFullMediaCheck(at: number): Promise<void> {
 
 const RECENT_SEARCHES_LIMIT = 25;
 
-/** Last committed searches, most recent first — empty if none recorded on this device. */
 export async function getRecentSearches(): Promise<string[]> {
 	return (await getMeta('recentSearches')) ?? [];
 }
 
-/**
- * Record a committed search query, bumping it to the front if already present (rather than
- * showing it twice) and capping the list at {@link RECENT_SEARCHES_LIMIT}. Returns the updated
- * list so the caller can update its UI state without a second round trip. Blank queries are
- * ignored — clearing the search box shouldn't add an empty entry.
- */
+/** Bumps a repeat to the front rather than showing it twice; blank queries are ignored. */
 export async function addRecentSearch(query: string): Promise<string[]> {
 	const q = query.trim();
 	if (!q) return getRecentSearches();

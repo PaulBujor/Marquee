@@ -1,9 +1,5 @@
-<!--
-	Built on the vendored shadcn-svelte Table primitives. Sorting and paging stay server-driven — the states
-	live in the URL, not in the table — so the rank of every column comes from a GET submission rather than
-	client-side sorting. That keeps it working with JavaScript off, and means the sort key reaches SQL only
-	through the server's column whitelist.
--->
+<!-- Sorting and paging are server-driven (state in the URL), so it works with JavaScript off and the
+sort key reaches SQL only through the server's column whitelist. -->
 <script lang="ts" generics="Row">
 	import * as Table from '#lib/components/ui/table/index.js';
 	import type { Column } from './types.js';

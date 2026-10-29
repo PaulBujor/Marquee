@@ -3,12 +3,11 @@
 	import { browser } from '$app/env';
 	import { toast } from 'svelte-sonner';
 
-	// Surface a waiting (freshly deployed) worker; swap only on user accept.
 	let waiting = $state<ServiceWorker | null>(null);
 
 	const TOAST_ID = 'pwa-update';
 
-	// Dismissible toast; re-surfaces on the next foreground update check while a worker still waits.
+	// Dismissible; re-surfaces on the next foreground check while a worker still waits.
 	function showUpdateToast() {
 		toast('A new version of Marquee is available.', {
 			id: TOAST_ID,
@@ -17,7 +16,6 @@
 		});
 	}
 
-	// Fire the toast once a worker is waiting.
 	$effect(() => {
 		if (waiting) showUpdateToast();
 	});
@@ -54,8 +52,7 @@
 			if (reg) track(reg);
 		});
 
-		// Re-check for a deploy when the app returns to the foreground; re-surface the toast if a
-		// worker is still waiting (the user may have dismissed it earlier).
+		// Re-check for a deploy on foreground; re-surface the toast if a worker still waits (dismissed earlier).
 		const onVisible = () => {
 			if (document.visibilityState !== 'visible') return;
 			registration?.update();
@@ -70,8 +67,7 @@
 	});
 
 	function reload(event: MouseEvent) {
-		// Keep the toast (Sonner would otherwise dismiss it on action click) and swap it to a
-		// loading state until `controllerchange` reloads the page.
+		// Keep the toast (Sonner dismisses it on action click) and swap it to a loading state.
 		event.preventDefault();
 		toast.loading('Reloading…', { id: TOAST_ID, duration: Infinity });
 		waiting?.postMessage({ type: 'SKIP_WAITING' });

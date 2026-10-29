@@ -1,11 +1,6 @@
 /**
- * Client-side projection: apply an event to the materialized IndexedDB stores.
- * This mirrors the server's `projectEvent` — same deterministic keys, same
- * per-field last-write-wins by `clientCreatedAt` — so local optimistic state and
- * pulled server state converge to the same result regardless of arrival order.
- *
- * `media.deleted` is the one event that reaches past those stores into the media cache; it runs
- * after the projection transaction commits, for the reason on {@link deletedMediaIds}.
+ * Mirrors the server's `projectEvent` — same deterministic keys, same per-field LWW by
+ * `clientCreatedAt` — so local optimistic and pulled state converge regardless of arrival order.
  */
 import type { IDBPTransaction } from 'idb';
 import {
@@ -30,7 +25,6 @@ type TrackingClock =
 const PROJECTION_STORES = ['tracking', 'episodeWatches', 'mediaLinks'] as const;
 type ProjectionTx = IDBPTransaction<MarqueeDB, typeof PROJECTION_STORES, 'readwrite'>;
 
-/** Read-modify-write a tracking row under LWW guard on `clockField`, inside a caller's transaction. */
 async function upsertTracking(
 	tx: ProjectionTx,
 	mediaId: string,
@@ -63,7 +57,6 @@ async function upsertTracking(
 
 type MediaLinkClock = 'linkedUpdatedAt' | 'declinedUpdatedAt';
 
-/** Read-modify-write a media-link row under LWW guard on `clockField`, inside a caller's transaction. */
 async function upsertMediaLink(
 	tx: ProjectionTx,
 	mediaId: string,
@@ -89,7 +82,6 @@ async function upsertMediaLink(
 	await store.put(row);
 }
 
-/** Apply one event within an open projection transaction (idempotent, LWW). */
 async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<void> {
 	const clock = event.clientCreatedAt;
 	const entityId = event.entityId;
@@ -97,8 +89,8 @@ async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<v
 	switch (event.type) {
 		case 'tracking.added': {
 			const payload = event.payload as EventPayloadMap['tracking.added'];
-			// Status and revive are independent LWW fields — a stale add can't un-remove a
-			// title a newer removal tombstoned.
+			// Status and revive are independent LWW fields — a stale add can't un-remove a newer
+			// removal.
 			await upsertTracking(tx, entityId, clock, 'statusUpdatedAt', (t) => {
 				t.status = payload.status;
 			});
@@ -188,16 +180,11 @@ async function applyEventInTx(tx: ProjectionTx, event: EventEnvelope): Promise<v
 	}
 }
 
-/**
- * The entries a batch of events deletes. Kept out of the projection transaction: erasing a custom
- * entry touches the four media stores, and widening `PROJECTION_STORES` to hold them would make
- * every tracking write lock the whole media cache for the sake of one rare event.
- */
+/** Kept out of the projection transaction: widening it would make every tracking write lock the cache. */
 function deletedMediaIds(events: EventEnvelope[]): string[] {
 	return events.filter((e) => e.type === 'media.deleted').map((e) => e.entityId);
 }
 
-/** Apply a single event to the local materialized stores (idempotent, LWW). */
 export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 	const db = await openDb();
 	const tx = db.transaction(PROJECTION_STORES, 'readwrite');
@@ -206,11 +193,7 @@ export async function applyEventToIdb(event: EventEnvelope): Promise<void> {
 	await deleteLocalMedia(deletedMediaIds([event]));
 }
 
-/**
- * Apply many events in **one** transaction — same rules as {@link applyEventToIdb}, and the
- * per-field LWW guards keep the result independent of the order passed in. For imports: one at a
- * time, a few hundred titles runs into thousands of round trips with the UI blocked behind them.
- */
+/** One transaction — a few hundred titles one at a time is thousands of round trips. */
 export async function applyEventsToIdb(events: EventEnvelope[]): Promise<void> {
 	if (events.length === 0) return;
 	const db = await openDb();
@@ -220,7 +203,6 @@ export async function applyEventsToIdb(events: EventEnvelope[]): Promise<void> {
 	await deleteLocalMedia(deletedMediaIds(events));
 }
 
-/** All non-removed tracking rows (optionally filtered by status). */
 export async function getTracking(status?: ClientTracking['status']): Promise<ClientTracking[]> {
 	const db = await openDb();
 	const rows = status
@@ -229,13 +211,12 @@ export async function getTracking(status?: ClientTracking['status']): Promise<Cl
 	return rows.filter((r) => !r.removed);
 }
 
-/** The tracking row for a single title, or undefined if never tracked. Includes tombstoned (removed) rows — the caller decides how to read them (see `toTrackingView`). */
+/** Includes tombstoned (removed) rows — the caller decides how to read them. */
 export async function getTrackingByMediaId(mediaId: string): Promise<ClientTracking | undefined> {
 	const db = await openDb();
 	return db.get('tracking', mediaId);
 }
 
-/** The identity decision recorded for a title, or undefined when the user hasn't made one. */
 export async function getMediaLink(mediaId: string): Promise<ClientMediaLink | undefined> {
 	const db = await openDb();
 	return db.get('mediaLinks', mediaId);
@@ -247,17 +228,12 @@ export async function getMediaLinksTo(targetId: string): Promise<ClientMediaLink
 	return (await db.getAll('mediaLinks')).filter((l) => l.targetId === targetId);
 }
 
-/** Watched-episode rows for a show. */
 export async function getEpisodeWatches(mediaId: string): Promise<ClientEpisodeWatch[]> {
 	const db = await openDb();
 	return db.getAllFromIndex('episodeWatches', 'by_media', mediaId);
 }
 
-/**
- * Every episode-watch row across all shows, in one read. Includes `watched: false` rows (the LWW
- * tombstones a later unwatch leaves behind) — callers filter as they need. Used by the export,
- * which would otherwise need a per-title index scan.
- */
+/** Includes `watched: false` LWW tombstones — callers filter as they need. */
 export async function getAllEpisodeWatches(): Promise<ClientEpisodeWatch[]> {
 	const db = await openDb();
 	return db.getAll('episodeWatches');

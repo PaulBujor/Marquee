@@ -1,13 +1,4 @@
 <script lang="ts">
-	// The app's primary navigation: a floating, translucent card pinned to the bottom of every
-	// signed-in page, so the four destinations stay in thumb reach instead of in the far top corner.
-	//
-	// Three behaviours make it read as an app rather than four links:
-	//   - each tab links to where you last were on it (URL + scroll), not to its bare root;
-	//   - tapping the tab you're already on acts on the page — search focuses its field, everything
-	//     else scrolls to the top (the dashboard offers an undo, since its position is expensive);
-	//   - the labels collapse away as you scroll down and come back as you scroll up.
-	// The decisions behind all three live in `#lib/state/tabs.js` as pure, tested helpers.
 	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { prefersReducedMotion } from 'svelte/motion';
@@ -35,9 +26,8 @@
 		search: SearchIcon
 	};
 
-	// A title page belongs to no tab, so it keeps the tab it was opened from lit — the detail view is
-	// a push within that tab's stack, and a title is reachable from the dashboard, search and upcoming
-	// alike. `current` (null there) drives what a tap *does*; `selected` only drives what looks active.
+	// A title page belongs to no tab, so it keeps the opened-from tab lit: `current` (null there) drives
+	// what a tap does; `selected` only drives what looks active.
 	const current = $derived(activeTab(page.url.pathname));
 	const selected = $derived(current ?? tabs.owner);
 
@@ -46,8 +36,7 @@
 	let compact = $state(false);
 	let phase: ScrollPhase = initialScrollPhase;
 
-	// Collapse the labels on the way down, restore them on the way up. Coalesced to one update per
-	// frame — this listener runs over the dashboard's very long grid.
+	// Coalesced to one update per frame — this listener runs over the dashboard's very long grid.
 	$effect(() => {
 		let frame = 0;
 		const onScroll = () => {
@@ -66,8 +55,7 @@
 		};
 	});
 
-	// A new page starts at the top, so it must start expanded — inheriting the previous page's
-	// collapsed bar reads as broken.
+	// A new page starts at the top, so it must start expanded; inheriting a collapsed bar reads as broken.
 	afterNavigate(({ shallow, type }) => {
 		if (shallow && type === 'goto') return;
 
@@ -75,8 +63,7 @@
 		compact = false;
 	});
 
-	// Get out of the way of the soft keyboard: iOS floats a fixed bottom element above it, covering
-	// the field being typed into. Best-effort — browsers without visualViewport just keep the bar.
+	// iOS floats a fixed bottom element above the soft keyboard, covering the field being typed into.
 	let keyboard = $state(false);
 	$effect(() => {
 		const viewport = window.visualViewport;
@@ -89,19 +76,9 @@
 		return () => viewport.removeEventListener('resize', update);
 	});
 
-	// Publish the bar's height, as two properties with different jobs — font scaling means the CSS
-	// baselines in layout.css are only estimates.
-	//
-	// `--tab-bar-space` is what pages pad by, and a collapsed height is never published to it. That
-	// padding must not SHRINK mid-scroll: doing so moves the scroll position, which feeds the
-	// compaction fold above, and the two oscillate. (On the way back up it does ease along with the
-	// bar for a frame or two, since `compact` clears before the height animation finishes — growing
-	// padding below the fold is harmless and can't drive that loop.)
-	//
-	// `--tab-bar-live` tracks the height right now, collapsed or not, and positions the things that
-	// float directly above the bar (toasts, the undo pill). They're fixed overlays, so following the
-	// bar down costs no reflow and can't feed that loop — whereas leaving them on the pinned value
-	// would visibly open a gap every time the bar collapsed.
+	// `--tab-bar-space` (page padding) never follows the collapsed height: shrinking it mid-scroll moves
+	// scrollY, which feeds the compaction fold and the two oscillate. `--tab-bar-live` tracks the live
+	// height for the fixed overlays above the bar, which costs no reflow.
 	let card = $state<HTMLElement | null>(null);
 	$effect(() => {
 		const el = card;
@@ -111,8 +88,7 @@
 			document.documentElement.style.setProperty('--tab-bar-live', space);
 			if (!compact) document.documentElement.style.setProperty('--tab-bar-space', space);
 		};
-		// Measure once up front: a ResizeObserver's first callback isn't guaranteed to arrive (and the
-		// API isn't guaranteed to exist), and the CSS baseline is only an estimate.
+		// A ResizeObserver's first callback isn't guaranteed to arrive, and the API may not exist.
 		publish(el.offsetHeight);
 		const observer =
 			typeof ResizeObserver === 'undefined'

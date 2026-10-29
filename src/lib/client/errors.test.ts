@@ -21,8 +21,6 @@ describe('appendError', () => {
 	});
 
 	it('folds a repeat into a count instead of listing it again', () => {
-		// A render loop throws the same error hundreds of times; a log that lists each one is
-		// unreadable and pushes the error you actually need off the end.
 		let log = appendError([], entry('boom', { source: 'sync' }));
 		log = appendError(log, entry('boom', { source: 'sync', at: 2_000 }));
 		log = appendError(log, entry('boom', { source: 'sync', at: 3_000 }));
@@ -96,8 +94,7 @@ describe('admitToast', () => {
 	});
 
 	it('lets a later unrelated failure speak up once the window passes', () => {
-		// The reason this is a window and not a per-session cap: three early errors must not silence
-		// the app for the rest of the session.
+		// A per-session cap would silence the app for the rest of the session; the window doesn't.
 		let recent: number[] = [];
 		for (let i = 0; i < TOAST_MAX; i++) recent = admitToast(recent, 1_000).recent;
 		expect(admitToast(recent, 1_000 + TOAST_WINDOW_MS + 1).show).toBe(true);
@@ -123,7 +120,6 @@ describe('onClientError', () => {
 	});
 
 	it('keeps reporting when a listener throws', () => {
-		// Surfacing an error must never be able to lose it.
 		const seen: string[] = [];
 		const offBad = onClientError(() => {
 			throw new Error('listener is broken');

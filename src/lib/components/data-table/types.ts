@@ -5,7 +5,6 @@ export interface Column<Row> {
 	key: string;
 	label: string;
 	sortable?: boolean;
-	/** Right-align the cell — used for status and timestamps. */
 	end?: boolean;
 	cell: Snippet<[Row]>;
 }

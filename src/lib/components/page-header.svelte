@@ -1,8 +1,5 @@
 <script lang="ts">
-	// Sticky page header shared by the search + settings + upcoming pages: content scrolls blurred
-	// beneath it, faded out by the same curved top→transparent gradient the home/title headers use,
-	// and it clears the iOS status bar / Dynamic Island. `children` holds the header content (a
-	// title, or a search field). Aligned to the max-w-2xl content column.
+	// Clears the iOS status bar / Dynamic Island; `children` holds the header content.
 	import type { Snippet } from 'svelte';
 	import HeaderScrim from '#lib/components/header-scrim.svelte';
 

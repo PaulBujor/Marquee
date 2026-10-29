@@ -2,22 +2,17 @@
 	import { cn } from '#lib/utils.js';
 	import { posterUrl, type TmdbImageSize } from '#lib/media.js';
 
-	/**
-	 * A person's circular profile photo, falling back to their initials. Profile images come straight
-	 * from TMDB rather than through `MediaImage` — people aren't part of the offline media cache.
-	 */
+	/** Profile images come straight from TMDB — people aren't part of the offline media cache. */
 	interface Props {
 		name: string;
 		profilePath: string | null;
 		size?: TmdbImageSize;
-		/** Sizing classes for the circle (e.g. `size-14`) — the caller owns the scale. */
 		class?: string;
 	}
 	let { name, profilePath, size = 'w185', class: className }: Props = $props();
 
 	const src = $derived(posterUrl(profilePath, size));
 
-	/** First letters of the first two words — e.g. "Christopher Nolan" → "CN". */
 	const initials = $derived(
 		name
 			.split(/\s+/)

@@ -12,23 +12,11 @@
 	{...restProps}
 />
 
-<!-- Reshape Sonner's defaults to fit the app design system: rounder card, pill action button,
-     and the dismiss (Sonner's close button) pulled inline to the LEFT so it mirrors the action
-     button on the right. Toasts render in a portal, so these are global + scoped under `.toaster`
-     (higher specificity than Sonner's own `[data-sonner-toast]` rules). -->
+<!-- Fully rounded to match the bottom tab bar it stacks above; the frosted material comes from the
+shared `--glass-*` variables. Toasts render in a portal, so these rules are global + scoped under `.toaster`. -->
 <style>
-	/* Fully rounded, to match the bottom tab bar it stacks above — the two floating surfaces at the
-	   bottom of the screen share a background, border and shadow, so they must share a silhouette
-	   too. The inline layout below (round dismiss left, pill action right) is built for a capsule;
-	   the extra inline padding keeps both clear of the curved ends.
-
-	   The frosted material comes from the shared `--glass-*` variables (see layout.css): the
-	   background arrives via Sonner's own `--normal-bg` hook above, and the filter is applied here
-	   because Sonner has no hook for it. One caveat we accept: on a pointer device Sonner transforms
-	   the toast *container* to lift the stack on hover, and a transformed ancestor forms a backdrop
-	   root — so the blur flattens while the stack is lifted, then returns. Touch devices never lift
-	   (Sonner forces `transform: none` under `pointer: coarse`), so the case this material exists
-	   for is unaffected. */
+	/* A transformed ancestor forms a backdrop root, so the blur flattens while Sonner lifts the stack on
+	   hover; touch devices never lift, so the case this material exists for is unaffected. */
 	:global(.toaster [data-sonner-toast][data-styled='true']) {
 		gap: 0.625rem;
 		padding: 0.75rem 1rem;

@@ -1,18 +1,6 @@
-<!--
-	Two intentional divergences from the shadcn-svelte "nova" registry.
-
-	It styles the open/close animation with `data-open:`/`data-closed:` (written against a newer
-	Bits UI), but the pinned bits-ui@2.18 Dialog.Content emits `data-state="open"|"closed"` — without
-	the `data-[state=…]:` variants below the dialog appears and disappears with no animation at all.
-	Same divergence, same reason, as `tabs-trigger.svelte`.
-
-	And the motion is the app's rather than the registry's: a fade plus a short rise from below, not
-	a zoom. Tailwind v4 puts the centring offset on `translate`, so the animation's own `transform`
-	composes with it rather than fighting it.
-
-	Both apply to `dialog-overlay.svelte` too. Revert to the registry version only when Bits UI is
-	upgraded to the one the registry targets; don't blindly re-run `shadcn-svelte add dialog`.
--->
+<!-- bits-ui@2.18 emits `data-state`, not the registry's `data-open:`/`data-closed:` (so the
+`data-[state=…]:` variants below), and the app's fade+rise replaces the registry's zoom; same for
+`dialog-overlay.svelte`. Don't re-run `shadcn-svelte add dialog`. -->
 <script lang="ts">
 	import { Dialog as DialogPrimitive } from 'bits-ui';
 	import DialogPortal from './dialog-portal.svelte';

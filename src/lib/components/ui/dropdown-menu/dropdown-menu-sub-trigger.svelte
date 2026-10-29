@@ -1,8 +1,5 @@
-<!--
-	The open-submenu highlight is `data-[state=open]:`, not the registry's `data-open:` — the pinned
-	bits-ui@2.18 emits `data-state` here too, so the registry class never matched and an open submenu
-	left its trigger unhighlighted. See `dialog-content.svelte`.
--->
+<!-- Open-submenu highlight is `data-[state=open]:`, not `data-open:` — bits-ui@2.18 emits `data-state`.
+See `dialog-content.svelte`. -->
 <script lang="ts">
 	import { DropdownMenu as DropdownMenuPrimitive } from 'bits-ui';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';

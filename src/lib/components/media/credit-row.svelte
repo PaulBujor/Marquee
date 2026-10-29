@@ -14,10 +14,7 @@
 	import { CUSTOM_NAME_MAX, type CustomCreditInput } from '#lib/validation/custom-media.js';
 	import type { PersonSearchResult, SearchResult } from '#lib/server/tmdb/index.js';
 
-	/**
-	 * One credited person: role + name field with type-ahead against the provider's people catalog.
-	 * The search is a spelling aid — picking someone fills in the name but stays private to the entry.
-	 */
+	/** One credited person. The type-ahead is a spelling aid — picking someone stays private to the entry. */
 	interface Props {
 		credit: CustomCreditInput;
 		onremove: () => void;

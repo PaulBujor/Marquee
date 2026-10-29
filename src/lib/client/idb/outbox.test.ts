@@ -8,7 +8,6 @@ setActiveUser('test-user'); // the store is namespaced per user; scope it before
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 
-/** Enqueue an event with an explicit clock so ordering is deterministic. */
 async function enqueue(clock: number) {
 	const e = createEvent('tracking.favorite_toggled', `movie:${clock}`, { favorite: true }, DEVICE);
 	e.clientCreatedAt = clock;

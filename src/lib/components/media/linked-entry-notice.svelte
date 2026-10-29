@@ -7,17 +7,13 @@
 	import { sync } from '#lib/client/sync/engine.svelte.js';
 	import { guardedWrite } from '#lib/client/write-guard.js';
 
-	/**
-	 * Shows matched custom entries on a linked title, with an unlink action. The only way back to
-	 * a matched entry — once linked it's off every list and out of search.
-	 */
+	/** The only way back to a matched entry — once linked it's off every list and out of search. */
 	interface Props {
-		/** Our media id for the title being viewed. */
 		mediaId: string;
 	}
 	let { mediaId }: Props = $props();
 
-	/** The user's own entries matched to this title, with the titles they were authored under. */
+	/** The user's own entries matched to this title. */
 	let matched = $state<{ id: string; title: string }[]>([]);
 	let confirming = $state<{ id: string; title: string } | null>(null);
 	let confirmOpen = $state(false);
@@ -61,8 +57,7 @@
 		sync.requestSync();
 		const gen = ++loadGen;
 		await load(gen);
-		// Other views read the same link state — the search page most of all, where the entry
-		// reappears the moment it stops pointing anywhere.
+		// Other views read the same link state — the search page most of all, where the entry reappears.
 		await invalidateAll();
 	}
 </script>

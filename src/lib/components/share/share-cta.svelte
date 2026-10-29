@@ -1,6 +1,5 @@
 <script lang="ts">
-	// The public pages' only call to action. Marquee accounts start `pending`, so this has to serve
-	// an existing user and a stranger alike: the sign-in page is also where the waitlist lives.
+	// Marquee accounts start `pending`, so this serves an existing user and a stranger alike.
 	import { Button } from '#lib/components/ui/button/index.js';
 
 	interface Props {

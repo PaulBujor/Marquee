@@ -35,7 +35,6 @@ beforeEach(async () => {
 
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 
-/** Seed a local `tracking` row for `externalId`, the way a real `tracking.added` event would. */
 async function track(externalId: string): Promise<void> {
 	await applyEventToIdb(trackEvent(externalId));
 }
@@ -49,8 +48,7 @@ function trackEvent(externalId: string): EventEnvelope<'tracking.added'> {
 	);
 }
 
-/** Seed `count` local `tracking` rows in one batch (an import-sized backlog would be slow one at a time).
- *  Returns the raw external ids — pass these to `record()`; use `mediaId('tmdb', id)` to get the hashed id. */
+/** Seed `count` local `tracking` rows in one batch (an import-sized backlog would be slow one at a time). */
 async function trackMany(count: number, prefix: string): Promise<string[]> {
 	const externalIds = Array.from({ length: count }, (_, i) => `${prefix}/${i}`);
 	await applyEventsToIdb(externalIds.map(trackEvent));
@@ -83,7 +81,6 @@ function record(externalId: string, over: Partial<MediaRecord> = {}): MediaRecor
 	};
 }
 
-/** A fetch stub that captures the request body and returns the given media list. */
 function stubFetch(media: MediaRecord[], sent: MediaSyncRequest[]) {
 	return (async (_url: string, init: RequestInit) => {
 		sent.push(JSON.parse(init.body as string) as MediaSyncRequest);
@@ -94,7 +91,6 @@ function stubFetch(media: MediaRecord[], sent: MediaSyncRequest[]) {
 	}) as unknown as typeof fetch;
 }
 
-/** A fetch stub that returns a queued sequence of responses (defaulting to the last one). */
 function stubResponses(responses: MediaSyncResponse[], sent: MediaSyncRequest[]) {
 	let i = 0;
 	return (async (_url: string, init: RequestInit) => {
@@ -108,12 +104,10 @@ function stubResponses(responses: MediaSyncResponse[], sent: MediaSyncRequest[])
 	}) as unknown as typeof fetch;
 }
 
-/** A fetch stub that always reports the request current (nothing missing/behind, never pending). */
 function stubCaughtUp(sent: MediaSyncRequest[]) {
 	return stubFetch([], sent);
 }
 
-/** Every id sent across the requests' `have` entries, deduped. */
 function haveIdsSent(sent: MediaSyncRequest[]): Set<string> {
 	return new Set(sent.flatMap((req) => req.have.map((h) => h.id)));
 }
@@ -147,7 +141,6 @@ describe('custom media backup', () => {
 		};
 	}
 
-	/** Track a custom id directly — it has no external id to derive one from. */
 	async function trackCustom(id: string): Promise<void> {
 		await applyEventToIdb(createEvent('tracking.added', id, { status: 'want_to_watch' }, DEVICE));
 	}
@@ -395,7 +388,6 @@ describe('runMediaSync', () => {
 
 		expect(sent).toHaveLength(3); // 500-chunk, 100-chunk, then the requeued 500-chunk retry
 		expect(sent[1].have).toHaveLength(100); // the smaller chunk was visited before the retry
-		// The retry (request 3) is the same 500-chunk as request 1, not some other/partial set.
 		expect(new Set(sent[2].have.map((h) => h.id))).toEqual(new Set(sent[0].have.map((h) => h.id)));
 		expect(result.truncated).toBe(false);
 	});

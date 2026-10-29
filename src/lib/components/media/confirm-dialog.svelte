@@ -1,10 +1,7 @@
 <script lang="ts">
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 
-	// A small controlled confirmation for actions that are awkward to undo (e.g. bulk "mark
-	// season/series watched"). An **alert** dialog (not a plain dialog): it takes role=alertdialog,
-	// traps focus, and doesn't dismiss on outside-click/Escape — the user must choose. The parent
-	// binds `open`; `onconfirm` fires on the action (the dialog auto-closes).
+	// An **alert** dialog: traps focus and won't dismiss on outside-click/Escape — the user must choose.
 	interface Props {
 		open?: boolean;
 		title: string;
@@ -33,8 +30,7 @@
 				<AlertDialog.Description>{description}</AlertDialog.Description>
 			{/if}
 		</AlertDialog.Header>
-		<!-- Cancel first in the DOM so the footer's flex-col-reverse (mobile) puts the primary
-		action on top, and sm:flex-row justify-end (desktop) puts it rightmost. -->
+		<!-- Cancel first in the DOM so the footer's flex-col-reverse puts the primary action on top on mobile. -->
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
 			<AlertDialog.Action variant={confirmVariant} onclick={onconfirm} disabled={busy}>

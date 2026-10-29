@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installGlobalErrorReporting, type ClientErrorReport } from './report-error';
 
-/** Dispatch an event carrying the extra fields the browser puts on error events. */
 function fire(target: EventTarget, type: string, fields: Record<string, unknown>) {
 	target.dispatchEvent(Object.assign(new Event(type), fields));
 }
@@ -121,7 +120,6 @@ describe('installGlobalErrorReporting', () => {
 		install(); // e.g. a hot reload re-running app startup
 		fire(target, 'error', { message: 'once please' });
 
-		// One listener set, so one report — not a duplicate per install.
 		expect(reports).toHaveLength(1);
 	});
 });

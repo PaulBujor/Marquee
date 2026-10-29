@@ -80,7 +80,6 @@ describe('applyEventToIdb', () => {
 			removed: false
 		});
 		await applyEventToIdb(ev('tracking.removed', MID, {}, 200));
-		// getTracking() hides it, but the by-id read still returns the tombstone.
 		expect((await getTracking()).find((t) => t.mediaId === MID)).toBeUndefined();
 		expect(await getTrackingByMediaId(MID)).toMatchObject({ removed: true });
 	});
@@ -192,7 +191,6 @@ describe('applyEventsToIdb', () => {
 			spied.transaction = original;
 		}
 
-		// Applied one at a time this would be five (a `tracking.added` alone costs two).
 		expect(opened).toBe(1);
 	});
 

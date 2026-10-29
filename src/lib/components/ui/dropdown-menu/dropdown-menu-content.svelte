@@ -1,8 +1,4 @@
-<!--
-	`data-[state=…]:` rather than the registry's `data-open:`/`data-closed:` — the pinned
-	bits-ui@2.18 emits `data-state`, so the registry classes never match and nothing animates. See
-	`dialog-content.svelte`.
--->
+<!-- `data-[state=…]:` rather than `data-open:` — bits-ui@2.18 emits `data-state`. See `dialog-content.svelte`. -->
 <script lang="ts">
 	import { cn, type WithoutChildrenOrChild } from '#lib/utils.js';
 	import DropdownMenuPortal from './dropdown-menu-portal.svelte';

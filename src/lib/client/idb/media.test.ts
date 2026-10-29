@@ -271,8 +271,7 @@ describe('searchCustomMedia', () => {
 	});
 
 	it('brings the entry back once the match is taken back', async () => {
-		// The round trip the unlink control exists for: nothing about linking was destructive, so
-		// undoing it has to restore the only route back to the entry.
+		// The round trip the unlink control exists for: linking was not destructive, so undo restores it.
 		const link = createEvent(
 			'media.linked',
 			CUSTOM_ID,
@@ -290,8 +289,7 @@ describe('searchCustomMedia', () => {
 	});
 
 	it('keeps an entry whose suggestions were merely dismissed', async () => {
-		// Declining a match says "not this one", not "this is that" — the entry is still the only way
-		// to reach the title.
+		// Declining says "not this one", not "this is that" — the entry is still the only route through.
 		await applyEventToIdb(createEvent('media.match_declined', CUSTOM_ID, {}, DEVICE));
 		expect((await searchCustomMedia('cassette')).map((m) => m.id)).toEqual([CUSTOM_ID]);
 	});
@@ -333,8 +331,8 @@ describe('credits', () => {
 			})
 		);
 
-		// Roles group first, each keeping its billing — the same order the server hands them over in,
-		// so a renderer can section without re-sorting and two devices always agree.
+		// Roles group first, each keeping its billing — the server's order, so a renderer can section
+		// without re-sorting and two devices always agree.
 		const rows = await getCredits(ID);
 		expect(rows.map((c) => c.name)).toEqual(['Top Billed', 'Second Billed', 'A Director']);
 		expect(rows[0]).toMatchObject({
@@ -598,7 +596,6 @@ describe('removal-then-eviction', () => {
 		await putMedia(showRecord(kept, 'show/50', 'Kept Show'));
 		await putMedia(showRecord(removed, 'show/51', 'Removed Show'));
 
-		// Both still on a list — nothing evicted yet.
 		let keepIds = new Set(await getReferencedMediaIds());
 		expect(keepIds).toEqual(new Set([kept, removed]));
 		expect(await pruneStaleMedia(keepIds)).toBe(0);
@@ -681,8 +678,7 @@ describe('media.deleted', () => {
 	});
 
 	it('erases the entry and everything hanging off it', async () => {
-		// Nothing can re-hydrate a user-authored row, so a tracking tombstone alone would leave the
-		// entry sitting in search forever — deleting has to actually delete.
+		// Nothing can re-hydrate a user-authored row, so a tombstone alone would leave it in search.
 		await applyEventToIdb(createEvent('media.deleted', CUSTOM_ID, {}, DEVICE));
 
 		const db = await openDb();

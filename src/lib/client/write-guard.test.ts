@@ -21,8 +21,7 @@ describe('guardedWrite', () => {
 	});
 
 	it('never lets a failed write pass as a success', async () => {
-		// The whole point: an unguarded handler swallowed the rejection, so the dialog closed and the
-		// user believed their entry was saved. The caller must be able to see it failed.
+		// An unguarded handler swallowed the rejection, so the dialog closed and the user believed it saved.
 		const ok = await guardedWrite(
 			async () => {
 				throw new Error('idb blocked');

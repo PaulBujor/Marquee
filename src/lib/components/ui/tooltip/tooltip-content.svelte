@@ -1,10 +1,6 @@
-<!--
-	The pinned bits-ui@2.18 gives a tooltip three states — `closed`, `delayed-open`, `instant-open` —
-	and never the `open` the registry's `data-open:` waits for, so only a delayed open animated and a
-	tooltip shown straight away appeared with a snap. Entering is keyed off "not closed" to cover
-	both open states. Transform-origin is the floating layer's real variable, so the zoom grows from
-	the trigger. See `dialog-content.svelte` for why not to re-run `shadcn-svelte add tooltip`.
--->
+<!-- bits-ui@2.18 gives a tooltip `closed`/`delayed-open`/`instant-open` and never `open`, so entering is
+keyed off "not closed" — keyed off `data-open:` a straight-open tooltip snapped in. Transform-origin
+is the floating layer's real variable, so the zoom grows from the trigger. See `dialog-content.svelte`. -->
 <script lang="ts">
 	import { Tooltip as TooltipPrimitive } from 'bits-ui';
 	import { cn } from '#lib/utils.js';
