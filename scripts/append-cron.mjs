@@ -2,7 +2,7 @@
  * Post-build step: attach `scheduled` and `queue` handlers to the worker adapter-cloudflare
  * emits. The adapter produces a fetch-only `_worker.js`, so we append handlers that self-fetch
  * the matching internal routes rather than importing app code (no build step here to compile TS
- * or resolve `$lib`). `scheduled` branches on the cron schedule; `queue` routes a batch by its
+ * or resolve `#lib`). `scheduled` branches on the cron schedule; `queue` routes a batch by its
  * Cloudflare queue name to an internal route, which returns per-message ack/retry outcomes that
  * this handler applies to the real `Message` objects — the only place that's possible, since it
  * requires the objects this invocation holds. The route map is derived from wrangler.jsonc bindings
@@ -19,8 +19,7 @@ const JOB_ROUTES = {
 };
 
 let src = await readFile(WORKER, 'utf8');
-// adapter-cloudflare v8 emits `export default { ... }`; earlier versions bound it to `worker_default`.
-// The handlers below are written against the name, so name it here and re-export at the end.
+// adapter-cloudflare v8 exports anonymously, and the appended handlers need a name.
 const defaultExports = src.split('export default {').length - 1;
 if (defaultExports !== 1) {
 	throw new Error(

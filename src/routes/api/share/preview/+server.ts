@@ -1,3 +1,4 @@
+import { env } from '#lib/server/bindings.js';
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { problem, zodProblem } from '#lib/server/http/problem.js';
@@ -24,7 +25,7 @@ const STATUS: Record<WarmResult['kind'], number> = {
 	unavailable: 503
 };
 
-export const POST: RequestHandler = async ({ request, locals, platform }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 	if (!locals.db) error(503, 'Service unavailable');
 
@@ -35,10 +36,10 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	const parsed = bodySchema.safeParse(raw);
 	if (!parsed.success) return zodProblem(parsed.error);
 
-	const apiKey = platform?.env.TMDB_API_KEY;
+	const apiKey = env.TMDB_API_KEY;
 	if (!apiKey) error(503, 'Shared links are not configured.');
 	// The kill switch has to cover the writes too, or previews accumulate for a surface that's off.
-	if (!publicSharingEnabled(platform?.env)) error(503, 'Shared links are not configured.');
+	if (!publicSharingEnabled(env)) error(503, 'Shared links are not configured.');
 
 	const userId = locals.user.id;
 	let result: WarmResult;

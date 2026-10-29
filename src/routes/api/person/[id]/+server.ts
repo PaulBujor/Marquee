@@ -1,3 +1,4 @@
+import { env } from '#lib/server/bindings.js';
 import { error, json } from '@sveltejs/kit';
 import { createTmdbClient, TmdbError } from '#lib/server/tmdb/index.js';
 import type { RequestHandler } from './$types';
@@ -8,7 +9,7 @@ import type { RequestHandler } from './$types';
  * unpaginated, so the client asks for a page rather than pulling a prolific actor's whole history.
  * Not cached and not available offline: like cast and trailers, this is a live TMDB-only surface.
  */
-export const GET: RequestHandler = async ({ locals, params, platform, url }) => {
+export const GET: RequestHandler = async ({ locals, params, url }) => {
 	if (!locals.user) error(401, 'Unauthorized.');
 
 	const id = Number(params.id);
@@ -17,8 +18,8 @@ export const GET: RequestHandler = async ({ locals, params, platform, url }) => 
 	const rawPage = Number(url.searchParams.get('page'));
 	const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
 
-	if (!platform) error(503, 'Service unavailable.');
-	const apiKey = platform.env.TMDB_API_KEY;
+	if (!env) error(503, 'Service unavailable.');
+	const apiKey = env.TMDB_API_KEY;
 	if (!apiKey) error(503, 'Person details are not configured.');
 
 	try {

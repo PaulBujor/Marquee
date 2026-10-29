@@ -2,7 +2,6 @@ import nodemailer from 'nodemailer';
 import type { EmailSender } from './index';
 
 export class SmtpSender implements EmailSender {
-	// Typed from the factory rather than the `nodemailer.*` namespace: v10 ships its own declarations.
 	private transporter: ReturnType<typeof nodemailer.createTransport>;
 
 	constructor(

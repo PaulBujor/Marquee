@@ -51,8 +51,8 @@ async function ipKey(opts: { ip?: string; cookie?: string } = { ip: '203.0.113.9
 	return rateLimitKey(request(opts));
 }
 
-function platform(limiter: unknown) {
-	return { env: { APP_RATE_LIMITER: limiter } } as unknown as App.Platform;
+function bindings(limiter: unknown) {
+	return { APP_RATE_LIMITER: limiter } as unknown as Env;
 }
 
 function limiter(impl: () => Promise<{ success: boolean }>) {
@@ -60,12 +60,12 @@ function limiter(impl: () => Promise<{ success: boolean }>) {
 }
 
 describe('withinRateLimit', () => {
-	it('allows when there are no bindings at all — build, prerender and unit tests have no platform', async () => {
+	it('allows when there are no bindings at all — build, prerender and unit tests have none', async () => {
 		expect(await withinRateLimit(undefined, 'APP_RATE_LIMITER', await ipKey())).toBe(true);
 	});
 
 	it('allows but says so once when a deployed environment is missing the binding', async () => {
-		const bare = { env: {} } as unknown as App.Platform;
+		const bare = {} as unknown as Env;
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 		expect(await withinRateLimit(bare, 'APP_RATE_LIMITER', await ipKey())).toBe(true);
@@ -100,7 +100,7 @@ describe('withinRateLimit', () => {
 	it('denies a caller who is over budget, and allows one the limiter itself failed on', async () => {
 		expect(
 			await withinRateLimit(
-				platform(limiter(async () => ({ success: false }))),
+				bindings(limiter(async () => ({ success: false }))),
 				'APP_RATE_LIMITER',
 				await ipKey()
 			)
@@ -109,7 +109,7 @@ describe('withinRateLimit', () => {
 		const broken = limiter(async () => {
 			throw new Error('limiter unavailable');
 		});
-		expect(await withinRateLimit(platform(broken), 'APP_RATE_LIMITER', await ipKey())).toBe(true);
+		expect(await withinRateLimit(bindings(broken), 'APP_RATE_LIMITER', await ipKey())).toBe(true);
 	});
 });
 

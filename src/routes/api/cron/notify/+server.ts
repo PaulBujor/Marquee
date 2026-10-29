@@ -1,3 +1,4 @@
+import { env } from '#lib/server/bindings.js';
 import { error, json } from '@sveltejs/kit';
 import { sendNewReleaseDigest } from '#lib/server/push/digest.js';
 import type { createDb } from '#lib/server/db/index.js';
@@ -8,8 +9,7 @@ type Db = ReturnType<typeof createDb>;
 
 /** Send the new-release push digest to users for whom it's ~9AM local. Self-contained: catches its
  * own failures (incl. an unconfigured VAPID key) so a bad run just no-ops. */
-async function sendDigests(db: Db, env: Env | undefined, now: Date) {
-	if (!env) return { ok: false as const, error: 'platform env unavailable' };
+async function sendDigests(db: Db, env: Env, now: Date) {
 	try {
 		const result = await sendNewReleaseDigest(db, env, now);
 		console.log(
@@ -28,13 +28,13 @@ async function sendDigests(db: Db, env: Env | undefined, now: Date) {
  * timezone (see scripts/append-cron.mjs); gated by `CRON_SECRET`, so a `POST` with an
  * `x-cron-key: <CRON_SECRET>` header also runs it on demand.
  */
-export const POST: RequestHandler = async ({ request, locals, platform }) => {
-	if (!(await isAuthorizedCronRequest(request, platform?.env.CRON_SECRET))) {
+export const POST: RequestHandler = async ({ request, locals }) => {
+	if (!(await isAuthorizedCronRequest(request, env.CRON_SECRET))) {
 		error(401, 'Unauthorized');
 	}
 	if (!locals.db) error(503, 'Service unavailable');
 
-	const notifications = await sendDigests(locals.db, platform?.env, new Date());
+	const notifications = await sendDigests(locals.db, env, new Date());
 
 	return json({ notifications });
 };

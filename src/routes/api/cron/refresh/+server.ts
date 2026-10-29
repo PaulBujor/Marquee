@@ -1,3 +1,4 @@
+import { env } from '#lib/server/bindings.js';
 import { error, json } from '@sveltejs/kit';
 import { enqueueStaleMedia } from '#lib/server/media/cron.js';
 import type { MediaRefreshMessage } from '#lib/server/media/refresh-consumer.js';
@@ -70,8 +71,8 @@ async function purgeShareData(db: Db) {
  * hourly schedule (see `/api/cron/notify`). Each job isolates its own errors so one failing never
  * prevents the others.
  */
-export const POST: RequestHandler = async ({ request, url, locals, platform }) => {
-	if (!(await isAuthorizedCronRequest(request, platform?.env.CRON_SECRET))) {
+export const POST: RequestHandler = async ({ request, url, locals }) => {
+	if (!(await isAuthorizedCronRequest(request, env.CRON_SECRET))) {
 		error(401, 'Unauthorized');
 	}
 	if (!locals.db) error(503, 'Service unavailable');
@@ -79,19 +80,13 @@ export const POST: RequestHandler = async ({ request, url, locals, platform }) =
 	// `?force=1` bypasses the per-row TTL — a manual re-hydrate (also useful for diagnostics).
 	const force = url.searchParams.get('force') === '1';
 
-	// `platform` is always set alongside `locals.db` (see hooks.server.ts) — the guard above covers
-	// both.
 	// Enqueueing itself never calls TMDB, but every message it produces will: without a key the
 	// consumer 503s on each batch, the relay retries the whole batch, and the entire backlog
 	// dead-letters. Check once here instead, and no-op the way the synchronous sweep used to.
-	const tmdbKey = platform!.env.TMDB_API_KEY;
+	const tmdbKey = env.TMDB_API_KEY;
 	if (!tmdbKey) console.error('cron: skipping media enqueue — TMDB is not configured.');
 	const media = tmdbKey
-		? await enqueueMedia(
-				locals.db,
-				cloudflareQueueProducer(platform!.env.MEDIA_REFRESH_QUEUE),
-				force
-			)
+		? await enqueueMedia(locals.db, cloudflareQueueProducer(env.MEDIA_REFRESH_QUEUE), force)
 		: { ok: false as const, error: 'TMDB is not configured.' };
 	const auth = await purgeAuth(locals.db);
 	const share = await purgeShareData(locals.db);

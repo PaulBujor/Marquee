@@ -9,8 +9,7 @@ const CACHE = `cache-${version}`;
 // Navigations (authed SSR HTML) live in their own cache so it can be cleared on logout without
 // dropping the precached build assets — keeps one user's cached shells off the next user's account.
 const PAGES = `pages-${version}`;
-// The app build + everything in static/ (icons, splash, manifest, offline.html). Build paths are already
-// cache-ready; static paths go through `asset()` to pick up the base path.
+// Build paths are cache-ready; static ones need `asset()` to pick up the base path.
 const BUILD_PATHS = immutable.map(({ path }) => path);
 const ASSETS = [...BUILD_PATHS, ...assets.map(({ path }) => asset(path))];
 const BUILD = new Set(BUILD_PATHS);

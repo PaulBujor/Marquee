@@ -1,3 +1,4 @@
+import { env } from '#lib/server/bindings.js';
 import { fail, redirect } from '@sveltejs/kit';
 import {
 	CODE_TTL_MINUTES,
@@ -61,8 +62,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 export const actions: Actions = {
 	// Request phase: branch on status; email a link (browser) or a code (PWA) per `mode`.
-	request: async ({ request, locals, platform, url, getClientAddress }) => {
-		if (!locals.db || !platform) return fail(503, { message: SERVICE_UNAVAILABLE });
+	request: async ({ request, locals, url, getClientAddress }) => {
+		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
@@ -71,7 +72,7 @@ export const actions: Actions = {
 			return fail(400, { email, message: firstError(parsedEmail.error) ?? INVALID_EMAIL });
 		}
 
-		const sender = createEmailSender(platform.env);
+		const sender = createEmailSender(env);
 		try {
 			const result = await requestSignIn({
 				db: locals.db,
@@ -135,8 +136,8 @@ export const actions: Actions = {
 	},
 
 	// Waitlist signup for a previously-unknown address (creates a pending user + emails a confirmation).
-	join: async ({ request, locals, platform, getClientAddress }) => {
-		if (!locals.db || !platform) return fail(503, { message: SERVICE_UNAVAILABLE });
+	join: async ({ request, locals, getClientAddress }) => {
+		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
@@ -145,7 +146,7 @@ export const actions: Actions = {
 			return fail(400, { email, message: firstError(parsedEmail.error) ?? INVALID_EMAIL });
 		}
 
-		const sender = createEmailSender(platform.env);
+		const sender = createEmailSender(env);
 		try {
 			const result = await joinWaitlist(locals.db, email, sender, getClientAddress());
 			return { step: 'join' as const, email: normalizeEmail(email), result: result.kind };

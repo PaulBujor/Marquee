@@ -4,6 +4,7 @@ import { sharePreviews, users } from '#lib/server/db/schema.js';
 import { previewId } from '#lib/server/share/preview.js';
 import { PUBLIC_SHARE_HEADERS } from '#lib/server/share/public.js';
 import { load } from './+page.server';
+import { setTestBindings, testWaitUntil } from '#lib/server/test/cloudflare-workers.js';
 
 type Event = Parameters<typeof load>[0];
 
@@ -61,8 +62,18 @@ async function setup(
 	}
 
 	const headers: Record<string, string> = {};
-	const pending: Promise<unknown>[] = [];
 	const limitKeys: string[] = [];
+	setTestBindings({
+		...(opts.disabled ? { SHARE_PUBLIC_DISABLED: opts.disabledValue ?? '1' } : {}),
+		TMDB_API_KEY: 'key',
+		PUBLIC_SHARE_LIMITER: {
+			limit: async ({ key }: { key: string }) => {
+				limitKeys.push(key);
+				return { success: !opts.limited };
+			}
+		}
+	});
+	const pending = testWaitUntil();
 	const event = {
 		params: { type: opts.type ?? 'movie', id: opts.id ?? '603' },
 		request: new Request('https://marquee.example/s/movie/603', {
@@ -72,19 +83,6 @@ async function setup(
 			}
 		}),
 		locals: { user: opts.user ?? null, db: opts.withDb === false ? undefined : db },
-		platform: {
-			env: {
-				...(opts.disabled ? { SHARE_PUBLIC_DISABLED: opts.disabledValue ?? '1' } : {}),
-				TMDB_API_KEY: 'key',
-				PUBLIC_SHARE_LIMITER: {
-					limit: async ({ key }: { key: string }) => {
-						limitKeys.push(key);
-						return { success: !opts.limited };
-					}
-				}
-			},
-			ctx: { waitUntil: (promise: Promise<unknown>) => pending.push(promise) }
-		},
 		setHeaders: (values: Record<string, string>) => {
 			for (const key in values) {
 				// SvelteKit throws when one header is set twice in a request ("header is already set"),
@@ -125,7 +123,7 @@ describe('GET /s/[type]/[id]', () => {
 		}
 	});
 
-	it('503s without the platform bindings', async () => {
+	it('503s without the bindings', async () => {
 		const { event } = await setup({ withDb: false });
 		expect((await outcome(() => load(event))).err?.status).toBe(503);
 	});

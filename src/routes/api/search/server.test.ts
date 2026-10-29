@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
 import { GET } from './+server';
+import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
 type Handler = typeof GET;
 type Event = Parameters<Handler>[0];
 
-/** Build a minimal event the handler actually reads (locals.user, platform.env, url). */
+/** Build a minimal event the handler actually reads (locals.user, bindings, url). */
 function makeEvent(opts: {
 	user?: unknown;
 	q?: string | null;
@@ -16,10 +17,8 @@ function makeEvent(opts: {
 	const url = new URL(
 		`http://localhost/api/search${q === null ? '' : `?q=${encodeURIComponent(q)}`}`
 	);
-	const platform = hasPlatform
-		? { env: apiKey === null ? {} : { TMDB_API_KEY: apiKey } }
-		: undefined;
-	return { locals: { user }, platform, url } as unknown as Event;
+	setTestBindings(hasPlatform && apiKey !== null ? { TMDB_API_KEY: apiKey } : {});
+	return { locals: { user }, url } as unknown as Event;
 }
 
 /** Run the handler and return whatever it threw (error() is thrown, not returned). */
@@ -55,7 +54,7 @@ describe('GET /api/search', () => {
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
-	it('errors 503 when the platform is unavailable', async () => {
+	it('errors 503 when no bindings are present', async () => {
 		const err = await thrownBy(() => GET(makeEvent({ q: 'inception', hasPlatform: false })));
 		expect(isHttpError(err)).toBe(true);
 		expect(err.status).toBe(503);

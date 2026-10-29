@@ -4,6 +4,7 @@ import { createTestDb } from '#lib/server/db/test-db.js';
 import { media } from '#lib/server/db/schema.js';
 import { mediaId } from '#lib/sync/events.js';
 import { POST } from './+server';
+import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
 type Handler = typeof POST;
 type RequestEvent = Parameters<Handler>[0];
@@ -21,10 +22,8 @@ function makeEvent(opts: {
 		headers: { get: (name: string) => (name === 'x-cron-key' ? header : null) },
 		json: async () => body
 	};
-	const platform = {
-		env: { CRON_SECRET: SECRET, ...(apiKey === null ? {} : { TMDB_API_KEY: apiKey }) }
-	};
-	return { request, locals: { db }, platform } as unknown as RequestEvent;
+	setTestBindings({ CRON_SECRET: SECRET, ...(apiKey === null ? {} : { TMDB_API_KEY: apiKey }) });
+	return { request, locals: { db } } as unknown as RequestEvent;
 }
 
 async function thrownBy(run: () => unknown): Promise<{ status: number }> {

@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
 import { GET } from './+server';
+import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
 type Handler = typeof GET;
 type RequestEvent = Parameters<Handler>[0];
 
-/** Build a minimal event the handler reads (locals.user, params, platform.env, url). */
+/** Build a minimal event the handler reads (locals.user, params, bindings, url). */
 function makeEvent(opts: {
 	user?: unknown;
 	type?: string;
@@ -22,13 +23,11 @@ function makeEvent(opts: {
 		hasPlatform = true,
 		season = null
 	} = opts;
-	const platform = hasPlatform
-		? { env: apiKey === null ? {} : { TMDB_API_KEY: apiKey } }
-		: undefined;
+	setTestBindings(hasPlatform && apiKey !== null ? { TMDB_API_KEY: apiKey } : {});
 	const url = new URL(
 		`http://localhost/api/title/${type}/${id}${season === null ? '' : `?season=${season}`}`
 	);
-	return { locals: { user }, params: { type, id }, platform, url } as unknown as RequestEvent;
+	return { locals: { user }, params: { type, id }, url } as unknown as RequestEvent;
 }
 
 const SHOW_WITH_SEASONS = {
@@ -97,7 +96,7 @@ describe('GET /api/title/[type]/[id]', () => {
 		expect(err.status).toBe(404);
 	});
 
-	it('errors 503 when the platform is unavailable', async () => {
+	it('errors 503 when no bindings are present', async () => {
 		const err = await thrownBy(() => GET(makeEvent({ hasPlatform: false })));
 		expect(err.status).toBe(503);
 	});

@@ -49,8 +49,6 @@ export class TabsState {
 
 	/** Fold a completed navigation into the per-tab URL memory. Non-tab routes leave it untouched,
 	 * so opening a title keeps the tab it was opened from as the owner. */
-	// Structural rather than `URL`: SvelteKit 3 hands out a readonly `page.url`, whose searchParams is
-	// not a URLSearchParams, and only the path is read here anyway.
 	record(url: { pathname: string; search: string }): void {
 		const id = activeTab(url.pathname);
 		if (!id) return;
