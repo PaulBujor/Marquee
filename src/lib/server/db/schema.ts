@@ -29,6 +29,10 @@ import {
 export const USER_STATUSES = ['pending', 'enabled', 'blocked'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
+/** Who may reach the admin surface. `admin` is granted by SQL, never by signup. */
+export const USER_ROLES = ['user', 'admin'] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
 /**
  * A registered user. Identity is the verified email address — there are no
  * passwords (auth is passwordless magic link). Users are created as `pending`
@@ -42,6 +46,7 @@ export const users = sqliteTable(
 			.$defaultFn(() => crypto.randomUUID()),
 		email: text('email').notNull().unique(),
 		status: text('status', { enum: USER_STATUSES }).notNull().default('pending'),
+		role: text('role', { enum: USER_ROLES }).notNull().default('user'),
 		// Optional free-text reason recorded when an account is blocked (audit trail).
 		blockedReason: text('blocked_reason'),
 		// Requesting client IP at waitlist signup, for per-IP signup rate limiting.
@@ -596,3 +601,32 @@ export const sharePreviewWarms = sqliteTable(
 );
 
 export type SharePreviewWarmRow = typeof sharePreviewWarms.$inferSelect;
+
+/**
+ * One row per admin mutation. Deliberately has no foreign keys: an audit row must outlive the
+ * account it acts on, and a cascade must not quietly delete the record of what was done.
+ */
+export const adminAudit = sqliteTable(
+	'admin_audit',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		actorUserId: text('actor_user_id').notNull(),
+		actorEmail: text('actor_email').notNull(),
+		action: text('action').notNull(),
+		targetType: text('target_type').notNull(),
+		targetId: text('target_id').notNull(),
+		targetLabel: text('target_label'),
+		reason: text('reason'),
+		metadata: text('metadata'),
+		ip: text('ip'),
+		createdAt: integer('created_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [
+		index('admin_audit_created_at_idx').on(table.createdAt),
+		index('admin_audit_target_idx').on(table.targetType, table.targetId)
+	]
+);

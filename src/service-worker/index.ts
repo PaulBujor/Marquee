@@ -210,6 +210,17 @@ self.addEventListener('fetch', (event) => {
 	)
 		return;
 
+	// Admin pages reflect live account state and must never be replayed from the navigation cache — a
+	// cached copy would outlive a logout. Network only: offline falls through to the app's offline page,
+	// so an admin sees nothing rather than a stale copy of the admin surface.
+	if (
+		url.origin === self.location.origin &&
+		(url.pathname === '/admin' || url.pathname.startsWith('/admin/'))
+	) {
+		event.respondWith(fetch(request).catch(() => offlineResponse()));
+		return;
+	}
+
 	// Versioned build assets: cache-first.
 	if (url.origin === self.location.origin && BUILD.has(url.pathname)) {
 		event.respondWith(caches.match(request).then((cached) => cached ?? fetch(request)));
