@@ -10,14 +10,6 @@
 	},
 	"workers_dev": true,
 	"preview_urls": true,
-	// Public share pages are the only unauthenticated, cached-nothing route, so they carry their own
-	// budget. Sized as a capacity guard, not as an anti-enumeration measure: enumeration is already
-	// defeated by the warm-only design (an unwarmed id carries nothing), while a budget tight enough
-	// to stop a scraper also throttles a legitimate crowd behind one NAT — see Cloudflare's own advice
-	// against IP-keyed limits. Still well under the app-wide budget below.
-	// Namespace ids are account-wide, so this is a deliberately documented block rather than a random
-	// pick: 9910xx is Marquee's, and the docs' example values (1001/1002) are avoided because any
-	// other Worker here that copied them would share our counters. Next binding takes 991003.
 	"ratelimits": [
 		{
 			"name": "PUBLIC_SHARE_LIMITER",
@@ -25,16 +17,11 @@
 			"simple": { "limit": 120, "period": 60 }
 		},
 		{
-			// Deliberately loose: a page load plus its API calls is a dozen requests, and a first
-			// sync can be chatty. This exists to stop a runaway, not to shape normal traffic.
 			"name": "APP_RATE_LIMITER",
 			"namespace_id": "991002",
 			"simple": { "limit": 300, "period": 60 }
 		}
 	],
-	// No Analytics Engine binding: declaring one was rejected at deploy time on this account (the
-	// local `--dry-run` accepts it, so it's server-side). Shed requests are logged instead, which
-	// Workers Logs indexes; add the binding and `noteRateLimited` starts writing data points too.
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -96,8 +83,6 @@
 	"env": {
 		"preview": {
 			"name": "marquee-preview",
-			// Mirrors the prod bindings above — see the rationale there. Bindings aren't inheritable in
-			// wrangler, so without this the preview environment would silently have no limit at all.
 			"ratelimits": [
 				{
 					"name": "PUBLIC_SHARE_LIMITER",

@@ -8,7 +8,7 @@
 		/** The path to share — the call site builds it with `resolve()`. */
 		path: string;
 		title: string;
-		/** The thing this link points at, so its preview is stored before the sheet opens. */
+		/** The thing this link points at, so its preview is stored as the share goes out. */
 		warm?: ShareWarmTarget;
 		label?: string;
 		size?: ButtonSize;
