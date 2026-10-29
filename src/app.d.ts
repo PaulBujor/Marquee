@@ -20,6 +20,7 @@ declare global {
 		SHARE_PUBLIC_DISABLED?: string;
 		// Set only on Worker Previews, to keep them out of search results.
 		PREVIEW_NOINDEX?: string;
+		PREVIEW_COOKIE_DOMAIN?: string;
 	}
 
 	namespace App {

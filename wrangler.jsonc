@@ -103,7 +103,8 @@
 			}
 		],
 		"vars": {
-			"PREVIEW_NOINDEX": "1"
+			"PREVIEW_NOINDEX": "1",
+			"PREVIEW_COOKIE_DOMAIN": ".preview.marquee.paulbujor.net"
 		},
 		"queues": {
 			"producers": [

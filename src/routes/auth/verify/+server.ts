@@ -1,5 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import { setSessionCookie, verifyMagicLink } from '#lib/server/auth/index.js';
+import { env } from '#lib/server/bindings.js';
 import { safeRedirectPath } from '#lib/redirect.js';
 import type { RequestHandler } from './$types';
 
@@ -14,7 +15,7 @@ export const GET: RequestHandler = async ({ url, locals, cookies }) => {
 	const result = await verifyMagicLink(locals.db, token);
 	if (!result.ok) redirect(303, `/login?error=${result.reason}`);
 
-	setSessionCookie(cookies, result.token, result.expiresAt);
+	setSessionCookie(cookies, result.token, result.expiresAt, env.PREVIEW_COOKIE_DOMAIN);
 	// Re-validated here: the query string is user-editable.
 	redirect(303, safeRedirectPath(url.searchParams.get('redirectTo')));
 };
