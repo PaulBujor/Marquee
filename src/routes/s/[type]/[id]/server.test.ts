@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTestDb } from '$lib/server/db/test-db';
 import { sharePreviews, users } from '$lib/server/db/schema';
 import { previewId } from '$lib/server/share/preview';
-import { PUBLIC_SHARE_HEADERS, SIGNED_IN_REDIRECT_HEADERS } from '$lib/server/share/public';
+import { PUBLIC_SHARE_HEADERS } from '$lib/server/share/public';
 import { load } from './+page.server';
 
 type Event = Parameters<typeof load>[0];
@@ -58,6 +58,7 @@ async function setup(
 	const headers: Record<string, string> = {};
 	const pending: Promise<unknown>[] = [];
 	const limitKeys: string[] = [];
+	const rateLimitEvents: { blobs?: string[]; doubles?: number[]; indexes?: string[] }[] = [];
 	const event = {
 		params: { type: opts.type ?? 'movie', id: opts.id ?? '603' },
 		request: new Request('https://marquee.example/s/movie/603', {
@@ -73,14 +74,25 @@ async function setup(
 						limitKeys.push(key);
 						return { success: !opts.limited };
 					}
+				},
+				RATE_LIMIT_EVENTS: {
+					writeDataPoint: (point: { blobs?: string[]; doubles?: number[]; indexes?: string[] }) =>
+						rateLimitEvents.push(point)
 				}
 			},
 			ctx: { waitUntil: (promise: Promise<unknown>) => pending.push(promise) }
 		},
-		setHeaders: (values: Record<string, string>) => Object.assign(headers, values)
+		setHeaders: (values: Record<string, string>) => {
+			for (const key in values) {
+				// SvelteKit throws when one header is set twice in a request ("header is already set"),
+				// so this double does too: `Object.assign` hid that from the tests once already.
+				if (key.toLowerCase() in headers) throw new Error(`"${key}" header is already set`);
+				headers[key] = values[key];
+			}
+		}
 	} as unknown as Event;
 
-	return { event, headers, db, pending, limitKeys };
+	return { event, headers, db, pending, limitKeys, rateLimitEvents };
 }
 
 /** The load answers with page data, or throws an `error()`/`redirect()`. */
@@ -138,13 +150,20 @@ describe('GET /s/[type]/[id]', () => {
 		expect(headers['x-robots-tag']).toBe('noindex, noarchive');
 	});
 
-	it('sheds a flood before reading anything, keyed by the client IP', async () => {
-		const { event, headers, limitKeys } = await setup({ warmed: true, limited: true });
+	it('sheds a flood before reading anything, and records that it did', async () => {
+		const { event, headers, limitKeys, rateLimitEvents } = await setup({
+			warmed: true,
+			limited: true
+		});
 
 		const { err } = await outcome(() => load(event));
 
 		expect(err?.status).toBe(429);
-		expect(limitKeys).toEqual(['203.0.113.9']);
+		expect(limitKeys).toEqual(['ip:203.0.113.9']);
+		// Rate-limit bindings aren't visible in the dashboard, so the shed request is recorded here.
+		expect(rateLimitEvents).toEqual([
+			{ blobs: ['share', '/s/movie/603'], doubles: [1], indexes: ['share'] }
+		]);
 		// The policy goes on before the guards, so even a refusal is no-store and noindex.
 		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
 	});
@@ -179,10 +198,9 @@ describe('GET /s/[type]/[id]', () => {
 
 		expect(err?.status).toBe(303);
 		expect(err?.location).toBe('/title/movie/603');
-		// The public policy goes on before the guards, so the redirect carries its robots header too —
-		// what matters is that the cache-control is private, never the public page's.
-		expect(headers['cache-control']).toBe(SIGNED_IN_REDIRECT_HEADERS['cache-control']);
-		expect(headers['cache-control']).toContain('private');
+		// One policy for every outcome: `no-store` can't be stored by any cache, so the redirect a
+		// signed-in reader gets needs nothing narrower — and setting a second header set would throw.
+		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
 
 		// The warm was detached, and it lands: the card is there for the next reader.
 		expect(pending).toHaveLength(1);

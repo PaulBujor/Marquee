@@ -14,11 +14,6 @@ export const PUBLIC_SHARE_HEADERS: Record<string, string> = {
 	'x-robots-tag': 'noindex, noarchive'
 };
 
-/** The response for a signed-in visitor, who is sent on to the real page: never cache that. */
-export const SIGNED_IN_REDIRECT_HEADERS: Record<string, string> = {
-	'cache-control': 'private, no-store'
-};
-
 /** Off switch for the whole surface, so it can be withdrawn without a rollback. */
 export function publicSharingEnabled(env: { SHARE_PUBLIC_DISABLED?: string } | undefined): boolean {
 	return env?.SHARE_PUBLIC_DISABLED !== '1';
