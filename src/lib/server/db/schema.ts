@@ -563,6 +563,8 @@ export const sharePreviews = sqliteTable(
 		genres: text('genres'),
 		crew: text('crew'),
 		cast: text('cast'),
+		// JSON: `{ key, name }` for the trailer the page plays, or null when TMDB lists none.
+		trailer: text('trailer'),
 		updatedAt: integer('updated_at', { mode: 'timestamp' })
 			.notNull()
 			.$defaultFn(() => new Date())

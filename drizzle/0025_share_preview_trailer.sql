@@ -1,0 +1,1 @@
+ALTER TABLE `share_previews` ADD `trailer` text;

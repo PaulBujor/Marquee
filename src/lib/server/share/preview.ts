@@ -148,6 +148,7 @@ function toPreviewShape(detail: MediaDetail, now: number): SharePreview {
 			name: member.name,
 			profilePath: member.profilePath
 		})),
+		trailer: detail.trailer,
 		updatedAt: now
 	};
 }
@@ -186,6 +187,7 @@ function upsertPreview(db: Db, preview: SharePreview) {
 		genres: JSON.stringify(preview.genres),
 		crew: JSON.stringify(preview.crew),
 		cast: JSON.stringify(preview.cast),
+		trailer: preview.trailer ? JSON.stringify(preview.trailer) : null,
 		updatedAt: new Date(preview.updatedAt)
 	};
 	return db
@@ -207,6 +209,7 @@ function upsertPreview(db: Db, preview: SharePreview) {
 				genres: values.genres,
 				crew: values.crew,
 				cast: values.cast,
+				trailer: values.trailer,
 				updatedAt: values.updatedAt
 			}
 		});
@@ -229,6 +232,7 @@ function fromRow(row: SharePreviewRow): SharePreview {
 		genres: parseList<string>(row.genres),
 		crew: parseCrew(row.crew),
 		cast: parseList<CastCredit>(row.cast),
+		trailer: parseTrailer(row.trailer),
 		updatedAt: row.updatedAt.getTime()
 	};
 }
@@ -236,6 +240,19 @@ function fromRow(row: SharePreviewRow): SharePreview {
 /** A `YYYY-MM-DD` date or nothing: the page formats what it is given, and `Intl` throws on junk. */
 function isIsoDate(value: string | null): value is string {
 	return typeof value === 'string' && value.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/** A malformed trailer is dropped rather than rendered: an embed needs a usable key. */
+function parseTrailer(value: string | null): ShareTrailer | null {
+	if (!value) return null;
+	try {
+		const parsed = JSON.parse(value) as Partial<ShareTrailer>;
+		return typeof parsed.key === 'string' && typeof parsed.name === 'string'
+			? { key: parsed.key, name: parsed.name }
+			: null;
+	} catch {
+		return null;
+	}
 }
 
 /** JSON columns are written by us, but a hand-edited row shouldn't be able to break a page. */

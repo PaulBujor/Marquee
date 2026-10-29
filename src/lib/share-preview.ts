@@ -16,6 +16,10 @@ export interface CrewCredits {
 	producers: string[];
 }
 
+export interface ShareTrailer {
+	key: string;
+	name: string;
+}
 export interface SharePreview {
 	type: 'movie' | 'show';
 	externalId: number;
@@ -36,6 +40,8 @@ export interface SharePreview {
 	genres: string[];
 	crew: CrewCredits;
 	cast: CastCredit[];
+	/** The trailer the app's own page plays, when TMDB lists one. */
+	trailer: ShareTrailer | null;
 	updatedAt: number;
 }
 

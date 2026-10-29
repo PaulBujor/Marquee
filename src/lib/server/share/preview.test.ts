@@ -363,3 +363,26 @@ describe('values the page has to be able to format', () => {
 		}
 	});
 });
+
+describe('the trailer', () => {
+	it('is null when the provider lists no video for the title', async () => {
+		const db = await seedDb();
+		stubFetch(SHOW);
+
+		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'show', id: 1399, now: NOW });
+
+		expect((await readPreview(db, 'show', 1399))?.trailer).toBeNull();
+	});
+
+	it('drops a stored value that is not a usable trailer, rather than rendering a broken embed', async () => {
+		const db = await seedDb();
+		stubFetch(MOVIE);
+		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW });
+
+		// A key with no name, and a value that isn't JSON at all: both must survive a read.
+		for (const stored of ['{"name":"Trailer"}', '{oops', '{"key":"x","name":42}']) {
+			await db.update(sharePreviews).set({ trailer: stored });
+			expect((await readPreview(db, 'movie', 603))?.trailer).toBeNull();
+		}
+	});
+});
