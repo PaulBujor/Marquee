@@ -1,167 +1,181 @@
 {
-  "version": "7",
-  "dialect": "sqlite",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "6",
-      "when": 1784361630589,
-      "tag": "0000_init_auth",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1784366851971,
-      "tag": "0001_waitlist_signup_ip",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1784372770665,
-      "tag": "0002_login_link_or_code",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1784403960122,
-      "tag": "0003_email_change_tokens",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1784667072147,
-      "tag": "0004_sync_event_model",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1784753647390,
-      "tag": "0005_media_provider_columns",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1784753669560,
-      "tag": "0006_media_drop_tmdb_id",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1784809981279,
-      "tag": "0007_media_backdrop_seasons",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1784814916157,
-      "tag": "0008_media_genres",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "6",
-      "when": 1784833246765,
-      "tag": "0009_media_last_aired",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "6",
-      "when": 1784928221734,
-      "tag": "0010_media_relational_add",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "6",
-      "when": 1784928246724,
-      "tag": "0011_media_drop_legacy_json",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "6",
-      "when": 1784986667093,
-      "tag": "0012_email_change_request_ip",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "6",
-      "when": 1785154466203,
-      "tag": "0013_media_title_normalized",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "6",
-      "when": 1785163685809,
-      "tag": "0014_push_subscriptions",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "6",
-      "when": 1785165139203,
-      "tag": "0015_notification_log",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "6",
-      "when": 1785789783670,
-      "tag": "0016_read_amplification_indexes",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "6",
-      "when": 1785860323525,
-      "tag": "0017_drop_redundant_episodes_media_idx",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "6",
-      "when": 1786031992305,
-      "tag": "0018_media_type_status_idx",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "6",
-      "when": 1786717369598,
-      "tag": "0019_media_owner_user_id",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "6",
-      "when": 1786733281351,
-      "tag": "0020_media_credits",
-      "breakpoints": true
-    },
-    {
-      "idx": 21,
-      "version": "6",
-      "when": 1786789503520,
-      "tag": "0021_people_owner_scoped_identity",
-      "breakpoints": true
-    },
-    {
-      "idx": 22,
-      "version": "6",
-      "when": 1793213291077,
-      "tag": "0022_share_previews",
-      "breakpoints": true
-    }
-  ]
+	"version": "7",
+	"dialect": "sqlite",
+	"entries": [
+		{
+			"idx": 0,
+			"version": "6",
+			"when": 1784361630589,
+			"tag": "0000_init_auth",
+			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "6",
+			"when": 1784366851971,
+			"tag": "0001_waitlist_signup_ip",
+			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "6",
+			"when": 1784372770665,
+			"tag": "0002_login_link_or_code",
+			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "6",
+			"when": 1784403960122,
+			"tag": "0003_email_change_tokens",
+			"breakpoints": true
+		},
+		{
+			"idx": 4,
+			"version": "6",
+			"when": 1784667072147,
+			"tag": "0004_sync_event_model",
+			"breakpoints": true
+		},
+		{
+			"idx": 5,
+			"version": "6",
+			"when": 1784753647390,
+			"tag": "0005_media_provider_columns",
+			"breakpoints": true
+		},
+		{
+			"idx": 6,
+			"version": "6",
+			"when": 1784753669560,
+			"tag": "0006_media_drop_tmdb_id",
+			"breakpoints": true
+		},
+		{
+			"idx": 7,
+			"version": "6",
+			"when": 1784809981279,
+			"tag": "0007_media_backdrop_seasons",
+			"breakpoints": true
+		},
+		{
+			"idx": 8,
+			"version": "6",
+			"when": 1784814916157,
+			"tag": "0008_media_genres",
+			"breakpoints": true
+		},
+		{
+			"idx": 9,
+			"version": "6",
+			"when": 1784833246765,
+			"tag": "0009_media_last_aired",
+			"breakpoints": true
+		},
+		{
+			"idx": 10,
+			"version": "6",
+			"when": 1784928221734,
+			"tag": "0010_media_relational_add",
+			"breakpoints": true
+		},
+		{
+			"idx": 11,
+			"version": "6",
+			"when": 1784928246724,
+			"tag": "0011_media_drop_legacy_json",
+			"breakpoints": true
+		},
+		{
+			"idx": 12,
+			"version": "6",
+			"when": 1784986667093,
+			"tag": "0012_email_change_request_ip",
+			"breakpoints": true
+		},
+		{
+			"idx": 13,
+			"version": "6",
+			"when": 1785154466203,
+			"tag": "0013_media_title_normalized",
+			"breakpoints": true
+		},
+		{
+			"idx": 14,
+			"version": "6",
+			"when": 1785163685809,
+			"tag": "0014_push_subscriptions",
+			"breakpoints": true
+		},
+		{
+			"idx": 15,
+			"version": "6",
+			"when": 1785165139203,
+			"tag": "0015_notification_log",
+			"breakpoints": true
+		},
+		{
+			"idx": 16,
+			"version": "6",
+			"when": 1785789783670,
+			"tag": "0016_read_amplification_indexes",
+			"breakpoints": true
+		},
+		{
+			"idx": 17,
+			"version": "6",
+			"when": 1785860323525,
+			"tag": "0017_drop_redundant_episodes_media_idx",
+			"breakpoints": true
+		},
+		{
+			"idx": 18,
+			"version": "6",
+			"when": 1786031992305,
+			"tag": "0018_media_type_status_idx",
+			"breakpoints": true
+		},
+		{
+			"idx": 19,
+			"version": "6",
+			"when": 1786717369598,
+			"tag": "0019_media_owner_user_id",
+			"breakpoints": true
+		},
+		{
+			"idx": 20,
+			"version": "6",
+			"when": 1786733281351,
+			"tag": "0020_media_credits",
+			"breakpoints": true
+		},
+		{
+			"idx": 21,
+			"version": "6",
+			"when": 1786789503520,
+			"tag": "0021_people_owner_scoped_identity",
+			"breakpoints": true
+		},
+		{
+			"idx": 22,
+			"version": "6",
+			"when": 1793213291077,
+			"tag": "0022_share_previews",
+			"breakpoints": true
+		},
+		{
+			"idx": 23,
+			"version": "6",
+			"when": 1793258715143,
+			"tag": "0023_rebuild_share_previews",
+			"breakpoints": true
+		},
+		{
+			"idx": 24,
+			"version": "6",
+			"when": 1793258715143,
+			"tag": "0024_rekey_share_previews",
+			"breakpoints": true
+		}
+	]
 }

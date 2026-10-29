@@ -10,6 +10,7 @@ import {
 	people,
 	pushSubscriptions,
 	sessions,
+	sharePreviewWarms,
 	syncState,
 	tracking,
 	users,
@@ -330,6 +331,7 @@ export async function deleteAccount(db: Db, user: User): Promise<void> {
 		db.delete(episodeWatches).where(eq(episodeWatches.userId, user.id)),
 		db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, user.id)),
 		db.delete(notificationLog).where(eq(notificationLog.userId, user.id)),
+		db.delete(sharePreviewWarms).where(eq(sharePreviewWarms.userId, user.id)),
 		db.delete(media).where(eq(media.ownerUserId, user.id)),
 		db.delete(people).where(eq(people.ownerUserId, user.id)),
 		db.delete(users).where(eq(users.id, user.id))

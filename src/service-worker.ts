@@ -203,6 +203,14 @@ self.addEventListener('fetch', (event) => {
 
 	const url = new URL(request.url);
 
+	// Public share pages belong to whoever follows the link, not to this device: a cached cold card
+	// outlives the warm that filled it and hides the redirect for a signed-in reader.
+	if (
+		url.origin === self.location.origin &&
+		(url.pathname === '/s' || url.pathname.startsWith('/s/'))
+	)
+		return;
+
 	// Versioned build assets: cache-first.
 	if (url.origin === self.location.origin && BUILD.has(url.pathname)) {
 		event.respondWith(caches.match(request).then((cached) => cached ?? fetch(request)));

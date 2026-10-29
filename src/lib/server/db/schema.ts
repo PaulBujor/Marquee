@@ -543,8 +543,8 @@ export type NotificationLogRow = typeof notificationLog.$inferSelect;
 export const sharePreviews = sqliteTable(
 	'share_previews',
 	{
-		// `tmdb:title:<externalId>`, e.g. `tmdb:title:603`. Provider-scoped so a second provider
-		// can't collide with a TMDB id.
+		// `tmdb:<type>:<externalId>`, e.g. `tmdb:movie:603`. The type is in the key because TMDB ids
+		// are per-type, so `movie/1399` and `show/1399` are different titles.
 		id: text('id').primaryKey(),
 		provider: text('provider', { enum: MEDIA_PROVIDERS }).notNull().default('tmdb'),
 		externalId: text('external_id').notNull(),

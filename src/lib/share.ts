@@ -66,11 +66,14 @@ export async function shareLink(
 export type ShareWarmTarget = { type: 'movie' | 'show'; id: number };
 
 /**
- * How long a share waits for the preview to be stored before opening the sheet. The recipient's
- * chat app unfurls the link within moments of the share, so the card is worth a short wait — but
- * never a long one, and never a failed share.
+ * How long the warm is given before it gives up and reports a timeout. It runs beside the sheet
+ * rather than in front of it: the recipient's app unfurls the link seconds later, but the tap has to
+ * be answered now, and `navigator.share` wants the user activation that waiting would risk.
  */
 export const WARM_TIMEOUT_MS = 1500;
+
+/** How a warm ended: `timeout` may still land server-side, so it isn't the same news as `failed`. */
+export type WarmOutcome = 'stored' | 'timeout' | 'failed';
 
 /**
  * Ask the server to store this link's preview so the recipient's app has a page to render.
@@ -78,10 +81,33 @@ export const WARM_TIMEOUT_MS = 1500;
  * a guaranteed preview. The server side is the only place that calls TMDB, and it requires a
  * session — that separation is what stops a crawler spending provider quota.
  */
+export interface ShareReport {
+	outcome: ShareOutcome;
+	warmed: WarmOutcome;
+}
+
+/**
+ * Share now, warm alongside. The card matters — the recipient's app unfurls the link moments after
+ * the sheet closes — but not enough to delay the sheet for, so the warm is started and left to settle
+ * while the sheet is open. Its outcome is still reported, because a link shared without its card is
+ * the outcome worth knowing about.
+ */
+export async function shareAndWarm(
+	content: ShareContent,
+	target: ShareWarmTarget | undefined,
+	impls: { warm?: typeof warmPreview; share?: typeof shareLink } = {}
+): Promise<ShareReport> {
+	const warming = target
+		? (impls.warm ?? warmPreview)(target)
+		: Promise.resolve<WarmOutcome>('stored');
+	const outcome = await (impls.share ?? shareLink)(content);
+	return { outcome, warmed: await warming };
+}
+
 export async function warmPreview(
 	target: ShareWarmTarget,
 	opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {}
-): Promise<boolean> {
+): Promise<WarmOutcome> {
 	const doFetch = opts.fetchImpl ?? fetch;
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? WARM_TIMEOUT_MS);
@@ -93,9 +119,9 @@ export async function warmPreview(
 			body: JSON.stringify(target),
 			signal: controller.signal
 		});
-		return res.ok;
-	} catch {
-		return false;
+		return res.ok ? 'stored' : 'failed';
+	} catch (err) {
+		return (err as { name?: string })?.name === 'AbortError' ? 'timeout' : 'failed';
 	} finally {
 		clearTimeout(timer);
 	}

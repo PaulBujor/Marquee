@@ -10,10 +10,11 @@ import {
 	notificationLog,
 	pushSubscriptions,
 	sessions,
+	sharePreviewWarms,
 	syncState,
 	tracking,
-	users,
-	type User
+	type User,
+	users
 } from '$lib/server/db/schema';
 import { deleteAccount } from './index';
 
@@ -66,6 +67,9 @@ async function seedUserWithData(db: Db, email: string): Promise<User> {
 		deviceId: `dev-${uid}`
 	});
 	await db.insert(notificationLog).values({ id: `${uid}::${MEDIA_ID}::release`, userId: uid });
+	await db
+		.insert(sharePreviewWarms)
+		.values({ id: `warm-${uid}`, userId: uid, createdAt: new Date() });
 
 	return user;
 }
@@ -82,6 +86,7 @@ async function countUserRows(db: Db, user: User): Promise<number> {
 		db.select().from(episodeWatches).where(eq(episodeWatches.userId, uid)),
 		db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, uid)),
 		db.select().from(notificationLog).where(eq(notificationLog.userId, uid)),
+		db.select().from(sharePreviewWarms).where(eq(sharePreviewWarms.userId, uid)),
 		db.select().from(loginTokens).where(eq(loginTokens.email, user.email)),
 		db.select().from(users).where(eq(users.id, uid))
 	]);
@@ -111,7 +116,7 @@ describe('deleteAccount', () => {
 
 		expect(await countUserRows(db, a)).toBe(0);
 		// Every one of B's rows survives (one per seeded table + the users row).
-		expect(await countUserRows(db, b)).toBe(10);
+		expect(await countUserRows(db, b)).toBe(11);
 	});
 
 	it('keeps the shared (non-user-scoped) TMDB media cache', async () => {

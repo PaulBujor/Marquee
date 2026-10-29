@@ -9,6 +9,7 @@
 	import MediaBadge from '$lib/components/media/media-badge.svelte';
 	import MediaTypeLabel from '$lib/components/media/media-type-label.svelte';
 	import PosterTile from '$lib/components/media/poster-tile.svelte';
+	import TitleMetaRow from '$lib/components/media/title-meta-row.svelte';
 	import TrackingControls from '$lib/components/media/tracking-controls.svelte';
 	import NextEpisodeRow from '$lib/components/media/next-episode-row.svelte';
 	import ConfirmDialog from '$lib/components/media/confirm-dialog.svelte';
@@ -44,10 +45,8 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
-	import ClockIcon from '@lucide/svelte/icons/clock';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import StarIcon from '@lucide/svelte/icons/star';
 	import type { CrewMember, MediaDetail, SeasonDetail } from '$lib/server/tmdb';
 
 	// `detail` is always present — the cached IndexedDB copy first, upgraded in place to the full
@@ -412,7 +411,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 		<!-- Trailing action, so it holds the right edge whether or not the title is showing. -->
 		<ShareButton
 			class="ml-auto shrink-0"
-			path={resolve('/title/[type]/[id]', { type: detail.type, id: String(detail.tmdbId) })}
+			path={resolve('/s/[type]/[id]', { type: detail.type, id: String(detail.tmdbId) })}
 			title={shareTitle}
 			warm={{ type: detail.type, id: detail.tmdbId }}
 			label="Share this title"
@@ -474,24 +473,12 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			</div>
 		</div>
 
-		<div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-			{#if detail.rating !== null}
-				<span class="flex items-center gap-1.5">
-					<StarIcon class="size-4 fill-primary text-primary" />
-					<span class="font-semibold">{detail.rating.toFixed(1)}</span>
-					<span class="text-muted-foreground">/10</span>
-				</span>
-			{/if}
-			{#if detail.runtime !== null}
-				<span class="flex items-center gap-1.5 text-muted-foreground">
-					<ClockIcon class="size-4" />
-					{detail.runtime} min{detail.type === 'show' ? ' / ep' : ''}
-				</span>
-			{/if}
-			{#each detail.genres as genre (genre)}
-				<MediaBadge variant="genre">{genre}</MediaBadge>
-			{/each}
-		</div>
+		<TitleMetaRow
+			type={detail.type}
+			rating={detail.rating}
+			runtime={detail.runtime}
+			genres={detail.genres}
+		/>
 
 		<!-- Watch-tracking controls, above the description. Held behind a fixed-height placeholder
 		     until the tracking read resolves, so the row paints once in its final state instead of

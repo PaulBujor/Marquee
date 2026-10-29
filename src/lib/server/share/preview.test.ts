@@ -150,10 +150,10 @@ describe('warming a preview', () => {
 		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW });
 
 		const stored = await db.select().from(sharePreviews);
-		expect(stored[0].id).toBe(previewId(603));
+		expect(stored[0].id).toBe(previewId('movie', 603));
 		expect(stored[0].titleType).toBe('movie');
 
-		const preview = await readPreview(db, 603);
+		const preview = await readPreview(db, 'movie', 603);
 		expect(preview).toMatchObject({
 			name: 'The Matrix',
 			rating: 8.2,
@@ -165,13 +165,14 @@ describe('warming a preview', () => {
 		expect(preview?.cast).toHaveLength(10);
 	});
 
-	it('is idempotent — re-warming refreshes the same row', async () => {
+	it('is idempotent — a re-warm past the freshness window refreshes the same row', async () => {
 		const db = await seedDb();
 		stubFetch(MOVIE);
 		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW });
 
 		stubFetch({ ...MOVIE, title: 'The Matrix (remastered)' });
-		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW + 1000 });
+		const later = NOW + 13 * 60 * 60 * 1000;
+		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: later });
 
 		const rows = await db.select().from(sharePreviews);
 		expect(rows).toHaveLength(1);
@@ -214,6 +215,24 @@ describe('warming a preview', () => {
 		expect(await countRecentWarms(db, USER_ID, NOW)).toBe(1);
 	});
 
+	it('spends no provider call when the stored preview is already fresh', async () => {
+		const db = await seedDb();
+		stubFetch(MOVIE);
+		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 603, now: NOW });
+		const second = stubFetch(MOVIE);
+
+		const result = await warmTitlePreview(db, 'key', {
+			userId: USER_ID,
+			type: 'movie',
+			id: 603,
+			now: NOW + 60 * 1000
+		});
+
+		expect(result.kind).toBe('warmed');
+		expect(second).not.toHaveBeenCalled();
+		expect(await countRecentWarms(db, USER_ID, NOW + 60 * 1000)).toBe(1);
+	});
+
 	it('records the warm against the asking account only', async () => {
 		const db = await seedDb();
 		stubFetch(MOVIE);
@@ -225,6 +244,18 @@ describe('warming a preview', () => {
 });
 
 describe('reading a preview', () => {
+	it('keeps a movie and a show with the same id apart — TMDB ids are per-type', async () => {
+		const db = await seedDb();
+		stubFetch({ ...MOVIE, id: 1399, title: 'A Movie Called 1399' });
+		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'movie', id: 1399, now: NOW });
+		stubFetch({ ...SHOW, id: 1399 });
+		await warmTitlePreview(db, 'key', { userId: USER_ID, type: 'show', id: 1399, now: NOW });
+
+		expect((await readPreview(db, 'movie', 1399))?.name).toBe('A Movie Called 1399');
+		expect((await readPreview(db, 'show', 1399))?.name).toBe('Game of Thrones');
+		expect(await db.select().from(sharePreviews)).toHaveLength(2);
+	});
+
 	it('never calls the provider — the read path is D1 only', async () => {
 		const db = await seedDb();
 		stubFetch(MOVIE);
@@ -232,15 +263,15 @@ describe('reading a preview', () => {
 
 		// Drop the stub: anything that reached for the network here would throw.
 		vi.unstubAllGlobals();
-		const preview = await readPreview(db, 603);
+		const preview = await readPreview(db, 'movie', 603);
 		expect(preview).toMatchObject({ name: 'The Matrix' });
 	});
 
 	it('returns null for anything never warmed, and for an impossible id', async () => {
 		const db = await seedDb();
-		expect(await readPreview(db, 603)).toBeNull();
-		expect(await readPreview(db, 0)).toBeNull();
-		expect(await readPreview(db, 1.2)).toBeNull();
+		expect(await readPreview(db, 'movie', 603)).toBeNull();
+		expect(await readPreview(db, 'movie', 0)).toBeNull();
+		expect(await readPreview(db, 'movie', 1.2)).toBeNull();
 	});
 });
 
@@ -296,7 +327,7 @@ describe('purging previews', () => {
 		const day = 24 * 60 * 60 * 1000;
 		await db.insert(sharePreviews).values([
 			{
-				id: previewId(1),
+				id: previewId('movie', 1),
 				provider: 'tmdb',
 				externalId: '1',
 				titleType: 'movie',
@@ -304,7 +335,7 @@ describe('purging previews', () => {
 				updatedAt: new Date(NOW - 100 * day)
 			},
 			{
-				id: previewId(2),
+				id: previewId('movie', 2),
 				provider: 'tmdb',
 				externalId: '2',
 				titleType: 'movie',
@@ -328,7 +359,7 @@ describe('values the page has to be able to format', () => {
 		// `Intl.format(new Date(...))` throws on an invalid date, which would 500 the shared page.
 		for (const stored of ['whenever', '2024-1-1', '2024-01-01T00:00:00Z', '']) {
 			await db.update(sharePreviews).set({ releasedOn: stored });
-			expect((await readPreview(db, 603))?.releasedOn).toBeNull();
+			expect((await readPreview(db, 'movie', 603))?.releasedOn).toBeNull();
 		}
 	});
 });
