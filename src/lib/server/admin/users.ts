@@ -58,3 +58,43 @@ export async function blockUser(
 
 	return { ok: true, email: target.email };
 }
+
+export type EnableRefusal = 'not-found' | 'already-enabled' | 'blocked';
+
+export const ENABLE_REFUSALS: Record<EnableRefusal, string> = {
+	'not-found': 'That account no longer exists.',
+	'already-enabled': 'That account can already sign in.',
+	blocked: 'That account is blocked — restore it instead, so the block is cleared deliberately.'
+};
+
+export async function enableUser(
+	db: Db,
+	actor: Actor,
+	targetId: string,
+	ip?: string | null
+): Promise<{ ok: true; email: string } | { ok: false; refusal: EnableRefusal }> {
+	const [target] = await db
+		.select({ id: users.id, email: users.email, status: users.status })
+		.from(users)
+		.where(eq(users.id, targetId))
+		.limit(1);
+
+	if (!target) return { ok: false, refusal: 'not-found' };
+	if (target.status === 'enabled') return { ok: false, refusal: 'already-enabled' };
+	if (target.status === 'blocked') return { ok: false, refusal: 'blocked' };
+
+	await db.batch([
+		db
+			.update(users)
+			.set({ status: 'enabled', blockedReason: null, updatedAt: new Date() })
+			.where(eq(users.id, targetId)),
+		auditStatement(db, {
+			actor,
+			action: 'user.enable',
+			target: { type: 'user', id: target.id, label: target.email },
+			ip
+		})
+	]);
+
+	return { ok: true, email: target.email };
+}

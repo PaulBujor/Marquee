@@ -90,6 +90,14 @@ export function renderWaitlistEmail(): string {
 	);
 }
 
+export function renderWelcomeEmail(): string {
+	return layout(
+		"You're in",
+		`<p>Your Marquee account is ready — you can sign in with your email address now, no password to remember.</p>
+		<p style="${MUTED}">Thanks for waiting.</p>`
+	);
+}
+
 export function renderAccountBlockedEmail(reason: string): string {
 	return layout(
 		'Your access to Marquee has been removed',
