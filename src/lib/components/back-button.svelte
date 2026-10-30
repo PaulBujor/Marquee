@@ -4,6 +4,7 @@
 	// avoid the extra history hop a link adds.
 
 	import { resolve } from '$app/paths';
+	import type { ResolvedPathname } from '$app/types';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { navigation } from '#lib/state/navigation.svelte.js';
 	import { cn } from '#lib/utils.js';
@@ -12,7 +13,7 @@
 
 	interface Props {
 		/** Where to go on a cold open with no in-app history to pop. A resolved path; defaults to home. */
-		fallback?: string;
+		fallback?: ResolvedPathname;
 		label?: string;
 		class?: string;
 	}
