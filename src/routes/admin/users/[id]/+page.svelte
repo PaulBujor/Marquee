@@ -14,11 +14,12 @@
 	<title>{data.target.email} · Admin</title>
 </svelte:head>
 
-<BackButton fallback={resolve('/admin/users')} label="All users" />
+<div class="flex items-start gap-2">
+	<BackButton fallback={resolve('/admin/users')} label="All users" />
+	<h1 class="min-w-0 pt-1 text-xl font-semibold break-all">{data.target.email}</h1>
+</div>
 
-<h1 class="mt-3 text-xl font-semibold break-all">{data.target.email}</h1>
-
-<div class="mt-2 flex flex-wrap items-center gap-2">
+<div class="mt-3 flex flex-wrap items-center gap-2">
 	<Badge
 		variant={data.target.status === 'blocked'
 			? 'destructive'
