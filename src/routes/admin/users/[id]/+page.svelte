@@ -4,6 +4,7 @@
 	import BackButton from '#lib/components/back-button.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
 	import { Textarea } from '#lib/components/ui/textarea/index.js';
 	import type { ActionData, PageData } from './$types';
 
@@ -130,3 +131,25 @@
 		</Card.Content>
 	</Card.Root>
 {/if}
+
+<Card.Root class="mt-5 ring-destructive/30">
+	<Card.Header>
+		<Card.Title>Delete this account</Card.Title>
+		<Card.Description>
+			Removes the account and everything it owns — tracked titles, custom titles and watch history —
+			and emails them to say so. This cannot be undone.
+		</Card.Description>
+	</Card.Header>
+	<Card.Content>
+		<form method="POST" action="?/delete" class="flex flex-col gap-3">
+			<label class="text-sm font-medium" for="confirm">Type {data.target.email} to confirm</label>
+			<Input id="confirm" name="confirm" required autocomplete="off" />
+			{#if form && 'deleteError' in form}
+				<p class="text-sm text-destructive">{form.deleteError}</p>
+			{/if}
+			<Button type="submit" variant="destructive" class="self-start" disabled={data.isSelf}>
+				Delete account
+			</Button>
+		</form>
+	</Card.Content>
+</Card.Root>
