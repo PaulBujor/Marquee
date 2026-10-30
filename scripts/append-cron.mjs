@@ -56,9 +56,15 @@ await appendFile(
 	WORKER,
 	`
 worker_default.scheduled = async (event, env, ctx) => {
-	// Two schedules: the daily maintenance sweep (0 6 * * *) and the hourly notifications digest
-	// (0 * * * *, so 9AM lands in every timezone). Route each cron to its own endpoint.
-	const path = event.cron === '0 6 * * *' ? '/api/cron/refresh' : '/api/cron/notify';
+	// Three schedules: the daily maintenance sweep (0 6 * * *), the waitlist digest for admins (0 7 * * *)
+	// and the hourly notifications digest (0 * * * *, so 9AM lands in every timezone). Route each cron to
+	// its own endpoint.
+	const path =
+		event.cron === '0 6 * * *'
+			? '/api/cron/refresh'
+			: event.cron === '0 7 * * *'
+				? '/api/cron/waitlist-digest'
+				: '/api/cron/notify';
 	ctx.waitUntil(
 		worker_default.fetch(
 			new Request('https://cron' + path, {
