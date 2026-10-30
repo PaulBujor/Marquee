@@ -120,4 +120,24 @@ describe('countUsage', () => {
 		expect(usage.activeWeek).toBe(1);
 		expect(usage.activeMonth).toBe(2);
 	});
+
+	it('ranks the most tracked titles and buckets additions by week', async () => {
+		const db = createTestDb();
+		const now = new Date();
+		await db.insert(media).values({ id: 'm-1', type: 'movie', title: 'Popular' });
+		await db.insert(media).values({ id: 'm-2', type: 'movie', title: 'Quiet' });
+		await db.insert(users).values({ id: 'u-1', email: 'a@example.com', status: 'enabled' });
+		await db.insert(users).values({ id: 'u-2', email: 'b@example.com', status: 'enabled' });
+		await db.insert(tracking).values({ id: 't-1', userId: 'u-1', mediaId: 'm-1', addedAt: now });
+		await db.insert(tracking).values({ id: 't-2', userId: 'u-2', mediaId: 'm-1', addedAt: now });
+		await db.insert(tracking).values({ id: 't-3', userId: 'u-1', mediaId: 'm-2', addedAt: now });
+
+		const usage = await countUsage(db, now);
+
+		expect(usage.topTitles.map((entry) => [entry.title, entry.trackers])).toEqual([
+			['Popular', 2],
+			['Quiet', 1]
+		]);
+		expect(usage.growth.reduce((total, bucket) => total + bucket.added, 0)).toBe(3);
+	});
 });

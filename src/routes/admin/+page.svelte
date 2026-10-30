@@ -53,3 +53,27 @@
 		</div>
 	{/each}
 </dl>
+
+{#if data.usage.topTitles.length}
+	<h2 class="mt-8 text-sm font-medium">Most tracked</h2>
+	<ol class="mt-3 space-y-2">
+		{#each data.usage.topTitles as title (title.id)}
+			<li class="flex items-baseline justify-between gap-3 text-sm">
+				<span class="truncate">{title.title}</span>
+				<span class="text-muted-foreground tabular-nums">{title.trackers}</span>
+			</li>
+		{/each}
+	</ol>
+{/if}
+
+{#if data.usage.growth.length}
+	<h2 class="mt-8 text-sm font-medium">Added per week</h2>
+	<ul class="mt-3 space-y-2">
+		{#each data.usage.growth as week (week.week)}
+			<li class="flex items-baseline justify-between gap-3 text-sm">
+				<span class="text-muted-foreground">{week.week}</span>
+				<span class="tabular-nums">{week.added}</span>
+			</li>
+		{/each}
+	</ul>
+{/if}
