@@ -23,6 +23,16 @@
 	onMount(() => {
 		if (!browser || !('serviceWorker' in navigator)) return;
 
+		let reloading = false;
+		// An install claims a page that was loaded from the network, so there is nothing stale to replace.
+		const controlledOnMount = navigator.serviceWorker.controller !== null;
+		const onControllerChange = () => {
+			if (reloading) return;
+			reloading = true;
+			if (controlledOnMount) location.reload();
+		};
+		navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+
 		let registration: ServiceWorkerRegistration | undefined;
 
 		const track = (reg: ServiceWorkerRegistration) => {
@@ -53,6 +63,7 @@
 		document.addEventListener('visibilitychange', onVisible);
 
 		return () => {
+			navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
 			document.removeEventListener('visibilitychange', onVisible);
 		};
 	});
