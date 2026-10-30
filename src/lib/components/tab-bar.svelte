@@ -84,7 +84,7 @@
 		const el = card;
 		if (!el) return;
 		const publish = (height: number) => {
-			const space = `calc(${height}px + max(0.75rem, env(safe-area-inset-bottom)))`;
+			const space = `calc(${height}px + 1rem)`;
 			document.documentElement.style.setProperty('--tab-bar-live', space);
 			if (!compact) document.documentElement.style.setProperty('--tab-bar-space', space);
 		};
@@ -134,7 +134,7 @@
 <nav
 	aria-label="Primary"
 	data-sveltekit-preload-data="tap"
-	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[transform,opacity] duration-200 motion-reduce:transition-none {keyboard
+	class="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-4 transition-[transform,opacity] duration-200 motion-reduce:transition-none {keyboard
 		? 'translate-y-full opacity-0'
 		: ''}"
 >

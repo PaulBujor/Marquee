@@ -13,7 +13,7 @@
 
 /* `--tab-bar-space` is the expanded height and `--tab-bar-live` the current one; both are SSR baselines the bar overwrites with its measured height. */
 :root {
-	--tab-bar-space: calc(4.875rem + max(0.75rem, env(safe-area-inset-bottom)));
+	--tab-bar-space: calc(4.875rem + 1rem);
 	--tab-bar-live: var(--tab-bar-space);
 }
 @media (min-width: 40rem) {
