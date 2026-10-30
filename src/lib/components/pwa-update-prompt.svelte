@@ -24,10 +24,12 @@
 		if (!browser || !('serviceWorker' in navigator)) return;
 
 		let reloading = false;
+		// An install claims a page that was loaded from the network, so there is nothing stale to replace.
+		const controlledOnMount = navigator.serviceWorker.controller !== null;
 		const onControllerChange = () => {
 			if (reloading) return;
 			reloading = true;
-			location.reload();
+			if (controlledOnMount) location.reload();
 		};
 		navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
