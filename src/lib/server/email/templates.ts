@@ -107,6 +107,14 @@ export function renderAccountBlockedEmail(reason: string): string {
 	);
 }
 
+export function renderAccountRestoredEmail(): string {
+	return layout(
+		'Your Marquee access is back',
+		`<p>An administrator has restored your access to Marquee — you can sign in with your email address again.</p>
+		<p style="${MUTED}">Sorry for the interruption.</p>`
+	);
+}
+
 export function renderAccountDeletedEmail(): string {
 	return layout(
 		'Your account has been deleted',

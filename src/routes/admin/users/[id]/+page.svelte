@@ -62,6 +62,15 @@
 			The email could not be sent — their access is still removed.
 		{/if}
 	</p>
+{:else if form?.unblocked}
+	<p class="mt-5 text-sm">
+		Access restored.
+		{#if form.emailed}
+			They were emailed to say so.
+		{:else}
+			The email could not be sent — they can sign in regardless.
+		{/if}
+	</p>
 {:else if data.target.status === 'pending'}
 	<Card.Root class="mt-5">
 		<Card.Header>

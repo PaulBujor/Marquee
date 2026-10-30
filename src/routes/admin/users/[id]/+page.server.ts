@@ -7,7 +7,11 @@ import { auditStatement } from '#lib/server/admin/audit.js';
 import { env } from '#lib/server/bindings.js';
 import { users } from '#lib/server/db/schema.js';
 import { createEmailSender } from '#lib/server/email/index.js';
-import { renderAccountBlockedEmail, renderWelcomeEmail } from '#lib/server/email/templates.js';
+import {
+	renderAccountBlockedEmail,
+	renderAccountRestoredEmail,
+	renderWelcomeEmail
+} from '#lib/server/email/templates.js';
 
 const MIN_REASON = 5;
 
@@ -94,9 +98,17 @@ export const actions: Actions = {
 		return { enabled: true, emailed };
 	},
 
-	unblock: async ({ locals, params }) => {
+	unblock: async ({ locals, params, getClientAddress }) => {
 		const actor = requireAdmin(locals.user);
 		if (!locals.db) error(503, 'Service unavailable');
+
+		const [target] = await locals.db
+			.select({ email: users.email })
+			.from(users)
+			.where(eq(users.id, params.id))
+			.limit(1);
+		if (!target) error(404, 'Not found');
+
 		await locals.db.batch([
 			locals.db
 				.update(users)
@@ -105,9 +117,22 @@ export const actions: Actions = {
 			auditStatement(locals.db, {
 				actor: { id: actor.id, email: actor.email },
 				action: 'user.unblock',
-				target: { type: 'user', id: params.id }
+				target: { type: 'user', id: params.id, label: target.email },
+				ip: getClientAddress()
 			})
 		]);
-		return { unblocked: true };
+
+		let emailed = true;
+		try {
+			await createEmailSender(env).send({
+				to: target.email,
+				subject: 'Your Marquee access is back',
+				html: renderAccountRestoredEmail()
+			});
+		} catch {
+			emailed = false;
+		}
+
+		return { unblocked: true, emailed };
 	}
 };
