@@ -31,7 +31,7 @@ const authentication: Handle = async ({ event, resolve }) => {
 		if (result) {
 			event.locals.user = result.user;
 		} else {
-			deleteSessionCookie(event.cookies);
+			deleteSessionCookie(event.cookies, env.PREVIEW_COOKIE_DOMAIN);
 		}
 	}
 	return resolve(event);

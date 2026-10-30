@@ -117,7 +117,7 @@ export const actions: Actions = {
 			return fail(502, { step: 'code' as const, email, method, codeError: SERVICE_UNAVAILABLE });
 		}
 		if (result.ok) {
-			setSessionCookie(cookies, result.token, result.expiresAt);
+			setSessionCookie(cookies, result.token, result.expiresAt, env.PREVIEW_COOKIE_DOMAIN);
 			redirect(303, redirectTo);
 		}
 

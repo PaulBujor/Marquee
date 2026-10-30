@@ -79,16 +79,23 @@ export async function invalidateOtherSessions(
 	return deleted.length;
 }
 
-export function setSessionCookie(cookies: Cookies, token: string, expiresAt: Date): void {
+/** Preview-only, where every host shares one database; production stays host-only by passing nothing. */
+export function setSessionCookie(
+	cookies: Cookies,
+	token: string,
+	expiresAt: Date,
+	domain?: string
+): void {
 	cookies.set(SESSION_COOKIE, token, {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax',
 		secure: true,
-		expires: expiresAt
+		expires: expiresAt,
+		...(domain ? { domain } : {})
 	});
 }
 
-export function deleteSessionCookie(cookies: Cookies): void {
-	cookies.delete(SESSION_COOKIE, { path: '/' });
+export function deleteSessionCookie(cookies: Cookies, domain?: string): void {
+	cookies.delete(SESSION_COOKIE, { path: '/', ...(domain ? { domain } : {}) });
 }
