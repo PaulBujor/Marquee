@@ -1,13 +1,4 @@
-/**
- * Crowdsourced search fallback: a substring search over the shared `media` catalog, used
- * when TMDB is unreachable so the search screen degrades to results we already hold rather than
- * going blank. Scoped to provider-backed `linked` rows only — a user's private `custom` entries are
- * never surfaced to other users.
- *
- * SQLite `LIKE` with a leading wildcard can't use a title index, but the shared catalog is bounded
- * and this is a rare fallback path, so a scan is acceptable; an FTS5 table would be the upgrade if it
- * ever gets hot.
- */
+/** Fallback when TMDB is unreachable: `linked` rows only — a private `custom` entry is never surfaced to other users. */
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { media } from '#lib/server/db/schema.js';
 import type { createDb } from '#lib/server/db/index.js';
@@ -15,15 +6,11 @@ import type { MediaSearchResult } from '#lib/server/tmdb/index.js';
 
 type Db = ReturnType<typeof createDb>;
 
-/** Escape LIKE wildcards in user input so `%` / `_` / `\` match literally (paired with `ESCAPE '\'`). */
+/** Escape LIKE wildcards so `%` / `_` / `\` match literally (paired with `ESCAPE '\'`). */
 function escapeLike(input: string): string {
 	return input.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
-/**
- * Case-insensitive title substring search over the shared `linked` catalog, newest-cached first,
- * mapped to the same {@link MediaSearchResult} shape the live TMDB search returns.
- */
 export async function searchLinkedMedia(
 	db: Db,
 	query: string,
@@ -31,9 +18,7 @@ export async function searchLinkedMedia(
 ): Promise<MediaSearchResult[]> {
 	const q = query.trim();
 	if (!q) return [];
-	// Fold the query with JS `toLowerCase()` and match the pre-folded `title_normalized` column, so
-	// this agrees with the offline client's full-Unicode folding rather than SQLite `LIKE`'s ASCII-only
-	// case-insensitivity. Both operands are already lowercased, so LIKE is a plain substring.
+	// Match the pre-folded `title_normalized` with JS `toLowerCase()`, so this agrees with the offline client's full-Unicode folding rather than SQLite `LIKE`'s ASCII-only case-insensitivity.
 	const pattern = `%${escapeLike(q.toLowerCase())}%`;
 	const rows = await db
 		.select({

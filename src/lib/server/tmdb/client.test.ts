@@ -8,7 +8,6 @@ import type {
 	TmdbTvDetailsResponse
 } from './types';
 
-/** A representative `/search/multi` payload: a movie, a show, and a person. */
 const SAMPLE: TmdbMultiSearchResponse = {
 	page: 1,
 	total_pages: 1,
@@ -176,7 +175,6 @@ describe('createTmdbClient.search', () => {
 	});
 });
 
-/** A representative `/movie/{id}?append_to_response=credits,images,videos` payload. */
 const MOVIE_DETAILS: TmdbMovieDetailsResponse = {
 	id: 27205,
 	title: 'Inception',
@@ -212,7 +210,6 @@ const MOVIE_DETAILS: TmdbMovieDetailsResponse = {
 	}
 };
 
-/** A representative `/tv/{id}?append_to_response=...` payload. */
 const TV_DETAILS: TmdbTvDetailsResponse = {
 	id: 1396,
 	name: 'Breaking Bad',
@@ -254,7 +251,6 @@ const TV_DETAILS: TmdbTvDetailsResponse = {
 	]
 };
 
-/** A representative `/tv/{id}/season/{n}` payload. */
 const SEASON_DETAILS: TmdbSeasonDetailResponse = {
 	season_number: 1,
 	name: 'Season 1',
@@ -377,8 +373,8 @@ describe('createTmdbClient.getDetails', () => {
 			},
 			similar: {
 				results: [
-					{ id: 100, title: 'Rec One (dupe)', poster_path: '/r1.jpg' }, // dedupe by id
-					{ id: 27205, title: 'Itself', poster_path: '/self.jpg' }, // self excluded
+					{ id: 100, title: 'Rec One (dupe)', poster_path: '/r1.jpg' },
+					{ id: 27205, title: 'Itself', poster_path: '/self.jpg' },
 					{ id: 200, title: 'Sim Two', release_date: '2013-03-03', poster_path: '/s2.jpg' }
 				]
 			}
@@ -512,7 +508,6 @@ describe('createTmdbClient.getDetails', () => {
 	});
 });
 
-/** A representative `/person/{id}?append_to_response=combined_credits` payload. */
 const PERSON: TmdbPersonResponse = {
 	id: 10,
 	name: 'Christopher Nolan',

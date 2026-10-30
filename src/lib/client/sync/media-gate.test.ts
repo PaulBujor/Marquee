@@ -57,7 +57,6 @@ describe('nextFullMediaCheckStamp', () => {
 	});
 
 	it('leaves the watermark untouched after a thrown error, even if a full check was due', () => {
-		// A throw is represented the same way as a skip: succeeded=false.
 		expect(nextFullMediaCheckStamp(true, false, 5000, 1000)).toBe(1000);
 	});
 

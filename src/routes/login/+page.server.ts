@@ -18,7 +18,6 @@ const SERVICE_UNAVAILABLE = 'Service unavailable.';
 const INVALID_EMAIL = 'Enter a valid email address.';
 const SEND_FAILED = "We couldn't send the email right now. Please try again shortly.";
 
-/** Map a `?error=` from the magic-link redirect to a message shown on the form. */
 function linkErrorMessage(error: string | null): string | null {
 	if (!error) return null;
 	switch (error) {
@@ -31,7 +30,6 @@ function linkErrorMessage(error: string | null): string | null {
 	}
 }
 
-/** Map a code-verification failure to a message shown on the code step. */
 function codeErrorMessage(
 	reason: 'invalid' | 'expired' | 'not_allowed' | 'too_many_attempts'
 ): string {
@@ -55,13 +53,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		linkError,
 		linkTtlMinutes: LINK_TTL_MINUTES,
 		codeTtlMinutes: CODE_TTL_MINUTES,
-		// Where to land after sign-in: a shared link being followed, usually.
 		redirectTo: safeRedirectPath(url.searchParams.get('redirectTo'))
 	};
 };
 
 export const actions: Actions = {
-	// Request phase: branch on status; email a link (browser) or a code (PWA) per `mode`.
 	request: async ({ request, locals, url, getClientAddress }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 
@@ -95,15 +91,13 @@ export const actions: Actions = {
 		}
 	},
 
-	// Verify phase (PWA code flow): match the emailed code and mint a session.
 	verify: async ({ request, locals, cookies }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 
 		const data = await request.formData();
 		const email = String(data.get('email') ?? '');
 		const code = String(data.get('code') ?? '').trim();
-		// Display-only: echoed back so the combined browser card (link + code) survives a
-		// wrong code instead of collapsing to a code-only view. Verification ignores it.
+		// Display-only, echoed back so a wrong code doesn't collapse the combined card to code-only.
 		const method = data.get('method') === 'link_and_code' ? 'link_and_code' : 'code';
 		const redirectTo = safeRedirectPath(data.get('redirectTo'));
 		if (!codeField.safeParse(code).success) {
@@ -135,7 +129,6 @@ export const actions: Actions = {
 		});
 	},
 
-	// Waitlist signup for a previously-unknown address (creates a pending user + emails a confirmation).
 	join: async ({ request, locals, getClientAddress }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 

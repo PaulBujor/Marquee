@@ -33,7 +33,6 @@ function media(externalId: string): MediaRecord {
 	};
 }
 
-/** A fetch stub returning 3 bytes, counting calls. */
 function stub() {
 	let calls = 0;
 	const fetchFn = (async () => {

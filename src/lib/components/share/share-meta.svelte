@@ -1,6 +1,5 @@
 <script lang="ts">
-	// Preview tags for a public share page. They have to be in the server-rendered HTML: a chat
-	// app's unfurler does not run JavaScript, so anything client-side arrives too late to matter.
+	// They must be in the server-rendered HTML: a chat app's unfurler doesn't run JavaScript.
 	interface Props {
 		title: string;
 		description: string;

@@ -99,7 +99,6 @@ describe('POST /api/share/preview', () => {
 		expect(await statusOf(() => POST(makeEvent({ db, body: { type: 'movie', id: -1 } })))).toBe(
 			400
 		);
-		// A person is no longer a shareable target.
 		expect(await statusOf(() => POST(makeEvent({ db, body: { kind: 'person', id: 287 } })))).toBe(
 			400
 		);

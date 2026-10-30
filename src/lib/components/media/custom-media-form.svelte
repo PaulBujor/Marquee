@@ -25,15 +25,10 @@
 		type CustomSeasonInput
 	} from '#lib/validation/custom-media.js';
 
-	/**
-	 * Create or edit a user-authored entry. Not a `<form method="POST">` — authoring has to work
-	 * offline. The parent takes the validated input and writes through the local store.
-	 */
+	/** Not a `<form method="POST">` — authoring has to work offline; the parent writes via the store. */
 	interface Props {
 		open?: boolean;
-		/** Present when editing; absent when creating. */
 		initial?: CustomMediaInput;
-		/** Prefills a new entry from whatever the user was searching for. */
 		initialTitle?: string;
 		initialType?: 'movie' | 'show';
 		busy?: boolean;
@@ -56,13 +51,11 @@
 	let year = $state<number | null>(null);
 	let overview = $state('');
 	let seasons = $state<{ seasonNumber: number; episodes: number | null }[]>([]);
-	// Credit rows carry a local `key` because nothing else about a row is stable while it's being
-	// typed: the name changes on every keystroke and a brand-new person has no id yet.
+	// Rows carry a local `key`: nothing else is stable while typing — the name changes per keystroke.
 	let credits = $state<(CustomCreditInput & { key: number })[]>([]);
 	let nextCreditKey = 0;
 	let showErrors = $state(false);
 
-	// Reseed whenever the dialog opens, so reopening never shows the previous entry's values.
 	let seeded = false;
 	$effect(() => {
 		if (!open) {
@@ -83,11 +76,7 @@
 		credits = (initial?.credits ?? []).map((c) => ({ ...c, key: nextCreditKey++ }));
 	});
 
-	/**
-	 * The season rows as the schema wants them. A blank count reads as zero — a season the user
-	 * added but hasn't filled in yet is "no episodes yet", not a validation dead end. A non-integer
-	 * (the one thing a number field still lets through) becomes -1, which the schema rejects.
-	 */
+	/** A blank count reads as zero ("no episodes yet"); a non-integer becomes -1, which the schema rejects. */
 	const seasonInput = $derived<CustomSeasonInput[]>(
 		seasons.map((s) => ({
 			seasonNumber: s.seasonNumber,
@@ -95,8 +84,7 @@
 		}))
 	);
 
-	// A row the user added but hasn't named yet isn't an error — it's an empty row. Dropping it
-	// here means "add person, change your mind, save" works without a validation dead end.
+	// An unnamed row is an empty row, dropped here so "add person, change mind, save" isn't a dead end.
 	const creditInput = $derived<CustomCreditInput[]>(
 		credits
 			.filter((c) => (c.name ?? '').trim() !== '')
@@ -122,7 +110,6 @@
 	const parsed = $derived(customMediaInputSchema.safeParse(candidate));
 	const episodeTotal = $derived(totalEpisodes(seasonInput));
 
-	/** First message for a field, shown only once the user has tried to submit. */
 	function errorFor(field: 'title' | 'year' | 'seasons' | 'credits'): string | null {
 		if (!showErrors || parsed.success) return null;
 		const issue = parsed.error.issues.find((i) => i.path[0] === field);
@@ -134,13 +121,8 @@
 	const creditsError = $derived(errorFor('credits'));
 
 	/**
-	 * Why the last submit was refused, always shown next to the button.
-	 *
-	 * The per-field messages above are the friendly half, but they only cover four fields *and* only
-	 * render where their field renders — the seasons message lives inside the shows-only block, so a
-	 * seasons-path failure on a movie has nowhere to appear at all. Any gap here makes Save do
-	 * visibly nothing, which is indistinguishable from the app being broken. So this names the
-	 * offending field unconditionally: a form must never refuse in silence.
+	 * A form must never refuse in silence: per-field messages only render where their field does, so a
+	 * seasons failure on a movie would otherwise make Save do visibly nothing.
 	 */
 	const submitError = $derived.by(() => {
 		if (!showErrors || parsed.success) return null;

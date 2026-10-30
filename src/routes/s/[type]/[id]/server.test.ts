@@ -85,8 +85,7 @@ async function setup(
 		locals: { user: opts.user ?? null, db: opts.withDb === false ? undefined : db },
 		setHeaders: (values: Record<string, string>) => {
 			for (const key in values) {
-				// SvelteKit throws when one header is set twice in a request ("header is already set"),
-				// so this double does too: `Object.assign` hid that from the tests once already.
+				// SvelteKit throws when a header is set twice; `Object.assign` hid that from these tests once already.
 				if (key.toLowerCase() in headers) throw new Error(`"${key}" header is already set`);
 				headers[key] = values[key];
 			}
@@ -200,8 +199,7 @@ describe('GET /s/[type]/[id]', () => {
 
 		expect(err?.status).toBe(303);
 		expect(err?.location).toBe('/title/movie/603');
-		// One policy for every outcome: `no-store` can't be stored by any cache, so the redirect a
-		// signed-in reader gets needs nothing narrower — and setting a second header set would throw.
+		// One policy for every outcome: `no-store` can't be cached, and a second header set would throw.
 		expect(headers).toEqual(PUBLIC_SHARE_HEADERS);
 
 		expect(pending).toHaveLength(1);
@@ -217,7 +215,6 @@ describe('GET /s/[type]/[id]', () => {
 			expect(data?.state, `SHARE_PUBLIC_DISABLED=${value}`).toBe('disabled');
 		}
 
-		// ...and anything else — including an explicit "0" — leaves the surface up.
 		for (const value of ['0', 'false', '']) {
 			const { event } = await setup({ disabled: true, disabledValue: value, warmed: true });
 			const { data } = await outcome(() => load(event));
@@ -226,8 +223,7 @@ describe('GET /s/[type]/[id]', () => {
 	});
 
 	it('cannot buy a fresh budget by inventing a session cookie', async () => {
-		// The limiter runs before authentication, so this cookie is unverified input: it must not become
-		// the budget key, or one client gets a new allowance with every request it makes.
+		// The limiter runs before auth, so this cookie is unverified: it must not become the budget key.
 		const { event, limitKeys } = await setup({ warmed: true, cookie: 'session=forged-token' });
 		await outcome(() => load(event));
 

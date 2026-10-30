@@ -6,10 +6,7 @@
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import CheckIcon from '@lucide/svelte/icons/check';
 
-	/**
-	 * What went wrong, in full — behind the toast's "See error". Raw message and stack rather than a
-	 * friendly summary: whoever opens this has already read the friendly version.
-	 */
+	/** Raw message and stack, not a summary: whoever opens this has already read the friendly version. */
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 
 	let copied = $state(false);

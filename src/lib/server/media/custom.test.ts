@@ -138,8 +138,7 @@ describe('storeCustomMedia', () => {
 			externalId: null,
 			ownerUserId: USER,
 			title: 'Midnight Cassette Club',
-			// Stored at 1 even though the client minted it at 0 — that gap is what makes the client
-			// pull its own record back and stop treating it as unsynced.
+			// Stored at 1 though the client minted it at 0 — that gap is what makes the client pull its record back and stop treating it as unsynced.
 			version: 1,
 			updatedAt: T0
 		});
@@ -244,8 +243,7 @@ describe('storeCustomMedia', () => {
 			{ name: 'Renata Voss', role: 'director' }
 		]);
 
-		// A later edit drops the lead — the credit goes, the person row stays (another entry may
-		// credit them), exactly as the provider path behaves.
+		// A later edit drops the lead: the credit goes, the person row stays (another entry may credit them).
 		await storeCustomMedia(
 			db,
 			USER,
@@ -274,8 +272,7 @@ describe('storeCustomMedia', () => {
 	});
 
 	it('drops a credit naming a person the pusher may not write', async () => {
-		// The other account's private person. Its id is the client's to mint, so a push can name it —
-		// and must neither rewrite the row nor end up crediting somebody else's name on this entry.
+		// The other account's private person: its id is the client's to mint, so a push can name it and must neither rewrite it nor credit it here.
 		await db
 			.insert(people)
 			.values({ id: PERSON_A, provider: 'local', ownerUserId: OTHER, name: 'Theirs' });
@@ -301,8 +298,7 @@ describe('storeCustomMedia', () => {
 			[push({ title: 'newer', editedAt: T0 + 100 })],
 			new Set([CUSTOM_ID])
 		);
-		// An older edit arrives late from a second device; LWW keeps the newer copy. It's reported as
-		// stored so the sender stops queueing it — the winning copy comes back on the version diff.
+		// An older edit arrives late; LWW keeps the newer copy but reports it stored so the sender stops queueing.
 		const stored = await storeCustomMedia(
 			db,
 			USER,
@@ -333,8 +329,7 @@ describe('resolveMediaSync with custom media', () => {
 	it('recovers a custom entry on a device that has only the tracking row', async () => {
 		await track(db, USER, CUSTOM_ID);
 		await resolveMediaSync(db, noTmdb, USER, { refs: [], have: [], custom: [push()] }, T0);
-		// A fresh device: the event log gave it the tracking row, it has no media row, so it asks at
-		// version 0 and the owner-scoped copy comes back. No TMDB call is possible for such a title.
+		// A fresh device has the tracking row but no media row, so it asks at version 0 and the owner-scoped copy comes back.
 		const res = await resolveMediaSync(
 			db,
 			noTmdb,

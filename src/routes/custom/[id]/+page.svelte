@@ -65,7 +65,6 @@
 		tracking.updateInProduction(entry?.inProduction ?? null);
 	});
 
-	// Season selector, defaulting to wherever the user left off.
 	let selectedSeason = $state<number | null>(null);
 	$effect(() => {
 		if (selectedSeason !== null || data.seasons.length === 0) return;
@@ -104,7 +103,6 @@
 		await goto(resolve('/'));
 	}
 
-	// --- Matching ---
 	let matchOpen = $state(false);
 	let candidates = $state<MediaSearchResult[]>([]);
 	let searchingMatches = $state(false);
@@ -124,7 +122,6 @@
 			const body = (await res.json()) as { results: SearchResult[] };
 			candidates = body.results
 				.filter((r): r is { kind: 'media' } & MediaSearchResult => r.kind === 'media')
-				// Only offer titles of the same kind — a show is never the film of the same name.
 				.filter((r) => r.type === entry.type)
 				.slice(0, 8);
 		} catch {
@@ -148,8 +145,7 @@
 		const targetId = tmdbMediaId(candidate.type, candidate.tmdbId);
 		linking = targetId;
 		try {
-			// Seed the target's media snapshot first, so the channel has identity to hydrate from and
-			// the title renders the moment we land on it.
+			// Seed the snapshot first: the channel needs identity to hydrate, and the title renders on arrival.
 			await putMedia($state.snapshot(mediaRecordFromSearch(candidate)));
 
 			const [row, watches] = await Promise.all([

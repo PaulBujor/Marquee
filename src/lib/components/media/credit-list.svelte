@@ -2,7 +2,7 @@
 	import { foldName, groupCredits } from '#lib/credits.js';
 	import type { MediaCredit } from '#lib/sync/events.js';
 
-	/** Cast and crew as role-grouped text lines. `highlight` marks matching names in primary color. */
+	/** `highlight` marks matching names in primary color. */
 	interface Props {
 		credits: MediaCredit[];
 		highlight?: Set<string>;
@@ -12,7 +12,6 @@
 
 	const groups = $derived(groupCredits(credits));
 
-	/** How a person reads on one line: their name, and for cast who they played. */
 	function line(credit: MediaCredit): string {
 		return credit.character ? `${credit.name} as ${credit.character}` : credit.name;
 	}

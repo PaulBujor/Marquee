@@ -1,9 +1,3 @@
-/**
- * Builds a {@link MediaRecord} for a user-authored entry — the mint site for custom media.
- *
- * Client-safe and pure (id and clock injectable), so the fan-out and the date derivation below are
- * testable without IndexedDB.
- */
 import { todayIso } from '#lib/tracking/actions.js';
 import type { MediaCredit, MediaEpisode, MediaRecord, MediaSeason } from '#lib/sync/events.js';
 import {
@@ -13,19 +7,7 @@ import {
 	type CustomSeasonInput
 } from '#lib/validation/custom-media.js';
 
-/**
- * The air date every synthesized episode of a custom show gets.
- *
- * It cannot be null. A null air date means *unannounced or not yet aired* — `isAired` reads it that
- * way, and so does everything built on it: an episode with no date is unwatchable, contributes no
- * progress, is never the "next episode", and is skipped by "mark season watched". That's the right
- * reading for TMDB data we simply don't have yet, but for a custom entry the user is asserting the
- * episode exists. Giving it a real past date makes every one of those helpers work unchanged, and
- * keeps the entry off the upcoming timeline, which only shows dates in the future.
- *
- * The entry's year is the honest choice where there is one. A year in the future would put the date
- * ahead of today and make the episodes unwatchable again, so it's clamped.
- */
+// Never null: a null air date reads as unannounced, which makes the episode unwatchable everywhere — and a future year is clamped to today for the same reason.
 export function customEpisodeAirDate(year: number | null, now: number = Date.now()): string {
 	const today = todayIso(now);
 	if (year === null) return today;
@@ -33,7 +15,6 @@ export function customEpisodeAirDate(year: number | null, now: number = Date.now
 	return candidate <= today ? candidate : today;
 }
 
-/** Fan a season's episode count out into individual episodes, all sharing the entry's air date. */
 function synthesizeEpisodes(seasons: CustomSeasonInput[], airDate: string): MediaEpisode[] {
 	const out: MediaEpisode[] = [];
 	for (const season of seasons) {
@@ -64,15 +45,7 @@ function synthesizeSeasons(seasons: CustomSeasonInput[], airDate: string): Media
 	}));
 }
 
-/**
- * Turn the form's credit rows into wire credits, numbering each role's billing from the order the
- * user arranged them in. A person the entry doesn't credit yet gets an id minted here — random for
- * the same reason the media id is, and private to this user.
- *
- * `externalId`/`profilePath` carry through only when the author picked someone out of search. They
- * record *who was meant*; the minted id is still what identifies the person, so a custom entry never
- * claims the provider's row.
- */
+// externalId/profilePath record *who was meant*; the minted person id still identifies them, so a custom entry never claims the provider's row.
 function synthesizeCredits(input: CustomCreditInput[], mintPersonId: () => string): MediaCredit[] {
 	const billing = new Map<string, number>();
 	return input.map((c) => {
@@ -92,18 +65,7 @@ function synthesizeCredits(input: CustomCreditInput[], mintPersonId: () => strin
 	});
 }
 
-/**
- * A complete media record for a new or edited custom entry.
- *
- * `id` is supplied for an edit and minted randomly for a new one — random rather than derived,
- * because there is no `(provider, externalId)` to derive from and a private entry must not have an
- * id anyone else could compute. `version: 0` marks it as never having been round-tripped through
- * the server, exactly as a quick-add snapshot does.
- *
- * A show is stamped `inProduction: false` so it can reach `completed`: `isStillAiring` keeps a show
- * with unaired episodes in `watching`, and the user has told us the whole thing, so there is
- * nothing still to come.
- */
+// `inProduction: false` is what lets a fully-authored show reach `completed` — `isStillAiring` would otherwise hold it in `watching`.
 export function createCustomMedia(
 	input: CustomMediaInput,
 	opts: { id?: string; now?: number; mintPersonId?: () => string } = {}
@@ -135,17 +97,11 @@ export function createCustomMedia(
 		version: 0,
 		seasons: isShow ? synthesizeSeasons(seasons, airDate) : null,
 		episodes: isShow ? synthesizeEpisodes(seasons, airDate) : null,
-		// The author is authoritative about their own entry, so `[]` (known-empty) rather than null:
-		// a credit they removed has to actually clear, not read as "unknown, keep what's stored".
+		// `[]`, not null: null reads as "unknown, keep what's stored", so a removed credit would never clear.
 		credits: synthesizeCredits(input.credits, mintPersonId)
 	};
 }
 
-/**
- * Recover the form input from a stored record, so editing an entry starts from what's there.
- * Seasons come back from the stored season rows, which carry the episode count directly; credits
- * keep their person ids, so re-saving credits the same people rather than minting fresh rows.
- */
 export function toCustomMediaInput(
 	record: Pick<MediaRecord, 'title' | 'type' | 'year' | 'overview'>,
 	seasons: Pick<MediaSeason, 'seasonNumber' | 'episodeCount'>[],
@@ -155,8 +111,7 @@ export function toCustomMediaInput(
 		title: record.title ?? '',
 		type: record.type,
 		year: record.year,
-		// Clamped, not just copied: an entry authored under a looser bound would otherwise seed a form
-		// the schema then refuses, leaving it permanently un-editable.
+		// Clamped, not copied: a looser-bound entry would otherwise seed a form the schema then refuses, permanently un-editable.
 		overview: (record.overview ?? '').slice(0, CUSTOM_OVERVIEW_MAX),
 		seasons:
 			record.type === 'show'

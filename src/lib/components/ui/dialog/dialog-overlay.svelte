@@ -1,8 +1,4 @@
-<!--
-	`data-[state=…]:` rather than the registry's `data-open:`/`data-closed:`, and a 200ms duration so
-	the scrim and the panel settle together — see `dialog-content.svelte` for both, and for why not
-	to re-run `shadcn-svelte add dialog` over this.
--->
+<!-- `data-[state=…]:` rather than the registry's `data-open:`; 200ms so scrim and panel settle together. -->
 <script lang="ts">
 	import { Dialog as DialogPrimitive } from 'bits-ui';
 	import { cn } from '#lib/utils.js';

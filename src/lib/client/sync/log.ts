@@ -1,5 +1,3 @@
-/** Pure helpers for the sync log — split out so the ring and formatting are testable. */
-
 export type SyncLogLevel = 'info' | 'warn' | 'error';
 export type SyncLogChannel = 'cycle' | 'events' | 'media' | 'images' | 'cache';
 
@@ -11,10 +9,9 @@ export interface SyncLogEntry {
 	message: string;
 }
 
-/** Entries kept in memory — a cycle writes a handful, so this holds a long session. */
+/** A cycle writes a handful, so this holds a long session. */
 export const SYNC_LOG_MAX = 200;
 
-/** Append, newest first, dropping the oldest past `max`. */
 export function appendEntry(
 	entries: SyncLogEntry[],
 	entry: SyncLogEntry,
@@ -28,7 +25,6 @@ export function formatTime(at: number): string {
 	return new Date(at).toLocaleTimeString(undefined, { hour12: false });
 }
 
-/** The whole log as plain text, oldest first, for the copy button. */
 export function formatLogText(entries: SyncLogEntry[]): string {
 	return [...entries]
 		.reverse()
@@ -39,7 +35,6 @@ export function formatLogText(entries: SyncLogEntry[]): string {
 		.join('\n');
 }
 
-/** Entries recovered from session storage, dropping anything malformed. */
 export function parseEntries(raw: string | null): SyncLogEntry[] {
 	if (!raw) return [];
 	try {

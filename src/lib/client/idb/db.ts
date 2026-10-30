@@ -1,17 +1,3 @@
-/**
- * Client-side IndexedDB: the offline store backing the sync pipeline. It holds an
- * `events` outbox (local events awaiting push) plus materialized `tracking` /
- * `episodeWatches` stores (the client-side projection of the same event log the
- * server materializes) and a `media` reference cache with its `seasons` / `episodes`
- * child stores (populated off a separate channel, not derived from events; episodes
- * carry air dates for watchability + the upcoming calendar; `credits` holds cast and crew).
- * `mediaLinks` materializes the
- * `media.*` events — which of the user's own entries have been matched to a provider-backed
- * title. `meta` holds the `deviceId` and sync `cursor`. The database itself is namespaced per
- * user (`marquee-<userId>`, see {@link setActiveUser}).
- *
- * Client-safe (browser only) — never imported from server code.
- */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { reportClientError } from '#lib/client/report-error.js';
 import type {
@@ -24,31 +10,21 @@ import type {
 	TrackingStatus
 } from '#lib/sync/events.js';
 
-/**
- * An outbox event: the envelope plus a `synced` flag (0 = pending push, 1 = acked).
- * It's `0 | 1`, not a boolean, because the `by_synced` index queries unsynced rows and
- * IndexedDB keys must be number/string/Date/array — a boolean can't be an index key.
- */
+/** `0 | 1`, not a boolean: `by_synced` indexes it, and IndexedDB keys can't be booleans. */
 export interface OutboxEvent extends EventEnvelope {
 	synced: 0 | 1;
 }
 
-/** A media record's scalar fields; its seasons/episodes/credits live in their own stores. */
 export type MediaScalars = Omit<MediaRecord, 'seasons' | 'episodes' | 'credits'>;
 
 /** `updatedAt` is the LWW clock (epoch ms). */
 export interface ClientMedia extends MediaScalars {
 	updatedAt: number;
-	/**
-	 * Custom media only: 1 while the author's latest edit still needs backing up to the server.
-	 * Absent on provider-backed rows, which the server holds authoritatively and the client only
-	 * ever reads. Cleared once the media channel reports the record stored.
-	 */
+	/** Custom media only; cleared once the media channel reports the record stored. */
 	pendingPush?: 0 | 1;
 	/**
-	 * Custom media only: epoch ms of the author's last local edit. Distinct from `updatedAt`, which
-	 * is stamped on every local write including a channel pull — this one is the LWW clock the
-	 * server compares two devices' edits by, so it must move only when the *user* changes something.
+	 * The LWW clock the server compares two devices' edits by — unlike `updatedAt` it must move only
+	 * when the *user* changes something, not on a channel pull.
 	 */
 	editedAt?: number;
 }
@@ -66,21 +42,20 @@ export interface ClientEpisode extends MediaEpisode {
 }
 
 /**
- * A cached credit. `id` = `${mediaId}::{role}::{personId}` — the same `(media, person, role)`
- * uniqueness the server enforces, flattened into a key. `by_person` serves the reverse lookup
- * offline, the same way the server's `credits_person_idx` does.
+ * `id` = `${mediaId}::{role}::{personId}` — the server's uniqueness flattened into a key; `by_person`
+ * serves the reverse lookup offline.
  */
 export interface ClientCredit extends MediaCredit {
 	id: string;
 	mediaId: string;
 }
 
-/** Materialized tracking row (single-user client, so keyed by `mediaId`). Per-field LWW clocks. */
+/** Single-user client, so keyed by `mediaId`. Per-field LWW clocks. */
 export interface ClientTracking {
 	mediaId: string;
 	status: TrackingStatus;
 	favorite: boolean;
-	/** Optional user rating 1–5; null = unrated. */
+	/** 1–5; null = unrated. */
 	rating: number | null;
 	removed: boolean;
 	statusUpdatedAt: number;
@@ -91,11 +66,8 @@ export interface ClientTracking {
 }
 
 /**
- * Materialized identity decision for one media reference: the provider-backed title the user
- * matched it to, and whether they've dismissed the suggestion. Keyed by the *source* id (a custom
- * entry), with per-field LWW clocks like a tracking row, so a link and a dismissal from different
- * devices merge independently. Client-only — the server stores the `media.*` events but
- * materializes nothing from them (see `server/sync/projection.ts`).
+ * Client-only: the server stores the `media.*` events but materializes nothing from them (see
+ * `server/sync/projection.ts`). Per-field LWW clocks, so a link and a dismissal merge independently.
  */
 export interface ClientMediaLink {
 	mediaId: string;
@@ -108,7 +80,7 @@ export interface ClientMediaLink {
 	declinedUpdatedAt: number;
 }
 
-/** Materialized per-episode watched state. `id` = `${mediaId}::s{S}e{E}`. */
+/** `id` = `${mediaId}::s{S}e{E}`. */
 export interface ClientEpisodeWatch {
 	id: string;
 	mediaId: string;
@@ -118,10 +90,6 @@ export interface ClientEpisodeWatch {
 	updatedAt: number;
 }
 
-/**
- * Cached artwork for a title — poster + backdrop **image bytes** as Blobs, keyed by our media
- * id, so tracked titles render with zero network and an offline export carries the artwork.
- */
 export interface MediaImages {
 	id: string;
 	poster: Blob | null;
@@ -129,19 +97,16 @@ export interface MediaImages {
 	updatedAt: number;
 }
 
-/** The `meta` key/value store's known keys and the type each maps to. */
 export interface MetaValues {
 	deviceId: string;
 	cursor: number;
-	/** Epoch ms of the last successful event sync — shown in settings, drives "last synced". */
+	/** Epoch ms. */
 	lastSyncAt: number;
-	/** Epoch ms of the last full media version-diff pass — lets the cadence survive a PWA relaunch. */
+	/** Epoch ms; lets the cadence survive a PWA relaunch. */
 	lastFullMediaCheck: number;
-	/** Last 5 committed search queries, most recent first — local-only, never synced. */
 	recentSearches: string[];
 }
 export type MetaKey = keyof MetaValues;
-/** A single `meta` row — a known key paired with its typed value. */
 export type MetaEntry = { [K in MetaKey]: { key: K; value: MetaValues[K] } }[MetaKey];
 
 export interface MarqueeDB extends DBSchema {
@@ -178,11 +143,8 @@ let dbPromise: Promise<MarqueeDatabase> | null = null;
 let activeUserId: string | null = null;
 
 /**
- * Scope the local store to a signed-in user. The database is **namespaced per user**
- * (`marquee-<userId>`), so switching accounts opens a *different* database — the prior
- * user's data (including unsynced events) is never cleared or exposed to another account.
- * Call once on login (from the root layout) before any store access. Passing `null` (logout)
- * detaches; the next {@link openDb} will throw until a user is set again.
+ * Per-user database (`marquee-<userId>`), so switching accounts opens a *different* database — the
+ * prior user's data is never cleared or exposed to another account.
  */
 export function setActiveUser(userId: string | null): void {
 	if (userId === activeUserId) return;
@@ -190,12 +152,7 @@ export function setActiveUser(userId: string | null): void {
 	dbPromise = null; // the next openDb opens the new user's database
 }
 
-/**
- * Delete the active user's local database (offline replica + outbox + cursor). The next
- * {@link openDb} recreates it empty, so a fresh sync re-pulls everything from the server — used by
- * the "clear local data" reset. Caller should flush pending events first (unsynced edits are lost)
- * and reload afterwards. No-op when no user is active.
- */
+/** Caller must flush pending events first — unsynced edits are lost. No-op when no user is active. */
 export async function wipeLocalData(): Promise<void> {
 	if (!activeUserId || typeof indexedDB === 'undefined') return;
 	const name = `${DB_NAME}-${activeUserId}`;
@@ -213,7 +170,6 @@ export async function wipeLocalData(): Promise<void> {
 	});
 }
 
-/** Open (once per active user) that user's database, creating stores/indexes on first use. */
 export function openDb(): Promise<MarqueeDatabase> {
 	if (!activeUserId) {
 		return Promise.reject(new Error('openDb: no active user — call setActiveUser() first'));
@@ -260,7 +216,6 @@ export function openDb(): Promise<MarqueeDatabase> {
 				if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
 			},
 			/**
-			 * Another tab still has the database open at an older version, so our upgrade can't run.
 			 * Without this the open **hangs forever** — no error, no rejection — and every read and
 			 * write behind it hangs with it, which surfaces as the app silently doing nothing.
 			 */
@@ -271,11 +226,7 @@ export function openDb(): Promise<MarqueeDatabase> {
 					at: Date.now()
 				});
 			},
-			/**
-			 * The mirror case: *this* tab is holding an old version open while another wants to
-			 * upgrade. Close so it can proceed — this tab is running superseded code anyway, and the
-			 * next `openDb()` reopens at the new version.
-			 */
+			/** This tab holds an old version: close so the other can upgrade — it's superseded anyway. */
 			blocking() {
 				void dbPromise?.then((db) => db.close()).catch(() => {});
 				dbPromise = null;

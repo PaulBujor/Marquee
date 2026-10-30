@@ -40,7 +40,6 @@ describe('chunkIds', () => {
 
 describe('chunkRows', () => {
 	it('derives the chunk size from the column count so no chunk exceeds the param limit', () => {
-		// 8 columns → floor(100 / 8) = 12 rows per insert.
 		const rows = Array.from({ length: 50 }, (_, i) => ({
 			a: i,
 			b: i,

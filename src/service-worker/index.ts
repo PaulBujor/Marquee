@@ -6,20 +6,18 @@ import { runSync } from '#lib/client/sync/sync.js';
 import { setActiveUser } from '#lib/client/idb/index.js';
 
 const CACHE = `cache-${version}`;
-// Navigations (authed SSR HTML) live in their own cache so it can be cleared on logout without
-// dropping the precached build assets — keeps one user's cached shells off the next user's account.
+// Own cache so logout clears it without dropping precached build assets — one user's shells never reach the next.
 const PAGES = `pages-${version}`;
 // Build paths are cache-ready; static ones need `asset()` to pick up the base path.
 const BUILD_PATHS = immutable.map(({ path }) => path);
 const ASSETS = [...BUILD_PATHS, ...assets.map(({ path }) => asset(path))];
 const BUILD = new Set(BUILD_PATHS);
 const OFFLINE_URL = asset('offline.html');
-/** Background Sync tag: flush queued offline writes when connectivity returns. */
+/** Must match the tag the sync engine registers. */
 const SYNC_TAG = 'marquee-sync';
 
 self.addEventListener('install', (event) => {
-	// No skipWaiting: the worker waits for the update prompt so hashed chunks
-	// aren't swapped under a live tab.
+	// No skipWaiting: the worker waits for the update prompt so hashed chunks aren't swapped under a live tab.
 	event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
 });
 
@@ -34,17 +32,13 @@ self.addEventListener('activate', (event) => {
 	);
 });
 
-// Posted by the update prompt when the user accepts the new version; and by the app on logout /
-// account switch to drop the previous user's cached navigation shells.
+// Sent by the update prompt on accept, and by the app on logout/account switch to drop the previous user's cached shells.
 self.addEventListener('message', (event) => {
 	if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 	if (event.data?.type === 'CLEAR_PAGES') event.waitUntil(caches.delete(PAGES));
 });
 
-// Background Sync (Chromium/Android): fires when connectivity returns, even if the app was closed —
-// so writes queued offline get flushed without waiting for the user to reopen. Registered from the
-// sync engine when a sync can't complete offline. iOS has no Background Sync API; there the
-// foreground/reconnect triggers (and a future daily-push piggyback) cover it.
+// Fires even if the app was closed; iOS has no Background Sync API, so foreground/reconnect triggers cover it.
 interface SyncEvent extends ExtendableEvent {
 	readonly tag: string;
 }
@@ -52,23 +46,19 @@ self.addEventListener('sync', ((event: SyncEvent) => {
 	if (event.tag === SYNC_TAG) event.waitUntil(flushOfflineWrites());
 }) as EventListener);
 
-/** Payload the server sends with a Web Push (see `src/lib/server/push`). */
 interface PushPayload {
 	title: string;
 	body: string;
-	/** In-app path to deep-link to on click. */
 	url?: string;
 	/** Collapse key — a later notification with the same tag replaces an earlier one. */
 	tag?: string;
 }
 
-// Web Push: show the notification, then wake a background sync so the app's local data is
-// fresh by the time the user opens it — this also covers iOS, which has no Background Sync API.
+// Show the notification, then wake a background sync so local data is fresh on open — also covers iOS, which has no Background Sync API.
 self.addEventListener('push', (event) => {
 	event.waitUntil(handlePush(event));
 });
 
-// Deep-link a notification tap to its target, focusing an already-open tab when there is one.
 self.addEventListener('notificationclick', (event) => {
 	event.notification.close();
 	const url = (event.notification.data as { url?: string } | null)?.url ?? '/';
@@ -94,7 +84,6 @@ async function handlePush(event: PushEvent): Promise<void> {
 	await flushOfflineWrites().catch(() => {});
 }
 
-/** Focus an open tab (handing it the target path) or open a new window at the URL. */
 async function openOrFocus(url: string): Promise<void> {
 	const target = new URL(url, self.location.origin);
 	const path = target.pathname + target.search;
@@ -109,24 +98,14 @@ async function openOrFocus(url: string): Promise<void> {
 	await self.clients.openWindow(target.href);
 }
 
-/**
- * Drain queued offline events. Prefer an open tab (it holds the active user + reactive state, so its
- * views update); when the app is fully closed, push the outbox directly via the same `runSync` round
- * trip — the server dedupes by event id, so a later foreground sync is safe.
- *
- * Crucially, the no-tab path flushes **only the store of the user the session cookie authenticates
- * as** (asked of the server), never every local store. On a shared device, blindly syncing each
- * `marquee-<id>` DB under the ambient cookie would write one account's queued events into another's
- * account (the server attributes them to the cookie's user) — silent cross-account corruption.
- */
+// The no-tab path flushes **only** the store of the user the cookie authenticates as: syncing every local DB would write one account's events into another's.
 async function flushOfflineWrites(): Promise<void> {
 	const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 	if (clients.length > 0) {
 		for (const client of clients) client.postMessage({ type: 'SYNC' });
 		return;
 	}
-	// No open tab: confirm who the cookie belongs to before touching any store. If we can't (offline
-	// or signed out), flush nothing and let the next foreground sync handle it.
+	// Confirm the cookie's owner before touching any store; if we can't, flush nothing and let the next foreground sync handle it.
 	let userId: string | null = null;
 	try {
 		const res = await fetch('/api/whoami');
@@ -139,7 +118,6 @@ async function flushOfflineWrites(): Promise<void> {
 	try {
 		await runSync();
 	} catch (err) {
-		// Best-effort: a failure just leaves events queued for the next trigger.
 		console.warn('[sw] background sync flush failed', err);
 	}
 }
@@ -155,22 +133,12 @@ async function offlineResponse(): Promise<Response> {
 	});
 }
 
-// Navigations cache under their **path only** (query stripped) so a page's many query variants
-// (`?from=…`, `?q=…`, `?season=…`) share one entry and the cache stays bounded. The shell boots and
-// reads the real URL client-side, so dropping the query for the cache key is safe.
+// Path only, query stripped, so a page's many query variants share one entry; the shell reads the real URL client-side.
 function pageCacheKey(url: URL): Request {
 	return new Request(`${url.origin}${url.pathname}`);
 }
 
-/**
- * Cache-first (stale-while-revalidate) for navigations, so the app **boots instantly** — offline or
- * on a slow network — instead of waiting on a server round-trip every launch. Serve the last cached
- * shell immediately, then revalidate in the background. The shell renders from IndexedDB (dashboard,
- * timeline, and — via the title page's IDB fallback — tracked titles) and re-syncs, so a stale
- * cached copy self-heals; only the *first* visit to a path (nothing cached yet) waits on the
- * network. This deliberately caches authed SSR HTML: it's the user's own shell on their own device,
- * versioned with the build (wiped on update) and cleared on logout (CLEAR_PAGES).
- */
+// Stale-while-revalidate so the app boots instantly offline; deliberately caches authed SSR HTML — the user's own shell, versioned with the build and cleared on logout.
 async function handleNavigate(request: Request, event: FetchEvent): Promise<Response> {
 	const key = pageCacheKey(new URL(request.url));
 	const cache = await caches.open(PAGES);
@@ -189,10 +157,9 @@ async function handleNavigate(request: Request, event: FetchEvent): Promise<Resp
 		.catch(() => null);
 
 	if (cached) {
-		event.waitUntil(revalidate); // refresh the cache for next time without blocking this response
+		event.waitUntil(revalidate);
 		return cached;
 	}
-	// First visit to this path — nothing cached yet; wait on the network, else the offline page.
 	return (await revalidate) ?? offlineResponse();
 }
 
@@ -210,9 +177,7 @@ self.addEventListener('fetch', (event) => {
 	)
 		return;
 
-	// Admin pages reflect live account state and must never be replayed from the navigation cache — a
-	// cached copy would outlive a logout. Network only: offline falls through to the app's offline page,
-	// so an admin sees nothing rather than a stale copy of the admin surface.
+	// Admin pages must never be replayed from the navigation cache — a cached copy outlives a logout. Offline shows nothing rather than a stale copy.
 	if (
 		url.origin === self.location.origin &&
 		(url.pathname === '/admin' || url.pathname.startsWith('/admin/'))
@@ -221,19 +186,15 @@ self.addEventListener('fetch', (event) => {
 		return;
 	}
 
-	// Versioned build assets: cache-first.
 	if (url.origin === self.location.origin && BUILD.has(url.pathname)) {
 		event.respondWith(caches.match(request).then((cached) => cached ?? fetch(request)));
 		return;
 	}
 
-	// Navigations: cache-first (stale-while-revalidate) so the app boots instantly, then the
-	// offline page on a first-visit miss (see handleNavigate).
 	if (request.mode === 'navigate') {
 		event.respondWith(handleNavigate(request, event));
 		return;
 	}
 
-	// Everything else: cache-first.
 	event.respondWith(caches.match(request).then((cached) => cached ?? fetch(request)));
 });

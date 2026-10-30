@@ -4,11 +4,9 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 
-	// Quick add/remove button for a search row. Presentational: the parent owns the
-	// tracked lookup + write handlers so a change on one row reflects on all of them.
+	// Presentational: the parent owns the tracked lookup and write handlers, so one row's change shows on all.
 	interface Props {
 		title: string;
-		/** Current tracking status, or undefined when the title isn't on any list. */
 		status: TrackingStatus | undefined;
 		busy: boolean;
 		onadd: () => void;
@@ -17,9 +15,7 @@
 	let { title, status, busy, onadd, onremove }: Props = $props();
 
 	const tracked = $derived(status !== undefined);
-	// One-tap remove only for a plain "want to watch". Titles further along (watching / completed /
-	// didn't finish) keep a static tick and are managed from the detail page, so a stray tap here
-	// can't silently wipe episode-watch history.
+	// One-tap remove only for a plain "want to watch" — a stray tap can't silently wipe episode history.
 	const removable = $derived(status === 'want_to_watch');
 </script>
 

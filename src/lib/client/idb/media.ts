@@ -1,7 +1,3 @@
-/**
- * `media` store accessors. A {@link MediaRecord} is stored split across three stores mirroring the
- * server: scalar fields in `media`, and (for shows) the nested arrays in `seasons`/`episodes`.
- */
 import {
 	openDb,
 	type ClientCredit,
@@ -29,27 +25,17 @@ function creditKey(mediaId: string, role: string, personId: string): string {
 	return `${mediaId}::${role}::${personId}`;
 }
 
-/** Stores a full media record touches. Held by one transaction so a record commits as a unit. */
 const MEDIA_STORES = ['media', 'seasons', 'episodes', 'credits'] as const;
 
 /**
- * Upsert a media record. A null `seasons`/`episodes` (a scalar-only track-time snapshot) leaves any
- * existing child rows untouched; a non-null one (a full channel pull) replaces them — so a snapshot
- * never wipes synced episode data.
- *
- * A locally-authored row with an edit still queued for backup is left alone: the incoming copy is
- * by definition the server's, and the server has not seen that edit yet, so applying it would
- * silently discard what the user just typed. The pending copy wins and is pushed on the next cycle.
+ * A locally-authored row with an unpushed edit is left alone: the incoming copy is the server's, and
+ * the server hasn't seen that edit, so applying it would silently discard what the user typed.
  */
 export async function putMedia(record: MediaRecord): Promise<void> {
 	return writeMedia(record, { respectPending: true });
 }
 
-/**
- * The write `putMedia` guards. `respectPending: false` is the author's own path — an edit must be
- * able to overwrite an earlier edit that hasn't been pushed yet, which the guard would otherwise
- * block. `pending` carries the backup marker + edit clock through in the same transaction.
- */
+/** `respectPending: false` is the author's own path — an edit must overwrite an earlier unpushed one. */
 async function writeMedia(
 	record: MediaRecord,
 	opts: { respectPending: boolean; pending?: { editedAt: number } }
@@ -64,8 +50,8 @@ async function writeMedia(
 		return;
 	}
 	await mediaStore.put({
-		// Carry the backup fields forward: an unrelated write (a tracking snapshot, say) must not
-		// silently drop the edit clock a later push compares against.
+		// Carry the backup fields forward: an unrelated write must not drop the edit clock a later
+		// push compares against.
 		...(existing ? { pendingPush: existing.pendingPush, editedAt: existing.editedAt } : {}),
 		...scalars,
 		updatedAt: Date.now(),
@@ -88,8 +74,7 @@ async function writeMedia(
 			await store.put({ ...e, id: episodeKey(record.id, e.season, e.episode), mediaId: record.id });
 		}
 	}
-	// Same null-vs-empty rule as the child arrays above: null is "unknown, leave what's stored"
-	// (a quick-add snapshot), `[]` is "known to have none" and clears them.
+	// null is "unknown, leave what's stored" (a quick-add snapshot); `[]` clears them.
 	if (credits) {
 		const store = tx.objectStore('credits');
 		const index = store.index('by_media');
@@ -101,10 +86,7 @@ async function writeMedia(
 	await tx.done;
 }
 
-/**
- * Upsert many media records in one transaction. `putMedia` opens its own three-store transaction
- * per record, which an import of a whole library turns into thousands of them.
- */
+/** `putMedia` opens three stores per record; an import of a whole library is thousands of transactions. */
 export async function putMediaBatch(records: MediaRecord[]): Promise<void> {
 	if (records.length === 0) return;
 	const db = await openDb();
@@ -118,8 +100,6 @@ export async function putMediaBatch(records: MediaRecord[]): Promise<void> {
 	for (const record of records) {
 		const { seasons, episodes, credits, ...scalars } = record;
 		await mediaStore.put({ ...scalars, updatedAt: now });
-		// Same rule as putMedia: a null child array is a scalar-only snapshot and leaves any
-		// already-synced child rows alone; a non-null one replaces them.
 		if (seasons) {
 			for (const key of await seasonStore.index('by_media').getAllKeys(record.id)) {
 				await seasonStore.delete(key);
@@ -168,11 +148,7 @@ export async function getAllMedia(): Promise<ClientMedia[]> {
 	return (await openDb()).getAll('media');
 }
 
-/**
- * Offline search over the locally-cached catalog — the user's own titles only. Scoped to
- * provider-backed `linked` rows with a known external id (so each result can open its detail page),
- * a case-insensitive title substring, mapped to the same shape as a TMDB search result.
- */
+/** Only provider-backed `linked` rows with a known external id, so each result can open its detail page. */
 export async function searchLocalMedia(query: string, limit = 20): Promise<SearchLikeMedia[]> {
 	const q = query.trim().toLowerCase();
 	if (!q) return [];
@@ -194,10 +170,7 @@ export async function searchLocalMedia(query: string, limit = 20): Promise<Searc
 	return matches.sort((a, b) => a.title.localeCompare(b.title)).slice(0, limit);
 }
 
-/**
- * User-authored entries matching a title substring. Linked entries are excluded — the database
- * title they now represent is the one to find.
- */
+/** Linked entries are excluded — the database title they now represent is the one to find. */
 export async function searchCustomMedia(query: string, limit = 20): Promise<ClientMedia[]> {
 	const q = query.trim().toLowerCase();
 	if (!q) return [];
@@ -211,17 +184,15 @@ export async function searchCustomMedia(query: string, limit = 20): Promise<Clie
 		.slice(0, limit);
 }
 
-/** A title's cached seasons — the source for the season selector when rendering offline. */
 export async function getSeasons(mediaId: string): Promise<ClientSeason[]> {
 	return (await openDb()).getAllFromIndex('seasons', 'by_media', mediaId);
 }
 
-/** A title's cached episodes — the source for watchability + progress. */
 export async function getEpisodes(mediaId: string): Promise<ClientEpisode[]> {
 	return (await openDb()).getAllFromIndex('episodes', 'by_media', mediaId);
 }
 
-/** A title's cached cast and crew, ordered by role then billing (as the server returned them). */
+/** Ordered by role then billing, as the server returned them. */
 export async function getCredits(mediaId: string): Promise<ClientCredit[]> {
 	const rows = await (await openDb()).getAllFromIndex('credits', 'by_media', mediaId);
 	return rows.sort(
@@ -230,17 +201,11 @@ export async function getCredits(mediaId: string): Promise<ClientCredit[]> {
 	);
 }
 
-/** Everything a person is credited on locally — the offline half of the reverse lookup. */
 export async function getCreditsForPerson(personId: string): Promise<ClientCredit[]> {
 	return (await openDb()).getAllFromIndex('credits', 'by_person', personId);
 }
 
-/**
- * Media ids on a list — a non-removed `tracking` row, or a `watched: true` episode. Both what the
- * media channel asks the server about and the keep-set eviction runs against, so a title stops
- * being fetched and starts being dropped the moment it leaves every list. Tombstones (a removed
- * tracking row, a `watched: false` episode) don't count.
- */
+/** Tombstones (removed tracking, `watched: false`) don't count; this is also the eviction keep-set. */
 export async function getReferencedMediaIds(): Promise<string[]> {
 	const db = await openDb();
 	const ids = new Set<string>();
@@ -249,16 +214,7 @@ export async function getReferencedMediaIds(): Promise<string[]> {
 	return [...ids];
 }
 
-/**
- * Drop `media` rows and their `seasons`/`episodes` children for ids outside `keepIds`. No
- * storage-pressure gate like `pruneMediaImages` has — reference data is small and re-fetched from
- * the channel on re-add, so leaving every list is reason enough. Returns how many rows were deleted.
- *
- * **Except custom rows, which are never evicted.** That reasoning rests on the row being
- * re-fetchable, and a user-authored entry isn't: dropping it is the only copy on this device gone,
- * and nothing on the server would bring it back, since recovery is keyed off ids the client can
- * still name. Keeping them also means a removed entry stays findable in search and can be re-added.
- */
+/** **Except custom rows, never evicted** — dropping one loses the only copy; nothing can restore it. */
 export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
 	const db = await openDb();
 	const tx = db.transaction(MEDIA_STORES, 'readwrite');
@@ -285,16 +241,7 @@ export async function pruneStaleMedia(keepIds: Set<string>): Promise<number> {
 	return deleted;
 }
 
-/**
- * Erase user-authored entries and everything hanging off them — the projection of `media.deleted`.
- *
- * Scoped to `source === 'custom'`: a provider-backed row is shared catalog the channel re-fetches,
- * so an event naming one is ignored rather than acted on. The `mediaLinks` row goes too, since an
- * identity decision about an entry that no longer exists can only confuse a later replay.
- *
- * Runs outside the projection transaction (see `applyEventToIdb`) so the ordinary tracking write
- * path doesn't have to hold the media stores open.
- */
+/** Only `source === 'custom'` rows are erased — a provider-backed row is shared catalog. */
 export async function deleteLocalMedia(ids: string[]): Promise<void> {
 	if (ids.length === 0) return;
 	const db = await openDb();
@@ -321,15 +268,7 @@ export async function deleteLocalMedia(ids: string[]): Promise<void> {
 	await tx.done;
 }
 
-/**
- * Referenced ids the client has no synced copy of yet — no local row at all, or the `version: 0`
- * placeholder a quick-add snapshot seeds (see `mediaRecordFromSearch`). These are what the media
- * channel needs to ask the server about; everything else stays local until the next full check.
- *
- * A custom row is excluded: nothing on the server can be pulled for a title it has never seen, and
- * asking every cycle for one would keep the light pass permanently non-empty. Backing it up is the
- * push side's job ({@link getPendingCustomMedia}), not the diff's.
- */
+/** Custom rows are excluded: the server can't be asked for a title it has never seen. */
 export async function getUnsyncedMediaIds(referencedIds: string[]): Promise<string[]> {
 	const rows = await Promise.all(referencedIds.map((id) => getMedia(id)));
 	return referencedIds.filter((_, i) => {
@@ -339,14 +278,7 @@ export async function getUnsyncedMediaIds(referencedIds: string[]): Promise<stri
 	});
 }
 
-/**
- * Locally-authored records whose latest edit still needs backing up, as complete push payloads,
- * oldest edit first so a backlog drains in the order it was written.
- *
- * A full scan of `media` rather than an index: the store holds scalars for a bounded library, the
- * sync cycle already scans `tracking` and `episodeWatches` whole, and an index would cost a schema
- * version bump to buy nothing measurable.
- */
+/** Full scan, not an index: the library is bounded and an index would cost a schema bump for nothing. */
 export async function getPendingCustomMedia(limit: number): Promise<CustomMediaPush[]> {
 	const db = await openDb();
 	const rows = (await db.getAll('media'))
@@ -406,18 +338,14 @@ export async function getPendingCustomMedia(limit: number): Promise<CustomMediaP
 					character: c.character,
 					sortOrder: c.sortOrder
 				})),
-				// A row can only be pending because an edit stamped the clock, but fall back rather
-				// than push a record the server's schema would reject outright.
+				// Fall back rather than push a record the server's schema would reject outright.
 				editedAt: row.editedAt ?? row.updatedAt
 			};
 		})
 	);
 }
 
-/**
- * Write a locally-authored record and mark it for backup, stamping the edit clock the server orders
- * two devices' edits by. The one write path for creating or editing a custom entry.
- */
+/** The one write path for creating or editing a custom entry; stamps the edit clock the server orders by. */
 export async function putCustomMedia(
 	record: MediaRecord,
 	editedAt: number = Date.now()
@@ -425,7 +353,6 @@ export async function putCustomMedia(
 	await writeMedia(record, { respectPending: false, pending: { editedAt } });
 }
 
-/** Clear the backup marker for records the server reported stored. */
 export async function clearPendingPush(ids: string[]): Promise<void> {
 	if (ids.length === 0) return;
 	const db = await openDb();
@@ -438,7 +365,6 @@ export async function clearPendingPush(ids: string[]): Promise<void> {
 	await tx.done;
 }
 
-/** Provider + external id for a title the server can hydrate. */
 export interface MediaIdentityRef {
 	provider: HydratableProvider;
 	externalId: string;
@@ -450,7 +376,6 @@ export interface MediaVersionEntry {
 	version: number;
 }
 
-/** Provider-backed media among `ids` for the media-sync channel. */
 export async function getLinkedMediaRefs(ids: string[]): Promise<MediaIdentityRef[]> {
 	const rows = await Promise.all(ids.map((id) => getMedia(id)));
 	return rows
@@ -464,7 +389,6 @@ export async function getLinkedMediaRefs(ids: string[]): Promise<MediaIdentityRe
 		}));
 }
 
-/** Version-diff report for the media-sync channel. */
 export async function getMediaVersions(ids: string[]): Promise<MediaVersionEntry[]> {
 	return Promise.all(ids.map(async (id) => ({ id, version: (await getMedia(id))?.version ?? 0 })));
 }

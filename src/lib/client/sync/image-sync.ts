@@ -1,8 +1,3 @@
-/**
- * Fetches poster + backdrop image bytes for cached media and stores them as Blobs in IndexedDB,
- * so tracked titles render with zero network and an offline export carries the artwork. Runs
- * after the media sync; bounded per run so a large list fills in over several cycles.
- */
 import { getAllMedia } from '#lib/client/idb/index.js';
 import { getMediaImages, putMediaImages, type MediaImageBlobs } from '#lib/client/idb/images.js';
 import { isAuthFailure, SessionExpiredError } from '#lib/client/session.js';

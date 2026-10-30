@@ -121,8 +121,7 @@ describe('requestEmailChange', () => {
 	it('rate-limits by target address across accounts (email-bomb defense)', async () => {
 		const { sender } = fakeSender();
 		const kinds: string[] = [];
-		// Six *different* users all targeting one victim inbox — the per-user cap never trips, but
-		// the per-target cap must (5 sent, 6th blocked).
+		// Six different users targeting one inbox: the per-user cap never trips, the per-target cap must.
 		for (let i = 0; i < 6; i++) {
 			const user = await seedUser(db, `attacker${i}@x.com`);
 			kinds.push((await requestEmailChange({ db, user, newEmail: 'victim@x.com', sender })).kind);
@@ -134,8 +133,7 @@ describe('requestEmailChange', () => {
 	it('rate-limits by requesting IP across accounts and targets', async () => {
 		const { sender } = fakeSender();
 		const kinds: string[] = [];
-		// 21 distinct users + distinct targets from one IP: neither per-user nor per-target trips,
-		// but the per-IP cap (20) does on the 21st.
+		// 21 users and 21 targets from one IP: only the per-IP cap (20) can trip.
 		for (let i = 0; i < 21; i++) {
 			const user = await seedUser(db, `u${i}@x.com`);
 			kinds.push(
@@ -161,14 +159,12 @@ describe('verifyEmailChange', () => {
 			previousEmail: 'me@x.com'
 		});
 		expect((await db.select().from(users).where(eq(users.id, user.id)))[0].email).toBe('new@x.com');
-		// single-use: the same code no longer works
 		expect((await verifyEmailChange({ db, user, code })).ok).toBe(false);
 	});
 
 	it('signs out other devices but keeps the one making the change', async () => {
 		const user = await seedUser(db, 'me@x.com');
 		const { sender, sent } = fakeSender();
-		// Three signed-in devices; the change is made from `keeper`.
 		const keeper = await createSession(db, user.id);
 		await createSession(db, user.id);
 		await createSession(db, user.id);
@@ -215,7 +211,6 @@ describe('verifyEmailChange', () => {
 			(await db.select().from(emailChangeTokens).where(eq(emailChangeTokens.userId, user.id)))[0]
 				.attempts
 		).toBe(1);
-		// account email unchanged
 		expect((await db.select().from(users).where(eq(users.id, user.id)))[0].email).toBe('me@x.com');
 	});
 
@@ -232,7 +227,6 @@ describe('verifyEmailChange', () => {
 			if (!r.ok) reasons.push(r.reason);
 		}
 		expect(reasons[4]).toBe('too_many_attempts');
-		// even the correct code no longer works
 		expect((await verifyEmailChange({ db, user, code })).ok).toBe(false);
 	});
 
@@ -255,7 +249,6 @@ describe('verifyEmailChange', () => {
 		const { sender, sent } = fakeSender();
 		await requestEmailChange({ db, user, newEmail: 'new@x.com', sender });
 		const code = codeFromEmail(sent[0].html);
-		// someone else grabs the address before the code is entered
 		await seedUser(db, 'new@x.com');
 
 		expect(await verifyEmailChange({ db, user, code })).toEqual({ ok: false, reason: 'taken' });

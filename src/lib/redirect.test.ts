@@ -23,7 +23,6 @@ describe('safeRedirectPath', () => {
 		expect(safeRedirectPath('/login?redirectTo=%2Fsettings')).toBe('/');
 		expect(safeRedirectPath('/login/')).toBe('/');
 		expect(safeRedirectPath('/auth/verify?token=abc')).toBe('/');
-		// A path that merely starts with the same letters is fine.
 		expect(safeRedirectPath('/login-history')).toBe('/login-history');
 	});
 

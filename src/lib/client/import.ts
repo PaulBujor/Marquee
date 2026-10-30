@@ -1,7 +1,4 @@
-/**
- * Data import: rebuild a library from an export file. Writes events (not state), which land in the
- * outbox and sync normally. Works offline. Client-safe.
- */
+/** Writes events (not state), which land in the outbox and sync normally. */
 import {
 	applyEventsToIdb,
 	enqueueEvents,
@@ -16,7 +13,6 @@ import { planImport, type ImportPlan } from '#lib/portability/plan.js';
 
 export type { ParseFailure };
 
-/** Human-readable reason a file was rejected, for display next to the picker. */
 export function parseFailureMessage(reason: ParseFailure): string {
 	switch (reason) {
 		case 'not_json':
@@ -36,8 +32,8 @@ export type ReadResult = { ok: true; plan: ImportPlan } | { ok: false; reason: P
 export async function readImportFile(file: File): Promise<ReadResult> {
 	const parsed = parseExport(await file.text());
 	if (!parsed.ok) {
-		// Only the reasons that suggest *we* have a problem: a wrong file is a UI message, but
-		// something claiming to be our export failing our schema means the two have drifted.
+		// Something claiming to be our export failing our schema means the two have drifted; a wrong
+		// file is just a UI message, so only those reasons are reported here.
 		if (parsed.reason === 'invalid' || parsed.reason === 'unsupported_version') {
 			reportClientError({
 				message: `import rejected a Marquee export: ${parsed.reason}`,
@@ -50,10 +46,7 @@ export async function readImportFile(file: File): Promise<ReadResult> {
 	return { ok: true, plan: planImport(parsed.doc, await getDeviceId()) };
 }
 
-/**
- * Apply a plan: seed media, queue events, and project locally. Additive — nothing local is cleared.
- * `plan` must be plain data (not `$state`).
- */
+/** Additive — nothing local is cleared; `plan` must be plain data (not `$state`). */
 export async function applyImport(plan: ImportPlan): Promise<void> {
 	// Report and rethrow — UI shows the failure; this log covers silent ones on other devices.
 	try {

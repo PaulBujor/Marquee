@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths';
 	import { detailRoute, type DetailTarget } from '#lib/tracking/detail-route.js';
 
-	/** Links a title to its detail page (custom or provider-backed), or renders inert when no page exists. */
 	interface Props {
 		item: DetailTarget;
 		class?: string;

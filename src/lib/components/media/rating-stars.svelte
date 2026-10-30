@@ -2,17 +2,13 @@
 	import StarIcon from '@lucide/svelte/icons/star';
 	import { cn } from '#lib/utils.js';
 
-	// The user's own 1–5 rating control, in amber so it reads as distinct from the single TMDB `/10`
-	// star in the meta row (which uses the primary accent). Five discrete stars, labelled "Your
-	// rating", no number. Interactive when `onRate` is given (tap a star to set it, tap the active
-	// star to clear); read-only otherwise, for list overlays.
+	// Amber so it reads as distinct from the single TMDB `/10` star in the meta row.
 	interface Props {
 		/** Current rating 1–5, or null when unrated. */
 		value: number | null;
 		/** Set the rating (tapping the active star clears it → null). Omit to render read-only. */
 		onRate?: (rating: number | null) => void;
 		disabled?: boolean;
-		/** Star glyph size. Read-only overlays use `sm`; the interactive control uses `md`. */
 		size?: 'sm' | 'md';
 		class?: string;
 	}
@@ -20,7 +16,6 @@
 
 	const readonly = $derived(onRate === undefined);
 	let hover = $state<number | null>(null);
-	// Paint the hovered star (interactive preview) if any, otherwise the committed value.
 	const shown = $derived(hover ?? value ?? 0);
 	const starSize = $derived(size === 'sm' ? 'size-4' : 'size-5');
 

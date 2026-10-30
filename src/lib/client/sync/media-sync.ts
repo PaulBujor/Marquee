@@ -1,8 +1,4 @@
-/**
- * Client half of the media reference channel. Two cadences: **light** (every cycle, only ids with
- * no local copy — empty in steady state) and **Full** (every referenced id's version, slower).
- * Also pushes user-authored custom media. Runs after event sync.
- */
+/** Two cadences: **light** (ids with no local copy, every cycle) and **full** (every referenced id). */
 import {
 	clearPendingPush,
 	getLinkedMediaRefs,
@@ -24,7 +20,6 @@ import {
 	type ValidatedCustomMedia
 } from '#lib/sync/media-protocol.js';
 
-/** Validate local custom records against the wire schema; skip malformed ones with a warning. */
 function toWirePushes(records: { id: string }[]): ValidatedCustomMedia[] {
 	const out: ValidatedCustomMedia[] = [];
 	for (const record of records) {
@@ -40,10 +35,7 @@ function toWirePushes(records: { id: string }[]): ValidatedCustomMedia[] {
 	return out;
 }
 
-/**
- * Hard cap on drain iterations. `25 * MEDIA_SYNC_MAX` covers a 12,500-title library. Past that,
- * the loop exits and reports the leftover via `truncated`.
- */
+/** `25 × MEDIA_SYNC_MAX` covers a 12,500-title library; past that the loop exits and reports `truncated`. */
 export const MAX_DRAIN_ITERATIONS = 25;
 
 /** Wall-clock budget per chunk request, so one stalled connection can't hang the whole drain. */

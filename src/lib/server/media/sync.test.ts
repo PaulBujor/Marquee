@@ -58,11 +58,7 @@ function stub() {
 	};
 }
 
-/**
- * Seed a `tracking` row so the user's projection references `externalId` — the anti-abuse source
- * of truth `resolveMediaSync` validates requests against (a stand-in for the real projection a
- * `tracking.added` event would produce; the event log itself is no longer read by this path).
- */
+/** Seeds the `tracking` projection row the anti-abuse gate validates requests against. */
 async function addTracking(db: Db, i: number, externalId: string): Promise<void> {
 	const id = mediaId('tmdb', externalId);
 	await db.insert(tracking).values({
@@ -74,7 +70,6 @@ async function addTracking(db: Db, i: number, externalId: string): Promise<void>
 	});
 }
 
-/** Pre-store a fresh, released movie row (so it isn't re-fetched from TMDB). */
 async function storeFreshMovie(db: Db, externalId: string, over: Record<string, unknown> = {}) {
 	await db.insert(media).values({
 		id: mediaId('tmdb', externalId),
@@ -92,7 +87,6 @@ async function storeFreshMovie(db: Db, externalId: string, over: Record<string, 
 async function seed() {
 	const db = createTestDb();
 	await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
-	// The user tracks REFERENCED (but not UNREFERENCED).
 	await addTracking(db, 1, REFERENCED);
 	return db;
 }
@@ -110,7 +104,7 @@ describe('resolveMediaSync', () => {
 		});
 		expect(res.media).toHaveLength(1);
 		expect(res.media[0]).toMatchObject({ id: REF_ID, title: 'title-603', version: 1 });
-		expect(calls()).toBe(1); // only the referenced id was hydrated
+		expect(calls()).toBe(1);
 	});
 
 	it('carries the hydrated cast and crew back on the returned record', async () => {
@@ -144,8 +138,7 @@ describe('resolveMediaSync', () => {
 
 	it('reports a title with no credits as an empty list, never as unknown', async () => {
 		const db = await seed();
-		// A stored row nothing has ever credited. `null` here would tell the client "keep what you
-		// have", which is exactly wrong for a list the server is authoritative about.
+		// No credits ever stored — `null` would tell the client "keep what you have", which is wrong for a list the server is authoritative about.
 		await storeFreshMovie(db, REFERENCED);
 		const { client } = stub();
 		const res = await resolveMediaSync(db, client, USER, {
@@ -178,8 +171,7 @@ describe('resolveMediaSync', () => {
 			refs: [{ provider: 'tmdb', externalId: REFERENCED }],
 			have: []
 		});
-		// Empty request → nothing returned, even though the user still references REF_ID. The
-		// client is expected to ask (via `have`) when it wants a version-diff.
+		// Empty request → nothing returned; the client must ask via `have` for a version-diff.
 		const res = await resolveMediaSync(db, client, USER, { refs: [], have: [] });
 		expect(res.media).toEqual([]);
 	});
@@ -191,13 +183,12 @@ describe('resolveMediaSync', () => {
 			refs: [{ provider: 'tmdb', externalId: REFERENCED }],
 			have: []
 		});
-		// Client reports it has version 1 → nothing to send back.
+		// Client reports version 1 → nothing to send back.
 		const upToDate = await resolveMediaSync(db, client, USER, {
 			refs: [],
 			have: [{ id: REF_ID, version: 1 }]
 		});
 		expect(upToDate.media).toEqual([]);
-		// Client behind (version 0) → the row is returned.
 		const behind = await resolveMediaSync(db, client, USER, {
 			refs: [],
 			have: [{ id: REF_ID, version: 0 }]
@@ -224,8 +215,8 @@ describe('resolveMediaSync', () => {
 			{ refs: [{ provider: 'tmdb', externalId: REFERENCED }], have: [{ id: REF_ID, version: 0 }] },
 			T0
 		);
-		expect(calls()).toBe(0); // already stored → not re-fetched (missing-only hydration)
-		expect(res.media.map((m) => m.id)).toEqual([REF_ID]); // still returned (client reported 0)
+		expect(calls()).toBe(0);
+		expect(res.media.map((m) => m.id)).toEqual([REF_ID]);
 		expect(res.pending).toBe(false);
 	});
 
@@ -257,7 +248,7 @@ describe('resolveMediaSync', () => {
 			T0
 		);
 		expect(calls()).toBe(0); // request-time sync never re-pulls an existing row, TTL or not
-		expect(res.media).toEqual([]); // client already reports the current version
+		expect(res.media).toEqual([]);
 		expect(res.pending).toBe(false);
 	});
 
@@ -279,11 +270,10 @@ describe('resolveMediaSync', () => {
 		expect(first.pending).toBe(true);
 		expect(first.media).toHaveLength(MEDIA_SYNC_REFRESH_MAX);
 
-		// Second pass: the first batch is now stored, so only the remainder is hydrated.
 		const second = await resolveMediaSync(db, client, USER, { refs, have: [] }, T0);
 		expect(calls()).toBe(total); // the remaining 5, no re-fetch of the first 25
 		expect(second.pending).toBe(false);
-		expect(new Set(second.media.map((m) => m.id)).size).toBe(total); // all present now
+		expect(new Set(second.media.map((m) => m.id)).size).toBe(total);
 	});
 
 	it('does not return a private row owned by somebody else, even when asked for by id', async () => {
@@ -323,8 +313,7 @@ describe('resolveMediaSync', () => {
 	});
 
 	it('returns a large stored library across chunked IN queries', async () => {
-		// More stored titles than the 90-id chunk (and than D1's 100-param cap), so the media
-		// `IN (...)` query must be split — otherwise D1 throws "too many SQL variables".
+		// More titles than the chunk size and than D1's 100-param cap, so the `IN (...)` must be split.
 		const db = createTestDb();
 		await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
 		const N = 205;

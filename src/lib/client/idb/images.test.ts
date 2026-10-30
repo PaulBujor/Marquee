@@ -5,7 +5,6 @@ import { getMediaImages, pruneMediaImages } from './images';
 
 setActiveUser('images-test');
 
-/** Insert a bare mediaImages row with a controlled `updatedAt` for LRU ordering. */
 async function putRaw(id: string, updatedAt: number) {
 	const db = await openDb();
 	await db.put('mediaImages', { id, poster: null, backdrop: null, updatedAt });

@@ -1,6 +1,3 @@
-// Client-only sync log — a rune singleton, like theme/navigation/tabs. Mirrored to sessionStorage
-// so it survives a reload as well as navigation, and dies with the tab.
-
 import {
 	appendEntry,
 	parseEntries,
@@ -10,7 +7,6 @@ import {
 } from './log';
 
 const STORAGE_KEY = 'marquee:sync-log';
-/** Coalesce the writes a burst of log lines would otherwise make. */
 const PERSIST_DEBOUNCE_MS = 250;
 
 class SyncLog {
@@ -20,7 +16,6 @@ class SyncLog {
 	#persistTimer: ReturnType<typeof setTimeout> | null = null;
 	#loaded = false;
 
-	/** Idempotent; browser-only. */
 	load(): void {
 		if (this.#loaded || typeof sessionStorage === 'undefined') return;
 		this.#loaded = true;

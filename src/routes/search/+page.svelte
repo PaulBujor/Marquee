@@ -42,8 +42,6 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Tracked-status lookup (mediaId → status) so each search row can show whether it's on a list,
-	// refreshed after our own writes and after any sync pull applies remote changes.
 	let tracked = $state<Map<string, TrackingStatus>>(new Map());
 	const writing = new SvelteSet<string>();
 	$effect(() => {
@@ -61,10 +59,7 @@
 		if (writing.has(id)) return;
 		writing.add(id);
 		try {
-			// Cache the media locally (offline render + identity for the media channel to hydrate),
-			// then record the add — mirrors TrackingState.add()'s pipeline. `$state.snapshot` unwraps
-			// the record from any Svelte proxy (offline results are `$state`) so IndexedDB's structured
-			// clone doesn't throw "Proxy object could not be cloned".
+			// `$state.snapshot` unwraps the record (offline results are `$state`) or IndexedDB's clone throws "Proxy object could not be cloned".
 			await putMedia($state.snapshot(mediaRecordFromSearch(item)));
 			await recordEvent('tracking.added', id, { status: 'want_to_watch' });
 			sync.requestSync();
@@ -88,9 +83,7 @@
 		}
 	}
 
-	// The user's own entries. Searched locally in every network mode: nothing upstream has ever
-	// heard of them, so this is the only route to one — and a custom entry is exactly the kind of
-	// title someone reaches for when the database came up empty.
+	// Searched locally in every mode: nothing upstream has ever heard of a custom entry, so this is the only route to one.
 	let customResults = $state<ClientMedia[]>([]);
 	let customSeq = 0;
 	$effect(() => {
@@ -106,7 +99,6 @@
 		});
 	});
 
-	// Creating an entry: the type chips prefill the form, which is where the real choice is made.
 	let createOpen = $state(false);
 	let createType = $state<'movie' | 'show'>('movie');
 	let creating = $state(false);
@@ -115,12 +107,10 @@
 		if (creating) return;
 		creating = true;
 		const record = createCustomMedia(input);
-		// Guarded: a local write can fail for reasons the user can't see, and swallowing that leaves
-		// the dialog closing on an entry that was never saved.
+		// Guarded: a local write can fail invisibly, which would close the dialog on an entry that was never saved.
 		const ok = await guardedWrite(
 			async () => {
-				// Mirrors `quickAdd`'s pipeline, but through the authoring write: it stamps the edit
-				// clock and queues the record for backup, since no server can hydrate this one.
+				// Same pipeline via the authoring write: it stamps the edit clock and queues the record for backup.
 				await putCustomMedia(record);
 				await recordEvent('tracking.added', record.id, { status: 'want_to_watch' });
 			},
@@ -135,7 +125,7 @@
 		await goto(resolve('/custom/[id]', { id: record.id }));
 	}
 
-	// Local-only search history (device IndexedDB, never synced) — shown before the user types.
+	// Device IndexedDB only, never synced.
 	let recentSearches = $state<string[]>([]);
 	onMount(() => {
 		void getRecentSearches().then((r) => (recentSearches = r));
@@ -155,18 +145,11 @@
 
 	const DEBOUNCE_MS = 300;
 
-	// Local input value, seeded once from the URL (untrack marks the initial read as intentional).
-	// Results come from `data` (the URL is the source of truth); typing pushes the query into
-	// `?q=`, which re-runs the server load. afterNavigate re-syncs on back/forward.
 	let query = $state(untrack(() => data.q));
 	let searching = $state(false);
 	let searchInput = $state<HTMLInputElement | null>(null);
 
-	// The Search tab focuses this field — on arrival from another destination, and immediately when
-	// it's tapped while already here. The request is a counter rather than a flag so repeated taps
-	// re-fire and it doesn't matter whether it was raised before or after this page mounted; tracking
-	// the one we served means reaching /search any other way (a deep link, Back from a title) never
-	// steals focus or pops the soft keyboard.
+	// A counter, not a flag: repeated taps re-fire, and arriving any other way (deep link, Back) never steals focus.
 	let servedFocus = 0;
 	$effect(() => {
 		const request = tabs.searchFocusRequest;
@@ -178,12 +161,9 @@
 	});
 
 	let debounce: ReturnType<typeof setTimeout> | undefined;
-	// Guards the loading flag against overlapping commits — only the latest clears it.
 	let commitSeq = 0;
 
 	const online = $derived(sync.online);
-	// Offline: the server load can't run, so search the local IndexedDB catalog (the user's own
-	// titles) reactively as they type. Online results still come from `data` (TMDB / shared library).
 	let offlineResults = $state<SearchLikeMedia[]>([]);
 	let offlineSearching = $state(false);
 	let offlineSeq = 0;
@@ -201,8 +181,6 @@
 			offlineSearching = false;
 			return;
 		}
-		// Show the skeleton while the debounced local search runs, so we don't flash "no results"
-		// before it has actually looked (mirrors the online path's `searching`).
 		offlineSearching = true;
 		offlineDebounce = setTimeout(() => {
 			const seq = ++offlineSeq;
@@ -214,9 +192,7 @@
 			});
 		}, DEBOUNCE_MS);
 	});
-	// When connectivity returns, commit whatever was typed offline: offline typing never reaches the
-	// URL (onInput bails), so without this the list would snap back to the stale `?q=` results and the
-	// user's offline query would be lost until they edited the box.
+	// Offline typing never reaches the URL, so on reconnect the typed query would otherwise snap back to a stale `?q=`.
 	let wasOnline = sync.online;
 	$effect(() => {
 		const nowOnline = sync.online;
@@ -224,22 +200,18 @@
 			void commit();
 		wasOnline = nowOnline;
 	});
-	// One relevance-ordered list whatever the source. Offline rows come from the local catalog, which
-	// holds titles only, so they're tagged `media` to sit in the same list as the online results.
 	const results = $derived<SearchResult[]>(
 		online
 			? data.results
 			: offlineResults.map((media) => ({
 					kind: 'media' as const,
 					...media,
-					// `overview` is optional on a local row but required on a search result; keep the real
-					// one where there is one, or a quick-add from offline would store a blank overview.
+					// `overview` is optional locally but required on a search result; a blank one would be stored by a quick-add.
 					overview: media.overview ?? ''
 				}))
 	);
 
-	// All / Titles / People is a filter over that one list rather than three requests, so it stays in
-	// local state: putting it in the URL would re-run the load and re-hit TMDB just to hide rows.
+	// Local state, not the URL: a URL tab would re-run the load and re-hit TMDB just to hide rows.
 	type ResultTab = 'all' | 'titles' | 'people';
 	const RESULT_TABS: { key: ResultTab; label: string }[] = [
 		{ key: 'all', label: 'All' },
@@ -253,19 +225,14 @@
 	const visibleResults = $derived(
 		resultTab === 'titles' ? mediaResults : resultTab === 'people' ? peopleResults : results
 	);
-	// The user's own entries sit above the database results under All and Titles — they're the
-	// smaller, more specific set, and they're the ones only this person can find.
 	const visibleCustom = $derived(resultTab === 'people' ? [] : customResults);
 	const nothingFound = $derived(results.length === 0 && customResults.length === 0);
-	// Loading = the online commit is in flight, or the offline local search is still running.
 	const loading = $derived(searching || offlineSearching);
 	const activeQuery = $derived(online ? data.q : query.trim());
 	const networkMode = $derived<'up' | 'down' | 'offline'>(
 		!online ? 'offline' : data.degraded ? 'down' : 'up'
 	);
 
-	// Re-sync the input when the URL changes outside of typing (back/forward, direct load) so a
-	// restored `?q=` shows up in the box. Skip our own `goto` navigations (nav.type === 'goto').
 	afterNavigate((nav) => {
 		if (nav.shallow && nav.type === 'goto') return;
 		if (nav.type === 'popstate' || nav.type === 'enter') query = data.q;
@@ -274,25 +241,21 @@
 	function pushQuery(q: string) {
 		const path = resolve('search');
 		const target = q ? `${path}?q=${encodeURIComponent(q)}` : path;
-		// The path is resolved; appending a query string drops resolve()'s branded type, which the
-		// rule keys on, and it has no escape for query-string navigation — so disable it here.
+		// The path is resolved; appending a query string drops resolve()'s branded type, which the rule keys on.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		return goto(target, { replace: true, reset: false });
 	}
 
 	async function commit() {
 		const q = query.trim();
-		// Offline we don't navigate (the server load would fail) — the reactive effect already
-		// debounced + refreshed `offlineResults` from the local catalog.
+		// Offline there's nothing to navigate to: the server load would fail, and the effect already searched locally.
 		if (!online) return;
 		const seq = ++commitSeq;
-		// Only show the skeleton for an actual search — clearing shouldn't flash a loading state.
 		searching = q.length > 0;
 		try {
 			await pushQuery(q);
 		} finally {
-			// Always clear the skeleton, even if the navigation rejects (e.g. connectivity drops
-			// mid-commit) — otherwise the loading state would stick on screen.
+			// Clear even if the navigation rejects (connectivity can drop mid-commit), or the skeleton sticks.
 			if (seq === commitSeq) searching = false;
 		}
 	}
@@ -310,8 +273,6 @@
 		searchInput?.focus();
 	}
 
-	// Record to history once the user settles on a query (Enter, or leaving the field) rather than on
-	// every keystroke the live-search debounce reacts to — `recordSearch` itself ignores blanks.
 	function onSearchKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') void recordSearch(query);
 	}
@@ -324,13 +285,10 @@
 	<title>Search · Marquee</title>
 </svelte:head>
 
-<!-- No back control: this is a tab root. The search field sits where a page title would, and its
-h-10 holds the header at the same height as the other pages'. -->
+<!-- No back control: tab root. The field's h-10 keeps the header the same height as other pages'. -->
 <PageHeader>
 	<div class="flex items-center gap-3">
 		<div class="relative flex-1">
-			<!-- `glass`: the same frosted material as the tab bar. The field sits in a sticky header that
-			results scroll beneath, so it needs the tint and wash for the same reason the bar does. -->
 			<Input
 				bind:ref={searchInput}
 				type="search"
@@ -395,7 +353,6 @@ h-10 holds the header at the same height as the other pages'. -->
 			</div>
 		{/if}
 		{#if networkMode !== 'up' && activeQuery}
-			<!-- Degraded/offline banner: TMDB unreachable → shared library; offline → your own titles. -->
 			<p
 				data-spec-ref="search-degraded-offline-banner"
 				class="rounded-sm bg-secondary px-3 py-2.5 text-sm text-muted-foreground"
@@ -413,7 +370,6 @@ h-10 holds the header at the same height as the other pages'. -->
 	{/if}
 
 	{#if !loading && !nothingFound}
-		<!-- One request, three views of it. Shown only once there's something to split. -->
 		<Tabs.Root bind:value={resultTab}>
 			<Tabs.List class="w-full">
 				{#each RESULT_TABS as t (t.key)}
@@ -524,8 +480,7 @@ h-10 holds the header at the same height as the other pages'. -->
 	{/if}
 
 	{#if !loading && activeQuery}
-		<!-- The escape hatch for a title no database carries. Offered whatever the results look like:
-		a near-miss is the most common reason someone reaches for it, not an empty list. -->
+		<!-- The escape hatch for a title no database carries: offered even on a near-miss, the usual reason to reach for it. -->
 		<div class="mt-2 flex flex-col gap-3 border-t border-dashed border-border pt-4">
 			<p class="text-sm text-muted-foreground">Can't find it?</p>
 			<ToggleGroup.Root

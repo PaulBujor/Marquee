@@ -21,8 +21,7 @@ function linkFromEmail(html: string): string {
 	return decodeURIComponent(m[1]);
 }
 
-// The code is the only element whose text is exactly 6 digits; match on the element
-// boundary so a combined email's link URL (which may contain digits) can't fool it.
+// The code is the only 6-digit element; match on the element boundary so a link URL with digits can't fool it.
 function codeFromEmail(html: string): string {
 	const m = html.match(/>(\d{6})</);
 	if (!m) throw new Error('no code in email');
@@ -71,7 +70,6 @@ describe('requestSignIn', () => {
 				method: 'link_and_code'
 			}
 		);
-		// a single combined email carrying both a magic link and a 6-digit code
 		expect(sent).toHaveLength(1);
 		expect(sent[0].html).toContain('/auth/verify?token=');
 		expect(codeFromEmail(sent[0].html)).toMatch(/^\d{6}$/);
@@ -154,7 +152,6 @@ describe('verifyMagicLink', () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) expect(result.user.email).toBe('v@x.com');
 		expect(await db.select().from(sessions).where(eq(sessions.userId, user.id))).toHaveLength(1);
-		// single-use
 		expect(await verifyMagicLink(db, token)).toEqual({ ok: false, reason: 'invalid' });
 	});
 
@@ -196,7 +193,6 @@ describe('verifyCode', () => {
 		const result = await verifyCode(db, 'c@x.com', code);
 		expect(result.ok).toBe(true);
 		expect(await db.select().from(sessions).where(eq(sessions.userId, user.id))).toHaveLength(1);
-		// single-use
 		expect(await verifyCode(db, 'c@x.com', code)).toEqual({ ok: false, reason: 'invalid' });
 	});
 
@@ -208,7 +204,6 @@ describe('verifyCode', () => {
 		await requestSignIn({ db, email: 'c@x.com', sender, ...base });
 		const second = codeFromEmail(sent[1].html);
 
-		// only the newest code works; the previous one was consumed on re-issue
 		expect(await verifyCode(db, 'c@x.com', first)).toEqual({ ok: false, reason: 'invalid' });
 		expect((await verifyCode(db, 'c@x.com', second)).ok).toBe(true);
 	});
@@ -239,7 +234,6 @@ describe('verifyCode', () => {
 			if (!r.ok) reasons.push(r.reason);
 		}
 		expect(reasons[4]).toBe('too_many_attempts');
-		// even the correct code no longer works — it was invalidated
 		expect((await verifyCode(db, 'c@x.com', code)).ok).toBe(false);
 	});
 

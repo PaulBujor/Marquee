@@ -28,7 +28,6 @@ function input(over: Partial<CustomMediaInput> = {}): CustomMediaInput {
 	};
 }
 
-/** Deterministic ids for the people a record mints, so assertions can name them. */
 function mintIds(prefix = 'person'): () => string {
 	let n = 0;
 	return () => `${prefix}-${n++}`;
@@ -44,8 +43,6 @@ describe('customEpisodeAirDate', () => {
 	});
 
 	it('clamps a future year to today so the episodes stay watchable', () => {
-		// A date ahead of today would make every episode read as not-yet-aired, which is exactly the
-		// state that makes an episode unmarkable.
 		expect(customEpisodeAirDate(2030, NOW)).toBe(TODAY);
 	});
 
@@ -59,8 +56,6 @@ describe('createCustomMedia', () => {
 		const a = createCustomMedia(input(), { now: NOW });
 		const b = createCustomMedia(input(), { now: NOW });
 		expect(a.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-		// Same inputs, different ids — two people cataloguing the same obscure film keep separate,
-		// private entries, and neither can compute the other's.
 		expect(a.id).not.toBe(b.id);
 	});
 
@@ -139,8 +134,6 @@ describe('createCustomMedia', () => {
 	});
 
 	it('produces episodes the existing tracking helpers treat as watchable', () => {
-		// The whole reason air dates are synthesized rather than left null: every one of these
-		// helpers reads a null date as "not yet aired" and would refuse to act on the episode.
 		const record = createCustomMedia(
 			input({ type: 'show', seasons: [{ seasonNumber: 1, episodeCount: 2 }] }),
 			{ now: NOW }
@@ -199,7 +192,6 @@ describe('createCustomMedia', () => {
 				profilePath: null,
 				role: 'director',
 				character: null,
-				// Billing restarts per role, so each section is ordered on its own.
 				sortOrder: 0
 			}
 		]);
@@ -216,8 +208,6 @@ describe('createCustomMedia', () => {
 	});
 
 	it('ignores a character typed against a crew role', () => {
-		// The form hides the field for crew, but the input shape allows it — a producer never played
-		// anyone, and storing one would put nonsense on the comparison view.
 		const record = createCustomMedia(
 			input({ credits: [{ role: 'producer', name: 'Renata Voss', character: 'Herself' }] }),
 			{ now: NOW, mintPersonId: mintIds() }
@@ -227,9 +217,7 @@ describe('createCustomMedia', () => {
 });
 
 describe('createCustomMedia with fields the schema never saw', () => {
-	// `planImport` builds its input by hand from an export document, where `overview`, `character`
-	// and `name` are all optional-and-nullable. Nothing validates that input before it lands here, so
-	// a missing field has to normalize rather than throw halfway through building the record.
+	// Nothing validates `planImport`'s hand-built input, so a missing field must normalize rather than throw mid-build.
 	const loose = (over: Record<string, unknown>) =>
 		input(over as Partial<CustomMediaInput>) as unknown as CustomMediaInput;
 
@@ -249,8 +237,6 @@ describe('createCustomMedia with fields the schema never saw', () => {
 
 describe('toCustomMediaInput', () => {
 	it('clamps an overview stored under a looser bound', () => {
-		// Otherwise the form seeds a value its own schema then refuses, and the entry can never be
-		// edited again.
 		const record = createCustomMedia(input(), { now: NOW });
 		const stored = { ...record, overview: 'x'.repeat(CUSTOM_OVERVIEW_MAX + 500) };
 		expect(toCustomMediaInput(stored, []).overview).toHaveLength(CUSTOM_OVERVIEW_MAX);
@@ -302,7 +288,6 @@ describe('toCustomMediaInput', () => {
 			}
 		]);
 
-		// And re-saving that input keeps every id rather than minting new rows.
 		const resaved = createCustomMedia(back, {
 			id: record.id,
 			now: NOW,

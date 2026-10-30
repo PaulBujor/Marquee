@@ -1,5 +1,3 @@
-// Print a Markdown coverage table (for GitHub Actions job summary) from the
-// v8 json-summary report. No-op if the report is missing.
 import { readFileSync } from 'node:fs';
 
 try {

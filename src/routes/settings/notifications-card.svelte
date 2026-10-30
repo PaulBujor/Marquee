@@ -4,7 +4,6 @@
 	import { notifications } from '#lib/state/notifications.svelte.js';
 	import XIcon from '@lucide/svelte/icons/x';
 
-	/** One row of the device list (shape of `GET /api/push/subscriptions`). */
 	interface DeviceRow {
 		id: string;
 		deviceLabel: string | null;
@@ -30,7 +29,6 @@
 		}
 	}
 
-	// Reconcile permission/subscription state and load this account's devices once on open.
 	$effect(() => {
 		if (!notifications.supported) return;
 		void notifications.refresh().then(loadDevices);
@@ -46,7 +44,6 @@
 
 	async function toggle() {
 		if (notifications.subscribed) {
-			// Turning off unsubscribes this device; also drop its server row so the list updates now.
 			const endpoint = notifications.endpoint;
 			await notifications.disable();
 			const mine = endpoint ? devices.find((d) => d.endpoint === endpoint) : undefined;
@@ -59,7 +56,6 @@
 
 	async function removeDevice(device: DeviceRow) {
 		await deleteDevice(device.id);
-		// If it's this device, also unsubscribe locally so it stops receiving pushes.
 		if (device.endpoint === notifications.endpoint) await notifications.disable();
 		await loadDevices();
 	}

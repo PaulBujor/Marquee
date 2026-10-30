@@ -1,9 +1,5 @@
 <script lang="ts">
-	// Escape hatch for a mis-tapped Dashboard tab. Re-tapping the tab you're already on scrolls to the
-	// top, which is the right default but destroys a hard-won position in a long, paginated grid — so
-	// for a few seconds we offer the way back. Only the dashboard raises the offer; the other
-	// destinations are cheap enough to scroll through again that a pill there would read as an error
-	// message after an ordinary gesture.
+	// Only the dashboard raises the offer; elsewhere a pill would read as an error after a normal gesture.
 	import { afterNavigate } from '$app/navigation';
 	import { fly } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';

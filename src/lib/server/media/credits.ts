@@ -1,15 +1,4 @@
-/**
- * Persisting a title's cast and crew.
- *
- * The data already arrives — `refreshMedia` fetches TMDB details with `append_to_response=credits`
- * and `normalizeDetails` turns it into `cast` / `director` / `writers` / `producers` / `creators`.
- * Storing it makes it available offline, lets a custom entry be compared against a candidate on
- * more than its title, and gives the reverse lookup ("everything this person worked on") a home.
- *
- * `people` rows are shared reference data keyed by our derived person id, so two titles crediting
- * the same actor converge on one row. Reconciliation mirrors `syncSeasons`/`syncEpisodes`: diff
- * against what's stored, write only what changed, delete what disappeared.
- */
+/** `people` rows are shared reference data keyed by our derived person id, so two titles crediting the same actor converge on one row. */
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { credits, people, type CreditRow, type Person } from '#lib/server/db/schema.js';
 import { chunkBySize, chunkIds, chunkRows, D1_MAX_BOUND_PARAMS } from '#lib/server/db/chunk.js';
@@ -21,7 +10,6 @@ type Db = ReturnType<typeof createDb>;
 type PersonInsert = typeof people.$inferInsert;
 type CreditInsert = typeof credits.$inferInsert;
 
-/** Mutable columns compared to decide whether a row needs rewriting. */
 const PERSON_CONTENT_FIELDS = ['name', 'externalId', 'profilePath'] as const;
 const CREDIT_CONTENT_FIELDS = ['character', 'sortOrder'] as const;
 
@@ -33,13 +21,7 @@ function contentChanged<K extends string>(
 	return fields.some((f) => a[f] !== b[f]);
 }
 
-/**
- * Flatten a normalized TMDB detail into person + credit rows.
- *
- * A person credited twice in the same role (TMDB does this — an actor listed for two characters)
- * collapses to the first occurrence, because `(media, person, role)` is the primary key. Keeping
- * the first preserves billing order, which is the one thing the ordering is for.
- */
+/** A person credited twice in one role collapses to the first, because `(media, person, role)` is the primary key — which also preserves billing order. */
 export function creditRowsFromDetail(
 	mediaId: string,
 	detail: MediaDetail
@@ -82,21 +64,7 @@ export function creditRowsFromDetail(
 	return { personRows: [...personRows.values()], creditRows: [...creditRows.values()] };
 }
 
-/**
- * Flatten a pushed custom record's credits into person + credit rows. The mirror of
- * {@link creditRowsFromDetail} for the one case the server can't fetch: people on a user's own
- * entry, stored owner-scoped and private.
- *
- * The row stays `provider: 'local'` even when it carries a provider external id. That id is a
- * *hint* — which real person the author picked out of search — not a claim on the shared catalog,
- * and keeping the provider local is what says so. Uniqueness is per owner (see the partial indexes
- * on `people`), so two accounts can each hold their own row pointing at the same person.
- *
- * People are collapsed by that hint, not by the id the client sent. The form mints a fresh id per
- * credit row and allows the same person under two roles, so crediting someone as director *and*
- * writer produces two ids naming one person — two rows that collide on `people_owner_external_idx`
- * and abort the whole push. Credits follow the id the collapse kept.
- */
+/** Rows stay `provider: 'local'` even when they carry a provider external id — that id is a hint about which real person the author picked, not a claim on the shared catalog. */
 export function creditRowsFromCustom(
 	mediaId: string,
 	userId: string,
@@ -121,8 +89,7 @@ export function creditRowsFromCustom(
 		}
 		const storedId = existing?.id ?? c.personId;
 
-		// Same collapse as the provider path: `(media, person, role)` is the primary key, and keeping
-		// the first occurrence preserves the order the author put them in.
+		// Same collapse as the provider path: `(media, person, role)` is the primary key, and the first occurrence keeps the author's order.
 		const key = `${storedId}:${c.role}`;
 		if (!creditRows.has(key)) {
 			creditRows.set(key, {
@@ -138,7 +105,6 @@ export function creditRowsFromCustom(
 	return { personRows: [...personRows.values()], creditRows: [...creditRows.values()] };
 }
 
-/** Stable signature of a credit set, to detect a content change without diffing field by field. */
 export function creditSignature(
 	rows: Pick<CreditInsert, 'personId' | 'role' | 'character' | 'sortOrder'>[]
 ): string {
@@ -148,7 +114,6 @@ export function creditSignature(
 		.join('|');
 }
 
-/** Load the stored rows for a set of person ids, keyed by id. */
 async function loadPeople(db: Db, ids: string[]): Promise<Map<string, Person>> {
 	if (ids.length === 0) return new Map();
 	const rows = (
@@ -159,7 +124,6 @@ async function loadPeople(db: Db, ids: string[]): Promise<Map<string, Person>> {
 	return new Map(rows.map((r) => [r.id, r]));
 }
 
-/** Write the rows whose content actually differs from what's stored. */
 async function upsertPeople(db: Db, rows: PersonInsert[]): Promise<void> {
 	for (const chunk of chunkRows(rows)) {
 		await db
@@ -177,13 +141,7 @@ async function upsertPeople(db: Db, rows: PersonInsert[]): Promise<void> {
 	}
 }
 
-/**
- * Upsert the people a provider-backed title credits. Shared rows, so this only ever adds or
- * refreshes a name or photo — it never deletes, since another title may credit the same person.
- *
- * Only ever called with rows derived from a provider response. A person id the *client* supplied
- * must go through {@link syncOwnedPeople} instead, which won't write outside that user's own rows.
- */
+/** Shared rows: only ever adds or refreshes a name or photo — never deletes, since another title may credit the same person. */
 export async function syncProviderPeople(db: Db, rows: PersonInsert[]): Promise<void> {
 	if (rows.length === 0) return;
 	const byId = await loadPeople(
@@ -199,20 +157,7 @@ export async function syncProviderPeople(db: Db, rows: PersonInsert[]): Promise<
 	);
 }
 
-/**
- * Upsert people a user authored, and report the id each pushed person is actually stored under.
- *
- * A person id on a custom entry is minted by the client, so a push can name an id that already
- * exists — including a provider person's, whose id is derivable by anyone. Such a row is left
- * untouched and its id left out of the result, so one account can never rewrite the name every
- * other title shows for that person. Same gate, same reasoning, as the media row's own `mayWrite`.
- *
- * The result is a mapping rather than a set because a person can arrive under a **new id for an
- * identity this user already stores**: the form mints an id per credit row, so crediting the same
- * searched person on a second entry sends a second id carrying the same `externalId`. Only one row
- * per `(owner, provider, external_id)` may exist, so the stored id wins and the caller re-points
- * the credit at it — otherwise the insert aborts the push and takes the whole media channel with it.
- */
+/** A client-minted id can collide with a provider person's, whose id is derivable by anyone — such a row is left untouched and its id withheld. */
 export async function syncOwnedPeople(
 	db: Db,
 	userId: string,
@@ -234,8 +179,7 @@ export async function syncOwnedPeople(
 	const canonical = new Map<string, string>();
 	const toWrite: PersonInsert[] = [];
 	for (const row of rows) {
-		// An identity this user already holds under another id: keep the stored row, re-point the
-		// credit. Its name/photo are left as they are — the hint says it's the same person either way.
+		// An identity this user already holds under another id: keep the stored row, re-point the credit.
 		const owned = typeof row.externalId === 'string' ? byExternalId.get(row.externalId) : undefined;
 		if (owned && owned.id !== row.id) {
 			canonical.set(row.id, owned.id);
@@ -251,7 +195,6 @@ export async function syncOwnedPeople(
 	return canonical;
 }
 
-/** This user's own person rows carrying any of `externalIds`, keyed by external id. */
 async function loadOwnedPeopleByExternalId(
 	db: Db,
 	userId: string,
@@ -272,11 +215,7 @@ async function loadOwnedPeopleByExternalId(
 	return new Map(rows.map((r) => [r.externalId as string, r]));
 }
 
-/**
- * Reconcile a title's credits against what's stored: upsert new or changed rows, delete the ones
- * that disappeared (a re-credited film, a corrected cast list), leave unchanged rows untouched.
- * The people they name must already exist — a credit is a foreign key onto them.
- */
+/** People must already exist — a credit is a foreign key onto them. */
 export async function syncCredits(db: Db, mediaId: string, newRows: CreditInsert[]): Promise<void> {
 	const oldRows: CreditRow[] = await db.select().from(credits).where(eq(credits.mediaId, mediaId));
 	const key = (r: { personId: string; role: string }) => `${r.personId}:${r.role}`;
@@ -311,21 +250,16 @@ export async function syncCredits(db: Db, mediaId: string, newRows: CreditInsert
 	}
 }
 
-/** Order credits so roles group together and each role keeps its billing — a renderer can section
- *  without re-sorting, and two clients always agree on the order. */
+/** Group roles together and keep each role's billing, so a renderer can section without re-sorting and two clients always agree. */
 function byRoleThenBilling(a: MediaCredit, b: MediaCredit): number {
 	return a.role.localeCompare(b.role) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
 }
 
-/** Load a title's credits as wire records. */
 export async function loadCredits(db: Db, mediaId: string): Promise<MediaCredit[]> {
 	return (await loadCreditsForMedia(db, [mediaId])).get(mediaId) ?? [];
 }
 
-/**
- * Credits for many titles in one pass, keyed by media id. The media channel returns whole batches,
- * so a per-title query there would be one round trip per row.
- */
+/** One pass for a whole batch — a per-title query would be one round trip per row. */
 export async function loadCreditsForMedia(
 	db: Db,
 	mediaIds: string[]

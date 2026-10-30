@@ -16,14 +16,12 @@
 
 	const next = $derived(tracking.nextEpisode());
 
-	// On mark: fill the circle for the just-marked episode, hold briefly (`frozen` pins the
-	// display), then release so the row transitions to the recomputed next episode.
+	// `frozen` pins the display briefly so the just-marked episode fills before the row advances.
 	let frozen = $state<EpisodeCoord | null>(null);
 	let checking = $state(false);
 	const shown = $derived(frozen ?? next);
 	const name = $derived(shown ? episodeName?.(shown.season, shown.episode) : undefined);
-	// Slide the row in/out (0ms under reduce-motion) so it doesn't pop when the last aired episode
-	// is marked (row leaves) or unwatched (row returns).
+	// Slide so the row doesn't pop when it leaves (last episode marked) or returns (unwatched).
 	const slideMs = $derived(prefersReducedMotion.current ? 0 : 250);
 
 	async function markNext() {

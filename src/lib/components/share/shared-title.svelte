@@ -1,7 +1,5 @@
 <script lang="ts">
-	// The body of a shared title page: the same layout as the signed-in title page, minus what needs
-	// a user (tracking controls, similar, seasons/episodes), the back control and the nav bar. The CTA
-	// takes the tracking row's place.
+	// Same layout as the signed-in title page minus what needs a user; the CTA takes the tracking row's place.
 	import { slide } from 'svelte/transition';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import MediaBadge from '#lib/components/media/media-badge.svelte';
@@ -90,7 +88,6 @@
 			genres={preview.genres}
 		/>
 
-		<!-- Where the signed-in page keeps its tracking controls. -->
 		<ShareCta href={loginHref} />
 
 		<div class="flex flex-col gap-4">

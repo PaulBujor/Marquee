@@ -4,10 +4,7 @@
 	import { buttonVariants } from '#lib/components/ui/button/index.js';
 	import { cn } from '#lib/utils.js';
 
-	// A button-styled control that's inert while offline, explaining why on hover/focus. It renders a
-	// real (enabled) Tooltip trigger — `type="button"` with no action — styled to look disabled, which
-	// sidesteps the "disabled elements don't fire tooltip events" gap. Drop it in place of the live
-	// control when `!sync.online`.
+	// An enabled button styled as disabled sidesteps "disabled elements don't fire tooltip events".
 	let {
 		message = 'You need an internet connection for this.',
 		variant = 'default',

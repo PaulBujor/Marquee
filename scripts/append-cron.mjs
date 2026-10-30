@@ -1,19 +1,9 @@
-/**
- * Post-build step: attach `scheduled` and `queue` handlers to the worker adapter-cloudflare
- * emits. The adapter produces a fetch-only `_worker.js`, so we append handlers that self-fetch
- * the matching internal routes rather than importing app code (no build step here to compile TS
- * or resolve `#lib`). `scheduled` branches on the cron schedule; `queue` routes a batch by its
- * Cloudflare queue name to an internal route, which returns per-message ack/retry outcomes that
- * this handler applies to the real `Message` objects — the only place that's possible, since it
- * requires the objects this invocation holds. The route map is derived from wrangler.jsonc bindings
- * so a rename can't silently desync. Appending is idempotent. Runs after `vite build`.
- */
+// Appends `scheduled`/`queue` to the fetch-only `_worker.js` adapter-cloudflare emits — nothing here compiles TS or resolves `#lib`, so the handlers self-fetch internal routes.
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 
 const WORKER = '.svelte-kit/cloudflare/_worker.js';
 const WRANGLER = 'wrangler.jsonc';
 
-/** Internal route consuming each queue-backed job, keyed by the job's producer binding. */
 const JOB_ROUTES = {
 	MEDIA_REFRESH_QUEUE: '/api/queue/media-refresh'
 };
@@ -35,8 +25,7 @@ if (src.includes('QUEUE_ROUTES')) {
 	process.exit(0);
 }
 
-// Derive queue → route from wrangler.jsonc rather than restating names here — a rename would
-// otherwise leave QUEUE_ROUTES[batch.queue] undefined, silently dead-lettering the backlog.
+// Derived from wrangler.jsonc: a rename would otherwise leave QUEUE_ROUTES[batch.queue] undefined, silently dead-lettering the backlog.
 const wrangler = JSON.parse(
 	(await readFile(WRANGLER, 'utf8'))
 		// Strip // comments and trailing commas — enough for this file's JSONC.

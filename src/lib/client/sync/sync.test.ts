@@ -11,7 +11,6 @@ import { parseRetryAfter, runSync, SyncError, toSyncErrorInfo } from './sync';
 setActiveUser('sync-test-user');
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 
-/** A server-shaped pulled event for a given aggregate + sequence. */
 function pulled(entityId: string, sequence: number, clock: number): ServerEvent {
 	return {
 		...createEvent('tracking.added', entityId, { status: 'watching' }, DEVICE),
@@ -22,7 +21,6 @@ function pulled(entityId: string, sequence: number, clock: number): ServerEvent 
 	};
 }
 
-/** A fetch stub that replies with the given responses in order, capturing each request. */
 function stub(responses: SyncResponse[]) {
 	const requests: SyncRequest[] = [];
 	let call = 0;

@@ -8,11 +8,7 @@ import { needsRefresh, parseTmdbExternalId, refreshMedia } from './hydrate';
 
 type Db = ReturnType<typeof createTestDb>;
 
-/**
- * Monkey-patches insert/update/delete on `db` to record which table each call targets, so a test
- * can assert on write volume (not just end state) — e.g. "an unchanged refresh writes zero rows".
- * Calls through to the real implementation; only observes.
- */
+/** Records which table each insert/update/delete targets so a test can assert write volume, not just end state. */
 function trackWrites(db: Db): { op: 'insert' | 'update' | 'delete'; table: string }[] {
 	const writes: { op: 'insert' | 'update' | 'delete'; table: string }[] = [];
 	const target = db as unknown as Record<string, (...args: unknown[]) => unknown>;
@@ -55,7 +51,6 @@ const movieDefaults: MediaDetail = {
 	similar: []
 };
 
-/** A movie TMDB stub exposing getDetails + getSeason, counting detail calls. */
 function movieStub(overrides: Partial<MediaDetail> = {}) {
 	let detailCalls = 0;
 	return {
@@ -81,11 +76,6 @@ interface EpisodeStub {
 	stillPath: string | null;
 }
 
-/**
- * A show TMDB stub whose episode set, season metadata, and production status can be mutated
- * between refreshes, so a re-pull can observe a newly-aired/changed/removed episode, a season
- * content edit, or a status flip.
- */
 function showStub() {
 	let detailCalls = 0;
 	let inProduction = true;
@@ -237,7 +227,7 @@ describe('refreshMedia', () => {
 			source: 'linked',
 			type: 'movie',
 			title: 'The Matrix',
-			titleNormalized: 'the matrix', // JS-folded for the degraded search
+			titleNormalized: 'the matrix',
 			backdropPath: '/backdrop.jpg',
 			releaseDate: '1999-03-31',
 			version: 1,
@@ -273,8 +263,7 @@ describe('refreshMedia', () => {
 	});
 
 	it('persists every episode of a large show across insert chunks', async () => {
-		// D1 caps a query at 100 bound params, so episode inserts are chunked; verify a show with
-		// more episodes than one chunk still stores them all.
+		// D1 caps a query at 100 bound params, so episode inserts are chunked; a show with more episodes than one chunk must still store them all.
 		const db = createTestDb();
 		const stub = showStub();
 		for (let n = 3; n <= 40; n++) stub.addEpisode({ episodeNumber: n, airDate: '2026-01-01' });
@@ -382,8 +371,6 @@ describe('refreshMedia', () => {
 		const writes = trackWrites(db);
 		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0 + 13 * 3600_000);
 
-		// One insert statement carries just the new row (chunked upserts only ever contain
-		// rows that are new or changed).
 		expect(writes.filter((w) => w.table === 'episodes')).toHaveLength(1);
 	});
 
@@ -402,9 +389,7 @@ describe('refreshMedia', () => {
 	});
 
 	it('deletes a season that disappeared upstream, and its episodes with it', async () => {
-		// The stub only ever reports season 1, so seed a season 2 (+ an episode under it) directly to
-		// simulate a stored season that TMDB no longer lists — there's no FK cascade from `seasons` to
-		// `episodes` (both just reference `media`), so the diff must delete both explicitly.
+		// No FK cascade from `seasons` to `episodes` (both just reference `media`), so the diff deletes both explicitly.
 		const db = createTestDb();
 		const stub = showStub();
 		const id = mediaId('tmdb', 'show/1396');

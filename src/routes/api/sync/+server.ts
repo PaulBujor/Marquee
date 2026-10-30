@@ -8,35 +8,22 @@ import { problem, zodProblem } from '#lib/server/http/problem.js';
 import { slidingWindow } from '#lib/server/http/rate-limit.js';
 import type { RequestHandler } from './$types';
 
-/**
- * Per-user rate limit on `/api/sync` — best-effort, per-isolate defense-in-depth against a
- * looping/buggy client (Cloudflare's edge rate-limiting is the real backstop). A normal client syncs
- * on triggers plus a 45s interval, well under this; the cap only trips a runaway. In-memory, so it's
- * not shared across isolates and resets on redeploy — that's fine for its purpose.
- */
+/** Best-effort per-isolate defense-in-depth: Cloudflare's edge rate limiting is the real backstop. */
 const SYNC_RATE_WINDOW_MS = 60_000;
 const SYNC_RATE_MAX = 60;
 const syncHits = new Map<string, number[]>();
 
-/**
- * The sync round trip: push the client's local events and pull everything it's
- * missing since its cursor. Auth-gated (a session-bound user) and idempotent —
- * duplicate pushes dedupe by event id, so the client can safely retry with backoff after a failed push.
- */
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 	if (!locals.db) error(503, 'Service unavailable');
 
-	// Rate limit per user. Return a bare 429 with `Retry-After` — SvelteKit's `error()` can't attach
-	// headers, and the retry hint must stay HTTP-level (not baked into the SyncResponse JSON).
+	// Bare 429: `error()` can't attach the `Retry-After` header, and the hint must stay HTTP-level.
 	const { result, kept } = slidingWindow(
 		syncHits.get(locals.user.id) ?? [],
 		Date.now(),
 		SYNC_RATE_WINDOW_MS,
 		SYNC_RATE_MAX
 	);
-	// Drop the key once its window is empty, so the map doesn't retain an entry per user that has
-	// ever hit this isolate.
 	if (kept.length === 0) syncHits.delete(locals.user.id);
 	else syncHits.set(locals.user.id, kept);
 	if (result.limited)
@@ -45,8 +32,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			headers: { 'Retry-After': String(result.retryAfterSec) }
 		});
 
-	// Parse+validate the whole body against the DTO; every issue is collected into a
-	// problem+json response rather than failing on the first (server is authoritative).
+	// Every issue comes back in one problem+json rather than failing on the first.
 	const raw: unknown = await request.json().catch(() => undefined);
 	if (raw === undefined)
 		return problem(400, 'Malformed request body', { detail: 'Body must be valid JSON.' });
@@ -56,7 +42,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	await applyEvents(locals.db, locals.user.id, events as EventEnvelope[]);
 
-	// Pull one extra row past the page size to detect whether more remain.
 	const rows = await locals.db
 		.select()
 		.from(eventsTable)

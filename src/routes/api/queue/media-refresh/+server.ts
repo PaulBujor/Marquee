@@ -11,13 +11,7 @@ interface Body {
 	messages: QueueEnvelope<MediaRefreshMessage>[];
 }
 
-/**
- * Consumes one queue batch of media-refresh messages. Self-fetched by the queue() handler
- * (see append-cron.mjs) — same pattern as scheduled/cron routes, since the adapter-generated
- * worker can't import this module graph directly. Computes QueueOutcome[] for the caller to
- * relay, because ack/retry requires the real Message objects the caller holds.
- * Gated by CRON_SECRET so it isn't an unauth'd TMDB-hydration endpoint.
- */
+/** Returns QueueOutcome[] rather than acking: only the self-fetching caller holds the real `Message` objects. */
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!(await isAuthorizedCronRequest(request, env.CRON_SECRET))) {
 		error(401, 'Unauthorized');

@@ -92,7 +92,6 @@ describe('creditRowsFromDetail', () => {
 		expect(creditRows.find((c) => c.role === 'producer')?.personId).toBe(personId('tmdb', 947));
 		// Nolan is credited twice, in two different roles — legitimate, and both are kept.
 		expect(creditRows.filter((c) => c.personId === personId('tmdb', 525))).toHaveLength(2);
-		// …but he only produces one `people` row.
 		expect(personRows.filter((p) => p.id === personId('tmdb', 525))).toHaveLength(1);
 	});
 
@@ -112,8 +111,7 @@ describe('creditRowsFromDetail', () => {
 				]
 			})
 		);
-		// `(media, person, role)` is the PK, so only one can persist — keeping the first preserves
-		// the order the provider ranked them in.
+		// `(media, person, role)` is the PK, so keeping the first preserves the provider's billing order.
 		const cast = creditRows.filter((c) => c.role === 'cast');
 		expect(cast).toHaveLength(1);
 		expect(cast[0]).toMatchObject({ character: 'Twin A', sortOrder: 0 });
@@ -132,7 +130,7 @@ describe('syncCredits', () => {
 	it('stores people once and their credits against the title', async () => {
 		await syncProviderCredits(db, MEDIA_ID, creditRowsFromDetail(MEDIA_ID, detail()));
 
-		expect(await db.select().from(people)).toHaveLength(4); // Leo, JGL, Nolan, Thomas
+		expect(await db.select().from(people)).toHaveLength(4);
 		expect(await db.select().from(credits).where(eq(credits.mediaId, MEDIA_ID))).toHaveLength(5);
 	});
 
@@ -260,8 +258,7 @@ describe('syncOwnedPeople', () => {
 		await syncProviderCredits(db, MEDIA_ID, creditRowsFromDetail(MEDIA_ID, detail()));
 		const nolan = personId('tmdb', 525);
 
-		// A client mints its own person ids, and a provider person's is derivable by anyone — so this
-		// is the push that would otherwise rename Nolan for every user who has a Nolan film cached.
+		// A client mints its own person ids, and a provider person's is derivable by anyone.
 		const { personRows } = creditRowsFromCustom(MEDIA_ID, USER, [
 			customCredit(nolan, 'Not Christopher Nolan')
 		]);
@@ -309,9 +306,7 @@ describe('syncOwnedPeople', () => {
 	});
 
 	it('collapses one searched person credited under two roles onto a single row', async () => {
-		// The form mints an id per credit row and allows the same person twice under different roles,
-		// so this arrives as two ids carrying one `externalId`. Two rows would violate
-		// `people_owner_external_idx`, and the abort takes the whole media-sync request with it.
+		// The form mints an id per credit row, so this arrives as two ids carrying one `externalId`; two rows would violate `people_owner_external_idx` and abort the whole request.
 		const second = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 		const { personRows, creditRows } = creditRowsFromCustom(MEDIA_ID, USER, [
 			{ ...customCredit(OWN_PERSON, 'Christopher Nolan'), externalId: 'person/525' },
@@ -332,8 +327,7 @@ describe('syncOwnedPeople', () => {
 	});
 
 	it('re-points a second entry’s new id at the row that person already has', async () => {
-		// Same person, different entry, so a fresh id — but only one row per (owner, provider, ext) may
-		// exist. The stored id wins and the caller follows it.
+		// Same person, different entry, so a fresh id — but only one row per (owner, provider, ext) may exist.
 		const later = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 		const pick = (id: string) =>
 			creditRowsFromCustom(MEDIA_ID, USER, [

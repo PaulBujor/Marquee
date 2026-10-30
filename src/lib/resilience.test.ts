@@ -75,7 +75,6 @@ describe('withRetry', () => {
 		const retryDelay = (err: unknown, computed: number) =>
 			(err as { retryAfterMs?: number }).retryAfterMs ?? computed;
 		await withRetry(fn, { maxAttempts: 5, baseMs: 100, retryDelay }, sleep);
-		// Both retries slept the error-supplied 5000ms, not the 100/200ms exponential backoff.
 		expect(slept).toEqual([5000, 5000]);
 	});
 });
@@ -117,7 +116,6 @@ describe('CircuitBreaker', () => {
 });
 
 describe('fetchWithTimeout', () => {
-	/** A fetch that never settles until the request signal aborts, mimicking a stalled connection. */
 	const stallingFetch: typeof fetch = (_input, init) =>
 		new Promise((_resolve, reject) => {
 			init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });

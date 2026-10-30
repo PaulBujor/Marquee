@@ -54,10 +54,8 @@
 	});
 </script>
 
-<!--
-Discriminated Unions + Destructing (required for bindable) do not
-get along, so we shut typescript up by casting `value` to `never`.
--->
+<!-- Discriminated unions + destructuring (required for bindable) don't get along, so `value` is cast to
+`never` to satisfy TypeScript. -->
 <ToggleGroupPrimitive.Root
 	bind:value={value as never}
 	bind:ref

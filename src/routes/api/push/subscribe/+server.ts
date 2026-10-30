@@ -4,16 +4,11 @@ import { slidingWindow } from '#lib/server/http/rate-limit.js';
 import { pushSubscribeSchema, upsertSubscription } from '#lib/server/push/subscriptions.js';
 import type { RequestHandler } from './$types';
 
-// Best-effort per-isolate cap on a runaway client (Cloudflare's edge limiter is the real backstop).
-// Subscribing is rare; this only trips a loop.
+// Best-effort per-isolate cap on a runaway client: Cloudflare's edge limiter is the real backstop.
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 20;
 const hits = new Map<string, number[]>();
 
-/**
- * Store the caller's Web Push subscription (auth-gated). Idempotent — re-subscribing from the same
- * device updates the existing row (see `upsertSubscription`). The server re-validates the body.
- */
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 	if (!locals.db) error(503, 'Service unavailable');
@@ -24,8 +19,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		RATE_WINDOW_MS,
 		RATE_MAX
 	);
-	// Drop the key once its window is empty, so the map doesn't retain an entry per user that has
-	// ever hit this isolate.
 	if (kept.length === 0) hits.delete(locals.user.id);
 	else hits.set(locals.user.id, kept);
 	if (result.limited)

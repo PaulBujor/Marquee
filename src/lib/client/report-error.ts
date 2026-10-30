@@ -1,41 +1,26 @@
-/**
- * Client-side error sink: forward browser errors to `/api/client-error`, which logs them
- * to Cloudflare observability. Best-effort and **silent** — a reporter must never throw or surface a
- * failure of its own (that would turn one error into two). Used by the `handleError` client hook and
- * by the sync engine when a channel fails.
- */
+/** Best-effort and silent — a reporter that throws would turn one error into two. */
 export interface ClientErrorReport {
 	message: string;
 	/** Where it came from — a route id, `'sync'`, etc. */
 	source?: string;
-	/** HTTP status, when the error was a bad response (e.g. a sync 5xx). */
 	status?: number;
 	stack?: string;
 	url?: string;
-	/** Epoch ms the error occurred. */
+	/** Epoch ms. */
 	at?: number;
-	/**
-	 * Set by a caller that has already told the user what went wrong in its own words — the error
-	 * still reaches the log and the sink, it just doesn't raise a second toast over the first.
-	 */
+	/** Set by a caller that has already told the user in its own words — no second toast. */
 	handled?: boolean;
 }
 
-/** Notified for every report, in addition to the network sink. */
 type ClientErrorListener = (report: ClientErrorReport) => void;
 const listeners = new Set<ClientErrorListener>();
 
-/**
- * Watch every reported error — how the UI learns about them, while this module stays rune-free and
- * importable from `hooks.client.ts`. A throwing listener can't break reporting: surfacing an error
- * must never be able to lose it.
- */
+/** A throwing listener must never be able to lose the report the sink still has to send. */
 export function onClientError(listener: ClientErrorListener): () => void {
 	listeners.add(listener);
 	return () => listeners.delete(listener);
 }
 
-/** Fire-and-forget POST the report; swallow every failure. No-op outside the browser. */
 export function reportClientError(report: ClientErrorReport): void {
 	for (const listener of listeners) {
 		try {
@@ -57,11 +42,7 @@ export function reportClientError(report: ClientErrorReport): void {
 	}
 }
 
-/**
- * Most reports come from a `catch` that knew to call {@link reportClientError}. These two caps are
- * for the ones that don't: a render loop or a retrying timer can throw the same error thousands of
- * times a second, and an unbounded reporter would turn that into thousands of POSTs.
- */
+/** A render loop can throw thousands of times a second; unbounded reporting would be thousands of POSTs. */
 const MAX_REPORTS_PER_PAGE = 20;
 
 export interface GlobalReportingOptions {
@@ -73,12 +54,8 @@ export interface GlobalReportingOptions {
 let installed = false;
 
 /**
- * The catch-all net: report errors that escape everything else. SvelteKit's `handleError` only
- * sees throws during navigation and rendering, so anything from an event handler, a timer or a
- * floating promise never reaches the sink otherwise.
- *
- * It doesn't replace explicit reporting — an error a `catch` handles never becomes uncaught.
- * Returns a teardown function; calling it twice installs one set of listeners.
+ * SvelteKit's `handleError` only sees navigation and render throws, so handler/timer/promise errors
+ * reach the sink only through this net.
  */
 export function installGlobalErrorReporting(options: GlobalReportingOptions = {}): () => void {
 	const target = options.target ?? (typeof window === 'undefined' ? undefined : window);
@@ -87,17 +64,12 @@ export function installGlobalErrorReporting(options: GlobalReportingOptions = {}
 
 	const report = options.report ?? reportClientError;
 	/**
-	 * Path only — the query string is dropped before the report leaves the browser. Reports are
-	 * logged into Cloudflare observability with `persist: true` and no sampling, so anything in a
-	 * URL lands in durable logs. No current route puts a secret in its query (the magic-link
-	 * `/auth/verify` never hydrates, so it can't reach this), but that is a property of today's
-	 * route table rather than a guarantee — enforce it here instead.
+	 * Path only: reports land in durable Cloudflare logs, so a query string must never be sent.
 	 */
 	const safeUrl = () => (typeof location === 'undefined' ? undefined : location.pathname);
 	const seen = new Set<string>();
 	let sent = 0;
 
-	/** Report unless we've already sent this exact error, or hit the per-page cap. */
 	const send = (message: string, stack: string | undefined, source: string) => {
 		try {
 			const key = `${source}:${message}`;

@@ -29,11 +29,7 @@
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
-	// Track in-app navigation once, here in the persistent root layout, so the shared back-navigation
-	// state reliably sees every navigation regardless of when a per-page back control mounts. The
-	// same pass feeds the tab bar's memory of where you were on each destination — the dashboard and
-	// search both mirror their state into the URL with `goto`, so their filters and query land here
-	// for free, with no per-page hook.
+	// Here, in the persistent root layout, so it sees every navigation however late a page's back control mounts.
 	afterNavigate((nav) => {
 		if (nav.shallow && nav.type === 'goto') return;
 
@@ -44,7 +40,6 @@
 		if (restore !== null) void restoreScroll(restore);
 	});
 
-	// Remember the scroll offset of the destination being left.
 	beforeNavigate(({ shallow, type }) => {
 		if (shallow && type === 'goto') return;
 
@@ -52,9 +47,7 @@
 	});
 
 	async function restoreScroll(y: number) {
-		// Unconditional first: the loop below only ever scrolls *down* to reach a saved offset, and a
-		// tab being opened for the first time has none. Tab links carry `data-sveltekit-noscroll`, so
-		// without this the new page would simply keep the outgoing page's scroll position.
+		// Unconditional: tab links carry `data-sveltekit-noscroll`, and the loop below only ever scrolls *down*.
 		window.scrollTo(0, y);
 		for (let i = 0; i < 5 && window.scrollY < y - 1; i++) {
 			await tick();
@@ -63,25 +56,19 @@
 		}
 	}
 
-	// Scope the local store to the signed-in user *before* any tracking UI opens it (the layout
-	// script runs before child pages mount). Per-user database (`marquee-<id>`) — a wrong-account
-	// login opens a different DB, never clearing the prior user's data. `untrack`: a deliberate
-	// one-shot read of the initial user; the effect below handles any later change.
+	// Before any tracking UI opens the store: per-user DB (`marquee-<id>`), so a wrong-account login opens a different DB rather than clearing the old one.
 	if (typeof window !== 'undefined') {
 		const initialUser = untrack(() => data.user);
 		if (initialUser) {
 			setActiveUser(initialUser.id);
 			void initOfflineStorage(); // once per boot: request persistence + prune the image cache
 		}
-		// Complete a logout that was started offline — now if we're already online, else on reconnect.
-		// Pass the currently-authenticated user so a stale queued logout can't sign out a newer session.
+		// A stale queued logout must not sign out a newer session, hence the current user id.
 		void flushPendingLogout(untrack(() => data.user?.id ?? null));
 		window.addEventListener('online', () => void flushPendingLogout(data.user?.id ?? null));
 	}
 
-	// Ask the browser to keep our IndexedDB from being evicted, and bound the media + image cache to
-	// titles still on a list. Boot-time backstop for a removal made offline — the sync engine sweeps
-	// again on any cycle that moves events. Best-effort; all guarded.
+	// Boot-time backstop for a removal made offline; the sync engine sweeps again on any cycle that moves events.
 	async function initOfflineStorage() {
 		await requestPersistentStorage();
 		const keepIds = new Set(await getReferencedMediaIds());
@@ -89,12 +76,11 @@
 		await pruneMediaImages(keepIds);
 	}
 
-	// Drive background event sync while signed in; tear down (and detach the store) on logout.
 	$effect(() => {
 		if (!data.user) {
 			sync.stop();
 			setActiveUser(null);
-			library.reset(); // don't keep the prior user's dashboard in memory once signed out
+			library.reset();
 			return;
 		}
 		setActiveUser(data.user.id);
@@ -102,34 +88,28 @@
 		return () => sync.stop();
 	});
 
-	// When the session expires (detected by a 401 on any sync channel), stop the engine and show
-	// the signed-out status. The toast component handles the sonner. Runs from the layout rather than
-	// from `session.svelte.ts` to avoid the import cycle `session.svelte.ts → engine.svelte.ts → session.svelte.ts`.
+	// Runs here, not in `session.svelte.ts`, to avoid the cycle `session.svelte.ts → engine.svelte.ts → session.svelte.ts`.
 	$effect(() => {
 		if (session.expired) sync.markSignedOut();
 	});
 
-	// When the account changes (logout or switching users), also reset the session-expiry state so a
-	// fresh login doesn't inherit the old expiry. Drop the previous user's cached page shells too.
+	// A fresh login must not inherit the previous account's expiry or cached page shells.
 	let cachedForUser = untrack(() => data.user?.id ?? null);
 	$effect(() => {
 		const uid = data.user?.id ?? null;
 		if (uid !== cachedForUser) {
 			session.reset();
 			navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PAGES' });
-			library.reset(); // the previous user's titles must not carry into the new session
-			tabs.reset(); // nor their per-destination filters, query and scroll offsets
+			library.reset();
+			tabs.reset();
 
-			// Drop the previous user's "last synced" timestamp on the actual account change (not on
-			// every sync teardown, which refreshAll() would trigger) so it can't briefly show for
-			// the next account; start() reloads the new user's value.
+			// Only on the account change, not on every teardown (refreshAll() triggers that), or it shows the old account's value.
 			sync.lastSyncAt = null;
 			cachedForUser = uid;
 		}
 	});
 
-	// A notification tap deep-links here: the service worker focuses this tab and posts the target
-	// path (see `notificationclick` in the service worker), which we navigate to client-side.
+	// A notification tap deep-links here: the SW focuses this tab and posts the target path.
 	$effect(() => {
 		if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
 		const onMessage = (e: MessageEvent) => {
@@ -157,7 +137,6 @@
 		return () => mq.removeEventListener('change', handler);
 	});
 
-	// Toast position: top-center on desktop, bottom-center on mobile.
 	let toastPosition = $state<'top-center' | 'bottom-center'>('bottom-center');
 	$effect(() => {
 		if (typeof window === 'undefined') return;
@@ -173,25 +152,15 @@
 	// OS chrome matches the app background (not the accent); hex mirror `--background`.
 	const themeColor = $derived(theme.isDark ? '#000000' : '#ffffff');
 
-	// The tab bar is the app's primary navigation, so it rides every signed-in page — including a
-	// title page, which stays inside the stack of whichever tab opened it. The two signed-out
-	// surfaces have nothing to navigate between.
 	const showTabBar = $derived(!!data.user && page.url.pathname !== '/login');
-	// Lift bottom-anchored toasts clear of the bar, tracking its *live* height so the gap stays put
-	// when the bar collapses on scroll. Sonner uses the mobile set below 600px, so both must be given.
-	// Only the vertical offset is ours: the horizontal insets have to stay Sonner's own defaults.
-	// Below 600px it derives the toast's width from `--mobile-offset-left` on *both* sides, so an
-	// unbalanced left inset doesn't just shift the stack — the toaster keeps `width: 100%` and hangs
-	// off the screen, clipping each toast's leading icon. Above 600px the offsets are ignored
-	// altogether: a centred toaster is placed at `left: 50%` / `translateX(-50%)`.
+	// Only the vertical offset is ours: below 600px Sonner derives the toast width from `--mobile-offset-left` on *both* sides, so an unbalanced horizontal inset hangs the toaster off-screen.
 	const toastOffset = $derived(
 		showTabBar ? { bottom: 'calc(var(--tab-bar-live) + 1.5rem)' } : undefined
 	);
 </script>
 
 <svelte:head>
-	<!-- The .ico carries no colour-scheme variant, so it stays the unqualified
-	fallback; the PNGs below swap the mark between the light and dark teal. -->
+	<!-- The .ico has no colour-scheme variant, so it stays the unqualified fallback. -->
 	<link rel="icon" href="/favicon.ico" sizes="any" />
 	<link
 		rel="icon"
@@ -225,19 +194,14 @@
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<link rel="manifest" href="/manifest.json" />
 	<meta name="theme-color" content={themeColor} />
-	<!-- Standalone web-app mode. iOS only consults the apple-touch-startup-image
-	links below when launched as a standalone web app, so this must be present. -->
+	<!-- Standalone web-app mode: iOS only consults the startup-image links below when launched standalone. -->
 	<meta name="mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-title" content="Marquee" />
 	<!-- Translucent status bar so the dark splash/app background extends under it. -->
 	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-	<!-- iOS PWA splash screens: iOS matches a static image by exact device
-	resolution + orientation. The light link (no prefers-color-scheme) is the
-	default/fallback so a splash always shows; the dark link adds
-	(prefers-color-scheme: dark) to override it in dark mode. -->
-	<!-- iPhone 15 Pro (393x852 @3) -->
+	<!-- iOS matches a splash by exact device resolution + orientation; the light link is the fallback, the dark one overrides it. -->
 	<link
 		rel="apple-touch-startup-image"
 		media="screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)"
@@ -258,7 +222,6 @@
 		media="screen and (prefers-color-scheme: dark) and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)"
 		href="/splash/iphone15pro-landscape-dark.png"
 	/>
-	<!-- iPad Air (10.9"/11", 4th/5th/M2): 820x1180 pt @2 -->
 	<link
 		rel="apple-touch-startup-image"
 		media="screen and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
@@ -290,8 +253,7 @@
 	<TabBar />
 {/if}
 <Toaster position={toastPosition} offset={toastOffset} mobileOffset={toastOffset} />
-<!-- Surfaces reported errors: a toast when something breaks, the full message and stack behind it.
-Mounted here so it covers every route, including the ones that fail before their own UI renders. -->
+<!-- Mounted in the root layout so it covers routes that fail before their own UI renders. -->
 <ErrorReporter />
 <SessionExpiredToast />
 <InstallPrompt />

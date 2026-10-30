@@ -7,16 +7,14 @@
 		type?: 'movie' | 'show';
 		isCustom?: boolean;
 		isFavorite?: boolean;
-		/** The user's own 1–5 rating; renders a small badge when set. */
 		rating?: number | null;
 		gradientFrom?: string;
 		gradientTo?: string;
-		/** Poster image URL; when set it renders behind the overlays, gradient is the fallback. */
+		/** The gradient is the fallback. */
 		posterUrl?: string | null;
 		/** When set (with `posterPath`), the poster renders offline-capably from the cached blob. */
 		mediaId?: string;
 		posterPath?: string | null;
-		/** Alt text for the poster image. */
 		alt?: string;
 		class?: string;
 		children?: import('svelte').Snippet;

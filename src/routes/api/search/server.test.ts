@@ -6,7 +6,6 @@ import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 type Handler = typeof GET;
 type Event = Parameters<Handler>[0];
 
-/** Build a minimal event the handler actually reads (locals.user, bindings, url). */
 function makeEvent(opts: {
 	user?: unknown;
 	q?: string | null;
@@ -116,7 +115,6 @@ describe('GET /api/search', () => {
 
 	it('degrades (degraded:true) when TMDB errors; no shared-library results without a db', async () => {
 		vi.stubGlobal('fetch', tmdbResponse({}, 500));
-		// makeEvent supplies no `locals.db`, so the shared-library fallback is skipped → empty results.
 		const res = await GET(makeEvent({ q: 'inception' }));
 		expect(await res.json()).toEqual({ results: [], degraded: true });
 	});

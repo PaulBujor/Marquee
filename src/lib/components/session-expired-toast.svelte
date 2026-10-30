@@ -4,13 +4,7 @@
 	import { session } from '#lib/client/session.svelte.js';
 	import { loginPathWithRedirect } from '#lib/redirect.js';
 
-	/**
-	 * A persistent toast when the session expires. Mounted in the root layout beside `<ErrorReporter />`
-	 * and built the same way: watch the state, raise the sonner. `duration: Infinity` because this is a
-	 * *state*, not an event — it should not time out. The action navigates to `/login`.
-	 *
-	 * The guard on `announced` prevents multiple toasts when multiple channels 401 in the same cycle.
-	 */
+	/** `duration: Infinity` because this is a *state*, not an event; `announced` keeps it to one toast. */
 	$effect(() => {
 		if (!session.expired || session.announced) return;
 		session.announced = true;
@@ -20,8 +14,7 @@
 			duration: Infinity,
 			action: {
 				label: 'Sign in',
-				// Carry the current page through sign-in: an expiry mid-browse is the most common
-				// way to end up here, and losing the page is what makes it feel like a kick-out.
+				// Carry the current page through sign-in — losing it is what makes an expiry feel like a kick-out.
 				onClick: () => {
 					const target = loginPathWithRedirect(
 						`${window.location.pathname}${window.location.search}`

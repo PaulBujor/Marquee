@@ -1,8 +1,5 @@
-<!--
-	Two fixes for the pinned bits-ui@2.18, which the registry doesn't target: `data-[state=…]:`
-	rather than `data-open:`/`data-closed:` (see `dialog-content.svelte`), and the floating layer's
-	real transform-origin variable, so the zoom grows from the anchor rather than the centre.
--->
+<!-- `data-[state=…]:` rather than `data-open:`, and the floating layer's real transform-origin so the
+zoom grows from the anchor; see `dialog-content.svelte`. -->
 <script lang="ts">
 	import { Popover as PopoverPrimitive } from 'bits-ui';
 	import PopoverPortal from './popover-portal.svelte';

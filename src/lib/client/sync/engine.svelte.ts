@@ -1,7 +1,3 @@
-/**
- * Client sync engine: drives event + media channels on triggers (open/foreground/reconnect/interval),
- * coalesces overlapping requests, exposes a reactive status. Each channel has retry + circuit breaker.
- */
 import { runSync, SyncError, toSyncErrorInfo, type SyncErrorInfo } from './sync';
 import { runMediaSync } from './media-sync';
 import { runImageSync } from './image-sync';
@@ -23,7 +19,6 @@ import { reportClientError } from '#lib/client/report-error.js';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline' | 'signed-out';
 
-/** Coalesce bursts of trigger/nudge calls into one run this many ms later. */
 const NUDGE_MS = 300;
 /** Light polling cadence while the tab is open — also the natural retry cadence after a failure. */
 const INTERVAL_MS = 60_000;
@@ -32,30 +27,23 @@ const RETRY: RetryOptions = { maxAttempts: 3, baseMs: 2000, maxMs: 60000 };
 /** Trip a channel's breaker after this many consecutive cycle failures, then pause for the cooldown. */
 const CIRCUIT = { maxFailures: 3, cooldownMs: 60_000 };
 
-/** Retry a `/api/sync` failure only when it's transient — network error, or 5xx/429, not a 4xx.
- * A SessionExpiredError must never be retried: the session is gone and every retry is a doomed 401. */
+/** A SessionExpiredError must never be retried: the session is gone and every retry is a doomed 401. */
 const retriableSync = (err: unknown) =>
 	err instanceof SessionExpiredError
 		? false
 		: !(err instanceof SyncError) || err.status >= 500 || err.status === 429;
 
-/**
- * On a 429 with a `Retry-After`, wait exactly that long instead of exponential backoff — honor the
- * server's clock rather than escalating (which a 429 makes wrong). Any other failure keeps normal
- * backoff. The engine's `maxAttempts` still bounds how many times a single cycle waits.
- */
+/** Honour a 429's `Retry-After` rather than escalating the backoff, which a 429 makes wrong. */
 const syncRetryDelay = (err: unknown, computedMs: number): number =>
 	err instanceof SyncError && err.retryAfterMs != null ? err.retryAfterMs : computedMs;
 
 class SyncEngine {
 	status = $state<SyncStatus>('idle');
-	/** Whether the browser currently reports a network connection — drives the offline indicator. */
 	online = $state(true);
-	/** Detail of the most recent event-sync failure, retained for future error reporting; cleared on success. */
 	lastError = $state<SyncErrorInfo | null>(null);
 	/** Bumped each time a sync pulls+applies remote data, so open views can re-read local state. */
 	revision = $state(0);
-	/** Epoch ms of the last successful event sync (persisted), or null — shown in settings. */
+	/** Epoch ms of the last successful event sync (persisted), or null. */
 	lastSyncAt = $state<number | null>(null);
 	/** Epoch ms the in-flight cycle began, or null when idle — lets the log show a stall's duration. */
 	cycleStartedAt = $state<number | null>(null);
@@ -73,7 +61,6 @@ class SyncEngine {
 	#media = new CircuitBreaker({ ...CIRCUIT, name: 'sync:media' });
 	#images = new CircuitBreaker({ ...CIRCUIT, name: 'sync:images' });
 
-	/** Wire triggers and kick an initial catch-up. Idempotent; browser-only. */
 	start(): void {
 		if (this.#started || typeof window === 'undefined') return;
 		this.#started = true;
@@ -114,9 +101,8 @@ class SyncEngine {
 			);
 		}
 
-		// Load the persisted full-check watermark before the first cycle can run, so a relaunch
-		// resumes the cadence instead of restarting it at 0 (see media-gate.ts). The `#started`
-		// guard drops this if `stop()` ran before the (local, near-instant) read resolved.
+		// Load the persisted watermark before the first cycle can run, so a relaunch resumes the
+		// cadence instead of restarting it at 0; the `#started` guard drops it if `stop()` won.
 		void getLastFullMediaCheck().then((at) => {
 			if (!this.#started) return;
 			this.#lastFullMediaCheck = at;
@@ -125,7 +111,6 @@ class SyncEngine {
 		});
 	}
 
-	/** Remove triggers and cancel pending timers (call on logout / teardown). */
 	stop(): void {
 		this.#teardown.forEach((off) => off());
 		this.#teardown = [];
@@ -135,7 +120,6 @@ class SyncEngine {
 		this.#started = false;
 	}
 
-	/** Ask for a sync soon. Debounced, so triggers/nudges in quick succession run once. */
 	requestSync(): void {
 		if (this.#nudgeTimer) return;
 		this.#nudgeTimer = setTimeout(() => {
@@ -144,19 +128,13 @@ class SyncEngine {
 		}, NUDGE_MS);
 	}
 
-	/**
-	 * Permanently stop syncing and mark the status as signed-out. Called by the root layout when
-	 * `session.expired` flips. Killing the 60s interval is what ends the storm of 401 retries.
-	 */
+	/** Killing the 60s interval is what ends the storm of 401 retries. */
 	markSignedOut(): void {
 		this.stop();
 		this.status = 'signed-out';
 	}
 
-	/**
-	 * Run one channel through its breaker: `null` when the breaker is open (skipped this cycle),
-	 * the resolved value on success; throws — after in-cycle retries — on failure (tripping it).
-	 */
+	/** `null` when the breaker is open (channel skipped this cycle); throws after in-cycle retries. */
 	async #runChannel<T>(
 		circuit: CircuitBreaker,
 		fn: () => Promise<T>,
@@ -176,11 +154,7 @@ class SyncEngine {
 		}
 	}
 
-	/**
-	 * Ask the service worker to flush our outbox when connectivity returns — even if the tab is later
-	 * closed (Chromium/Android Background Sync). Best-effort and idempotent (same tag coalesces);
-	 * unsupported browsers (iOS/Firefox) just reject, and the online/foreground triggers cover them.
-	 */
+	/** Best-effort Background Sync; iOS/Firefox reject and the online/foreground triggers cover them. */
 	#registerBackgroundSync(): void {
 		if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
 		navigator.serviceWorker.ready
@@ -221,7 +195,6 @@ class SyncEngine {
 			let pulled = 0; // events pulled this cycle — the sequence-watermark signal for the media gate below
 			let pushed = 0; // events pushed this cycle — with `pulled`, gates the cache sweep below
 
-			// Event channel — authoritative; drives the visible status.
 			try {
 				syncLog.add('events', 'push + pull…');
 				const startedAt = Date.now();
@@ -273,9 +246,8 @@ class SyncEngine {
 			const runMedia = shouldRunMediaSync(pulled, this.#lastFullMediaCheck, cycleNow);
 			if (!runMedia) syncLog.add('media', 'skipped — nothing new to ask about');
 			if (runMedia) {
-				// Also surfaces in the sync indicator (a failing media sync, e.g. a large library,
-				// should be visible, not silent). Same shape as the event channel: a breaker-open
-				// skip or a throw flips the status to error and skips images for this cycle.
+				// Also surfaces in the sync indicator; same shape as the event channel: a breaker-open
+				// skip or a throw flips the status and skips images this cycle.
 				try {
 					syncLog.add('media', `${dueForFullCheck ? 'full version-diff' : 'light'} pass…`);
 					const startedAt = Date.now();
@@ -340,9 +312,8 @@ class SyncEngine {
 				console.warn('[sync] image sync failed (will retry later)', err);
 			}
 
-			// Drop cached media + images for titles that left every list. Local-only, and gated on the
-			// cycle having moved events — a removal is either pushed from here or pulled from another
-			// device, so an idle tab never rescans the stores.
+			// Local-only, and gated on the cycle having moved events — a removal is either pushed from
+			// here or pulled from another device, so an idle tab never rescans the stores.
 			if (pushed > 0 || pulled > 0) {
 				try {
 					const keepIds = new Set(await getReferencedMediaIds());
@@ -369,5 +340,4 @@ class SyncEngine {
 	}
 }
 
-/** The app-wide sync engine. */
 export const sync = new SyncEngine();

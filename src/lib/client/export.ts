@@ -1,11 +1,3 @@
-/**
- * Data export: read the device's offline replica and hand the user a JSON file.
- *
- * Deliberately network-free — IndexedDB is a full replica, so the export is complete without the
- * server. That's the point: it works offline, and it works if the service disappears.
- *
- * Client-safe (browser only).
- */
 import {
 	getAllEpisodeWatches,
 	getAllMedia,
@@ -21,7 +13,7 @@ import {
 	type MarqueeExport
 } from '#lib/portability/schema.js';
 
-/** Gather local state into an export document. `now` is injectable so callers can pin the stamp. */
+/** `now` is injectable so callers can pin the stamp. */
 export async function collectExport(now: Date = new Date()): Promise<MarqueeExport> {
 	const [tracking, media, watches] = await Promise.all([
 		getTracking(), // already excludes removed (tombstoned) titles
@@ -29,9 +21,8 @@ export async function collectExport(now: Date = new Date()): Promise<MarqueeExpo
 		getAllEpisodeWatches()
 	]);
 
-	// A provider-backed show's seasons are re-fetched on import; a user-authored one has no other
-	// source, so its structure has to travel in the file or the watch history comes back pointing at
-	// episodes that no longer exist.
+	// A user-authored show has no other source, so its seasons must travel in the file or the
+	// watch history comes back pointing at episodes that no longer exist.
 	const customShows = media.filter((m) => m.source === 'custom' && m.type === 'show');
 	const customSeasons = new Map<string, ExportedSeason[]>(
 		await Promise.all(
@@ -64,21 +55,14 @@ export async function collectExport(now: Date = new Date()): Promise<MarqueeExpo
 	return buildExport({ tracking, media, watches, customSeasons, customCredits, exportedAt: now });
 }
 
-/**
- * `marquee-export-2026-08-01.json` — dated so repeated exports don't overwrite each other. Uses
- * the **local** calendar date: exporting just after midnight should give today, not yesterday.
- * (`exportedAt` inside the document stays UTC, as an instant should.)
- */
+/** Uses the local calendar date; `exportedAt` inside the document stays UTC. */
 export function exportFilename(now: Date = new Date()): string {
 	const month = String(now.getMonth() + 1).padStart(2, '0');
 	const day = String(now.getDate()).padStart(2, '0');
 	return `${EXPORT_FILENAME_PREFIX}-${now.getFullYear()}-${month}-${day}.json`;
 }
 
-/**
- * Build the export and save it via a synthetic download link. Returns the number of titles
- * written so the caller can confirm what happened.
- */
+/** Returns the number of titles written so the caller can confirm what happened. */
 export async function downloadExport(): Promise<number> {
 	const now = new Date();
 	const doc = await collectExport(now);

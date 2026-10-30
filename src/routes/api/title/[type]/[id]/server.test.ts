@@ -40,7 +40,6 @@ const SHOW_WITH_SEASONS = {
 	]
 };
 
-/** Stub fetch to answer the detail call, then each subsequent season call. */
 function stubShowFetch() {
 	const fetchSpy = vi.fn(async (input: URL | string) => {
 		const path = new URL(String(input)).pathname;

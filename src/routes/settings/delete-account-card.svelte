@@ -16,7 +16,6 @@
 	let deleteOpen = $state(false);
 	let confirmEmail = $state('');
 
-	// Deleting the account hits the server; offline, gate the trigger with an explanation.
 	const online = $derived(sync.online);
 
 	const deleteError = $derived(form && 'deleteError' in form ? form.deleteError : null);
@@ -24,9 +23,7 @@
 	const trackDelete = () => {
 		submitting = true;
 		return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
-			// A redirect means the server deleted the account: wipe this device's local replica and
-			// tear down its push subscription before the redirect navigates (the active user — and so
-			// the database to delete — is still this account at this point).
+			// Wipe the local replica before the redirect navigates: the active user is still this account here.
 			if (result.type === 'redirect') {
 				await notifications.disable();
 				await wipeLocalData();
@@ -45,10 +42,7 @@
 		</Card.Description>
 	</Card.Header>
 	<Card.Content>
-		<!-- AlertDialog (not Dialog): deleting the account is the most destructive, can't-be-undone
-		action, so no outside-click/Escape dismiss. The delete control stays a plain submit button
-		inside the form (not AlertDialog.Action, which auto-closes) so a server validation error
-		keeps the dialog open. -->
+		<!-- AlertDialog, not Dialog: no outside-click/Escape dismiss on an irreversible action; the control stays a plain submit so a validation error keeps it open. -->
 		<AlertDialog.Root bind:open={deleteOpen}>
 			{#if online}
 				<AlertDialog.Trigger class={buttonVariants({ variant: 'destructive' })}>

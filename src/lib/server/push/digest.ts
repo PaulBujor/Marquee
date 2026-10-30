@@ -17,21 +17,15 @@ type Db = ReturnType<typeof createDb>;
 
 /** Notifications go out at 9AM the user's local time. */
 export const SEND_HOUR = 9;
-/** How many days back a release still counts as "new" — covers a missed run / late-day airs without
- *  back-filling a whole back catalogue when a long-running show is newly tracked. */
+/** How many days back a release still counts as "new" — covers a missed run or a late-day air without back-filling a catalogue. */
 export const GRACE_DAYS = 2;
 const SPECIALS_SEASON = 0;
-/** Movie statuses we notify for (not `completed` / `did_not_finish`). */
+/** Not `completed` / `did_not_finish`. */
 const ACTIVE_STATUSES = ['want_to_watch', 'watching'] as const;
-/** Show statuses eligible to notify; {@link selectNotifiableEpisodes} then decides per row. */
+/** `completed` is included here; {@link selectNotifiableEpisodes} decides per row. */
 const ACTIVE_SHOW_STATUSES = ['want_to_watch', 'watching', 'completed'] as const;
 
-/**
- * Max users notified in one hourly invocation. Every send is a serial network call, so an
- * unbounded run grows with the user base until it exceeds the Worker's CPU/subrequest budget and
- * silently drops whoever came last. Overflow rolls to the next run — `GRACE_DAYS` keeps the
- * release notifiable and `notification_log` keeps it exactly-once.
- */
+// Serial sends, so an unbounded run exceeds the Worker's CPU/subrequest budget and silently drops whoever came last.
 export const DIGEST_MAX_USERS_PER_RUN = 200;
 
 /** The user's local date (`YYYY-MM-DD`) and hour (0–23) for `now`, or a UTC fallback on a bad tz. */
@@ -53,21 +47,18 @@ export function localDateHour(now: Date, timeZone: string | null): { date: strin
 	}
 }
 
-/** Shift an ISO date (`YYYY-MM-DD`) back by `days`. */
 function subtractDays(isoDate: string, days: number): string {
 	const d = new Date(`${isoDate}T00:00:00Z`);
 	d.setUTCDate(d.getUTCDate() - days);
 	return d.toISOString().slice(0, 10);
 }
 
-/** In-app deep link for a title from its TMDB external id (`movie/603` → `/title/movie/603`). */
 function titleUrl(externalId: string | null): string {
 	if (!externalId) return '/';
 	const parsed = parseTmdbExternalId(externalId);
 	return parsed ? `/title/${parsed.type}/${parsed.tmdbId}` : '/';
 }
 
-/** A single notifiable release, prior to grouping into pushes. */
 interface ReleaseItem {
 	/** Ledger key — deterministic per (user, release). */
 	key: string;
@@ -80,24 +71,12 @@ interface ReleaseItem {
 	epName?: string | null;
 }
 
-/** A push ready to send, plus the underlying releases it covers (for per-release ledger writes). */
 interface ReleaseGroup {
 	payload: PushPayload;
 	items: ReleaseItem[];
 }
 
-/**
- * Which candidate episodes are worth a push.
- *
- * `did_not_finish` never qualifies, not even for a new season. Stated here rather than left to the
- * caller's status filter, so widening that filter can't resurrect abandoned shows. `watching` and
- * `completed` always qualify — a finished show keeps `completed` when it returns.
- *
- * `want_to_watch` must earn it: an episode already watched, or the show's first-ever episode (a
- * title added before it aired). `tracking.status` lags — the reconciler skips `status_changed`
- * until episode metadata lands — so a watch record is what rescues an actively-watched show still
- * reading `want_to_watch`. A later season's premiere doesn't count, nor does an unresolvable one.
- */
+// `did_not_finish` never qualifies, and `want_to_watch` must earn it: `tracking.status` lags until episode metadata lands.
 export function selectNotifiableEpisodes<
 	T extends { mediaId: string; airDate: string | null; status: string }
 >(
@@ -115,7 +94,6 @@ export function selectNotifiableEpisodes<
 	});
 }
 
-/** Media ids for which this user has at least one episode marked watched. */
 async function findWatchedShows(db: Db, userId: string): Promise<Set<string>> {
 	const rows = await db
 		.selectDistinct({ mediaId: episodeWatchesTable.mediaId })
@@ -143,7 +121,6 @@ async function findPremiereAirDates(db: Db, mediaIds: string[]): Promise<Map<str
 	return premieres;
 }
 
-/** Newly-aired episodes + newly-released movies for a user within `[from, to]`, as notifiable items. */
 async function findReleases(
 	db: Db,
 	userId: string,
@@ -171,12 +148,7 @@ async function findReleases(
 				eq(trackingTable.userId, userId),
 				eq(trackingTable.removed, false),
 				inArray(trackingTable.status, [...ACTIVE_SHOW_STATUSES]),
-				// Provider-backed titles only. A custom entry's episodes all share one synthesized air
-				// date, clamped to today so they stay watchable — so a show the user typed in themselves
-				// lands squarely in this window, and every episode passes the premiere test below
-				// (they share the date that `min()` returns). Authoring a 30-episode show would push
-				// "30 new episodes" about work the user just entered by hand. Nothing a custom entry
-				// carries is a release we could announce; that clamp means it can never be in the future.
+				// Provider-backed only: a custom entry's synthesized air dates would announce episodes the user just typed in.
 				eq(mediaTable.source, 'linked'),
 				gte(episodesTable.seasonNumber, SPECIALS_SEASON + 1),
 				gte(episodesTable.airDate, from),
@@ -184,7 +156,6 @@ async function findReleases(
 			)
 		);
 
-	// Only `want_to_watch` rows need the extra facts — skip both reads when none are in play.
 	const undecided = [
 		...new Set(episodeRows.filter((r) => r.status === 'want_to_watch').map((r) => r.mediaId))
 	];
@@ -223,8 +194,7 @@ async function findReleases(
 				eq(trackingTable.removed, false),
 				inArray(trackingTable.status, [...ACTIVE_STATUSES]),
 				eq(mediaTable.type, 'movie'),
-				// Same rule as the episode query. A custom movie has no release date so it never matches
-				// today, but that's an accident of the writer, not a guarantee worth relying on.
+				// Same rule as above: a custom movie has no release date, but that's an accident of the writer, not a guarantee.
 				eq(mediaTable.source, 'linked'),
 				gte(mediaTable.releaseDate, from),
 				lte(mediaTable.releaseDate, to)
@@ -244,7 +214,6 @@ async function findReleases(
 	return items;
 }
 
-/** Drop items already recorded in the ledger, so only genuinely new releases remain. */
 async function filterUnsent(db: Db, items: ReleaseItem[]): Promise<ReleaseItem[]> {
 	const keys = items.map((i) => i.key);
 	const sent = new Set<string>();
@@ -258,7 +227,6 @@ async function filterUnsent(db: Db, items: ReleaseItem[]): Promise<ReleaseItem[]
 	return items.filter((i) => !sent.has(i.key));
 }
 
-/** The rich, single-release payload — unchanged from before grouping existed. */
 function singleItemPayload(item: ReleaseItem): PushPayload {
 	const url = titleUrl(item.externalId);
 	if (item.kind === 'movie') {
@@ -272,12 +240,6 @@ function singleItemPayload(item: ReleaseItem): PushPayload {
 	};
 }
 
-/**
- * Collapse a user's fresh releases into the pushes to actually send: a single release keeps its
- * rich per-episode/movie form; multiple releases from one show collapse to one per-show
- * notification; releases spanning more than one show/movie collapse further into a single
- * cross-show summary (rather than one push per show) so a busy day never fans out per release.
- */
 function groupReleases(items: ReleaseItem[]): ReleaseGroup[] {
 	if (items.length === 0) return [];
 
@@ -294,9 +256,7 @@ function groupReleases(items: ReleaseItem[]): ReleaseGroup[] {
 			{
 				payload: {
 					title: 'New releases',
-					// `/timeline` only ever shows strictly-future releases (filterUpcoming excludes
-					// airDate/releaseDate <= today), so it would never show the items this notification
-					// is about — the library is the deep link that actually still contains them.
+					// `/timeline` shows only strictly-future releases, so it would never hold the items this push is about; `/` does.
 					body: `${total} new release${total === 1 ? '' : 's'} across ${byMedia.size} titles`,
 					url: '/',
 					tag: 'digest::summary'
@@ -331,26 +291,14 @@ export interface DigestSummary {
 	pruned: number;
 }
 
-/**
- * Send the daily new-release digest. Runs hourly; a user is notified only when it's ~9AM
- * their local time (timezone taken from their most recently used subscription among the ones
- * matching the current hour's due timezones — a user whose most-recently-used device sits in a
- * timezone that isn't due this run is correctly skipped, but one whose *only* due device is an
- * older one can be notified off that device's timezone instead; a rare multi-device-across-zones
- * edge case, traded for not reading every subscription row every hour).
- *
- * `sender` is injectable for tests; by default it's built from the VAPID env (throws if unconfigured,
- * which the cron wrapper catches).
- */
+// Runs hourly; timezone is taken from the most-recently-used due subscription, an accepted multi-device-across-zones edge case.
 export async function sendNewReleaseDigest(
 	db: Db,
 	env: Env,
 	now: Date,
 	sender: PushSender = createPushSender(env)
 ): Promise<DigestSummary> {
-	// Which timezones are at local hour SEND_HOUR right now — resolved against the distinct set in
-	// use, not every subscription row, since the number of distinct timezones stays small and
-	// roughly constant as the user base grows.
+	// Distinct timezones stay small and roughly constant, unlike subscription rows.
 	const timezonesInUse = await db
 		.selectDistinct({ timezone: pushSubscriptions.timezone })
 		.from(pushSubscriptions);
@@ -368,8 +316,6 @@ export async function sendNewReleaseDigest(
 	].filter((condition): condition is SQL => condition !== undefined);
 
 	// Two passes, so the hourly run doesn't pull every device's key material to discard 23/24 of it.
-	// The first reads only what the 9AM-local test needs, and only for subscriptions whose timezone
-	// is due this hour; the encryption keys are loaded in the second, for due users only.
 	const candidates = await db
 		.select({
 			userId: pushSubscriptions.userId,
@@ -382,7 +328,6 @@ export async function sendNewReleaseDigest(
 		);
 	if (candidates.length === 0) return { dueUsers: 0, sent: 0, pruned: 0 };
 
-	// The user's timezone is the one on their most-recently-used subscription.
 	const tzByUser = new Map<string, { timezone: string | null; lastUsedAt: Date }>();
 	for (const row of candidates) {
 		const current = tzByUser.get(row.userId);
@@ -398,9 +343,6 @@ export async function sendNewReleaseDigest(
 	}
 	if (due.length === 0) return { dueUsers: 0, sent: 0, pruned: 0 };
 
-	// Bound the work per invocation. Sends are serial network calls, so an unbounded run would
-	// eventually exceed the Worker's limits and drop whoever sorted last. Overflow waits for the
-	// next hourly run: `GRACE_DAYS` keeps the release notifiable, and the ledger keeps it once-only.
 	const batch = due.slice(0, DIGEST_MAX_USERS_PER_RUN);
 	if (due.length > batch.length) {
 		console.warn(
@@ -408,7 +350,6 @@ export async function sendNewReleaseDigest(
 		);
 	}
 
-	// Now load the full subscription rows (endpoint + keys) for just the users being notified.
 	const subsByUser = new Map<string, PushSubscriptionRow[]>();
 	for (const ids of chunkIds(batch.map((d) => d.userId))) {
 		const rows = await db
@@ -452,9 +393,7 @@ export async function sendNewReleaseDigest(
 					pruned += 1;
 				}
 			}
-			// Log every release the push covered — not just the group as a whole — so dedupe stays
-			// per-release: a later run that finds only some of these still unsent (e.g. one more
-			// episode airs) doesn't re-notify the ones already delivered in this group.
+			// Per-release ledger writes: a later run finding one more episode must not re-notify the rest of the group.
 			if (delivered) {
 				for (const item of group.items) {
 					await db

@@ -1,21 +1,10 @@
-/**
- * Transactional email bodies for the auth flows. Kept apart from the send
- * transport (`./index`) and the auth logic (`../auth`) so the markup lives in
- * one place. Inline styles because email clients ignore <style>/external CSS.
- */
-
-// Mail renders on the client's own white background, so these mirror the LIGHT
-// design tokens in src/routes/layout.css — keep them in sync.
+// Mirrors the LIGHT design tokens in src/routes/layout.css — mail renders on white; keep in sync.
 const BRAND = '#0f766e'; // --primary
 const SERIF = "'Fraunces', ui-serif, Georgia, serif";
 const MUTED = 'color: #5c6470; font-size: 13px;'; // --muted-foreground
 const IGNORE_REQUEST = "If you didn't request this, you can safely ignore this email.";
 
-/**
- * Escape a value interpolated into email HTML. Only the sign-in codes and links are
- * server-generated; an address the user typed is not — `EMAIL_REGEX` is permissive enough to
- * allow `<` and `>`, so anything user-supplied goes through here.
- */
+/** `EMAIL_REGEX` allows `<` and `>`, so the address the user typed must be escaped, not just the codes and links. */
 function escapeHtml(value: string): string {
 	return value
 		.replaceAll('&', '&amp;')
@@ -25,7 +14,6 @@ function escapeHtml(value: string): string {
 		.replaceAll("'", '&#39;');
 }
 
-/** Shared shell: doctype + base typography + a serif heading. */
 function layout(heading: string, body: string): string {
 	return `<!doctype html>
 <html>
@@ -42,16 +30,11 @@ function layout(heading: string, body: string): string {
 </html>`;
 }
 
-/** The shared big letter-spaced code display used by every code-carrying email. */
 function codeBlock(code: string, margin = '24px 0'): string {
 	return `<p style="margin: ${margin}; font-size: 32px; font-weight: 700; letter-spacing: 8px; font-family: ui-monospace, 'SF Mono', Menlo, monospace;">${code}</p>`;
 }
 
-/**
- * Browser sign-in email carrying both a magic link and a 6-digit code: click the
- * link, or type the code back into the open tab. The two TTLs differ on purpose
- * (see the auth module) so each is stated next to its own mechanism.
- */
+/** The link and code TTLs differ on purpose — see the auth module. */
 export function renderMagicLinkAndCodeEmail(
 	url: string,
 	code: string,
@@ -89,11 +72,7 @@ export function renderEmailChangeCode(code: string, ttlMinutes: number): string 
 	);
 }
 
-/**
- * Sent to the **previous** address after an email change completes. Sign-in is passwordless and
- * keyed entirely on the address, so control of the address is control of the account — this is the
- * only signal the former owner gets that it moved.
- */
+/** Sent to the **previous** address: sign-in is passwordless and keyed on the address, so this is the only signal it moved. */
 export function renderEmailChangedNotice(newEmail: string): string {
 	return layout(
 		'Your Marquee email was changed',

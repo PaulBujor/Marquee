@@ -3,8 +3,7 @@ import { setSessionCookie, verifyMagicLink } from '#lib/server/auth/index.js';
 import { safeRedirectPath } from '#lib/redirect.js';
 import type { RequestHandler } from './$types';
 
-// Single-use token in the query string (keeps the email link no-JS friendly);
-// expires in 15 minutes and is never logged.
+// Query string keeps the email link no-JS friendly; single-use, 15-minute TTL, never logged.
 export const GET: RequestHandler = async ({ url, locals, cookies }) => {
 	if (!locals.db) error(503, 'Service unavailable');
 

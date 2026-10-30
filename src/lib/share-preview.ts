@@ -1,8 +1,4 @@
-/**
- * The shape of a share preview, client-safe so the public pages can render one without importing
- * anything server-only. The server's preview store produces it and the public route reads it back;
- * it is catalogue data only — never a user's tracking state.
- */
+// Catalogue data only, never a user's tracking state — public pages render it with no server-only import.
 
 export interface CastCredit {
 	name: string;
@@ -40,7 +36,6 @@ export interface SharePreview {
 	genres: string[];
 	crew: CrewCredits;
 	cast: CastCredit[];
-	/** The trailer the app's own page plays, when TMDB lists one. */
 	trailer: ShareTrailer | null;
 	updatedAt: number;
 }

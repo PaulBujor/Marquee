@@ -1,7 +1,4 @@
-/**
- * Server side of custom media: writes `media` rows from client-supplied content rather than
- * hydrating from a provider. Custom rows are owner-scoped and never overwritten by shared data.
- */
+/** Custom rows are owner-scoped and never overwritten by shared data. */
 import { and, eq, inArray } from 'drizzle-orm';
 import { credits, episodes, media, seasons, type Media } from '#lib/server/db/schema.js';
 import { chunkIds } from '#lib/server/db/chunk.js';
@@ -19,7 +16,6 @@ import {
 
 type Db = ReturnType<typeof createDb>;
 
-/** Split a pushed record into the media scalars and its child rows. */
 function toRows(record: ValidatedCustomMedia) {
 	const scalars = {
 		id: record.id,
@@ -28,8 +24,7 @@ function toRows(record: ValidatedCustomMedia) {
 		source: 'custom' as const,
 		type: record.type,
 		title: record.title,
-		// Folded in app code with JS `toLowerCase()`, matching how hydration writes it and how the
-		// offline client folds — the two must agree or the same query returns different rows.
+		// Folded the same way hydration writes it — the two must agree or the same query returns different rows.
 		titleNormalized: record.title.toLowerCase(),
 		year: record.year,
 		posterPath: null,
@@ -64,24 +59,13 @@ function toRows(record: ValidatedCustomMedia) {
 	return { scalars, seasonRows, episodeRows };
 }
 
-/**
- * Whether this user may write `record`'s id. A brand-new id is fine; an existing row is only
- * writable when it is that user's own custom row. This is what stops a request from overwriting the
- * shared catalog, or another account's private entry, with attacker-chosen metadata — the id alone
- * proves nothing, since a client mints it.
- */
+/** An existing row is only writable when it's that user's own custom row — the id alone proves nothing, since a client mints it. */
 function mayWrite(existing: Media | undefined, userId: string): boolean {
 	if (!existing) return true;
 	return existing.source === 'custom' && existing.ownerUserId === userId;
 }
 
-/**
- * Store the custom records a user pushed and return the ids actually written. `allowedIds` is the
- * caller's anti-abuse gate (ids the user's own tracking references) — an id outside it is dropped
- * before any write, so the endpoint can't be used as free storage for rows nothing points at.
- *
- * Skipped ids are simply absent from the result; the client keeps them queued and tries again.
- */
+/** `allowedIds` is the anti-abuse gate: an id outside it is dropped before any write, so the endpoint can't be used as free storage. */
 export async function storeCustomMedia(
 	db: Db,
 	userId: string,
@@ -104,8 +88,7 @@ export async function storeCustomMedia(
 	for (const record of eligible) {
 		const existing = existingById.get(record.id);
 		if (!mayWrite(existing, userId)) continue;
-		// A stored copy from a later edit (another device) wins; report it as stored anyway, since
-		// there is nothing left for this client to retry — the newer copy comes back on the diff.
+		// A stored copy from a later edit (another device) wins; report it as stored anyway — nothing left for this client to retry.
 		if (existing && existing.updatedAt > record.editedAt) {
 			stored.push(record.id);
 			continue;
@@ -113,11 +96,7 @@ export async function storeCustomMedia(
 
 		const { scalars, seasonRows, episodeRows } = toRows(record);
 		const { personRows, creditRows } = creditRowsFromCustom(record.id, userId, record.credits);
-		// People first — a credit is a foreign key onto one. A person id this user may not write (it
-		// already belongs to someone else, or to the shared catalog) takes its credit down with it
-		// rather than pointing at a row that says someone else's name. An id absent from the mapping
-		// is one of those; an id mapped to a *different* one is the same person already stored under
-		// the id that mapping names.
+		// People first — a credit is a foreign key onto one. An id this user may not write takes its credit down with it rather than pointing at someone else's name.
 		const storedPersonId = await syncOwnedPeople(db, userId, personRows);
 		const ownCreditRows = creditRows
 			.filter((c) => storedPersonId.has(c.personId))
@@ -130,8 +109,7 @@ export async function storeCustomMedia(
 					...scalars,
 					ownerUserId: userId,
 					version: 1,
-					// Nothing will ever re-pull this from a provider, so the refresh clock is only here
-					// to keep the nightly sweep's "never refreshed" branch from picking it up.
+					// Nothing will ever re-pull this, so the clock only keeps the nightly sweep off it.
 					refreshedAt: record.editedAt,
 					updatedAt: record.editedAt
 				})
@@ -157,8 +135,7 @@ export async function storeCustomMedia(
 			episodeSignature(oldEpisodes) !== episodeSignature(episodeRows) ||
 			creditSignature(oldCredits) !== creditSignature(ownCreditRows);
 
-		// Children first: if that throws, the row keeps its old clock and version, so the next push
-		// retries rather than being recorded as up to date with half its episodes written.
+		// Children first: if that throws, the row keeps its old clock and version, so the next push retries.
 		await syncSeasons(db, record.id, oldSeasons, seasonRows);
 		await syncEpisodes(db, record.id, oldEpisodes, episodeRows);
 		await syncCredits(db, record.id, ownCreditRows);

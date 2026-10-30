@@ -11,8 +11,8 @@
 	}: WithElementRef<HTMLTextareaAttributes> = $props();
 </script>
 
-<!-- The Input primitive's border, focus and invalid treatment, minus the pill radius: a multi-line
-	field with fully-rounded ends reads as a mistake, so it takes the card radius instead. -->
+<!-- The Input primitive's border, focus and invalid treatment minus the pill radius: rounded ends on a
+multi-line field read as a mistake. -->
 <textarea
 	bind:this={ref}
 	data-slot={dataSlot}

@@ -6,15 +6,12 @@
 
 	let { children }: { children: Snippet } = $props();
 
-	// Nothing on the admin surface is cached for offline use (see the `/admin` opt-out in the service
-	// worker), so an offline client shows an explanation instead of a soft navigation into a dead page.
 	let online = $state(true);
 	onMount(() => {
 		online = navigator.onLine;
 	});
 
-	// Only a route change gets the skeleton. A filter, sort or search navigation re-runs the same page's
-	// load, and blanking the table under someone who is typing would be worse than leaving it in place.
+	// Only a route change: blanking the table under someone typing a filter would be worse than leaving it.
 	const pending = $derived(
 		!!navigating.to &&
 			navigating.to.url.pathname.startsWith('/admin') &&

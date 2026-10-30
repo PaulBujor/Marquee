@@ -70,7 +70,6 @@ describe('openDb upgrade', () => {
 		const db = await openDb();
 
 		expect(db.objectStoreNames.contains('mediaLinks')).toBe(true);
-		// The upgrade is additive — existing projections survive it.
 		expect(await db.get('tracking', 'keep-me')).toMatchObject({ status: 'watching' });
 	});
 

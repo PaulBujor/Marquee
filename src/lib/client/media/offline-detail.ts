@@ -1,7 +1,3 @@
-/**
- * Build the detail-page view model from cached IndexedDB data when offline. Returns null when the
- * title isn't cached at all.
- */
 import { getCredits, getEpisodes, getMedia, getSeasons } from '#lib/client/idb/index.js';
 import type { ClientCredit, ClientEpisode } from '#lib/client/idb/index.js';
 import { parsePersonExternalId, tmdbMediaId, type CreditRole } from '#lib/sync/events.js';
@@ -20,7 +16,6 @@ export interface OfflineTitle {
 	season: SeasonDetail | null;
 }
 
-/** Map cached episode rows for one season into the detail page's episode list, in order. */
 export function offlineSeason(
 	seasonNumber: number,
 	name: string,
@@ -41,11 +36,7 @@ export function offlineSeason(
 	return { seasonNumber, name, overview, episodes };
 }
 
-/**
- * Split cached credits into the detail page's cast/crew shape. The page addresses a person by their
- * TMDB id (that's what `/person/[id]` takes), so a credit whose person we minted ourselves — no
- * provider id to link to — is left out rather than rendered as a dead link.
- */
+/** A credit with no provider person id is left out rather than rendered as a dead link. */
 export function offlineCredits(
 	rows: ClientCredit[]
 ): Pick<MediaDetail, 'cast' | 'director' | 'writers' | 'producers' | 'creators'> {
@@ -79,10 +70,7 @@ export function offlineCredits(
 	};
 }
 
-/**
- * Assemble an offline detail view for a TMDB title from IndexedDB, or null if it isn't cached.
- * `seasonParam` mirrors the online `?season=N` selection; absent → first non-Specials season.
- */
+/** `seasonParam` mirrors the online `?season=N`; absent → first non-Specials season. */
 export async function buildOfflineDetail(
 	type: 'movie' | 'show',
 	tmdbId: number,
@@ -91,9 +79,7 @@ export async function buildOfflineDetail(
 	try {
 		return await assembleOfflineDetail(type, tmdbId, seasonParam);
 	} catch {
-		// Store not ready (e.g. the active user isn't scoped yet on an early load) or a read failed —
-		// no offline base; the page renders its skeleton and enriches from the network instead. Never
-		// throw from here: it runs inside the page `load`, and a throw would 500 the whole page.
+		// Never throw from here: it runs inside the page `load`, and a throw would 500 the whole page.
 		return null;
 	}
 }

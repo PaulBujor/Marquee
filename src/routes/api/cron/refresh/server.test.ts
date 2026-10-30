@@ -111,10 +111,7 @@ describe('POST /api/cron/refresh', () => {
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
-	// Enqueueing never calls TMDB itself, but every message it produces does. Without a key the
-	// consumer 503s on every batch and the relay retries it, so an unguarded sweep would push the
-	// whole backlog into the dead-letter queue. Skip the enqueue and say so, like the old
-	// synchronous sweep did.
+	// Without a key every produced message 503s and the relay retries the batch, dead-lettering the backlog.
 	it('enqueues nothing when TMDB is not configured, and still purges auth', async () => {
 		const db = createTestDb();
 		await db.insert(media).values({

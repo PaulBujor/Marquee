@@ -3,7 +3,6 @@
 	import type { HTMLSelectAttributes } from 'svelte/elements';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 
-	/** A native select as a segment of an InputGroup — borderless, with a divider facing the group. */
 	type Props = Omit<HTMLSelectAttributes, 'size'> & {
 		/** Which side of the group this segment sits on; decides where its divider goes. */
 		side?: 'start' | 'end';

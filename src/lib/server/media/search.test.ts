@@ -3,7 +3,6 @@ import { createTestDb } from '#lib/server/db/test-db.js';
 import { media } from '#lib/server/db/schema.js';
 import { searchLinkedMedia } from './search';
 
-/** Seed a handful of catalog rows: two linked TMDB titles + one private custom entry. */
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>) {
 	await db.insert(media).values([
 		{
@@ -82,7 +81,6 @@ describe('searchLinkedMedia', () => {
 
 	it('returns results ordered by most recently updated first', async () => {
 		const db = await createTestDb();
-		// Seed two matching rows with different updatedAt timestamps.
 		await db.insert(media).values([
 			{
 				id: 'old',
@@ -113,8 +111,7 @@ describe('searchLinkedMedia', () => {
 
 	it('folds non-ASCII case like the offline client (matches accented titles)', async () => {
 		const db = await createTestDb();
-		// `title_normalized` holds the JS `toLowerCase()` fold (what refreshMedia writes), so an
-		// uppercase accented query matches — where SQLite's ASCII-only LIKE on `title` would not.
+		// `title_normalized` holds the JS `toLowerCase()` fold (what refreshMedia writes), so an uppercase accented query matches — where ASCII-only `LIKE` on `title` would not.
 		await db.insert(media).values({
 			id: 'ete',
 			provider: 'tmdb',

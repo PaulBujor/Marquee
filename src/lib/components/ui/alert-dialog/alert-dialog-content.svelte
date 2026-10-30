@@ -1,8 +1,4 @@
-<!--
-	`data-[state=…]:` rather than the registry's `data-open:`/`data-closed:`, and the app's dialog
-	motion (fade + rise) rather than the registry's zoom, so an alert and a dialog enter alike — see
-	`dialog-content.svelte` for both, and for why not to re-run `shadcn-svelte add alert-dialog`.
--->
+<!-- `data-[state=…]:` rather than `data-open:` — bits-ui@2.18 emits `data-state`; see `dialog-content.svelte`. -->
 <script lang="ts">
 	import { AlertDialog as AlertDialogPrimitive } from 'bits-ui';
 	import AlertDialogPortal from './alert-dialog-portal.svelte';

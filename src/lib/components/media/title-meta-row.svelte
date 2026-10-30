@@ -1,6 +1,5 @@
 <script lang="ts">
-	// Rating, runtime and genres — the row under a title's hero. Shared so the app's title page and a
-	// public shared page can't drift apart on what they show or how they lay it out.
+	// Shared so the title page and a public shared page can't drift on what they show.
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import StarIcon from '@lucide/svelte/icons/star';
 	import MediaBadge from '#lib/components/media/media-badge.svelte';

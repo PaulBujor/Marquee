@@ -20,8 +20,7 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import XIcon from '@lucide/svelte/icons/x';
 
-	// Shared tracking action row for the detail page. For a show, "mark watched" marks the whole
-	// series (confirmed, since it's hard to undo) — the season list lives on `tracking`.
+	// Marking watched marks the whole series (confirmed, since it's hard to undo); seasons live on `tracking`.
 	interface Props {
 		tracking: TrackingState;
 		type: 'movie' | 'show';
@@ -32,11 +31,8 @@
 	let markSeriesOpen = $state(false);
 
 	const view = $derived(tracking.view);
-	// For a show, trust `status === 'completed'` unless local episode data actively contradicts it —
-	// it can be stuck `completed` with episodes unmarked (see `markSeriesWatched`), but it's just as
-	// often correct with the episode data simply not synced to this device yet (`tracking.episodes`
-	// empty), in which case there's nothing to contradict it with. Movies have no episode log at all,
-	// so `status` stays authoritative there unconditionally.
+	// Trust `status === 'completed'` unless local episodes contradict it: it can be stuck completed with
+	// episodes unmarked, but empty episode data means "not synced yet", not a contradiction.
 	const done = $derived(
 		view.tracked &&
 			(type === 'show'
@@ -47,15 +43,12 @@
 	);
 	const favorite = $derived(view.tracked && view.favorite);
 	const rating = $derived(view.tracked ? view.rating : null);
-	// You can only rate something you've actually watched: never a "want to watch". Shared with the
-	// poster badge so both surfaces agree on when a rating is meaningful (see `canRate`).
+	// You can only rate something you've watched; shared with the poster badge so both surfaces agree.
 	const canRate = $derived(view.tracked && canRateStatus(type, view.status));
-	// Status is conveyed by the buttons (add / mark watched / watched). Only "didn't finish" —
-	// which the buttons can't express — gets an explicit label below them.
+	// Only "didn't finish" — which the buttons can't express — gets an explicit label.
 	const didNotFinish = $derived(view.tracked && view.status === 'did_not_finish');
 
-	// When this was watched, read off the clocks the projections already keep (see `watchedAt`).
-	// Null for anything unwatched, so the line is simply absent until there's a date to show.
+	// Read off the clocks the projections already keep (see `watchedAt`); null for anything unwatched.
 	const watchedInput = $derived(
 		view.tracked
 			? {
@@ -68,15 +61,13 @@
 	);
 	const watchedAt = $derived(watchedInput ? watchedAtFor(watchedInput) : null);
 
-	// A show you're caught up on (every aired episode watched) — no "next" remaining. Being up to
-	// date reads as "watched": you shouldn't be prompted to mark the whole series (which would also
-	// mark unaired episodes). Still-airing shows stay `watching`; this is a display concern.
+	// Caught up reads as "watched" so you're not prompted to mark the whole series (which marks unaired
+	// episodes); still-airing shows stay `watching`.
 	const caughtUp = $derived(
 		type === 'show' && view.tracked && tracking.watched.size > 0 && tracking.nextEpisode() === null
 	);
 	const watchedState = $derived(done || (caughtUp && view.tracked && view.status === 'watching'));
-	// Would a bulk mark under-seed right now (see `TrackingState.readyToMarkSeries`)? Excludes
-	// `watchedState`, since stepping back from "Watched" touches no episode data.
+	// Excludes `watchedState`: stepping back from "Watched" touches no episode data.
 	const seriesNotReady = $derived(
 		type === 'show' && !watchedState && !tracking.readyToMarkSeries()
 	);
@@ -108,8 +99,7 @@
 				Add to list
 			</Button>
 		{:else}
-			<!-- List-membership actions as one segmented control: the primary status action and
-			removing from the list. Favorite is a separate, unrelated toggle. -->
+			<!-- List-membership actions as one segmented control; favorite is a separate toggle. -->
 			<ButtonGroup>
 				<Button
 					variant="outline"
@@ -151,8 +141,7 @@
 		{/if}
 	</div>
 	{#if canRate}
-		<!-- The user's own 1–5 rating (primary accent), distinct from the TMDB /10 score in the meta
-		row. Shown only once the title's been watched (see canRate). Tap the active star or "Clear". -->
+		<!-- The user's own 1–5 rating, distinct from the TMDB /10 score in the meta row. -->
 		<div class="mt-1 flex flex-col gap-1">
 			<span class="text-xs font-medium text-muted-foreground">Your rating</span>
 			<div class="flex items-center gap-1">
@@ -185,8 +174,7 @@
 	{/if}
 </div>
 
-<!-- Remove: destructive, or keep as "didn't finish", or cancel. AlertDialog (not Dialog) — a
-destructive choice the user must resolve, so no outside-click/Escape dismiss. -->
+<!-- AlertDialog, not Dialog — a destructive choice the user must resolve, so no outside-click/Escape. -->
 <AlertDialog.Root bind:open={removeOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
@@ -195,9 +183,7 @@ destructive choice the user must resolve, so no outside-click/Escape dismiss. --
 				You can remove this title entirely, or keep it as didn't finish.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
-		<!-- Cancel first in the DOM so the footer's flex-col-reverse (mobile) stacks the
-		destructive action on top and Cancel at the bottom; sm:flex-row justify-end puts
-		Remove rightmost on desktop. -->
+		<!-- Cancel first in the DOM so the footer's flex-col-reverse stacks Remove on top on mobile. -->
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
 			<AlertDialog.Action variant="outline" onclick={chooseDidNotFinish} disabled={tracking.busy}>

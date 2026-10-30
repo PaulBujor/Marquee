@@ -54,10 +54,7 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import type { CrewMember, MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 
-	// `detail` is always present — the cached IndexedDB copy first, upgraded in place to the full
-	// network copy. `enrichState` says how to render the network-only sections (cast, trailer,
-	// similar): a skeleton while the enrichment loads, the real thing once `enriched`, or an offline
-	// placeholder when we're stuck on the cached copy.
+	// `detail` is always present (cached copy first), so network-only sections key off `enrichState` alone.
 	let {
 		detail,
 		season,
@@ -69,7 +66,6 @@
 	} = $props();
 	const offline = $derived(enrichState === 'offline');
 
-	// The full release/first-air date to spell out in the details section (movie vs show).
 	const releaseDate = $derived(detail.type === 'movie' ? detail.releaseDate : detail.firstAirDate);
 	// Format a `YYYY-MM-DD` as e.g. "16 July 2010" in UTC, so a local timezone can't shift the day.
 	const dateFmt = new Intl.DateTimeFormat(undefined, {
@@ -79,18 +75,14 @@
 		timeZone: 'UTC'
 	});
 	const formatDate = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
-	// Our own media id for the tracking event pipeline (provider-agnostic).
 	const mediaId = $derived(tmdbMediaId(detail.type, detail.tmdbId));
 	const seasons = $derived(detail.type === 'show' ? seasonCount(detail.seasons) : 0);
 	const production = $derived(
 		detail.type === 'show' ? productionState(detail.inProduction) : 'unknown'
 	);
-	// Today (YYYY-MM-DD) for the per-episode aired check — an episode is watchable once it's aired.
 	const today = todayIso();
 
-	// Media snapshot cached locally on track (renders lists offline; identity for the media
-	// channel). Built from the TMDB data the page already has — scalars only; `version: 0` marks
-	// it as behind so the media channel pulls the authoritative row (with full seasons/episodes).
+	// `version: 0` marks this snapshot as behind, so the media channel pulls the authoritative row with full seasons/episodes.
 	const mediaRecord = $derived<MediaRecord>({
 		id: mediaId,
 		provider: 'tmdb',
@@ -114,11 +106,7 @@
 		credits: null
 	});
 
-	// Reactive local tracking state (IndexedDB-backed); reloaded on sync pulls. Recreated **only when
-	// the media id changes** — not on the in-place base→enriched upgrade (which changes `detail`, and
-	// thus `mediaRecord`). A fresh instance would reset `view`/`ready`/`watched` and re-trickle the
-	// watch-status not-watched → watching → watched as it reloaded, reflowing the action row.
-	// `untrack` keeps the record/seasons reads from making this recompute on every enrichment.
+	// Recreated only when the media id changes: on the base→enriched upgrade a fresh instance would re-trickle the watch status and reflow the action row.
 	const tracking = $derived.by(() => {
 		const id = mediaId;
 		return untrack(() => new TrackingState(id, mediaRecord, detail.seasons));
@@ -127,18 +115,13 @@
 		void sync.revision;
 		tracking.load();
 	});
-	// Keeps season summaries + production status live despite `tracking`'s frozen identity above
-	// — otherwise a title opened from a stale local cache never picks up newly-synced data.
+	// Seasons + production stay live despite `tracking`'s frozen identity, or a stale cached title never picks up synced data.
 	$effect(() => {
 		tracking.updateSeasons(detail.seasons);
 		tracking.updateInProduction(detail.inProduction);
 	});
 
-	// Tracking status + favorite of the *similar* titles, for the badge + heart on each card — we
-	// already hold this offline, keyed by our derived media id. Reloaded on sync pulls / navigation.
-	// Status is derived the same way as the detail page and dashboard (see `deriveStatus`), so a show
-	// caught up on everything aired shows correctly here too, not just wherever the user happened to
-	// last take an action on it.
+	// Derived like the dashboard (`deriveStatus`), so a fully-caught-up show shows correctly here too.
 	const STATUS_LABEL: Record<TrackingStatus, string> = {
 		want_to_watch: 'On list',
 		watching: 'Watching',
@@ -188,12 +171,11 @@
 	}
 
 	let detailsOpen = $state(true);
-	// Year in the share sheet's title, so the recipient's app shows which one.
 	const shareTitle = $derived(detail.year ? `${detail.title} (${detail.year})` : detail.title);
 	let similarOpen = $state(true);
 	let showTrailer = $state(false);
 
-	// Seasons switch client-side (fetched from our JSON endpoint + cached); the load seeds the first.
+	// Seasons switch client-side from the JSON endpoint; the load seeds the first.
 	type SeasonData = SeasonDetail;
 	let selectedSeason = $state(untrack(() => season?.seasonNumber ?? null));
 	let seasonCache = $state<Record<number, SeasonData>>(
@@ -212,34 +194,27 @@
 			: null
 	);
 
-	// The loaded season carries the real synopsis; the summary stands in until it resolves.
 	const selectedSeasonOverview = $derived(
 		[currentSeason?.overview, selectedSeasonSummary?.overview].find(hasDescription) ?? null
 	);
-	// Whether a bulk mark of the selected season right now would under-seed — see
-	// `TrackingState.readyToMarkSeason`.
 	const seasonNotReady = $derived(
 		selectedSeasonSummary !== null &&
 			!tracking.readyToMarkSeason(selectedSeasonSummary.seasonNumber)
 	);
 	let seasonConfirmOpen = $state(false);
 
-	// Enrichment upgrades the page in place (no navigation): when a fresher `season` prop arrives —
-	// e.g. the offline-seeded episode list replaced by the enriched network copy — fold it into the
-	// cache so the open season upgrades too. afterNavigate covers the navigation case; this covers the
-	// streamed in-place swap. Keyed by season number, so it never disturbs the user's own selection.
+	// The streamed in-place swap replaces the `season` prop; fold it into the cache so the open season upgrades too.
 	$effect(() => {
 		if (!season) return;
 		const s = season;
 		seasonCache[s.seasonNumber] = s;
 	});
 
-	// Episode title from the cached season data, if that season has been fetched.
 	function episodeName(season: number, episode: number): string | undefined {
 		return seasonCache[season]?.episodes.find((e) => e.episodeNumber === episode)?.name;
 	}
 
-	// The fixed header reveals the title once the in-content <h1> scrolls out of view.
+	// Header reveals the title once the <h1> scrolls past it (-56px is the header height).
 	let titleEl = $state<HTMLElement | null>(null);
 	let titleInView = $state(true);
 	$effect(() => {
@@ -254,9 +229,7 @@
 		return () => io.disconnect();
 	});
 
-	// Shrink the hero title's font until the full name fits in at most two lines, so a long title
-	// stays in place over the hero instead of wrapping up into the artwork. Re-runs when the title
-	// changes and on viewport resize; floors at 15px (then it may wrap, but that's the rare extreme).
+	// Shrink until the name fits two lines so a long title stays over the hero; floors at 15px.
 	const MIN_TITLE_PX = 15;
 	$effect(() => {
 		const el = titleEl;
@@ -277,8 +250,7 @@
 		return () => window.removeEventListener('resize', fit);
 	});
 
-	// Pre-select the season of the next watchable episode once watch state loads (season 1 when
-	// caught up). Runs after the SSR seed / nav reset; `preselectedFor` keeps it to once per title.
+	// `preselectedFor` keeps this to once per title, after the SSR seed / nav reset.
 	$effect(() => {
 		if (detail.type !== 'show' || !tracking.ready || preselectedFor === mediaId) return;
 		preselectedFor = mediaId;
@@ -288,24 +260,16 @@
 		}
 	});
 
-	// Suggestion-chain origin. Each "Similar" link carries the chain's origin forward in `?from=`, so
-	// however deep the chain runs, a cold-opened title still knows where the chain began (home, or
-	// the search that started it) and the back control has somewhere sensible to land. Rewinding the
-	// whole chain in one go no longer needs its own control — the tab bar is always on screen.
+	// Each "Similar" link carries the chain's origin in `?from=`, so a cold-opened title still knows where the chain began.
 	const originParam = $derived(page.url.searchParams.get('from'));
-	// The origin to return to: the carried `?from` param, else where this title was entered from (home
-	// or a search, tracked in the shared navigation state), else home.
 	const origin = $derived(originParam ?? navigation.entryOrigin);
 
-	/** A "Similar" card's href: the same route, carrying the chain's origin forward. */
 	function similarHref(type: 'movie' | 'show', id: number): string {
 		const path = resolve('/title/[type]/[id]', { type, id: String(id) });
 		return `${path}?from=${encodeURIComponent(origin)}`;
 	}
 
-	// Reset the per-title view state whenever the media changes — a title → title hop via a "Similar"
-	// link reuses this component. The entering navigation's origin lives in the shared `navigation`
-	// state (fed by the root layout), so it no longer needs to be captured here.
+	// A "Similar" hop reuses this component, so the per-title view state must reset on the media change.
 	afterNavigate(({ shallow, type }) => {
 		if (shallow && type === 'goto') return;
 
@@ -319,8 +283,7 @@
 	});
 
 	function goToOrigin() {
-		// `origin` is a runtime URL (home, or a search + query) carried in `?from=`, so it can't be a
-		// branded resolve() result — same shape as the search/home query-string navigations.
+		// `origin` is a runtime URL carried in `?from=`, so it can't be a branded resolve() result.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		goto(origin);
 	}
@@ -334,7 +297,6 @@
 		if (seasonNumber === selectedSeason) return;
 		selectedSeason = seasonNumber; // highlight immediately; episodes fill in when fetched
 		if (seasonCache[seasonNumber]) return;
-		// Offline: build the season's episode list from cached IndexedDB data instead of the network.
 		if (offline) {
 			const summary = detail.seasons.find((s) => s.seasonNumber === seasonNumber);
 			seasonCache[seasonNumber] = offlineSeason(
@@ -368,8 +330,7 @@
 		}
 	}
 
-	/** A cast or crew member's own page. Un-annotated so `resolve()`'s branded type survives — the
-	 * lint rule that requires resolved hrefs keys on it. */
+	/** Un-annotated so `resolve()`'s branded type survives; the resolved-href lint rule keys on it. */
 	function personHref(id: number) {
 		return resolve('/person/[id]', { id: String(id) });
 	}
@@ -379,8 +340,7 @@
 	<title>{detail.title} · Marquee</title>
 </svelte:head>
 
-<!-- A comma-separated crew list where each name links to that person. The separator's space is
-an entity because Svelte trims a literal trailing space at the end of an element. -->
+<!-- The separator's space is an entity: Svelte trims a literal trailing space at the end of an element. -->
 {#snippet crewNames(members: CrewMember[])}
 	{#each members as member, i (member.id)}
 		{#if i > 0}
@@ -394,17 +354,13 @@ an entity because Svelte trims a literal trailing space at the end of an element
 	{/each}
 {/snippet}
 
-<!-- Fixed header over the hero: the back control is always reachable, but the blur backing + title
-fade in together only once the in-content <h1> scrolls out of view — over the hero the header is
-fully transparent. Blur is stronger here (over artwork) than the other headers. -->
+<!-- Transparent over the hero; the blur backing and title only appear once the <h1> scrolls out of view. -->
 <header class="fixed inset-x-0 top-0 z-40">
 	<HeaderScrim strong show={!titleInView} />
-	<!-- Inset equally on all three sides that frame the control, matching the app header. -->
 	<div
 		class="relative mx-auto flex w-full items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
 	>
-		<!-- Ghost: no plate, so it sits as lightly as possible on the hero artwork. `icon-lg` is 44px —
-		a full touch target even though nothing is drawn around it. -->
+		<!-- Ghost, no plate, over artwork; `icon-lg` is 44px so the target is full-size even with nothing drawn. -->
 		<Button
 			onclick={goBack}
 			variant="ghost"
@@ -456,7 +412,6 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			? '-mt-14'
 			: 'pt-[calc(4.75rem+env(safe-area-inset-top))]'}"
 	>
-		<!-- Poster overlaps the bottom of the backdrop; title/badges sit alongside it. -->
 		<div class="flex items-end gap-4">
 			<div class="w-24 shrink-0">
 				<PosterTile
@@ -467,8 +422,6 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				/>
 			</div>
 			<div class="flex min-w-0 flex-1 flex-col gap-2 pb-1">
-				<!-- Scaled down to fit ~two lines in place (see the fit effect), so a long title stays
-				put instead of growing up into the hero artwork. -->
 				<h1
 					bind:this={titleEl}
 					class="font-serif text-2xl leading-tight font-semibold text-balance break-words"
@@ -496,9 +449,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			genres={detail.genres}
 		/>
 
-		<!-- Watch-tracking controls, above the description. Held behind a fixed-height placeholder
-		     until the tracking read resolves, so the row paints once in its final state instead of
-		     stepping through intermediate ones and reflowing everything below it. -->
+		<!-- Placeholder until the tracking read resolves, so the row paints once in its final height instead of reflowing. -->
 		<div class="flex flex-col gap-2">
 			{#if !tracking.ready}
 				<div class="flex items-center gap-2" aria-hidden="true">
@@ -511,13 +462,10 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 				{/if}
 				<TrackingControls {tracking} type={detail.type} />
 			{/if}
-			<!-- Only renders when one of the user's own entries was matched to this title. That entry has
-			no route of its own once linked — it's off every list and out of search — so this is the one
-			place the association stays visible and reversible. -->
+			<!-- Only when a custom entry was matched here: once linked it is off every list, so this is the only place the link stays reversible. -->
 			<LinkedEntryNotice {mediaId} />
 		</div>
 
-		<!-- Collapsible details: overview, cast, trailer -->
 		<div class="flex flex-col gap-4">
 			<button
 				type="button"
@@ -569,7 +517,6 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 					{/if}
 
 					{#if enrichState === 'loading'}
-						<!-- Cast + trailer skeletons while the network detail streams in over the cached copy. -->
 						<div class="flex flex-col gap-4">
 							<ul class="no-scrollbar flex gap-3.5 overflow-x-auto pb-1">
 								{#each [0, 1, 2, 3, 4, 5] as i (i)}
@@ -582,7 +529,6 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 							<Skeleton class="aspect-video w-full rounded-md" />
 						</div>
 					{:else if offline}
-						<!-- Cast, trailer, and similar come from TMDB and aren't cached for offline. -->
 						<OfflineState
 							message="Cast, the trailer, and similar titles aren't available offline."
 							class="py-6"
@@ -626,7 +572,6 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			{/if}
 		</div>
 
-		<!-- Similar titles: TMDB recommendations + similar merged, deduped. Collapsible. -->
 		{#if enrichState === 'loading'}
 			<section class="flex flex-col gap-3">
 				<div class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Similar</div>
@@ -657,9 +602,7 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 						{#each detail.similar as item (item.tmdbId)}
 							{@const st = similarState[tmdbMediaId(item.type, item.tmdbId)]}
 							<li class="w-24 shrink-0">
-								<!-- Carry the chain origin + hop count forward, so a deep chain can jump back to
-								where it started while normal Back still steps one title at a time. The href is
-								built from resolve() + a query string, which drops resolve()'s branded type. -->
+								<!-- Chain origin carried forward in `?from=`; the href is resolve() + a query string, which drops the branded type. -->
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 								<a href={similarHref(item.type, item.tmdbId)} class="block">
 									<PosterTile
@@ -684,7 +627,6 @@ fully transparent. Blur is stronger here (over artwork) than the other headers. 
 			</section>
 		{/if}
 
-		<!-- Seasons + episodes (shows only) -->
 		{#if detail.type === 'show' && detail.seasons.length > 0}
 			<section class="flex flex-col gap-3">
 				<h2 class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Seasons</h2>

@@ -42,9 +42,8 @@ describe('exportFilename', () => {
 		);
 	});
 
-	// Either side of local midnight the UTC date differs from the user's, in opposite directions
-	// depending on the sign of the offset. Asserting both means this holds in any timezone — and
-	// catches a UTC-based implementation wherever the runner happens to sit.
+	// Either side of local midnight the UTC date differs, so asserting both pins local-calendar
+	// behaviour in any timezone — and catches a UTC-based implementation wherever the runner sits.
 	it('uses the calendar date the user sees late at night, not UTC', () => {
 		expect(exportFilename(new Date(2026, 7, 1, 23, 30, 0))).toBe('marquee-export-2026-08-01.json');
 	});

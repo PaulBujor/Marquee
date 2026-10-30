@@ -10,10 +10,6 @@
 	import type { MediaCredit } from '#lib/sync/events.js';
 	import type { MediaDetail, MediaSearchResult } from '#lib/server/tmdb/index.js';
 
-	/**
-	 * Side-by-side comparison of a custom entry and a database candidate, with credit overlap
-	 * highlights. Presentational — the parent owns fetching detail and performing the link.
-	 */
 	interface Props {
 		entry: ClientMedia;
 		entrySeasons: ClientSeason[];
@@ -75,7 +71,6 @@
 	</div>
 
 	<div class="grid gap-4 sm:grid-cols-2">
-		<!-- The user's entry -->
 		<section class="flex flex-col gap-3 rounded-lg border border-dashed border-border p-3">
 			<h3 class="text-xs font-medium text-muted-foreground">Your entry</h3>
 			<div class="flex gap-3">
@@ -104,7 +99,6 @@
 			/>
 		</section>
 
-		<!-- The candidate -->
 		<section class="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
 			<h3 class="text-xs font-medium text-muted-foreground">Database entry</h3>
 			<div class="flex gap-3">

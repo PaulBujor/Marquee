@@ -23,7 +23,6 @@ type Db = ReturnType<typeof createTestDb>;
 const MEDIA_ID = 'media-1';
 const future = new Date(Date.now() + 86_400_000);
 
-/** Create a user and seed one row in every user-scoped table, so deletion has something to clear. */
 async function seedUserWithData(db: Db, email: string): Promise<User> {
 	await db.insert(users).values({ email, status: 'enabled' });
 	const user = (await db.select().from(users).where(eq(users.email, email)))[0];
@@ -74,7 +73,6 @@ async function seedUserWithData(db: Db, email: string): Promise<User> {
 	return user;
 }
 
-/** Count of a user's remaining rows across every table deletion should clear (one per table). */
 async function countUserRows(db: Db, user: User): Promise<number> {
 	const uid = user.id;
 	const counts = await Promise.all([

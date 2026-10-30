@@ -11,7 +11,6 @@
 	let busy = $state(false);
 	let errored = $state(false);
 
-	// Rough on-device usage, shown so the user can see the offline copy's footprint.
 	let usage = $state<string | null>(null);
 	$effect(() => {
 		estimateStorage().then((e) => {
@@ -19,8 +18,6 @@
 		});
 	});
 
-	// "Last synced" is shown at all times so it's clear how current the offline copy is — and how much
-	// a "clear local data" would discard when there are unsynced offline changes.
 	const online = $derived(sync.online);
 	const lastSyncAt = $derived(sync.lastSyncAt);
 	const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
@@ -47,8 +44,7 @@
 		busy = true;
 		errored = false;
 		try {
-			// Flush pending local events first so a wipe doesn't drop unsynced edits (best-effort —
-			// offline, there's nothing to push and we proceed anyway).
+			// Flush first so a wipe can't drop unsynced edits; offline there is nothing to push, so proceed.
 			await runSync().catch((err) => console.warn('clear local data: pre-wipe flush failed', err));
 			sync.stop();
 			await wipeLocalData();

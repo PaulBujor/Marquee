@@ -2,7 +2,6 @@
 	import { cn, type WithElementRef } from '#lib/utils.js';
 	import type { HTMLInputAttributes } from 'svelte/elements';
 
-	/** The text field inside an {@link InputGroup} — borderless, because the group draws the border. */
 	let {
 		ref = $bindable(null),
 		value = $bindable(),

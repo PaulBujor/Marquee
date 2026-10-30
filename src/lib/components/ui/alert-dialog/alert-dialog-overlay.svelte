@@ -1,8 +1,4 @@
-<!--
-	`data-[state=…]:` rather than the registry's `data-open:`/`data-closed:`, and the same motion as
-	`dialog-overlay.svelte` — see `dialog-content.svelte` for both, and for why not to re-run
-	`shadcn-svelte add alert-dialog` over this.
--->
+<!-- `data-[state=…]:` rather than `data-open:` — bits-ui@2.18 emits `data-state`; see `dialog-content.svelte`. -->
 <script lang="ts">
 	import { AlertDialog as AlertDialogPrimitive } from 'bits-ui';
 	import { cn } from '#lib/utils.js';

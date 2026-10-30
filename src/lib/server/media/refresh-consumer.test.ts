@@ -67,7 +67,6 @@ function seasonDetail(seasonNumber: number): SeasonDetail {
 	};
 }
 
-/** A stub that always succeeds. */
 function workingTmdb() {
 	return {
 		async getDetails(): Promise<MediaDetail> {
@@ -136,9 +135,7 @@ describe('processMediaRefreshBatch', () => {
 		expect(row.refreshedAt).toBe(T0);
 	});
 
-	// A failed detail fetch used to be swallowed by refreshMedia, which returned the stored row —
-	// indistinguishable from a successful no-op refresh, so the title was acked and silently left
-	// stale for a full day. It has to be retried like any other failure.
+	// A failed detail fetch used to be swallowed by refreshMedia, which returned the stored row — indistinguishable from a successful no-op, so the title was acked and silently left stale for a day.
 	it('retries a title whose detail fetch fails, and leaves it stale', async () => {
 		const db = createTestDb();
 		await seedMedia(db, 'show/9');

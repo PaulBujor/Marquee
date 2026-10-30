@@ -3,12 +3,7 @@ import { error, json } from '@sveltejs/kit';
 import { createTmdbClient, TmdbError } from '#lib/server/tmdb/index.js';
 import type { RequestHandler } from './$types';
 
-/**
- * Media detail (+ one season's episodes for shows) as JSON, fetched by the title page's universal
- * load. Keeping the TMDB call behind an API route lets the page be a universal `+page.ts` that can
- * fall back to IndexedDB when this is unreachable (offline) — so a tracked title still renders.
- * Auth-gated; the TMDB key stays server-side. `?season=N` selects which season's episodes to embed.
- */
+/** Behind an API route so the universal `+page.ts` can fall back to IndexedDB when this is unreachable. */
 export const GET: RequestHandler = async ({ locals, params, url }) => {
 	if (!locals.user) error(401, 'Unauthorized.');
 
@@ -24,8 +19,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 		const client = createTmdbClient(apiKey);
 		const detail = await client.getDetails(type, id);
 
-		// For shows, embed one season's episodes: the `?season=N` param when it names a real season,
-		// else the first non-Specials season (or the first TMDB lists).
+		// `?season=N` when it names a real season, else the first non-Specials season.
 		if (detail.type === 'show' && detail.seasons.length > 0) {
 			const raw = url.searchParams.get('season');
 			const requested = raw && raw.trim() !== '' ? Number(raw) : NaN;

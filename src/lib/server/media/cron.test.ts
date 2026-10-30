@@ -38,15 +38,14 @@ describe('enqueueStaleMedia', () => {
 	it('enqueues in-production shows + unreleased movies (skips finished shows + released movies)', async () => {
 		const db = createTestDb();
 		await seedMedia(db, 'show/1', { type: 'show', inProduction: true });
-		await seedMedia(db, 'show/2', { type: 'show', inProduction: false }); // finished → skip
-		await seedMedia(db, 'movie/3', { type: 'movie', releaseDate: null }); // undated → unreleased
-		await seedMedia(db, 'movie/4', { type: 'movie', releaseDate: '2027-01-01' }); // future → unreleased
-		await seedMedia(db, 'movie/5', { type: 'movie', releaseDate: '2020-01-01' }); // released → skip
+		await seedMedia(db, 'show/2', { type: 'show', inProduction: false });
+		await seedMedia(db, 'movie/3', { type: 'movie', releaseDate: null });
+		await seedMedia(db, 'movie/4', { type: 'movie', releaseDate: '2027-01-01' });
+		await seedMedia(db, 'movie/5', { type: 'movie', releaseDate: '2020-01-01' });
 
 		const queue = createMemoryQueue<MediaRefreshMessage>();
 		const result = await enqueueStaleMedia(db, queue, T0);
 
-		// show/1 + movie/3 + movie/4 are unsettled; show/2 + movie/5 are settled.
 		expect(result).toEqual({ scanned: 3, queued: 3, capped: false });
 		expect(queue.items).toHaveLength(3);
 		expect(queue.items.map((m) => m.externalId).sort()).toEqual(['movie/3', 'movie/4', 'show/1']);
@@ -95,8 +94,7 @@ describe('enqueueStaleMedia', () => {
 		expect(queue.items).toHaveLength(1);
 	});
 
-	// Exercised against an injected cap rather than ENQUEUE_MAX: the behaviour under test is the
-	// boundary itself, and seeding 5000+ rows to prove it costs seconds and grows with the ceiling.
+	// Exercised against an injected cap: seeding 5000+ rows to prove the boundary costs seconds.
 	it('caps a run at the enqueue ceiling and reports the overflow', async () => {
 		const db = createTestDb();
 		for (let i = 0; i < 7; i++) {
@@ -107,8 +105,7 @@ describe('enqueueStaleMedia', () => {
 		expect(result.queued).toBe(5);
 		expect(result.capped).toBe(true);
 		expect(queue.items).toHaveLength(5);
-		// The per-branch read stops at `max + 1`, so `scanned` proves overflow without being the
-		// full population count.
+		// The per-branch read stops at `max + 1`, so `scanned` proves overflow without the full count.
 		expect(result.scanned).toBe(6);
 	});
 

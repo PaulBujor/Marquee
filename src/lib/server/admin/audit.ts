@@ -26,10 +26,7 @@ export interface AuditEntry {
 	ip?: string | null;
 }
 
-/**
- * Returns the insert instead of performing it, so callers can put it in the same `db.batch` as the
- * mutation it describes: the change and its audit row commit together, or neither does.
- */
+// Returns the insert so callers can batch it with the mutation: the change and its audit row commit together.
 export function auditStatement(db: Db, entry: AuditEntry) {
 	return db.insert(adminAudit).values({
 		actorUserId: entry.actor.id,
