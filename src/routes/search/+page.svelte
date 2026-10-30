@@ -39,6 +39,7 @@
 	import Link2Icon from '@lucide/svelte/icons/link-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { PageData } from './$types';
+	import { navigate } from '#lib/client/navigate.js';
 
 	let { data }: { data: PageData } = $props();
 
@@ -241,9 +242,7 @@
 	function pushQuery(q: string) {
 		const path = resolve('search');
 		const target = q ? `${path}?q=${encodeURIComponent(q)}` : path;
-		// The path is resolved; appending a query string drops resolve()'s branded type, which the rule keys on.
-		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		return goto(target, { replace: true, reset: false });
+		return navigate(target, { replace: true, reset: false });
 	}
 
 	async function commit() {

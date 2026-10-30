@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import DataTable from '#lib/components/data-table/data-table.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import type { PageData } from './$types';
+	import { navigate } from '#lib/client/navigate.js';
 
 	let { data }: { data: PageData } = $props();
 
@@ -27,9 +27,7 @@
 			if (value.trim()) params.push(`q=${encodeURIComponent(value.trim())}`);
 			params.push(`sort=${encodeURIComponent(sortValue)}`);
 			const target = `${usersPath}?${params.join('&')}`;
-			// The path is resolved; appending a query string drops resolve()'s branded type, which the rule keys on.
-			// eslint-disable-next-line svelte/no-navigation-without-resolve
-			goto(target, { replace: true, reset: false });
+			navigate(target, { replace: true, reset: false });
 		}, DEBOUNCE_MS);
 	}
 

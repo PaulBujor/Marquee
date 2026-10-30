@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import * as Card from '#lib/components/ui/card/index.js';
+	import BackButton from '#lib/components/back-button.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Textarea } from '#lib/components/ui/textarea/index.js';
@@ -13,9 +14,7 @@
 	<title>{data.target.email} · Admin</title>
 </svelte:head>
 
-<a href={resolve('/admin/users')} class="text-sm text-muted-foreground underline underline-offset-2"
-	>← All users</a
->
+<BackButton fallback={resolve('/admin/users')} label="All users" />
 
 <h1 class="mt-3 text-xl font-semibold break-all">{data.target.email}</h1>
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { afterNavigate, goto } from '$app/navigation';
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { flip } from 'svelte/animate';
 	import { fade, slide } from 'svelte/transition';
@@ -32,6 +32,7 @@
 	import { canRate } from '#lib/tracking/actions.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import type { PageData } from './$types';
+	import { navigate } from '#lib/client/navigate.js';
 
 	let { data }: { data: PageData } = $props();
 
@@ -120,8 +121,7 @@
 		const qs = parts.join('&');
 		const target = qs ? `/?${qs}` : '/';
 		if (page.url.pathname === '/' && target !== `${page.url.pathname}${page.url.search}`) {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- own route + query string
-			goto(target, { replace: true, reset: false });
+			navigate(target, { replace: true, reset: false });
 		}
 	});
 
