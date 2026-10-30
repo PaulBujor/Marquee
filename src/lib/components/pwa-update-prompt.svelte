@@ -57,7 +57,8 @@
 		// Re-check for a deploy on foreground; re-surface the toast if a worker still waits (dismissed earlier).
 		const onVisible = () => {
 			if (document.visibilityState !== 'visible') return;
-			registration?.update();
+			// Backgrounding aborts the check, which rejects with AbortError and is not a failure.
+			void registration?.update().catch(() => {});
 			if (waiting) showUpdateToast();
 		};
 		document.addEventListener('visibilitychange', onVisible);
