@@ -115,6 +115,23 @@ export function renderAccountRestoredEmail(): string {
 	);
 }
 
+export function renderWaitlistDigestEmail(
+	pending: { email: string; signedUpAt: string }[]
+): string {
+	const rows = pending
+		.map(
+			(entry) =>
+				`<li style="margin: 0 0 4px;">${escapeHtml(entry.email)} <span style="${MUTED}">${escapeHtml(entry.signedUpAt)}</span></li>`
+		)
+		.join('');
+	return layout(
+		pending.length === 1 ? '1 account is waiting' : `${pending.length} accounts are waiting`,
+		`<p>These people signed up and are waiting to be admitted:</p>
+		<ul style="margin: 0; padding-left: 18px;">${rows}</ul>
+		<p style="${MUTED}">Admit them from Admin → Users.</p>`
+	);
+}
+
 export function renderAccountDeletedEmail(): string {
 	return layout(
 		'Your account has been deleted',
