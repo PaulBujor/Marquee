@@ -16,6 +16,17 @@
 		{ status: 'enabled', label: 'Enabled', value: data.counts.enabled, hint: 'can sign in' },
 		{ status: 'blocked', label: 'Blocked', value: data.counts.blocked, hint: 'denied access' }
 	]);
+
+	const usage = $derived([
+		{ label: 'Movies', value: data.usage.movies },
+		{ label: 'Series', value: data.usage.shows },
+		{ label: 'Watched', value: data.usage.watched },
+		{ label: 'Episodes watched', value: data.usage.episodesWatched },
+		{ label: 'Favourites', value: data.usage.favourites },
+		{ label: 'Rated', value: data.usage.rated },
+		{ label: 'Active 7d', value: data.usage.activeWeek },
+		{ label: 'Active 30d', value: data.usage.activeMonth }
+	]);
 </script>
 
 <form class="grid grid-cols-3 gap-3" method="GET" action={usersPath}>
@@ -32,3 +43,13 @@
 		</button>
 	{/each}
 </form>
+
+<h2 class="mt-8 text-sm font-medium">Library</h2>
+<dl class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+	{#each usage as item (item.label)}
+		<div class="rounded-xl p-4 ring-1 ring-foreground/10">
+			<dt class="text-xs text-muted-foreground">{item.label}</dt>
+			<dd class="mt-1 font-serif text-2xl font-semibold tabular-nums">{item.value}</dd>
+		</div>
+	{/each}
+</dl>
