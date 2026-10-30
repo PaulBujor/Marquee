@@ -1,21 +1,6 @@
 import { and, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { createDb } from '#lib/server/db/index.js';
-import {
-	emailChangeTokens,
-	episodeWatches,
-	events,
-	loginTokens,
-	media,
-	notificationLog,
-	people,
-	pushSubscriptions,
-	sessions,
-	sharePreviewWarms,
-	syncState,
-	tracking,
-	users,
-	type User
-} from '#lib/server/db/schema.js';
+import { loginTokens, users, type User } from '#lib/server/db/schema.js';
 import type { EmailSender } from '#lib/server/email/index.js';
 import {
 	renderCodeEmail,
@@ -257,7 +242,8 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
 	if (consumed.length === 0) return { ok: false, reason: 'invalid' };
 
 	const user = (await db.select().from(users).where(eq(users.email, email)).limit(1)).at(0);
-	if (!user || user.status !== 'enabled' || user.deletedAt) return { ok: false, reason: 'not_allowed' };
+	if (!user || user.status !== 'enabled' || user.deletedAt)
+		return { ok: false, reason: 'not_allowed' };
 
 	const { token, expiresAt } = await createSession(db, user.id);
 	return { ok: true, user, token, expiresAt };

@@ -100,7 +100,10 @@ export async function softDeleteUser(
 	}
 
 	await db.batch([
-		db.update(users).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, targetId)),
+		db
+			.update(users)
+			.set({ deletedAt: new Date(), updatedAt: new Date() })
+			.where(eq(users.id, targetId)),
 		db.delete(sessions).where(eq(sessions.userId, targetId)),
 		auditStatement(db, {
 			actor,

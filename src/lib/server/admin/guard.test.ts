@@ -10,6 +10,7 @@ function makeUser(role: 'user' | 'admin'): User {
 		status: 'enabled',
 		role,
 		blockedReason: null,
+		deletedAt: null,
 		signupIp: null,
 		createdAt: new Date(),
 		updatedAt: new Date()

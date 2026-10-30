@@ -66,5 +66,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			.where(where)
 	]);
 
-	return { rows, page, pageSize: PAGE_SIZE, total: Number(totals?.total ?? 0), status, deletedOnly, q, sort };
+	return {
+		rows,
+		page,
+		pageSize: PAGE_SIZE,
+		total: Number(totals?.total ?? 0),
+		status,
+		deletedOnly,
+		q,
+		sort
+	};
 };
