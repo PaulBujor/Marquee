@@ -118,7 +118,7 @@
 
 {#snippet adminCell(row: Row)}
 	{#if row.role === 'admin'}
-		<Badge variant="outline">admin</Badge>
+		<Badge variant="outline">Admin</Badge>
 	{:else}
 		<span class="text-muted-foreground">—</span>
 	{/if}

@@ -29,7 +29,7 @@
 		class="capitalize">{data.target.status}</Badge
 	>
 	{#if data.target.role === 'admin'}
-		<Badge variant="outline">admin</Badge>
+		<Badge variant="outline">Admin</Badge>
 	{/if}
 </div>
 
