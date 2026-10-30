@@ -6,10 +6,6 @@
 		headers wouldn't clear the Dynamic Island and the bottom bar would sit under the home
 		indicator. -->
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-		<!-- iOS renders an installed app fullscreen by default since 26 and then draws its own blur over
-		the top, which swallowed the header wordmark on iOS 27; naming the style keeps content below it.
-		iOS reads this at install time, so an existing Home Screen app has to be removed and re-added. -->
-		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 		<meta name="text-scale" content="scale" />
 		<!-- Apply the theme before first paint to avoid a light-mode flash. Mirrors
 		theme.svelte.ts; the layout's $effect takes over after hydration. -->
