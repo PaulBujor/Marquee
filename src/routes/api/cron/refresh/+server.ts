@@ -5,6 +5,7 @@ import type { MediaRefreshMessage } from '#lib/server/media/refresh-consumer.js'
 import { cloudflareQueueProducer } from '#lib/server/queue/cloudflare.js';
 import type { QueueProducer } from '#lib/server/queue/types.js';
 import { purgeExpiredAuth } from '#lib/server/auth/cleanup.js';
+import { purgeDueUsers } from '#lib/server/auth/deletion.js';
 import { purgeSharePreviewWarms, purgeSharePreviews } from '#lib/server/share/preview.js';
 import type { createDb } from '#lib/server/db/index.js';
 import { isAuthorizedCronRequest } from '#lib/server/http/secret.js';
@@ -41,6 +42,19 @@ async function purgeAuth(db: Db) {
 	}
 }
 
+async function purgeDeletedAccounts(db: Db) {
+	try {
+		const purged = await purgeDueUsers(db);
+		if (purged > 0) {
+			console.log(`cron: purged ${purged} account(s) past their deletion grace period`);
+		}
+		return { ok: true as const, purged };
+	} catch (err) {
+		console.error('cron: account purge failed', err);
+		return { ok: false as const, error: 'account purge failed' };
+	}
+}
+
 async function purgeShareData(db: Db) {
 	try {
 		const warms = await purgeSharePreviewWarms(db, Date.now());
@@ -72,7 +86,8 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
 		? await enqueueMedia(locals.db, cloudflareQueueProducer(env.MEDIA_REFRESH_QUEUE), force)
 		: { ok: false as const, error: 'TMDB is not configured.' };
 	const auth = await purgeAuth(locals.db);
+	const accounts = await purgeDeletedAccounts(locals.db);
 	const share = await purgeShareData(locals.db);
 
-	return json({ media, auth, share });
+	return json({ media, auth, accounts, share });
 };

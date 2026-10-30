@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { requireAdmin } from '#lib/server/admin/guard.js';
 import { orderBy, parseSort } from '#lib/server/admin/sort.js';
@@ -30,6 +30,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.db) error(503, 'Service unavailable');
 
 	const status = parseStatus(url.searchParams.get('status'));
+	const deletedOnly = url.searchParams.get('status') === 'deleted';
 	const q = (url.searchParams.get('q') ?? '').trim();
 	const page = Math.max(1, Number(url.searchParams.get('page') ?? '1') || 1);
 	const sort = parseSort(url.searchParams.get('sort'), SORT_KEYS, {
@@ -37,7 +38,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		dir: 'desc'
 	});
 
-	const filters: SQL[] = [];
+	const filters: SQL[] = [deletedOnly ? isNotNull(users.deletedAt) : isNull(users.deletedAt)];
 	if (status) filters.push(eq(users.status, status));
 	if (q) filters.push(sql`${users.email} LIKE ${`%${escapeLike(q)}%`} ESCAPE '\\'`);
 	const where = filters.length ? and(...filters) : undefined;
@@ -50,6 +51,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				status: users.status,
 				role: users.role,
 				blockedReason: users.blockedReason,
+				deletedAt: users.deletedAt,
 				signupIp: users.signupIp,
 				createdAt: users.createdAt
 			})
@@ -64,5 +66,5 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			.where(where)
 	]);
 
-	return { rows, page, pageSize: PAGE_SIZE, total: Number(totals?.total ?? 0), status, q, sort };
+	return { rows, page, pageSize: PAGE_SIZE, total: Number(totals?.total ?? 0), status, deletedOnly, q, sort };
 };

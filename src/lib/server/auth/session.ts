@@ -41,7 +41,12 @@ export async function validateSession(
 
 	const now = Date.now();
 	// A user blocked after signing in must lose their session on the next request.
-	if (row.session.expiresAt.getTime() <= now || row.user.status !== 'enabled') {
+	// A soft-deleted account keeps status 'enabled', so the deleted flag has to be checked as well.
+	if (
+		row.session.expiresAt.getTime() <= now ||
+		row.user.status !== 'enabled' ||
+		row.user.deletedAt
+	) {
 		await db.delete(sessions).where(eq(sessions.id, id));
 		return null;
 	}

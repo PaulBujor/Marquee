@@ -23,6 +23,7 @@ import {
 	renderWaitlistEmail
 } from '#lib/server/email/templates.js';
 import { createSession } from './session';
+import { deleteUserCascade } from './deletion.js';
 import { generateCode, generateToken, hashToken } from './tokens';
 import { normalizeEmail } from './validation';
 import { safeRedirectPath } from '#lib/redirect.js';
@@ -256,7 +257,7 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
 	if (consumed.length === 0) return { ok: false, reason: 'invalid' };
 
 	const user = (await db.select().from(users).where(eq(users.email, email)).limit(1)).at(0);
-	if (!user || user.status !== 'enabled') return { ok: false, reason: 'not_allowed' };
+	if (!user || user.status !== 'enabled' || user.deletedAt) return { ok: false, reason: 'not_allowed' };
 
 	const { token, expiresAt } = await createSession(db, user.id);
 	return { ok: true, user, token, expiresAt };
@@ -264,21 +265,7 @@ async function consumeAndMint(db: Db, id: string, email: string): Promise<Verify
 
 /** Delete children before the `users` row: D1 doesn't enforce the cascade everywhere; shared catalog rows stay. */
 export async function deleteAccount(db: Db, user: User): Promise<void> {
-	await db.batch([
-		db.delete(emailChangeTokens).where(eq(emailChangeTokens.userId, user.id)),
-		db.delete(sessions).where(eq(sessions.userId, user.id)),
-		db.delete(loginTokens).where(eq(loginTokens.email, user.email)),
-		db.delete(events).where(eq(events.userId, user.id)),
-		db.delete(syncState).where(eq(syncState.userId, user.id)),
-		db.delete(tracking).where(eq(tracking.userId, user.id)),
-		db.delete(episodeWatches).where(eq(episodeWatches.userId, user.id)),
-		db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, user.id)),
-		db.delete(notificationLog).where(eq(notificationLog.userId, user.id)),
-		db.delete(sharePreviewWarms).where(eq(sharePreviewWarms.userId, user.id)),
-		db.delete(media).where(eq(media.ownerUserId, user.id)),
-		db.delete(people).where(eq(people.ownerUserId, user.id)),
-		db.delete(users).where(eq(users.id, user.id))
-	]);
+	await deleteUserCascade(db, user);
 }
 
 async function isRateLimited(db: Db, email: string, ip?: string | null): Promise<boolean> {

@@ -37,6 +37,7 @@ export const users = sqliteTable(
 		status: text('status', { enum: USER_STATUSES }).notNull().default('pending'),
 		role: text('role', { enum: USER_ROLES }).notNull().default('user'),
 		blockedReason: text('blocked_reason'),
+		deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 		signupIp: text('signup_ip'),
 		createdAt: integer('created_at', { mode: 'timestamp' })
 			.notNull()

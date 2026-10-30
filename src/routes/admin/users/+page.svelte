@@ -32,7 +32,7 @@
 	}
 
 	const usersPath = resolve('/admin/users');
-	const statuses = ['pending', 'enabled', 'blocked'] as const;
+	const statuses = ['pending', 'enabled', 'blocked', 'deleted'] as const;
 	const lastPage = $derived(Math.max(1, Math.ceil(data.total / data.pageSize)));
 	const sortValue = $derived(`${data.sort.key}:${data.sort.dir}`);
 	const pill = 'inline-flex min-h-10 items-center rounded-full border px-4 text-xs capitalize';
@@ -141,6 +141,12 @@
 	<span class="text-muted-foreground">{row.signupIp ?? '—'}</span>
 {/snippet}
 
+{#snippet deletedCell(row: Row)}
+	<span class="text-muted-foreground"
+		>{row.deletedAt ? row.deletedAt.toISOString().slice(0, 10) : '—'}</span
+	>
+{/snippet}
+
 <DataTable
 	base={usersPath}
 	rows={data.rows}
@@ -153,7 +159,8 @@
 		{ key: 'role', label: 'Admin', sortable: true, cell: adminCell },
 		{ key: 'blockedReason', label: 'Reason', cell: reasonCell },
 		{ key: 'createdAt', label: 'Joined', sortable: true, cell: joinedCell },
-		{ key: 'signupIp', label: 'Signup IP', cell: ipCell }
+		{ key: 'signupIp', label: 'Signup IP', cell: ipCell },
+		{ key: 'deletedAt', label: 'Deleted', cell: deletedCell }
 	]}
 	empty="No accounts match."
 />
