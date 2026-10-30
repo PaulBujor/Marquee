@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
-	import { afterNavigate, goto } from '$app/navigation';
+	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -53,6 +53,7 @@
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import type { CrewMember, MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
+	import { navigate } from '#lib/client/navigate.js';
 
 	// `detail` is always present (cached copy first), so network-only sections key off `enrichState` alone.
 	let {
@@ -283,9 +284,7 @@
 	});
 
 	function goToOrigin() {
-		// `origin` is a runtime URL carried in `?from=`, so it can't be a branded resolve() result.
-		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		goto(origin);
+		navigate(origin);
 	}
 
 	function goBack() {

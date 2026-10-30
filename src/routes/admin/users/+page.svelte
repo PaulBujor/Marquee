@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import DataTable from '#lib/components/data-table/data-table.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import type { PageData } from './$types';
+	import { navigate } from '#lib/client/navigate.js';
 
 	let { data }: { data: PageData } = $props();
 
@@ -27,9 +27,7 @@
 			if (value.trim()) params.push(`q=${encodeURIComponent(value.trim())}`);
 			params.push(`sort=${encodeURIComponent(sortValue)}`);
 			const target = `${usersPath}?${params.join('&')}`;
-			// The path is resolved; appending a query string drops resolve()'s branded type, which the rule keys on.
-			// eslint-disable-next-line svelte/no-navigation-without-resolve
-			goto(target, { replace: true, reset: false });
+			navigate(target, { replace: true, reset: false });
 		}, DEBOUNCE_MS);
 	}
 
@@ -104,12 +102,21 @@
 </p>
 
 {#snippet emailCell(row: Row)}
-	<span class="truncate">{row.email}</span>
+	<a
+		href={resolve('/admin/users/[id]', { id: row.id })}
+		class="truncate underline underline-offset-2">{row.email}</a
+	>
+{/snippet}
+
+{#snippet reasonCell(row: Row)}
+	<span class="block max-w-40 truncate text-muted-foreground" title={row.blockedReason ?? ''}
+		>{row.blockedReason ?? '—'}</span
+	>
 {/snippet}
 
 {#snippet adminCell(row: Row)}
 	{#if row.role === 'admin'}
-		<Badge variant="outline">admin</Badge>
+		<Badge variant="outline">Admin</Badge>
 	{:else}
 		<span class="text-muted-foreground">—</span>
 	{/if}
@@ -144,6 +151,7 @@
 		{ key: 'email', label: 'Email', sortable: true, cell: emailCell },
 		{ key: 'status', label: 'Status', sortable: true, cell: statusCell },
 		{ key: 'role', label: 'Admin', sortable: true, cell: adminCell },
+		{ key: 'blockedReason', label: 'Reason', cell: reasonCell },
 		{ key: 'createdAt', label: 'Joined', sortable: true, cell: joinedCell },
 		{ key: 'signupIp', label: 'Signup IP', cell: ipCell }
 	]}

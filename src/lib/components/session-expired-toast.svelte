@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { goto } from '$app/navigation';
+
 	import { session } from '#lib/client/session.svelte.js';
 	import { loginPathWithRedirect } from '#lib/redirect.js';
+	import { navigate } from '#lib/client/navigate.js';
 
 	/** `duration: Infinity` because this is a *state*, not an event; `announced` keeps it to one toast. */
 	$effect(() => {
@@ -19,8 +20,7 @@
 					const target = loginPathWithRedirect(
 						`${window.location.pathname}${window.location.search}`
 					);
-					// eslint-disable-next-line svelte/no-navigation-without-resolve
-					goto(target);
+					navigate(target);
 				}
 			}
 		});

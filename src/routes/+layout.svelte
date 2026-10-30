@@ -12,7 +12,7 @@
 	import { Toaster } from '#lib/components/ui/sonner/index.js';
 	import ErrorReporter from '#lib/components/error-reporter.svelte';
 	import SessionExpiredToast from '#lib/components/session-expired-toast.svelte';
-	import { goto } from '$app/navigation';
+
 	import { theme } from '#lib/state/theme.svelte.js';
 	import { activeTab } from '#lib/state/tabs.js';
 	import { tabs } from '#lib/state/tabs.svelte.js';
@@ -26,6 +26,7 @@
 	import { sync } from '#lib/client/sync/engine.svelte.js';
 	import { navigation } from '#lib/state/navigation.svelte.js';
 	import type { LayoutData } from './$types';
+	import { navigate } from '#lib/client/navigate.js';
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
@@ -114,7 +115,7 @@
 		if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
 		const onMessage = (e: MessageEvent) => {
 			if (e.data?.type === 'NOTIFICATION_NAVIGATE' && typeof e.data.url === 'string') {
-				void goto(e.data.url);
+				navigate(e.data.url);
 			}
 		};
 		navigator.serviceWorker.addEventListener('message', onMessage);
