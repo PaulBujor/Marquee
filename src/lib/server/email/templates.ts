@@ -90,6 +90,15 @@ export function renderWaitlistEmail(): string {
 	);
 }
 
+export function renderAccountBlockedEmail(reason: string): string {
+	return layout(
+		'Your access to Marquee has been removed',
+		`<p>An administrator has removed your access to Marquee.</p>
+		<p style="${MUTED}">Reason given: ${escapeHtml(reason)}</p>
+		<p style="${MUTED}">If you think this was a mistake, reply to this email and we'll take another look.</p>`
+	);
+}
+
 export function renderAccountDeletedEmail(): string {
 	return layout(
 		'Your account has been deleted',

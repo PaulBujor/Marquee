@@ -104,7 +104,16 @@
 </p>
 
 {#snippet emailCell(row: Row)}
-	<span class="truncate">{row.email}</span>
+	<a
+		href={resolve('/admin/users/[id]', { id: row.id })}
+		class="truncate underline underline-offset-2">{row.email}</a
+	>
+{/snippet}
+
+{#snippet reasonCell(row: Row)}
+	<span class="block max-w-40 truncate text-muted-foreground" title={row.blockedReason ?? ''}
+		>{row.blockedReason ?? '—'}</span
+	>
 {/snippet}
 
 {#snippet adminCell(row: Row)}
@@ -144,6 +153,7 @@
 		{ key: 'email', label: 'Email', sortable: true, cell: emailCell },
 		{ key: 'status', label: 'Status', sortable: true, cell: statusCell },
 		{ key: 'role', label: 'Admin', sortable: true, cell: adminCell },
+		{ key: 'blockedReason', label: 'Reason', cell: reasonCell },
 		{ key: 'createdAt', label: 'Joined', sortable: true, cell: joinedCell },
 		{ key: 'signupIp', label: 'Signup IP', cell: ipCell }
 	]}
