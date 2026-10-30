@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import DataTable from '#lib/components/data-table/data-table.svelte';
+	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { PageData } from './$types';
 
@@ -21,37 +22,45 @@
 	{data.total} recorded action{data.total === 1 ? '' : 's'}
 </p>
 
-{#snippet actionCell(row: Row)}
-	<p class="text-sm">
-		<span class="font-medium">{row.action}</span> · {row.targetLabel ?? row.targetId}
-	</p>
-	{#if row.reason}
-		<p class="mt-0.5 text-xs">reason: {row.reason}</p>
-	{/if}
-{/snippet}
-
 {#snippet whenCell(row: Row)}
-	<time class="text-xs text-muted-foreground" datetime={row.createdAt.toISOString()}>
+	<time class="text-xs whitespace-nowrap" datetime={row.createdAt.toISOString()}>
 		{format(row.createdAt)}
 	</time>
 {/snippet}
 
-{#snippet actorCell(row: Row)}
-	<span class="text-xs text-muted-foreground"
-		>{row.actorEmail}{#if row.ip}
-			· {row.ip}{/if}</span
-	>
+{#snippet actionCell(row: Row)}
+	<Badge variant="outline">{row.action}</Badge>
 {/snippet}
 
+{#snippet targetCell(row: Row)}
+	<span class="text-xs">{row.targetLabel ?? row.targetId}</span>
+{/snippet}
+
+{#snippet actorCell(row: Row)}
+	<span class="text-xs">{row.actorEmail}</span>
+{/snippet}
+
+{#snippet ipCell(row: Row)}
+	<span class="text-xs text-muted-foreground">{row.ip ?? '—'}</span>
+{/snippet}
+
+{#snippet reasonCell(row: Row)}
+	<span class="text-xs text-muted-foreground">{row.reason ?? '—'}</span>
+{/snippet}
+
+<!-- When leads, so the sticky column carries the date on a phone and the rest scrolls. -->
 <DataTable
 	base={auditPath}
 	rows={data.rows}
 	sortKey={data.sort.key}
 	sortDir={data.sort.dir}
 	columns={[
+		{ key: 'createdAt', label: 'When', sortable: true, cell: whenCell },
 		{ key: 'action', label: 'Action', sortable: true, cell: actionCell },
-		{ key: 'createdAt', label: 'When', sortable: true, end: true, cell: whenCell },
-		{ key: 'actorEmail', label: 'Actor', sortable: true, cell: actorCell }
+		{ key: 'target', label: 'Target', cell: targetCell },
+		{ key: 'actorEmail', label: 'Actor', sortable: true, cell: actorCell },
+		{ key: 'ip', label: 'IP', cell: ipCell },
+		{ key: 'reason', label: 'Reason', cell: reasonCell }
 	]}
 	empty="Nothing recorded yet — actions appear here as you use the admin page."
 />
