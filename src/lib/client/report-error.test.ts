@@ -59,11 +59,42 @@ describe('installGlobalErrorReporting', () => {
 		expect(reports[0].message).toBe('just a string');
 	});
 
-	it('falls back to the event message when no error object is attached', () => {
+	it('ignores the cross-origin placeholder, which carries no error object', () => {
 		install();
 		fire(target, 'error', { message: 'Script error.' });
 
-		expect(reports[0].message).toBe('Script error.');
+		expect(reports).toHaveLength(0);
+	});
+
+	it('still reports a bare message that is not the placeholder', () => {
+		install();
+		fire(target, 'error', { message: 'Uncaught TypeError: x is not a function' });
+
+		expect(reports[0].message).toBe('Uncaught TypeError: x is not a function');
+	});
+
+	it('does not filter the placeholder when an error object is attached', () => {
+		install();
+		const error = new Error('Script error.');
+		fire(target, 'error', { message: 'Script error.', error });
+
+		expect(reports).toHaveLength(1);
+	});
+
+	it('ignores an aborted promise, which is a cancelled navigation or a backgrounded page', () => {
+		install();
+		const abort = new Error('The operation was aborted.');
+		abort.name = 'AbortError';
+		fire(target, 'unhandledrejection', { reason: abort });
+
+		expect(reports).toHaveLength(0);
+	});
+
+	it('still reports a rejection that is not an abort', () => {
+		install();
+		fire(target, 'unhandledrejection', { reason: new Error('genuinely broken') });
+
+		expect(reports[0].message).toBe('genuinely broken');
 	});
 
 	it('ignores resource load failures, which carry no error and no message', () => {

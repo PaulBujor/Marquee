@@ -93,6 +93,8 @@ export function installGlobalErrorReporting(options: GlobalReportingOptions = {}
 		// A failed <img>/<script> load also fires 'error' here, with neither field set. Those aren't
 		// exceptions and there's nothing useful to log.
 		if (!e.error && !e.message) return;
+		// A cross-origin script reports only this placeholder, with no error object: nothing to act on.
+		if (!e.error && /^Script error\.?$/.test(e.message ?? '')) return;
 		send(
 			e.error instanceof Error ? e.error.message : (e.message ?? 'Unknown error'),
 			e.error instanceof Error ? e.error.stack : undefined,
@@ -102,6 +104,8 @@ export function installGlobalErrorReporting(options: GlobalReportingOptions = {}
 
 	const onRejection = (event: Event) => {
 		const reason = (event as PromiseRejectionEvent).reason;
+		// Aborts mean navigation or backgrounding cancelled in-flight work, which is not a failure.
+		if (reason instanceof Error && reason.name === 'AbortError') return;
 		send(
 			reason instanceof Error ? reason.message : String(reason),
 			reason instanceof Error ? reason.stack : undefined,
