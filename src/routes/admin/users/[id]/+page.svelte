@@ -44,7 +44,16 @@
 	{/if}
 </dl>
 
-{#if form?.blocked}
+{#if form?.enabled}
+	<p class="mt-5 text-sm">
+		Access enabled.
+		{#if form.emailed}
+			They were sent a welcome email.
+		{:else}
+			The welcome email could not be sent — they can sign in regardless.
+		{/if}
+	</p>
+{:else if form?.blocked}
 	<p class="mt-5 text-sm">
 		Account blocked.
 		{#if form.emailed}
@@ -53,7 +62,41 @@
 			The email could not be sent — their access is still removed.
 		{/if}
 	</p>
-{:else if data.target.status !== 'blocked'}
+{:else if form?.unblocked}
+	<p class="mt-5 text-sm">
+		Access restored.
+		{#if form.emailed}
+			They were emailed to say so.
+		{:else}
+			The email could not be sent — they can sign in regardless.
+		{/if}
+	</p>
+{:else if data.target.status === 'pending'}
+	<Card.Root class="mt-5">
+		<Card.Header>
+			<Card.Title>Admit this account</Card.Title>
+			<Card.Description>
+				They can sign in as soon as this is done, and are sent a welcome email.
+			</Card.Description>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-3">
+			<form method="POST" action="?/enable">
+				<Button type="submit">Enable access</Button>
+			</form>
+			{#if form?.message}
+				<p class="text-sm text-destructive">{form.message}</p>
+			{/if}
+		</Card.Content>
+	</Card.Root>
+{:else if data.target.status === 'blocked'}
+	<Card.Root class="mt-5">
+		<Card.Content>
+			<form method="POST" action="?/unblock">
+				<Button type="submit" variant="outline">Restore access</Button>
+			</form>
+		</Card.Content>
+	</Card.Root>
+{:else}
 	<Card.Root class="mt-5">
 		<Card.Header>
 			<Card.Title>Block this account</Card.Title>
@@ -86,8 +129,4 @@
 			</form>
 		</Card.Content>
 	</Card.Root>
-{:else}
-	<form method="POST" action="?/unblock" class="mt-5">
-		<Button type="submit" variant="outline">Restore access</Button>
-	</form>
 {/if}

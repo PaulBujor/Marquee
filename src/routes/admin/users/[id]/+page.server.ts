@@ -1,13 +1,17 @@
 import { error, fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import type { Actions, PageServerLoad } from './$types';
-import { BLOCK_REFUSALS, blockUser } from '#lib/server/admin/users.js';
+import { BLOCK_REFUSALS, ENABLE_REFUSALS, blockUser, enableUser } from '#lib/server/admin/users.js';
 import { requireAdmin } from '#lib/server/admin/guard.js';
 import { auditStatement } from '#lib/server/admin/audit.js';
 import { env } from '#lib/server/bindings.js';
 import { users } from '#lib/server/db/schema.js';
 import { createEmailSender } from '#lib/server/email/index.js';
-import { renderAccountBlockedEmail } from '#lib/server/email/templates.js';
+import {
+	renderAccountBlockedEmail,
+	renderAccountRestoredEmail,
+	renderWelcomeEmail
+} from '#lib/server/email/templates.js';
 
 const MIN_REASON = 5;
 
@@ -68,10 +72,43 @@ export const actions: Actions = {
 		return { blocked: true, emailed, reason };
 	},
 
-	// Placeholder so a mistaken POST cannot fall through to a missing action and 404 the page.
-	unblock: async ({ locals, params }) => {
+	enable: async ({ locals, params, getClientAddress }) => {
 		const actor = requireAdmin(locals.user);
 		if (!locals.db) error(503, 'Service unavailable');
+
+		const result = await enableUser(
+			locals.db,
+			{ id: actor.id, email: actor.email },
+			params.id,
+			getClientAddress()
+		);
+		if (!result.ok) return fail(400, { message: ENABLE_REFUSALS[result.refusal] });
+
+		let emailed = true;
+		try {
+			await createEmailSender(env).send({
+				to: result.email,
+				subject: "You're in — Marquee",
+				html: renderWelcomeEmail()
+			});
+		} catch {
+			emailed = false;
+		}
+
+		return { enabled: true, emailed };
+	},
+
+	unblock: async ({ locals, params, getClientAddress }) => {
+		const actor = requireAdmin(locals.user);
+		if (!locals.db) error(503, 'Service unavailable');
+
+		const [target] = await locals.db
+			.select({ email: users.email })
+			.from(users)
+			.where(eq(users.id, params.id))
+			.limit(1);
+		if (!target) error(404, 'Not found');
+
 		await locals.db.batch([
 			locals.db
 				.update(users)
@@ -80,9 +117,22 @@ export const actions: Actions = {
 			auditStatement(locals.db, {
 				actor: { id: actor.id, email: actor.email },
 				action: 'user.unblock',
-				target: { type: 'user', id: params.id }
+				target: { type: 'user', id: params.id, label: target.email },
+				ip: getClientAddress()
 			})
 		]);
-		return { unblocked: true };
+
+		let emailed = true;
+		try {
+			await createEmailSender(env).send({
+				to: target.email,
+				subject: 'Your Marquee access is back',
+				html: renderAccountRestoredEmail()
+			});
+		} catch {
+			emailed = false;
+		}
+
+		return { unblocked: true, emailed };
 	}
 };

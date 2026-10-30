@@ -90,12 +90,28 @@ export function renderWaitlistEmail(): string {
 	);
 }
 
+export function renderWelcomeEmail(): string {
+	return layout(
+		"You're in",
+		`<p>Your Marquee account is ready — you can sign in with your email address now, no password to remember.</p>
+		<p style="${MUTED}">Thanks for waiting.</p>`
+	);
+}
+
 export function renderAccountBlockedEmail(reason: string): string {
 	return layout(
 		'Your access to Marquee has been removed',
 		`<p>An administrator has removed your access to Marquee.</p>
 		<p style="${MUTED}">Reason given: ${escapeHtml(reason)}</p>
 		<p style="${MUTED}">If you think this was a mistake, reply to this email and we'll take another look.</p>`
+	);
+}
+
+export function renderAccountRestoredEmail(): string {
+	return layout(
+		'Your Marquee access is back',
+		`<p>An administrator has restored your access to Marquee — you can sign in with your email address again.</p>
+		<p style="${MUTED}">Sorry for the interruption.</p>`
 	);
 }
 
