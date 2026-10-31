@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/env';
 	import { toast } from 'svelte-sonner';
+	import { isAbortError } from '#lib/abort.js';
+	import { reportClientError } from '#lib/client/report-error.js';
 
 	let waiting = $state<ServiceWorker | null>(null);
 
@@ -58,7 +60,13 @@
 		const onVisible = () => {
 			if (document.visibilityState !== 'visible') return;
 			// Backgrounding aborts the check, which rejects with AbortError and is not a failure.
-			void registration?.update().catch(() => {});
+			void registration?.update().catch((err: unknown) => {
+				if (isAbortError(err)) return;
+				reportClientError({
+					message: err instanceof Error ? err.message : String(err),
+					source: 'service-worker-update'
+				});
+			});
 			if (waiting) showUpdateToast();
 		};
 		document.addEventListener('visibilitychange', onVisible);

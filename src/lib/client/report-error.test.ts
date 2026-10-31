@@ -83,9 +83,15 @@ describe('installGlobalErrorReporting', () => {
 
 	it('ignores an aborted promise, which is a cancelled navigation or a backgrounded page', () => {
 		install();
-		const abort = new Error('The operation was aborted.');
-		abort.name = 'AbortError';
-		fire(target, 'unhandledrejection', { reason: abort });
+		// fetch rejects with a DOMException, which is why the check is by name rather than by type.
+		fire(target, 'unhandledrejection', { reason: new DOMException('aborted', 'AbortError') });
+
+		expect(reports).toHaveLength(0);
+	});
+
+	it('ignores an abort reason that is not an Error at all', () => {
+		install();
+		fire(target, 'unhandledrejection', { reason: { name: 'AbortError', message: 'aborted' } });
 
 		expect(reports).toHaveLength(0);
 	});
