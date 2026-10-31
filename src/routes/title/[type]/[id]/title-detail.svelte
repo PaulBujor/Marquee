@@ -357,7 +357,7 @@
 <header class="fixed inset-x-0 top-0 z-40">
 	<HeaderScrim strong show={!titleInView} />
 	<div
-		class="relative mx-auto flex w-full items-center gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
+		class="relative mx-auto flex w-full items-center gap-3 px-5 pt-[max(1.25rem,var(--top-inset))] pb-5"
 	>
 		<!-- Ghost, no plate, over artwork; `icon-lg` is 44px so the target is full-size even with nothing drawn. -->
 		<Button
@@ -409,7 +409,7 @@
 	<div
 		class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 pb-tab-bar {detail.backdropPath
 			? '-mt-14'
-			: 'pt-[calc(4.75rem+env(safe-area-inset-top))]'}"
+			: 'pt-[calc(4.75rem+var(--top-inset))]'}"
 	>
 		<div class="flex items-end gap-4">
 			<div class="w-24 shrink-0">

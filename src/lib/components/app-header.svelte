@@ -8,7 +8,7 @@
 	<HeaderScrim />
 	<!-- The same inset above, left and below keeps the wordmark evenly set in the content column. -->
 	<div
-		class="relative flex w-full items-center justify-between px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5"
+		class="relative flex w-full items-center justify-between px-5 pt-[max(1.25rem,var(--top-inset))] pb-5"
 	>
 		<a href={resolve('/')} class="flex items-center gap-2">
 			<!-- The theme rune's `isDark` reads the system preference non-reactively and is true during SSR,

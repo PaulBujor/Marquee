@@ -15,6 +15,7 @@
 :root {
 	--tab-bar-space: calc(4.875rem + 1rem);
 	--tab-bar-live: var(--tab-bar-space);
+	--top-inset: env(safe-area-inset-top);
 }
 @media (min-width: 40rem) {
 	:root {
@@ -36,7 +37,7 @@
 }
 @media (min-width: 48rem) {
 	:root {
-		--toast-top: calc(4rem + env(safe-area-inset-top));
+		--toast-top: calc(4rem + var(--top-inset));
 	}
 }
 
@@ -151,6 +152,11 @@
 
 	/* Installed iOS PWAs: WebKit drops the safe-area inset from viewport units under `viewport-fit=cover`, so hand the document that height back. */
 	@media (display-mode: standalone) {
+		/* iOS 27 blurs the top of an installed app over a band taller than the safe-area inset, so the
+		page keeps its full-bleed margins but the header's content starts below the band. */
+		:root {
+			--top-inset: calc(env(safe-area-inset-top) + 3rem);
+		}
 		html {
 			min-height: calc(100dvh + env(safe-area-inset-bottom));
 		}

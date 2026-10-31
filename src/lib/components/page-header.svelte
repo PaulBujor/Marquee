@@ -8,9 +8,7 @@
 
 <header class="sticky top-0 z-40">
 	<HeaderScrim />
-	<div
-		class="relative flex w-full flex-col gap-3 px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3"
-	>
+	<div class="relative flex w-full flex-col gap-3 px-5 pt-[max(1rem,var(--top-inset))] pb-3">
 		{@render children()}
 	</div>
 </header>

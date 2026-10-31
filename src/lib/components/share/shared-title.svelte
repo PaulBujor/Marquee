@@ -53,7 +53,7 @@
 	<div
 		class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 pb-10 {backdrop
 			? '-mt-14'
-			: 'pt-[calc(4.75rem+env(safe-area-inset-top))]'}"
+			: 'pt-[calc(4.75rem+var(--top-inset))]'}"
 	>
 		<div class="flex items-end gap-4">
 			<div class="w-24 shrink-0">
