@@ -1,3 +1,5 @@
+import { isAbortError } from '#lib/abort.js';
+
 /** Best-effort and silent — a reporter that throws would turn one error into two. */
 export interface ClientErrorReport {
 	message: string;
@@ -105,7 +107,7 @@ export function installGlobalErrorReporting(options: GlobalReportingOptions = {}
 	const onRejection = (event: Event) => {
 		const reason = (event as PromiseRejectionEvent).reason;
 		// Aborts mean navigation or backgrounding cancelled in-flight work, which is not a failure.
-		if (reason instanceof Error && reason.name === 'AbortError') return;
+		if (isAbortError(reason)) return;
 		send(
 			reason instanceof Error ? reason.message : String(reason),
 			reason instanceof Error ? reason.stack : undefined,

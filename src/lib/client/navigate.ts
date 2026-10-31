@@ -1,4 +1,5 @@
 import { goto } from '$app/navigation';
+import { isAbortError } from '#lib/abort.js';
 import { reportClientError } from './report-error.js';
 
 /**
@@ -8,7 +9,7 @@ import { reportClientError } from './report-error.js';
 export function navigate(to: string, options?: Parameters<typeof goto>[1]): Promise<void> {
 	// eslint-disable-next-line svelte/no-navigation-without-resolve -- callers pass paths they resolved themselves
 	return goto(to, options).catch((error: unknown) => {
-		if (error instanceof Error && error.name === 'AbortError') return;
+		if (isAbortError(error)) return;
 		reportClientError({
 			message: error instanceof Error ? error.message : String(error),
 			stack: error instanceof Error ? error.stack : undefined,

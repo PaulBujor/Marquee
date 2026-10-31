@@ -1,3 +1,5 @@
+import { isAbortError } from '#lib/abort.js';
+
 export interface ShareContent {
 	title: string;
 	text?: string;
@@ -41,7 +43,7 @@ export async function shareLink(
 			await env.share(content);
 			return 'shared';
 		} catch (err) {
-			if (err instanceof Error && err.name === 'AbortError') return 'cancelled';
+			if (isAbortError(err)) return 'cancelled';
 		}
 	}
 
@@ -97,7 +99,7 @@ export async function warmPreview(
 		});
 		return res.ok ? 'stored' : 'failed';
 	} catch (err) {
-		return (err as { name?: string })?.name === 'AbortError' ? 'timeout' : 'failed';
+		return isAbortError(err) ? 'timeout' : 'failed';
 	} finally {
 		clearTimeout(timer);
 	}
