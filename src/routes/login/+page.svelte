@@ -2,10 +2,12 @@
 	import { enhance, type ActionResult } from '$app/forms';
 	import { browser } from '$app/env';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import {
 		browserSupportsWebAuthn,
 		browserSupportsWebAuthnAutofill,
-		startAuthentication
+		startAuthentication,
+		WebAuthnAbortService
 	} from '@simplewebauthn/browser';
 	import { resolve } from '$app/paths';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -66,8 +68,14 @@
 		};
 	});
 
-	// Offered whenever the browser can do WebAuthn; the ceremony itself tells us if a passkey exists.
-	const passkeysSupported = $derived(browser && browserSupportsWebAuthn());
+	// Behind `mounted` so the server HTML and the client's first render agree; support is only known
+	// in the browser anyway, and a mismatch here breaks hydration (and with it every form).
+	let passkeysSupported = $state(false);
+	onMount(async () => {
+		if (!browserSupportsWebAuthn()) return;
+		passkeysSupported = true;
+		if (await browserSupportsWebAuthnAutofill()) void signInWithPasskey(true);
+	});
 
 	/**
 	 * Runs the passkey ceremony. `autofill` is conditional UI: no dialog, the passkey waits in the
@@ -121,12 +129,9 @@
 		}
 	}
 
-	// Conditional UI: the browser surfaces saved passkeys in the email field, with no prompt up front.
-	$effect(() => {
-		if (!passkeysSupported || !browserSupportsWebAuthnAutofill()) return;
-		if (onCodeStep) return;
-		void signInWithPasskey(true);
-	});
+	// Email means the passkey path is over: drop the pending conditional ceremony, so nothing of ours is
+	// in flight while the user works through the code step.
+	const cancelPasskey = () => WebAuthnAbortService.cancelCeremony();
 
 	const track = () => {
 		submitting = true;
@@ -164,6 +169,7 @@
 		method="POST"
 		action="?/verify"
 		class="flex flex-col gap-4"
+		onsubmit={cancelPasskey}
 		use:enhance={trackCode}
 	>
 		<input type="hidden" name="email" value={email} />
@@ -263,7 +269,13 @@
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<form method="POST" action="?/request" class="flex flex-col gap-3" use:enhance={track}>
+				<form
+					method="POST"
+					action="?/request"
+					class="flex flex-col gap-3"
+					onsubmit={cancelPasskey}
+					use:enhance={track}
+				>
 					<input type="hidden" name="mode" value={mode} />
 					<input type="hidden" name="redirectTo" value={redirectTo} />
 					{#if passkeysSupported}
