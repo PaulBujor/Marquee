@@ -27,6 +27,13 @@
 	const online = $derived(sync.online);
 	const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
+	// 403 is the fresh-sign-in rule for credential changes; 429 is the per-client ceremony cap.
+	function failure(res: Response): string {
+		if (res.status === 403) return 'For your security, sign out and back in, then try again.';
+		if (res.status === 429) return 'Too many attempts — try again in a few minutes.';
+		return "That didn't work. Try again.";
+	}
+
 	async function loadPasskeys() {
 		try {
 			const res = await fetch('/api/passkey');
@@ -47,7 +54,10 @@
 		error = null;
 		try {
 			const optionsRes = await fetch('/api/passkey/register/options', { method: 'POST' });
-			if (!optionsRes.ok) throw new Error(String(optionsRes.status));
+			if (!optionsRes.ok) {
+				error = failure(optionsRes);
+				return;
+			}
 			const optionsJSON = (await optionsRes.json()) as PublicKeyCredentialCreationOptionsJSON;
 
 			let registration;
@@ -64,7 +74,10 @@
 				body: JSON.stringify({ response: registration, name })
 			});
 			if (!verifyRes.ok) {
-				error = "Your browser's passkey could not be verified. Try again.";
+				error =
+					verifyRes.status === 400
+						? "Your browser's passkey could not be verified. Try again."
+						: failure(verifyRes);
 				return;
 			}
 			name = '';
@@ -80,7 +93,9 @@
 		busy = true;
 		error = null;
 		try {
-			await fetch(`/api/passkey/${passkey.id}`, { method: 'DELETE' });
+			const res = await fetch(`/api/passkey/${passkey.id}`, { method: 'DELETE' });
+			// Only 403/429 are worth surfacing; a 404 just means the list was stale.
+			if (res.status === 403 || res.status === 429) error = failure(res);
 		} catch {
 			// Best-effort — the reload below reflects the real state.
 		} finally {

@@ -122,7 +122,7 @@ export const actions: Actions = {
 				cookies,
 				result.token,
 				result.expiresAt,
-				sessionCookieDomain(url.hostname, env.PREVIEW_COOKIE_DOMAIN)
+				sessionCookieDomain(url.hostname, env)
 			);
 			redirect(303, redirectTo);
 		}

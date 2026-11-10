@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, gt, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import {
 	generateAuthenticationOptions,
@@ -12,6 +12,7 @@ import {
 } from '@simplewebauthn/server';
 import { isoBase64URL, isoUint8Array } from '@simplewebauthn/server/helpers';
 import type { Cookies } from '@sveltejs/kit';
+import { problem } from '#lib/server/http/problem.js';
 import type { createDb } from '#lib/server/db/index.js';
 import {
 	passkeyChallenges,
@@ -23,14 +24,24 @@ import {
 
 type Db = ReturnType<typeof createDb>;
 
-/** Carries only the challenge row's id; the challenge itself never leaves the database. */
-export const PASSKEY_CHALLENGE_COOKIE = 'passkey_challenge';
+/**
+ * Carries only the challenge row's id; the challenge itself never leaves the database. Two names, so a
+ * sign-in already in flight is not clobbered by a passkey being added in another tab.
+ */
+export const PASSKEY_COOKIE = 'passkey_challenge';
+export const PASSKEY_ENROLL_COOKIE = 'passkey_enroll_challenge';
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const PASSKEY_NAME_MAX = 40;
+/** Enrolling a credential outlives every session, so it needs a recent sign-in, not just any session. */
+export const REAUTH_WINDOW_MS = 15 * 60 * 1000;
+/** Bounds in-flight ceremonies per client: the sign-in options endpoint is public and writes a row. */
+const LIVE_CHALLENGES = 10;
 const RP_NAME = 'Marquee';
+/** The transports WebAuthn defines; anything else the client sends is discarded. */
+const TRANSPORTS = new Set(['usb', 'nfc', 'ble', 'internal', 'hybrid', 'smart-card']);
 
-export function setChallengeCookie(cookies: Cookies, challengeId: string): void {
-	cookies.set(PASSKEY_CHALLENGE_COOKIE, challengeId, {
+export function setChallengeCookie(cookies: Cookies, name: string, challengeId: string): void {
+	cookies.set(name, challengeId, {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax',
@@ -39,8 +50,26 @@ export function setChallengeCookie(cookies: Cookies, challengeId: string): void 
 	});
 }
 
-export function clearChallengeCookie(cookies: Cookies): void {
-	cookies.delete(PASSKEY_CHALLENGE_COOKIE, { path: '/' });
+export function clearChallengeCookie(cookies: Cookies, name: string): void {
+	cookies.delete(name, { path: '/' });
+}
+
+/**
+ * Enrolling or removing a credential can outlive or undo every other recovery lever, so it needs a
+ * recent sign-in rather than any live session. Returns the 403 to send, or null when allowed.
+ */
+export function requireRecentSignIn(scope: {
+	session: { createdAt: Date } | null;
+}): Response | null {
+	if (scope.session && isRecentSignIn(scope.session)) return null;
+	return problem(403, 'Sign in again', {
+		detail: 'Adding or removing a passkey needs a recent sign-in. Sign out and back in, then retry.'
+	});
+}
+
+/** `session.createdAt` is the sign-in time; `validateSession` only refreshes expiry and last use. */
+export function isRecentSignIn(session: { createdAt: Date }, now: number = Date.now()): boolean {
+	return now - session.createdAt.getTime() <= REAUTH_WINDOW_MS;
 }
 
 /**
@@ -54,23 +83,36 @@ function relyingParty(url: URL): { rpID: string; origin: string } {
 async function storeChallenge(
 	db: Db,
 	challenge: string,
-	owner: { userId: string } | 'anonymous'
+	owner: { userId: string } | 'anonymous',
+	meta: { rpId: string; ip?: string | null }
 ): Promise<string> {
 	const id = crypto.randomUUID();
 	await db.insert(passkeyChallenges).values({
 		id,
 		challenge,
 		userId: owner === 'anonymous' ? null : owner.userId,
+		rpId: meta.rpId,
+		requestIp: meta.ip ?? null,
 		expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS)
 	});
 	return id;
+}
+
+/** Live (unexpired) ceremonies this client has open; the ones it abandoned are never cleaned per-request. */
+async function liveChallenges(db: Db, ip: string): Promise<number> {
+	const [{ n }] = await db
+		.select({ n: count() })
+		.from(passkeyChallenges)
+		.where(and(eq(passkeyChallenges.requestIp, ip), gt(passkeyChallenges.expiresAt, new Date())));
+	return n;
 }
 
 /** Single use: the row is deleted as it's read, so a replayed ceremony finds nothing to match. */
 async function takeChallenge(
 	db: Db,
 	id: string | undefined,
-	owner: { userId: string } | 'anonymous'
+	owner: { userId: string } | 'anonymous',
+	rpId: string
 ): Promise<string | null> {
 	if (!id) return null;
 	const deleted = await db
@@ -82,10 +124,13 @@ async function takeChallenge(
 		)
 		.returning({
 			challenge: passkeyChallenges.challenge,
-			expiresAt: passkeyChallenges.expiresAt
+			expiresAt: passkeyChallenges.expiresAt,
+			rpId: passkeyChallenges.rpId
 		});
 	const row = deleted.at(0);
 	if (!row || row.expiresAt.getTime() <= Date.now()) return null;
+	// A challenge is only ever completed on the host it was issued for.
+	if (row.rpId !== rpId) return null;
 	return row.challenge;
 }
 
@@ -109,11 +154,30 @@ export interface PasskeyOptions<T> {
 }
 
 /** Resident key required: sign-in has to work from a discoverable credential with no email typed. */
+export interface CeremonyOpts {
+	/** Client address, used only to bound in-flight ceremonies. */
+	ip?: string | null;
+	/** This browser's previous challenge id, superseded so pageviews don't accumulate rows. */
+	previousChallengeId?: string;
+}
+
+/** Null when this client already has too many ceremonies open. */
+async function supersedeAndThrottle(db: Db, opts: CeremonyOpts): Promise<{ throttled: boolean }> {
+	if (opts.previousChallengeId)
+		await db.delete(passkeyChallenges).where(eq(passkeyChallenges.id, opts.previousChallengeId));
+	// Counting after the delete, so a browser replacing its own challenge is never pushed over.
+	const open = opts.ip ? await liveChallenges(db, opts.ip) : 0;
+	return { throttled: open >= LIVE_CHALLENGES };
+}
+
 export async function startRegistration(
 	db: Db,
 	user: User,
-	url: URL
-): Promise<PasskeyOptions<PublicKeyCredentialCreationOptionsJSON>> {
+	url: URL,
+	opts: CeremonyOpts = {}
+): Promise<PasskeyOptions<PublicKeyCredentialCreationOptionsJSON> | null> {
+	if ((await supersedeAndThrottle(db, opts)).throttled) return null;
+
 	const existing = await db
 		.select({ credentialId: passkeys.credentialId, transports: passkeys.transports })
 		.from(passkeys)
@@ -133,7 +197,37 @@ export async function startRegistration(
 		})),
 		authenticatorSelection: { residentKey: 'required', userVerification: 'required' }
 	});
-	return { options, challengeId: await storeChallenge(db, options.challenge, { userId: user.id }) };
+	return {
+		options,
+		challengeId: await storeChallenge(
+			db,
+			options.challenge,
+			{ userId: user.id },
+			{
+				rpId: url.hostname,
+				ip: opts.ip
+			}
+		)
+	};
+}
+
+/**
+ * A credential id that already belongs to another account must never be taken over. Registration
+ * upserts by `credential_id`, so without this check a row could be re-pointed at the caller.
+ */
+export async function credentialOwnedByOtherUser(
+	db: Db,
+	credentialId: string,
+	userId: string
+): Promise<boolean> {
+	const owner = (
+		await db
+			.select({ userId: passkeys.userId })
+			.from(passkeys)
+			.where(eq(passkeys.credentialId, credentialId))
+			.limit(1)
+	).at(0);
+	return owner !== undefined && owner.userId !== userId;
 }
 
 /** Stores the credential; returns false when the response doesn't verify or the ceremony is stale. */
@@ -146,7 +240,7 @@ export async function finishRegistration(opts: {
 	name: string;
 }): Promise<boolean> {
 	const { db, user, url, challengeId, response, name } = opts;
-	const challenge = await takeChallenge(db, challengeId, { userId: user.id });
+	const challenge = await takeChallenge(db, challengeId, { userId: user.id }, url.hostname);
 	if (!challenge) return false;
 
 	let verification;
@@ -165,7 +259,13 @@ export async function finishRegistration(opts: {
 	if (!verification.verified) return false;
 
 	const { credential, credentialBackedUp } = verification.registrationInfo;
-	// Upsert: the same device registering again replaces its old row instead of failing the unique index.
+
+	if (await credentialOwnedByOtherUser(db, credential.id, user.id)) return false;
+
+	// Client-supplied and replayed to the authenticator, so keep it to the transports WebAuthn defines.
+	const transports = (credential.transports ?? []).filter((t) => TRANSPORTS.has(t)).slice(0, 6);
+
+	// Upsert: the same device registering again replaces its own row instead of failing the index.
 	await db
 		.insert(passkeys)
 		.values({
@@ -173,17 +273,16 @@ export async function finishRegistration(opts: {
 			credentialId: credential.id,
 			publicKey: isoBase64URL.fromBuffer(credential.publicKey),
 			counter: credential.counter,
-			transports: credential.transports ?? null,
+			transports: transports.length ? transports : null,
 			name,
 			backedUp: credentialBackedUp
 		})
 		.onConflictDoUpdate({
 			target: passkeys.credentialId,
 			set: {
-				userId: user.id,
 				publicKey: isoBase64URL.fromBuffer(credential.publicKey),
 				counter: credential.counter,
-				transports: credential.transports ?? null,
+				transports: transports.length ? transports : null,
 				name,
 				backedUp: credentialBackedUp
 			}
@@ -194,13 +293,22 @@ export async function finishRegistration(opts: {
 /** No `allowCredentials`: the browser offers the discoverable credentials it holds for this host. */
 export async function startAuthentication(
 	db: Db,
-	url: URL
-): Promise<PasskeyOptions<PublicKeyCredentialRequestOptionsJSON>> {
+	url: URL,
+	opts: CeremonyOpts = {}
+): Promise<PasskeyOptions<PublicKeyCredentialRequestOptionsJSON> | null> {
+	if ((await supersedeAndThrottle(db, opts)).throttled) return null;
+
 	const options = await generateAuthenticationOptions({
 		...relyingParty(url),
 		userVerification: 'required'
 	});
-	return { options, challengeId: await storeChallenge(db, options.challenge, 'anonymous') };
+	return {
+		options,
+		challengeId: await storeChallenge(db, options.challenge, 'anonymous', {
+			rpId: url.hostname,
+			ip: opts.ip
+		})
+	};
 }
 
 export type PasskeySignInResult =
@@ -214,7 +322,7 @@ export async function finishAuthentication(opts: {
 	response: AuthenticationResponseJSON;
 }): Promise<PasskeySignInResult> {
 	const { db, url, challengeId, response } = opts;
-	const challenge = await takeChallenge(db, challengeId, 'anonymous');
+	const challenge = await takeChallenge(db, challengeId, 'anonymous', url.hostname);
 	if (!challenge) return { ok: false, reason: 'invalid' };
 
 	const rows = await db

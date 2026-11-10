@@ -12,7 +12,7 @@ export const actions: Actions = {
 	logout: async ({ locals, cookies, url }) => {
 		const token = cookies.get(SESSION_COOKIE);
 		if (token && locals.db) await invalidateSession(locals.db, token);
-		deleteSessionCookie(cookies, sessionCookieDomain(url.hostname, env.PREVIEW_COOKIE_DOMAIN));
+		deleteSessionCookie(cookies, sessionCookieDomain(url.hostname, env));
 		redirect(303, '/login');
 	}
 };

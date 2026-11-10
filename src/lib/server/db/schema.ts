@@ -169,9 +169,16 @@ export const passkeyChallenges = sqliteTable(
 		challenge: text('challenge').notNull(),
 		/** Set for registration, which only an authenticated user may complete; null for sign-in. */
 		userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+		/** The hostname the ceremony started on; a challenge is only ever completed there. */
+		rpId: text('rp_id'),
+		/** Only used to bound how many ceremonies one client can have in flight. */
+		requestIp: text('request_ip'),
 		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull()
 	},
-	(table) => [index('passkey_challenges_expires_at_idx').on(table.expiresAt)]
+	(table) => [
+		index('passkey_challenges_expires_at_idx').on(table.expiresAt),
+		index('passkey_challenges_request_ip_idx').on(table.requestIp)
+	]
 );
 
 export type User = typeof users.$inferSelect;

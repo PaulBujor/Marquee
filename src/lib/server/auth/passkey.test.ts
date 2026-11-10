@@ -4,6 +4,7 @@ import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { passkeyChallenges, passkeys, users } from '#lib/server/db/schema.js';
 import {
+	credentialOwnedByOtherUser,
 	finishAuthentication,
 	finishRegistration,
 	listPasskeys,
@@ -19,6 +20,12 @@ const ORIGIN = 'https://marquee.test';
 const RP_ID = 'marquee.test';
 const url = new URL(`${ORIGIN}/login`);
 const encoder = new TextEncoder();
+
+/** These are nullable only because the per-client ceremony cap can refuse them. */
+function unwrap<T>(value: T | null): T {
+	expect(value).not.toBeNull();
+	return value as T;
+}
 
 const b64url = (bytes: Uint8Array | ArrayBuffer): string =>
 	Buffer.from(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)).toString('base64url');
@@ -129,7 +136,7 @@ describe('passkey sign-in', () => {
 		const user = await seedUser();
 		const credential = await registerPasskey(user.id);
 
-		const { options, challengeId } = await startAuthentication(db, url);
+		const { options, challengeId } = unwrap(await startAuthentication(db, url));
 		const result = await finishAuthentication({
 			db,
 			url,
@@ -144,7 +151,7 @@ describe('passkey sign-in', () => {
 	});
 
 	it('answers a usernameless challenge, so no email is needed to start', async () => {
-		const { options } = await startAuthentication(db, url);
+		const { options } = unwrap(await startAuthentication(db, url));
 		expect(options.rpId).toBe(RP_ID);
 		expect(options.allowCredentials ?? []).toHaveLength(0);
 		expect(options.userVerification).toBe('required');
@@ -154,7 +161,7 @@ describe('passkey sign-in', () => {
 		const user = await seedUser();
 		const credential = await registerPasskey(user.id);
 
-		const { options, challengeId } = await startAuthentication(db, url);
+		const { options, challengeId } = unwrap(await startAuthentication(db, url));
 		const response = await assertion({ ...credential, challenge: options.challenge });
 
 		expect((await finishAuthentication({ db, url, challengeId, response })).ok).toBe(true);
@@ -167,7 +174,7 @@ describe('passkey sign-in', () => {
 	it('refuses a stale challenge', async () => {
 		const user = await seedUser();
 		const credential = await registerPasskey(user.id);
-		const { options, challengeId } = await startAuthentication(db, url);
+		const { options, challengeId } = unwrap(await startAuthentication(db, url));
 		await db
 			.update(passkeyChallenges)
 			.set({ expiresAt: new Date(Date.now() - 1000) })
@@ -186,7 +193,7 @@ describe('passkey sign-in', () => {
 		const user = await seedUser();
 		const credential = await registerPasskey(user.id);
 		const impostor = await newCredential();
-		const { options, challengeId } = await startAuthentication(db, url);
+		const { options, challengeId } = unwrap(await startAuthentication(db, url));
 
 		const result = await finishAuthentication({
 			db,
@@ -203,7 +210,7 @@ describe('passkey sign-in', () => {
 
 	it('refuses an unknown credential', async () => {
 		const credential = await newCredential();
-		const { options, challengeId } = await startAuthentication(db, url);
+		const { options, challengeId } = unwrap(await startAuthentication(db, url));
 
 		const result = await finishAuthentication({
 			db,
@@ -217,7 +224,7 @@ describe('passkey sign-in', () => {
 	it("refuses a user who isn't enabled", async () => {
 		const user = await seedUser('pending@example.com', 'pending');
 		const credential = await registerPasskey(user.id);
-		const { options, challengeId } = await startAuthentication(db, url);
+		const { options, challengeId } = unwrap(await startAuthentication(db, url));
 
 		const result = await finishAuthentication({
 			db,
@@ -233,7 +240,7 @@ describe('passkey registration', () => {
 	it('binds the challenge to the user and consumes it once', async () => {
 		const user = await seedUser();
 		const other = await seedUser('other@example.com');
-		const { challengeId } = await startRegistration(db, user, url);
+		const { challengeId } = unwrap(await startRegistration(db, user, url));
 
 		const [row] = await db
 			.select()
@@ -270,7 +277,7 @@ describe('passkey registration', () => {
 		const user = await seedUser();
 		const credential = await registerPasskey(user.id);
 
-		const { options } = await startRegistration(db, user, url);
+		const { options } = unwrap(await startRegistration(db, user, url));
 		expect(options.excludeCredentials?.map((c) => c.id)).toEqual([credential.credentialId]);
 		expect(options.rp.id).toBe(RP_ID);
 	});
@@ -312,5 +319,50 @@ describe('passkey management', () => {
 		expect(await db.select().from(passkeys)).toHaveLength(1);
 		expect(await removePasskey(db, other.id, target.id)).toBe(true);
 		expect(await db.select().from(passkeys)).toHaveLength(0);
+	});
+});
+
+describe('hardening', () => {
+	it('replaces this browser’s previous challenge instead of accumulating rows', async () => {
+		const first = unwrap(await startAuthentication(db, url, { ip: '1.2.3.4' }));
+		unwrap(
+			await startAuthentication(db, url, {
+				ip: '1.2.3.4',
+				previousChallengeId: first.challengeId
+			})
+		);
+		expect(await db.select().from(passkeyChallenges)).toHaveLength(1);
+	});
+
+	it('caps the ceremonies one client can leave open', async () => {
+		for (let i = 0; i < 10; i++) unwrap(await startAuthentication(db, url, { ip: '9.9.9.9' }));
+
+		expect(await startAuthentication(db, url, { ip: '9.9.9.9' })).toBeNull();
+		// The cap is per client, so it can't be used to lock everyone else out.
+		expect(await startAuthentication(db, url, { ip: '8.8.8.8' })).not.toBeNull();
+	});
+
+	it('will not complete a challenge minted for another host', async () => {
+		const user = await seedUser();
+		const credential = await registerPasskey(user.id);
+		const started = unwrap(await startAuthentication(db, url));
+
+		const result = await finishAuthentication({
+			db,
+			url: new URL('https://elsewhere.test/login'),
+			challengeId: started.challengeId,
+			response: await assertion({ ...credential, challenge: started.options.challenge })
+		});
+		expect(result).toEqual({ ok: false, reason: 'invalid' });
+	});
+
+	it('flags a credential that already belongs to another account', async () => {
+		const owner = await seedUser();
+		const other = await seedUser('other@example.com');
+		const credential = await registerPasskey(owner.id);
+
+		expect(await credentialOwnedByOtherUser(db, credential.credentialId, other.id)).toBe(true);
+		expect(await credentialOwnedByOtherUser(db, credential.credentialId, owner.id)).toBe(false);
+		expect(await credentialOwnedByOtherUser(db, 'unknown-id', owner.id)).toBe(false);
 	});
 });

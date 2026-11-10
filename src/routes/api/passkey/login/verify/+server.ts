@@ -5,7 +5,7 @@ import {
 	authenticationBodySchema,
 	clearChallengeCookie,
 	finishAuthentication,
-	PASSKEY_CHALLENGE_COOKIE
+	PASSKEY_COOKIE
 } from '#lib/server/auth/passkey.js';
 import { createSession, sessionCookieDomain, setSessionCookie } from '#lib/server/auth/session.js';
 import { problem, zodProblem } from '#lib/server/http/problem.js';
@@ -25,12 +25,12 @@ export const POST: RequestHandler = async ({ locals, url, cookies, request }) =>
 	const result = await finishAuthentication({
 		db: locals.db,
 		url,
-		challengeId: cookies.get(PASSKEY_CHALLENGE_COOKIE),
+		challengeId: cookies.get(PASSKEY_COOKIE),
 		// SAFETY: `response` is a whole WebAuthn response; only `id`/`type` are shape-checked here
 		// because `verifyAuthenticationResponse` validates every other field itself.
 		response: parsed.data.response as unknown as AuthenticationResponseJSON
 	});
-	clearChallengeCookie(cookies);
+	clearChallengeCookie(cookies, PASSKEY_COOKIE);
 
 	if (!result.ok) {
 		return result.reason === 'not_allowed'
@@ -39,11 +39,6 @@ export const POST: RequestHandler = async ({ locals, url, cookies, request }) =>
 	}
 
 	const { token, expiresAt } = await createSession(locals.db, result.user.id);
-	setSessionCookie(
-		cookies,
-		token,
-		expiresAt,
-		sessionCookieDomain(url.hostname, env.PREVIEW_COOKIE_DOMAIN)
-	);
+	setSessionCookie(cookies, token, expiresAt, sessionCookieDomain(url.hostname, env));
 	return json({ redirectTo: safeRedirectPath(parsed.data.redirectTo) });
 };

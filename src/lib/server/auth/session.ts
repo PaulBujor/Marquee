@@ -79,14 +79,25 @@ export async function invalidateOtherSessions(
 	return deleted.length;
 }
 
+export interface PreviewCookieScope {
+	PREVIEW_NOINDEX?: string;
+	PREVIEW_COOKIE_DOMAIN?: string;
+}
+
 /**
- * A `Domain` the request host isn't under is dropped by the browser without an error, which turns every
- * preview sign-in into a silent bounce back to `/login` — so the shared preview domain only applies to
- * hosts actually under it. Anything else stays host-only.
+ * Only a preview deployment may widen the session cookie — a stray value on prod would hand it to every
+ * sibling host. The configured value must also be a domain at least three labels deep, the request host
+ * must be under it (the browser drops a cookie whose `Domain` doesn't match the host, which silently
+ * broke preview sign-in), and anything else stays host-only.
  */
-export function sessionCookieDomain(hostname: string, configured?: string): string | undefined {
+export function sessionCookieDomain(
+	hostname: string,
+	scope: PreviewCookieScope
+): string | undefined {
+	const configured = scope.PREVIEW_NOINDEX ? scope.PREVIEW_COOKIE_DOMAIN : undefined;
 	if (!configured) return undefined;
 	const bare = configured.replace(/^\./, '');
+	if (bare.split('.').length < 3) return undefined;
 	return hostname === bare || hostname.endsWith(`.${bare}`) ? configured : undefined;
 }
 
@@ -108,5 +119,8 @@ export function setSessionCookie(
 }
 
 export function deleteSessionCookie(cookies: Cookies, domain?: string): void {
-	cookies.delete(SESSION_COOKIE, { path: '/', ...(domain ? { domain } : {}) });
+	cookies.delete(SESSION_COOKIE, { path: '/' });
+	// A session minted under the other scope (host-only vs domain-wide) is a *separate* cookie under the
+	// same name; leaving it alive lets it shadow the one just cleared.
+	if (domain) cookies.delete(SESSION_COOKIE, { path: '/', domain });
 }

@@ -30,16 +30,15 @@ const database: Handle = async ({ event, resolve }) => {
 // `locals.user` null. Load functions/actions read `locals.user` for auth.
 const authentication: Handle = async ({ event, resolve }) => {
 	event.locals.user = null;
+	event.locals.session = null;
 	const token = event.cookies.get(SESSION_COOKIE);
 	if (token && event.locals.db) {
 		const result = await validateSession(event.locals.db, token);
 		if (result) {
 			event.locals.user = result.user;
+			event.locals.session = result.session;
 		} else {
-			deleteSessionCookie(
-				event.cookies,
-				sessionCookieDomain(event.url.hostname, env.PREVIEW_COOKIE_DOMAIN)
-			);
+			deleteSessionCookie(event.cookies, sessionCookieDomain(event.url.hostname, env));
 		}
 	}
 	return resolve(event);

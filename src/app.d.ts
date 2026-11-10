@@ -1,7 +1,7 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 import type { createDb } from '#lib/server/db/index.js';
-import type { User } from '#lib/server/db/schema.js';
+import type { Session, User } from '#lib/server/db/schema.js';
 
 declare global {
 	// App-consumed env vars/secrets, declared explicitly so they're typed even
@@ -32,6 +32,9 @@ declare global {
 			// The authenticated user, or null. Set by the `authentication` hook on every
 			// request from the session cookie.
 			user: User | null;
+			// The validated session row, or null. Same hook; carries `createdAt` (the sign-in time),
+			// which is what passkey enrolment gates on.
+			session: Session | null;
 		}
 		// interface PageData {}
 		// interface PageState {}

@@ -14,12 +14,7 @@ export const GET: RequestHandler = async ({ url, locals, cookies }) => {
 	const result = await verifyMagicLink(locals.db, token);
 	if (!result.ok) redirect(303, `/login?error=${result.reason}`);
 
-	setSessionCookie(
-		cookies,
-		result.token,
-		result.expiresAt,
-		sessionCookieDomain(url.hostname, env.PREVIEW_COOKIE_DOMAIN)
-	);
+	setSessionCookie(cookies, result.token, result.expiresAt, sessionCookieDomain(url.hostname, env));
 	// Re-validated here: the query string is user-editable.
 	redirect(303, safeRedirectPath(url.searchParams.get('redirectTo')));
 };
