@@ -9,6 +9,8 @@ import {
 	loginTokens,
 	media,
 	notificationLog,
+	passkeyChallenges,
+	passkeys,
 	people,
 	pushSubscriptions,
 	seasons,
@@ -54,6 +56,8 @@ export async function deleteUserCascade(db: Db, user: Pick<User, 'id' | 'email'>
 	statements.push(
 		db.delete(emailChangeTokens).where(eq(emailChangeTokens.userId, user.id)),
 		db.delete(sessions).where(eq(sessions.userId, user.id)),
+		db.delete(passkeys).where(eq(passkeys.userId, user.id)),
+		db.delete(passkeyChallenges).where(eq(passkeyChallenges.userId, user.id)),
 		db.delete(loginTokens).where(eq(loginTokens.email, user.email)),
 		db.delete(events).where(eq(events.userId, user.id)),
 		db.delete(syncState).where(eq(syncState.userId, user.id)),

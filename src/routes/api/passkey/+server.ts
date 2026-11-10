@@ -1,0 +1,10 @@
+import { error, json } from '@sveltejs/kit';
+import { listPasskeys } from '#lib/server/auth/passkey.js';
+import type { RequestHandler } from './$types';
+
+export const GET: RequestHandler = async ({ locals }) => {
+	if (!locals.user) error(401, 'Unauthorized');
+	if (!locals.db) error(503, 'Service unavailable');
+
+	return json({ passkeys: await listPasskeys(locals.db, locals.user.id) });
+};

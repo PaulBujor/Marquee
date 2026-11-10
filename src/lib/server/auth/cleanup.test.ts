@@ -73,6 +73,7 @@ describe('purgeExpiredAuth', () => {
 		expect(await purgeExpiredAuth(db, NOW)).toEqual({
 			loginTokens: 0,
 			sessions: 0,
+			passkeyChallenges: 0,
 			notifications: 0
 		});
 	});
