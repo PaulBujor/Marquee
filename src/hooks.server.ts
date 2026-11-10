@@ -3,7 +3,12 @@ import { error } from '@sveltejs/kit';
 import { sequence, type Handle, type HandleServerError } from '@sveltejs/kit/hooks';
 import { isAdminPath } from '#lib/server/admin/guard.js';
 import { createDb } from '#lib/server/db/index.js';
-import { validateSession, deleteSessionCookie, SESSION_COOKIE } from '#lib/server/auth/index.js';
+import {
+	validateSession,
+	deleteSessionCookie,
+	sessionCookieDomain,
+	SESSION_COOKIE
+} from '#lib/server/auth/index.js';
 import {
 	actorRateLimitKey,
 	noteRateLimited,
@@ -31,7 +36,10 @@ const authentication: Handle = async ({ event, resolve }) => {
 		if (result) {
 			event.locals.user = result.user;
 		} else {
-			deleteSessionCookie(event.cookies, env.PREVIEW_COOKIE_DOMAIN);
+			deleteSessionCookie(
+				event.cookies,
+				sessionCookieDomain(event.url.hostname, env.PREVIEW_COOKIE_DOMAIN)
+			);
 		}
 	}
 	return resolve(event);

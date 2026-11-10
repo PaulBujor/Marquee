@@ -6,6 +6,7 @@ import {
 	LINK_TTL_MINUTES,
 	normalizeEmail,
 	requestSignIn,
+	sessionCookieDomain,
 	setSessionCookie,
 	verifyCode
 } from '#lib/server/auth/index.js';
@@ -91,7 +92,7 @@ export const actions: Actions = {
 		}
 	},
 
-	verify: async ({ request, locals, cookies }) => {
+	verify: async ({ request, locals, cookies, url }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 
 		const data = await request.formData();
@@ -117,7 +118,12 @@ export const actions: Actions = {
 			return fail(502, { step: 'code' as const, email, method, codeError: SERVICE_UNAVAILABLE });
 		}
 		if (result.ok) {
-			setSessionCookie(cookies, result.token, result.expiresAt, env.PREVIEW_COOKIE_DOMAIN);
+			setSessionCookie(
+				cookies,
+				result.token,
+				result.expiresAt,
+				sessionCookieDomain(url.hostname, env.PREVIEW_COOKIE_DOMAIN)
+			);
 			redirect(303, redirectTo);
 		}
 

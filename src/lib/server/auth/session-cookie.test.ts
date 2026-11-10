@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Cookies } from '@sveltejs/kit';
-import { deleteSessionCookie, SESSION_COOKIE, setSessionCookie } from './session.js';
+import {
+	deleteSessionCookie,
+	sessionCookieDomain,
+	SESSION_COOKIE,
+	setSessionCookie
+} from './session.js';
 
 type Call = { kind: 'set' | 'delete'; name: string; value?: string; opts: Record<string, unknown> };
 
@@ -66,5 +71,30 @@ describe('session cookie scope', () => {
 				expires: EXPIRES
 			});
 		}
+	});
+});
+
+describe('preview cookie domain', () => {
+	const parent = '.preview.marquee.paulbujor.net';
+
+	it('is dropped when nothing is configured', () => {
+		expect(sessionCookieDomain('marquee.paulbujor.net', undefined)).toBeUndefined();
+	});
+
+	it('applies to the bare domain and anything under it', () => {
+		expect(sessionCookieDomain('preview.marquee.paulbujor.net', parent)).toBe(parent);
+		expect(sessionCookieDomain('pr-281.preview.marquee.paulbujor.net', parent)).toBe(parent);
+	});
+
+	it('is dropped on a host that is not under it, where the browser would reject the cookie', () => {
+		// A version preview URL (`*.workers.dev`) or any other host: a Domain the host isn't under is
+		// discarded silently, which is what made preview sign-ins bounce back to `/login`.
+		expect(sessionCookieDomain('abc-marquee.paul.workers.dev', parent)).toBeUndefined();
+		expect(sessionCookieDomain('marquee.paulbujor.net', parent)).toBeUndefined();
+	});
+
+	it('does not match a look-alike host that merely ends with the same text', () => {
+		expect(sessionCookieDomain('preview.marquee.paulbujor.net.evil.test', parent)).toBeUndefined();
+		expect(sessionCookieDomain('evil-preview.marquee.paulbujor.net', parent)).toBeUndefined();
 	});
 });

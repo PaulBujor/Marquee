@@ -7,7 +7,7 @@ import {
 	finishAuthentication,
 	PASSKEY_CHALLENGE_COOKIE
 } from '#lib/server/auth/passkey.js';
-import { createSession, setSessionCookie } from '#lib/server/auth/session.js';
+import { createSession, sessionCookieDomain, setSessionCookie } from '#lib/server/auth/session.js';
 import { problem, zodProblem } from '#lib/server/http/problem.js';
 import { safeRedirectPath } from '#lib/redirect.js';
 import type { RequestHandler } from './$types';
@@ -39,6 +39,11 @@ export const POST: RequestHandler = async ({ locals, url, cookies, request }) =>
 	}
 
 	const { token, expiresAt } = await createSession(locals.db, result.user.id);
-	setSessionCookie(cookies, token, expiresAt, env.PREVIEW_COOKIE_DOMAIN);
+	setSessionCookie(
+		cookies,
+		token,
+		expiresAt,
+		sessionCookieDomain(url.hostname, env.PREVIEW_COOKIE_DOMAIN)
+	);
 	return json({ redirectTo: safeRedirectPath(parsed.data.redirectTo) });
 };

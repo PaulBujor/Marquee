@@ -79,6 +79,17 @@ export async function invalidateOtherSessions(
 	return deleted.length;
 }
 
+/**
+ * A `Domain` the request host isn't under is dropped by the browser without an error, which turns every
+ * preview sign-in into a silent bounce back to `/login` — so the shared preview domain only applies to
+ * hosts actually under it. Anything else stays host-only.
+ */
+export function sessionCookieDomain(hostname: string, configured?: string): string | undefined {
+	if (!configured) return undefined;
+	const bare = configured.replace(/^\./, '');
+	return hostname === bare || hostname.endsWith(`.${bare}`) ? configured : undefined;
+}
+
 /** Preview-only, where every host shares one database; production stays host-only by passing nothing. */
 export function setSessionCookie(
 	cookies: Cookies,

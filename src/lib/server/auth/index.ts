@@ -292,6 +292,7 @@ export {
 	invalidateOtherSessions,
 	deleteSessionCookie,
 	setSessionCookie,
+	sessionCookieDomain,
 	SESSION_COOKIE
 } from './session';
 
