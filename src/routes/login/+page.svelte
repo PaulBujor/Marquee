@@ -1,20 +1,32 @@
 <script lang="ts">
 	import { enhance, type ActionResult } from '$app/forms';
 	import { browser } from '$app/env';
-	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import {
+		browserSupportsWebAuthn,
+		browserSupportsWebAuthnAutofill,
+		startAuthentication,
+		WebAuthnAbortService
+	} from '@simplewebauthn/browser';
 	import { resolve } from '$app/paths';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import * as InputOTP from '#lib/components/ui/input-otp/index.js';
+	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import { clearPendingLogout } from '#lib/client/logout.js';
+	import { navigate } from '#lib/client/navigate.js';
 	import { session } from '#lib/client/session.svelte.js';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let submitting = $state(false);
+	let passkeyBusy = $state(false);
+	let passkeyError = $state<string | null>(null);
 	let code = $state('');
 	let codeForm = $state<HTMLFormElement | null>(null);
+	// Conditional UI needs `autocomplete="webauthn"`; Svelte's `FullAutoFill` type doesn't have that token.
+	const passkeyAutofill = { autocomplete: 'webauthn' as 'email' };
 
 	// Installed PWAs can't capture the emailed link, so they get a code; no server header exists, so detection is client-side.
 	const mode = $derived(
@@ -56,6 +68,70 @@
 		};
 	});
 
+	// Behind `mounted` so the server HTML and the client's first render agree; support is only known
+	// in the browser anyway, and a mismatch here breaks hydration (and with it every form).
+	let passkeysSupported = $state(false);
+	onMount(async () => {
+		if (!browserSupportsWebAuthn()) return;
+		passkeysSupported = true;
+		if (await browserSupportsWebAuthnAutofill()) void signInWithPasskey(true);
+	});
+
+	/**
+	 * Runs the passkey ceremony. `autofill` is conditional UI: no dialog, the passkey waits in the
+	 * email field's autofill list, so it stays silent until the user picks one.
+	 */
+	async function signInWithPasskey(autofill: boolean) {
+		if (!autofill) {
+			passkeyBusy = true;
+			passkeyError = null;
+		}
+		try {
+			const optionsRes = await fetch('/api/passkey/login/options', { method: 'POST' });
+			if (!optionsRes.ok) throw new Error(`options ${optionsRes.status}`);
+
+			let authentication;
+			try {
+				authentication = await startAuthentication({
+					optionsJSON: await optionsRes.json(),
+					useBrowserAutofill: autofill
+				});
+			} catch {
+				// Cancelled, or no passkey for this site — the email form is already on screen.
+				if (!autofill) passkeyError = 'No passkey used. Sign in with your email below instead.';
+				return;
+			}
+
+			const verifyRes = await fetch('/api/passkey/login/verify', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ response: authentication, redirectTo })
+			});
+			if (!verifyRes.ok) {
+				passkeyError =
+					verifyRes.status === 403
+						? "This account can't sign in right now."
+						: 'That passkey was not accepted. Sign in with your email below instead.';
+				return;
+			}
+
+			const { redirectTo: target } = (await verifyRes.json()) as { redirectTo: string };
+			session.reset();
+			clearPendingLogout();
+			await navigate(target, { replaceState: true, refreshAll: true });
+		} catch {
+			// A failed autofill attempt stays silent; the email form is the fallback either way.
+			if (!autofill)
+				passkeyError = "Passkey sign-in isn't working right now. Use your email below.";
+		} finally {
+			passkeyBusy = false;
+		}
+	}
+
+	// Email means the passkey path is over: drop the pending conditional ceremony, so nothing of ours is
+	// in flight while the user works through the code step.
+	const cancelPasskey = () => WebAuthnAbortService.cancelCeremony();
+
 	const track = () => {
 		submitting = true;
 		return async ({ update }: { update: () => Promise<void> }) => {
@@ -71,8 +147,7 @@
 				// A fresh sign-in supersedes expired-session state and any logout queued offline.
 				session.reset();
 				clearPendingLogout();
-				// eslint-disable-next-line svelte/no-navigation-without-resolve
-				await goto(result.location, { replaceState: true, refreshAll: true });
+				await navigate(result.location, { replaceState: true, refreshAll: true });
 				return;
 			}
 			await update();
@@ -92,6 +167,7 @@
 		method="POST"
 		action="?/verify"
 		class="flex flex-col gap-4"
+		onsubmit={cancelPasskey}
 		use:enhance={trackCode}
 	>
 		<input type="hidden" name="email" value={email} />
@@ -191,14 +267,36 @@
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<form method="POST" action="?/request" class="flex flex-col gap-3" use:enhance={track}>
+				<form
+					method="POST"
+					action="?/request"
+					class="flex flex-col gap-3"
+					onsubmit={cancelPasskey}
+					use:enhance={track}
+				>
 					<input type="hidden" name="mode" value={mode} />
 					<input type="hidden" name="redirectTo" value={redirectTo} />
+					{#if passkeysSupported}
+						<Button
+							type="button"
+							class="w-full"
+							variant="secondary"
+							disabled={passkeyBusy || !online}
+							onclick={() => signInWithPasskey(false)}
+						>
+							<KeyRoundIcon class="size-4" />
+							{passkeyBusy ? 'Waiting for your passkey…' : 'Sign in with a passkey'}
+						</Button>
+						{#if passkeyError}
+							<p class="text-sm text-destructive">{passkeyError}</p>
+						{/if}
+						<p class="text-center text-xs text-muted-foreground">or use your email</p>
+					{/if}
 					<Input
 						type="email"
 						name="email"
+						{...passkeyAutofill}
 						placeholder="you@example.com"
-						autocomplete="email"
 						required
 						aria-label="Email address"
 						value={email}

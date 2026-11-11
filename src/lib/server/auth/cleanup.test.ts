@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDb } from '#lib/server/db/test-db.js';
-import { loginTokens, sessions, users } from '#lib/server/db/schema.js';
+import { loginTokens, passkeyChallenges, sessions, users } from '#lib/server/db/schema.js';
 import { hashToken } from './tokens';
 import { purgeExpiredAuth } from './cleanup';
 
@@ -63,6 +63,26 @@ describe('purgeExpiredAuth', () => {
 		expect(remaining.map((r) => r.id)).toEqual([liveId]);
 	});
 
+	it('deletes expired passkey challenges and keeps live ones', async () => {
+		await db.insert(passkeyChallenges).values([
+			{
+				id: 'stale',
+				challenge: 'stale',
+				rpId: 'marquee.test',
+				expiresAt: new Date(NOW - HOUR)
+			},
+			{
+				id: 'live',
+				challenge: 'live',
+				rpId: 'marquee.test',
+				expiresAt: new Date(NOW + HOUR)
+			}
+		]);
+
+		expect(await purgeExpiredAuth(db, NOW)).toMatchObject({ passkeyChallenges: 1 });
+		expect((await db.select().from(passkeyChallenges)).map((r) => r.id)).toEqual(['live']);
+	});
+
 	it('is a no-op (0/0) when nothing is stale', async () => {
 		await db.insert(loginTokens).values({
 			email: 'live@x.com',
@@ -73,6 +93,7 @@ describe('purgeExpiredAuth', () => {
 		expect(await purgeExpiredAuth(db, NOW)).toEqual({
 			loginTokens: 0,
 			sessions: 0,
+			passkeyChallenges: 0,
 			notifications: 0
 		});
 	});

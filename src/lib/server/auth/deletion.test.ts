@@ -125,6 +125,8 @@ describe('deleteUserCascade', () => {
 				'events',
 				'media',
 				'notification_log',
+				'passkey_challenges',
+				'passkeys',
 				'people',
 				'push_subscriptions',
 				'sessions',

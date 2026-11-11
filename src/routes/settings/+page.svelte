@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import PageHeader from '#lib/components/page-header.svelte';
 	import AccountCard from './account-card.svelte';
+	import PasskeyCard from './passkey-card.svelte';
 	import AppearanceCard from './appearance-card.svelte';
 	import NotificationsCard from './notifications-card.svelte';
 	import DataCacheCard from './data-cache-card.svelte';
@@ -40,6 +41,7 @@
 		<AdminCard />
 	{/if}
 	<AccountCard user={data.user} codeTtlMinutes={data.codeTtlMinutes} {form} />
+	<PasskeyCard />
 	<AppearanceCard />
 	<NotificationsCard />
 	<DataCacheCard />

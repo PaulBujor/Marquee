@@ -130,10 +130,62 @@ export const sessions = sqliteTable(
 	]
 );
 
+/** A WebAuthn credential: only the public key is stored, the private key never leaves the device. */
+export const passkeys = sqliteTable(
+	'passkeys',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		/** Base64url, as the browser reports it; unique across users, so a lookup alone identifies the owner. */
+		credentialId: text('credential_id').notNull().unique(),
+		/** Base64url COSE public key, as returned by `verifyRegistrationResponse`. */
+		publicKey: text('public_key').notNull(),
+		/** Signature counter; a value that doesn't advance means a cloned authenticator. */
+		counter: integer('counter').notNull().default(0),
+		transports: text('transports', { mode: 'json' }).$type<string[]>(),
+		/** User-supplied label, so a person can tell their devices apart. */
+		name: text('name').notNull(),
+		backedUp: integer('backed_up', { mode: 'boolean' }).notNull().default(false),
+		createdAt: integer('created_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		lastUsedAt: integer('last_used_at', { mode: 'timestamp' })
+	},
+	(table) => [index('passkeys_user_id_idx').on(table.userId)]
+);
+
+/**
+ * One in-flight WebAuthn ceremony. The row id (not the challenge) goes into an httpOnly cookie, so the
+ * challenge is single-use, expiring, and bound to the browser that requested it.
+ */
+export const passkeyChallenges = sqliteTable(
+	'passkey_challenges',
+	{
+		id: text('id').primaryKey(),
+		challenge: text('challenge').notNull(),
+		/** Set for registration, which only an authenticated user may complete; null for sign-in. */
+		userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+		/** The hostname the ceremony started on; a challenge is only ever completed there. */
+		rpId: text('rp_id'),
+		/** Only used to bound how many ceremonies one client can have in flight. */
+		requestIp: text('request_ip'),
+		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull()
+	},
+	(table) => [
+		index('passkey_challenges_expires_at_idx').on(table.expiresAt),
+		index('passkey_challenges_request_ip_idx').on(table.requestIp)
+	]
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type LoginToken = typeof loginTokens.$inferSelect;
 export type EmailChangeToken = typeof emailChangeTokens.$inferSelect;
+export type Passkey = typeof passkeys.$inferSelect;
 
 // Unlike `users`, these tables have no `updated_at` trigger: every write flows through projection code, which sets the LWW clocks explicitly.
 

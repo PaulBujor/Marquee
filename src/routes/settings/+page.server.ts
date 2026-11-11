@@ -5,6 +5,7 @@ import {
 	deleteSessionCookie,
 	normalizeEmail,
 	requestEmailChange,
+	sessionCookieDomain,
 	SESSION_COOKIE,
 	verifyEmailChange
 } from '#lib/server/auth/index.js';
@@ -128,7 +129,7 @@ export const actions: Actions = {
 		});
 	},
 
-	deleteAccount: async ({ request, locals, cookies }) => {
+	deleteAccount: async ({ request, locals, cookies, url }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
 
@@ -140,7 +141,7 @@ export const actions: Actions = {
 
 		const email = locals.user.email;
 		await deleteAccount(locals.db, locals.user);
-		deleteSessionCookie(cookies);
+		deleteSessionCookie(cookies, sessionCookieDomain(url.hostname, env));
 
 		// Best-effort: a mail failure can't undo a committed deletion, and `waitUntil` keeps it off the redirect.
 		if (env.RESEND_API_KEY || env.SMTP_HOST) {

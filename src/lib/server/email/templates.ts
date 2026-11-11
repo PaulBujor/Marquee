@@ -82,6 +82,22 @@ export function renderEmailChangedNotice(newEmail: string): string {
 	);
 }
 
+export function renderPasskeyChangedEmail(action: 'added' | 'removed', name: string): string {
+	const label = escapeHtml(name || 'Passkey');
+	if (action === 'added') {
+		return layout(
+			'A passkey was added to Marquee',
+			`<p>A passkey called <strong>${label}</strong> can now sign in to your Marquee account.</p>
+		<p style="${MUTED}">If this wasn't you, someone else has access to your account: sign in with an email code, remove the passkey in Settings, and change your email.</p>`
+		);
+	}
+	return layout(
+		'A passkey was removed from Marquee',
+		`<p>The passkey <strong>${label}</strong> can no longer sign in to your Marquee account.</p>
+		<p style="${MUTED}">If this wasn't you, someone else has access to your account: sign in with an email code and review the passkeys in Settings.</p>`
+	);
+}
+
 export function renderWaitlistEmail(): string {
 	return layout(
 		"You're on the waitlist",
