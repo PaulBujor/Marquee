@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { enhance, type ActionResult } from '$app/forms';
 	import { browser } from '$app/env';
-	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import {
 		browserSupportsWebAuthn,
@@ -16,6 +15,7 @@
 	import * as InputOTP from '#lib/components/ui/input-otp/index.js';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import { clearPendingLogout } from '#lib/client/logout.js';
+	import { navigate } from '#lib/client/navigate.js';
 	import { session } from '#lib/client/session.svelte.js';
 	import type { ActionData, PageData } from './$types';
 
@@ -118,8 +118,7 @@
 			const { redirectTo: target } = (await verifyRes.json()) as { redirectTo: string };
 			session.reset();
 			clearPendingLogout();
-			// eslint-disable-next-line svelte/no-navigation-without-resolve
-			await goto(target, { replaceState: true, refreshAll: true });
+			await navigate(target, { replaceState: true, refreshAll: true });
 		} catch {
 			// A failed autofill attempt stays silent; the email form is the fallback either way.
 			if (!autofill)
@@ -148,8 +147,7 @@
 				// A fresh sign-in supersedes expired-session state and any logout queued offline.
 				session.reset();
 				clearPendingLogout();
-				// eslint-disable-next-line svelte/no-navigation-without-resolve
-				await goto(result.location, { replaceState: true, refreshAll: true });
+				await navigate(result.location, { replaceState: true, refreshAll: true });
 				return;
 			}
 			await update();
