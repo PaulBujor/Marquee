@@ -7,8 +7,11 @@ import {
 	credentialOwnedByOtherUser,
 	finishAuthentication,
 	finishRegistration,
+	isRecentSignIn,
 	listPasskeys,
+	REAUTH_WINDOW_MS,
 	removePasskey,
+	requireRecentSignIn,
 	startAuthentication,
 	startRegistration
 } from './passkey';
@@ -233,6 +236,8 @@ describe('passkey sign-in', () => {
 			response: await assertion({ ...credential, challenge: options.challenge })
 		});
 		expect(result).toEqual({ ok: false, reason: 'not_allowed' });
+		// Rejected before any write, so a blocked user's assertion leaves no trace on the credential.
+		expect((await db.select().from(passkeys))[0].lastUsedAt).toBeNull();
 	});
 });
 
@@ -356,6 +361,26 @@ describe('hardening', () => {
 		expect(result).toEqual({ ok: false, reason: 'invalid' });
 	});
 
+	it('never supersedes a challenge belonging to another owner', async () => {
+		const user = await seedUser();
+		const enrolled = unwrap(await startRegistration(db, user, url));
+		const anonymous = unwrap(await startAuthentication(db, url));
+
+		// A caller-supplied cookie id must not delete the other owner's row in either direction.
+		unwrap(await startAuthentication(db, url, { previousChallengeId: enrolled.challengeId }));
+		unwrap(await startRegistration(db, user, url, { previousChallengeId: anonymous.challengeId }));
+
+		const ids = (await db.select().from(passkeyChallenges)).map((row) => row.id);
+		expect(ids).toEqual(expect.arrayContaining([enrolled.challengeId, anonymous.challengeId]));
+	});
+
+	it('replaces the same user’s previous enrolment challenge', async () => {
+		const user = await seedUser();
+		const first = unwrap(await startRegistration(db, user, url));
+		unwrap(await startRegistration(db, user, url, { previousChallengeId: first.challengeId }));
+		expect(await db.select().from(passkeyChallenges)).toHaveLength(1);
+	});
+
 	it('flags a credential that already belongs to another account', async () => {
 		const owner = await seedUser();
 		const other = await seedUser('other@example.com');
@@ -364,5 +389,23 @@ describe('hardening', () => {
 		expect(await credentialOwnedByOtherUser(db, credential.credentialId, other.id)).toBe(true);
 		expect(await credentialOwnedByOtherUser(db, credential.credentialId, owner.id)).toBe(false);
 		expect(await credentialOwnedByOtherUser(db, 'unknown-id', owner.id)).toBe(false);
+	});
+});
+
+describe('recent sign-in gate', () => {
+	it('allows a sign-in inside the window and refuses one past it', () => {
+		const now = Date.now();
+		expect(isRecentSignIn({ createdAt: new Date(now - 60_000) }, now)).toBe(true);
+		expect(isRecentSignIn({ createdAt: new Date(now - REAUTH_WINDOW_MS) }, now)).toBe(true);
+		expect(isRecentSignIn({ createdAt: new Date(now - REAUTH_WINDOW_MS - 1) }, now)).toBe(false);
+	});
+
+	it('refuses a credential change without a recent session', () => {
+		const now = Date.now();
+		expect(requireRecentSignIn({ session: null })?.status).toBe(403);
+		expect(
+			requireRecentSignIn({ session: { createdAt: new Date(now - REAUTH_WINDOW_MS - 1) } })?.status
+		).toBe(403);
+		expect(requireRecentSignIn({ session: { createdAt: new Date(now) } })).toBeNull();
 	});
 });

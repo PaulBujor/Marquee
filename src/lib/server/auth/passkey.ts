@@ -107,6 +107,13 @@ async function liveChallenges(db: Db, ip: string): Promise<number> {
 	return n;
 }
 
+/** The owner's slice of a challenge row: a cookie id must never reach another user's row. */
+function ownedBy(owner: { userId: string } | 'anonymous', id: string) {
+	return owner === 'anonymous'
+		? and(eq(passkeyChallenges.id, id), isNull(passkeyChallenges.userId))
+		: and(eq(passkeyChallenges.id, id), eq(passkeyChallenges.userId, owner.userId));
+}
+
 /** Single use: the row is deleted as it's read, so a replayed ceremony finds nothing to match. */
 async function takeChallenge(
 	db: Db,
@@ -115,18 +122,11 @@ async function takeChallenge(
 	rpId: string
 ): Promise<string | null> {
 	if (!id) return null;
-	const deleted = await db
-		.delete(passkeyChallenges)
-		.where(
-			owner === 'anonymous'
-				? and(eq(passkeyChallenges.id, id), isNull(passkeyChallenges.userId))
-				: and(eq(passkeyChallenges.id, id), eq(passkeyChallenges.userId, owner.userId))
-		)
-		.returning({
-			challenge: passkeyChallenges.challenge,
-			expiresAt: passkeyChallenges.expiresAt,
-			rpId: passkeyChallenges.rpId
-		});
+	const deleted = await db.delete(passkeyChallenges).where(ownedBy(owner, id)).returning({
+		challenge: passkeyChallenges.challenge,
+		expiresAt: passkeyChallenges.expiresAt,
+		rpId: passkeyChallenges.rpId
+	});
 	const row = deleted.at(0);
 	if (!row || row.expiresAt.getTime() <= Date.now()) return null;
 	// A challenge is only ever completed on the host it was issued for.
@@ -162,9 +162,14 @@ export interface CeremonyOpts {
 }
 
 /** Null when this client already has too many ceremonies open. */
-async function supersedeAndThrottle(db: Db, opts: CeremonyOpts): Promise<{ throttled: boolean }> {
+async function supersedeAndThrottle(
+	db: Db,
+	opts: CeremonyOpts,
+	owner: { userId: string } | 'anonymous'
+): Promise<{ throttled: boolean }> {
+	// Scoped to the owner: the cookie carrying this id is caller-controlled.
 	if (opts.previousChallengeId)
-		await db.delete(passkeyChallenges).where(eq(passkeyChallenges.id, opts.previousChallengeId));
+		await db.delete(passkeyChallenges).where(ownedBy(owner, opts.previousChallengeId));
 	// Counting after the delete, so a browser replacing its own challenge is never pushed over.
 	const open = opts.ip ? await liveChallenges(db, opts.ip) : 0;
 	return { throttled: open >= LIVE_CHALLENGES };
@@ -176,7 +181,7 @@ export async function startRegistration(
 	url: URL,
 	opts: CeremonyOpts = {}
 ): Promise<PasskeyOptions<PublicKeyCredentialCreationOptionsJSON> | null> {
-	if ((await supersedeAndThrottle(db, opts)).throttled) return null;
+	if ((await supersedeAndThrottle(db, opts, { userId: user.id })).throttled) return null;
 
 	const existing = await db
 		.select({ credentialId: passkeys.credentialId, transports: passkeys.transports })
@@ -296,7 +301,7 @@ export async function startAuthentication(
 	url: URL,
 	opts: CeremonyOpts = {}
 ): Promise<PasskeyOptions<PublicKeyCredentialRequestOptionsJSON> | null> {
-	if ((await supersedeAndThrottle(db, opts)).throttled) return null;
+	if ((await supersedeAndThrottle(db, opts, 'anonymous')).throttled) return null;
 
 	const options = await generateAuthenticationOptions({
 		...relyingParty(url),
@@ -355,14 +360,15 @@ export async function finishAuthentication(opts: {
 	}
 	if (!verification.verified) return { ok: false, reason: 'invalid' };
 
+	// A passkey outliving a block/disable must not become a way in — checked before anything is written.
+	if (row.user.status !== 'enabled') return { ok: false, reason: 'not_allowed' };
+
 	const { newCounter, credentialBackedUp } = verification.authenticationInfo;
 	await db
 		.update(passkeys)
 		.set({ counter: newCounter, backedUp: credentialBackedUp, lastUsedAt: new Date() })
 		.where(eq(passkeys.id, row.passkey.id));
 
-	// A passkey outliving a block/disable must not become a way in.
-	if (row.user.status !== 'enabled') return { ok: false, reason: 'not_allowed' };
 	return { ok: true, user: row.user };
 }
 
