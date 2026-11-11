@@ -41,7 +41,7 @@
 		<AdminCard />
 	{/if}
 	<AccountCard user={data.user} codeTtlMinutes={data.codeTtlMinutes} {form} />
-	<PasskeyCard />
+	<PasskeyCard email={data.user.email} />
 	<AppearanceCard />
 	<NotificationsCard />
 	<DataCacheCard />

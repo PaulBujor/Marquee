@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { enhance, type ActionResult } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
@@ -8,6 +8,7 @@
 	import OfflineAction from '#lib/components/offline-action.svelte';
 	import { sync } from '#lib/client/sync/engine.svelte.js';
 	import { signOutOffline } from '#lib/client/logout.js';
+	import ReauthDialog from '#lib/components/reauth-dialog.svelte';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import type { ActionData, PageData } from './$types';
 
@@ -21,6 +22,9 @@
 	let loggingOut = $state(false);
 	let code = $state('');
 	let codeForm = $state<HTMLFormElement | null>(null);
+	let requestForm = $state<HTMLFormElement | null>(null);
+	let reauthOpen = $state(false);
+	let reauthRetry = $state<(() => void) | null>(null);
 
 	const step = $derived(form && 'step' in form ? form.step : null);
 	const message = $derived(form && 'message' in form ? form.message : null);
@@ -35,11 +39,24 @@
 
 	const track = () => {
 		submitting = true;
-		return async ({ update }: { update: () => Promise<void> }) => {
+		return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+			if (result.type === 'failure' && result.status === 403) {
+				submitting = false;
+				reauthRetry = () => requestForm?.requestSubmit();
+				reauthOpen = true;
+				return;
+			}
 			await update();
 			submitting = false;
 		};
 	};
+
+	function onReauth() {
+		reauthOpen = false;
+		const retry = reauthRetry;
+		reauthRetry = null;
+		retry?.();
+	}
 
 	const trackCode = () => {
 		submitting = true;
@@ -125,6 +142,7 @@
 			</form>
 		{:else}
 			<form
+				bind:this={requestForm}
 				method="POST"
 				action="?/requestEmailChange"
 				class="flex flex-col gap-3"
@@ -177,4 +195,11 @@
 			</Button>
 		</form>
 	</Card.Footer>
+
+	<ReauthDialog
+		bind:open={reauthOpen}
+		email={user.email}
+		redirectTo="/settings"
+		onSuccess={onReauth}
+	/>
 </Card.Root>

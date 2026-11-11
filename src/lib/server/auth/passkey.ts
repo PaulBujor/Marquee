@@ -11,7 +11,7 @@ import {
 	type RegistrationResponseJSON
 } from '@simplewebauthn/server';
 import { isoBase64URL, isoUint8Array } from '@simplewebauthn/server/helpers';
-import type { Cookies } from '@sveltejs/kit';
+import { fail, type Cookies } from '@sveltejs/kit';
 import { problem } from '#lib/server/http/problem.js';
 import type { createDb } from '#lib/server/db/index.js';
 import {
@@ -64,6 +64,17 @@ export function requireRecentSignIn(scope: {
 	if (scope.session && isRecentSignIn(scope.session)) return null;
 	return problem(403, 'Sign in again', {
 		detail: 'Adding or removing a passkey needs a recent sign-in. Sign out and back in, then retry.'
+	});
+}
+
+/** The form-action twin of `requireRecentSignIn`: same gate, but a `fail` a form's `enhance` can read. */
+export function recentSignInFailure(scope: {
+	session: { createdAt: Date } | null;
+}): ReturnType<typeof fail> | null {
+	if (scope.session && isRecentSignIn(scope.session)) return null;
+	return fail(403, {
+		message: 'Sign in again to continue.',
+		reauth: true
 	});
 }
 

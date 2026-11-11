@@ -9,6 +9,7 @@ import {
 	SESSION_COOKIE,
 	verifyEmailChange
 } from '#lib/server/auth/index.js';
+import { recentSignInFailure } from '#lib/server/auth/passkey.js';
 import { codeField } from '#lib/validation/index.js';
 import { createEmailSender } from '#lib/server/email/index.js';
 import {
@@ -38,6 +39,10 @@ export const actions: Actions = {
 	requestEmailChange: async ({ request, locals, getClientAddress }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
+
+		// The new address is proved by its own code; this gate is about the account holder being present.
+		const denied = recentSignInFailure(locals);
+		if (denied) return denied;
 
 		const data = await request.formData();
 		const newEmail = String(data.get('newEmail') ?? '');
@@ -132,6 +137,10 @@ export const actions: Actions = {
 	deleteAccount: async ({ request, locals, cookies, url }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 		if (!locals.user) return fail(401, { message: SERVICE_UNAVAILABLE });
+
+		// Irreversible, so it needs the same fresh sign-in as a credential change.
+		const denied = recentSignInFailure(locals);
+		if (denied) return denied;
 
 		const data = await request.formData();
 		const confirm = normalizeEmail(String(data.get('confirmEmail') ?? ''));
