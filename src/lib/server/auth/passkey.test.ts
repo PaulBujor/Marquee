@@ -10,6 +10,7 @@ import {
 	isRecentSignIn,
 	listPasskeys,
 	REAUTH_WINDOW_MS,
+	recentSignInFailure,
 	removePasskey,
 	requireRecentSignIn,
 	startAuthentication,
@@ -407,5 +408,14 @@ describe('recent sign-in gate', () => {
 			requireRecentSignIn({ session: { createdAt: new Date(now - REAUTH_WINDOW_MS - 1) } })?.status
 		).toBe(403);
 		expect(requireRecentSignIn({ session: { createdAt: new Date(now) } })).toBeNull();
+	});
+
+	it('gives form actions the same verdict as a `fail`', () => {
+		const now = Date.now();
+		expect(recentSignInFailure({ session: null })?.status).toBe(403);
+		expect(
+			recentSignInFailure({ session: { createdAt: new Date(now - REAUTH_WINDOW_MS - 1) } })?.status
+		).toBe(403);
+		expect(recentSignInFailure({ session: { createdAt: new Date(now) } })).toBeNull();
 	});
 });

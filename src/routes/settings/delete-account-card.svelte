@@ -7,6 +7,7 @@
 	import OfflineAction from '#lib/components/offline-action.svelte';
 	import { sync } from '#lib/client/sync/engine.svelte.js';
 	import { wipeLocalData } from '#lib/client/idb/index.js';
+	import ReauthDialog from '#lib/components/reauth-dialog.svelte';
 	import { notifications } from '#lib/state/notifications.svelte.js';
 	import type { ActionData } from './$types';
 
@@ -15,6 +16,9 @@
 	let submitting = $state(false);
 	let deleteOpen = $state(false);
 	let confirmEmail = $state('');
+	let deleteForm = $state<HTMLFormElement | null>(null);
+	let reauthOpen = $state(false);
+	let reauthRetry = $state<(() => void) | null>(null);
 
 	const online = $derived(sync.online);
 
@@ -23,6 +27,13 @@
 	const trackDelete = () => {
 		submitting = true;
 		return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+			// A stale sign-in is the one failure the dialog can fix; everything else stays in the form.
+			if (result.type === 'failure' && result.status === 403) {
+				submitting = false;
+				reauthRetry = () => deleteForm?.requestSubmit();
+				reauthOpen = true;
+				return;
+			}
 			// Wipe the local replica before the redirect navigates: the active user is still this account here.
 			if (result.type === 'redirect') {
 				await notifications.disable();
@@ -32,6 +43,13 @@
 			submitting = false;
 		};
 	};
+
+	function onReauth() {
+		reauthOpen = false;
+		const retry = reauthRetry;
+		reauthRetry = null;
+		retry?.();
+	}
 </script>
 
 <Card.Root class="ring-destructive/40">
@@ -68,6 +86,7 @@
 					</AlertDialog.Description>
 				</AlertDialog.Header>
 				<form
+					bind:this={deleteForm}
 					method="POST"
 					action="?/deleteAccount"
 					class="flex flex-col gap-3"
@@ -100,3 +119,10 @@
 		</AlertDialog.Root>
 	</Card.Content>
 </Card.Root>
+
+<ReauthDialog
+	bind:open={reauthOpen}
+	email={userEmail}
+	redirectTo="/settings"
+	onSuccess={onReauth}
+/>

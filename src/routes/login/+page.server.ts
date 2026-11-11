@@ -135,6 +135,38 @@ export const actions: Actions = {
 		});
 	},
 
+	// A signed-in user re-proving presence for a recent-sign-in gate. No redirect: the dialog that
+	// calls this retries the action that asked for it, so navigating away would lose that retry.
+	reauth: async ({ request, locals, cookies, url }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in.' });
+		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
+
+		const data = await request.formData();
+		const code = String(data.get('code') ?? '').trim();
+		if (!codeField.safeParse(code).success) {
+			return fail(400, { codeError: 'Enter the 6-digit code.' });
+		}
+
+		let result;
+		try {
+			result = await verifyCode(locals.db, locals.user.email, code);
+		} catch (err) {
+			console.error('re-authentication failed:', err);
+			return fail(502, { codeError: SERVICE_UNAVAILABLE });
+		}
+		if (result.ok) {
+			setSessionCookie(
+				cookies,
+				result.token,
+				result.expiresAt,
+				sessionCookieDomain(url.hostname, env)
+			);
+			return { ok: true };
+		}
+
+		return fail(400, { codeError: codeErrorMessage(result.reason) });
+	},
+
 	join: async ({ request, locals, getClientAddress }) => {
 		if (!locals.db) return fail(503, { message: SERVICE_UNAVAILABLE });
 

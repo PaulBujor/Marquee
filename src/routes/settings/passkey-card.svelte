@@ -6,6 +6,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { sync } from '#lib/client/sync/engine.svelte.js';
+	import ReauthDialog from '#lib/components/reauth-dialog.svelte';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import XIcon from '@lucide/svelte/icons/x';
 
@@ -17,21 +18,37 @@
 		lastUsedAt: number | null;
 	}
 
+	let { email }: { email: string } = $props();
+
 	let passkeys = $state<PasskeyRow[]>([]);
 	let name = $state('');
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 	let loaded = $state(false);
+	let reauthOpen = $state(false);
+	let reauthRetry = $state<(() => void) | null>(null);
 
 	const supported = browserSupportsWebAuthn();
 	const online = $derived(sync.online);
 	const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
-	// 403 is the fresh-sign-in rule for credential changes; 429 is the per-client ceremony cap.
+	// 429 is the per-client ceremony cap; everything else is a generic failure.
 	function failure(res: Response): string {
-		if (res.status === 403) return 'For your security, sign out and back in, then try again.';
 		if (res.status === 429) return 'Too many attempts — try again in a few minutes.';
 		return "That didn't work. Try again.";
+	}
+
+	/** A 403 means the sign-in is stale: re-prove it in the dialog, then replay the action. */
+	function needsReauth(retry: () => void) {
+		reauthRetry = retry;
+		reauthOpen = true;
+	}
+
+	function onReauth() {
+		reauthOpen = false;
+		const retry = reauthRetry;
+		reauthRetry = null;
+		retry?.();
 	}
 
 	async function loadPasskeys() {
@@ -54,6 +71,10 @@
 		error = null;
 		try {
 			const optionsRes = await fetch('/api/passkey/register/options', { method: 'POST' });
+			if (optionsRes.status === 403) {
+				needsReauth(addPasskey);
+				return;
+			}
 			if (!optionsRes.ok) {
 				error = failure(optionsRes);
 				return;
@@ -94,8 +115,9 @@
 		error = null;
 		try {
 			const res = await fetch(`/api/passkey/${passkey.id}`, { method: 'DELETE' });
-			// Only 403/429 are worth surfacing; a 404 just means the list was stale.
-			if (res.status === 403 || res.status === 429) error = failure(res);
+			// 429 is worth surfacing; a 404 just means the list was stale.
+			if (res.status === 403) needsReauth(() => removePasskey(passkey));
+			else if (res.status === 429) error = failure(res);
 		} catch {
 			// Best-effort — the reload below reflects the real state.
 		} finally {
@@ -178,3 +200,5 @@
 		{/if}
 	</Card.Content>
 </Card.Root>
+
+<ReauthDialog bind:open={reauthOpen} {email} redirectTo="/settings" onSuccess={onReauth} />
