@@ -406,8 +406,10 @@
 		</div>
 	{/if}
 
+	<!-- `relative` is load-bearing: the hero's gradient overlay is positioned, so a static body
+	     would paint underneath it and lose the title's first line where the fade turns opaque. -->
 	<div
-		class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 pb-tab-bar {detail.backdropPath
+		class="relative mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 pb-tab-bar {detail.backdropPath
 			? '-mt-14'
 			: 'pt-[calc(4.75rem+env(safe-area-inset-top))]'}"
 	>
