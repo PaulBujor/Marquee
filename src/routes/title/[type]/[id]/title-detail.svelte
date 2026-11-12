@@ -21,7 +21,8 @@
 	import HeaderScrim from '#lib/components/header-scrim.svelte';
 	import OfflineState from '#lib/components/offline-state.svelte';
 	import { Skeleton } from '#lib/components/ui/skeleton/index.js';
-	import { hasDescription, posterUrl } from '#lib/media.js';
+	import { hasDescription, posterUrl, proxiedImageUrl } from '#lib/media.js';
+	import { heroInk as sampleHeroInk, type HeroInk } from '#lib/client/hero-ink.js';
 	import { formatExactDateTime, formatRelativeDay } from '#lib/date.js';
 	import {
 		tmdbMediaId,
@@ -218,6 +219,39 @@
 	// Header reveals the title once the <h1> scrolls past it (-56px is the header height).
 	let titleEl = $state<HTMLElement | null>(null);
 	let titleInView = $state(true);
+
+	// The controls sit on the artwork until the title scrolls under the header, so their ink follows the
+	// backdrop's top corners; once the scrim is behind them they go back to the theme's foreground.
+	let backdropInk = $state<HeroInk | null>(null);
+	$effect(() => {
+		const path = detail.backdropPath;
+		backdropInk = null;
+		const url = proxiedImageUrl(path, 'w780');
+		if (!url) return;
+		let cancelled = false;
+		sampleHeroInk(url).then((ink) => {
+			if (!cancelled) backdropInk = ink;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+	const overlayInk = $derived(titleInView && detail.backdropPath ? backdropInk : null);
+	const overlayClass = $derived.by(() => {
+		if (!overlayInk) return '';
+		const light = overlayInk.ink === 'light';
+		const ink = light
+			? 'text-white hover:bg-white/15 hover:text-white drop-shadow-[0_1px_2px_rgb(0_0_0/0.6)]'
+			: 'text-black hover:bg-black/10 hover:text-black drop-shadow-[0_1px_2px_rgb(255_255_255/0.7)]';
+		// A mid-tone backdrop leaves the ink too little to work with, so the control carries its own plate.
+		const plate =
+			overlayInk.contrast < 3
+				? light
+					? 'bg-black/35 backdrop-blur-sm'
+					: 'bg-white/45 backdrop-blur-sm'
+				: '';
+		return `${ink} ${plate}`;
+	});
 	$effect(() => {
 		const el = titleEl;
 		if (!el || typeof IntersectionObserver === 'undefined') return;
@@ -365,7 +399,7 @@
 			variant="ghost"
 			size="icon-lg"
 			shape="round"
-			class="shrink-0"
+			class="shrink-0 {overlayClass}"
 			aria-label="Go back"
 		>
 			<ChevronLeftIcon class="size-5" />
@@ -380,7 +414,7 @@
 		{/if}
 		<!-- Trailing action, so it holds the right edge whether or not the title is showing. -->
 		<ShareButton
-			class="ml-auto shrink-0"
+			class="ml-auto shrink-0 {overlayClass}"
 			path={resolve('/s/[type]/[id]', { type: detail.type, id: String(detail.tmdbId) })}
 			title={shareTitle}
 			warm={{ type: detail.type, id: detail.tmdbId }}
