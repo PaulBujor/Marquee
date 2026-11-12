@@ -424,7 +424,7 @@
 
 		{#if list.length > 0}
 			<div
-				class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7"
+				class="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10"
 			>
 				{#each visible as item (item.mediaId)}
 					{@const dnf = item.status === 'did_not_finish'}
