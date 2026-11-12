@@ -50,8 +50,9 @@
 		</div>
 	{/if}
 
+	<!-- `relative` so the hero's positioned gradient overlay cannot paint over the title's first line. -->
 	<div
-		class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 pb-10 {backdrop
+		class="relative mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 pb-10 {backdrop
 			? '-mt-14'
 			: 'pt-[calc(4.75rem+env(safe-area-inset-top))]'}"
 	>
