@@ -113,6 +113,12 @@ export interface TmdbImages {
 	posters?: TmdbImage[];
 }
 
+/** `append_to_response=external_ids` — only the one alias the app consumes is modelled. */
+export interface TmdbExternalIds {
+	/** IMDb id (`tt…`), absent or null when TMDB has no mapping for the title. */
+	imdb_id?: string | null;
+}
+
 export interface TmdbMovieDetailsResponse {
 	id: number;
 	title?: string;
@@ -129,6 +135,7 @@ export interface TmdbMovieDetailsResponse {
 	videos?: TmdbVideosResponse;
 	recommendations?: TmdbSimilarResponse;
 	similar?: TmdbSimilarResponse;
+	external_ids?: TmdbExternalIds;
 }
 
 export interface TmdbTvDetailsResponse {
@@ -149,6 +156,7 @@ export interface TmdbTvDetailsResponse {
 	recommendations?: TmdbSimilarResponse;
 	similar?: TmdbSimilarResponse;
 	seasons?: TmdbSeasonSummary[];
+	external_ids?: TmdbExternalIds;
 	/** One of TMDB's TV statuses: `Returning Series`, `Planned`, `In Production`, `Ended`, `Canceled`, `Pilot`. */
 	status?: string;
 	in_production?: boolean;
@@ -278,6 +286,8 @@ export interface MediaTrailer {
 
 export interface MediaDetail {
 	tmdbId: number;
+	/** IMDb id (`tt…`), or null when TMDB has no mapping for the title. */
+	imdbId: string | null;
 	type: 'movie' | 'show';
 	title: string;
 	year: number | null;

@@ -15,6 +15,7 @@ const T0 = Date.UTC(2026, 6, 24);
 
 const SHOW_DETAIL: MediaDetail = {
 	tmdbId: 1,
+	imdbId: null,
 	type: 'show',
 	title: 'title-1',
 	year: 2026,
