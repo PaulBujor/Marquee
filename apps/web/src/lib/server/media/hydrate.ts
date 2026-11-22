@@ -10,6 +10,7 @@ import {
 	type SeasonRow
 } from '#lib/server/db/schema.js';
 import { creditRowsFromDetail, creditSignature, syncCredits, syncProviderPeople } from './credits';
+import { writeExternalId } from './external-ids';
 import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '#lib/server/db/chunk.js';
 import { hasDescription } from '#lib/media.js';
 import { seedMediaId, type MediaProvider } from '#lib/sync/events.js';
@@ -324,7 +325,7 @@ export async function refreshMedia(
 	if (!existing) {
 		await db
 			.insert(media)
-			.values({ ...scalars, source: 'linked', version: 1, refreshedAt: now })
+			.values({ ...scalars, source: 'linked', version: 1, refreshedAt: now, imdbCheckedAt: now })
 			.onConflictDoNothing();
 		if (detail.type === 'show') {
 			await syncSeasons(db, id, [], seasonRows);
@@ -363,10 +364,16 @@ export async function refreshMedia(
 				source: existing.source,
 				updatedAt: existing.updatedAt,
 				refreshedAt: now,
+				// Reaching TMDB answered the IMDb question, whatever the answer was; a failed refresh never gets here.
+				imdbCheckedAt: now,
 				version: changed ? existing.version + 1 : existing.version
 			})
 			.where(and(eq(media.id, id), eq(media.refreshedAt, existing.refreshedAt)));
 	}
+
+	// Identity from the payload we already have — no second TMDB call. Both writes are append-only and idempotent.
+	await writeExternalId(db, id, provider, externalId);
+	if (detail.imdbId) await writeExternalId(db, id, 'imdb', detail.imdbId);
 
 	const stored = await db.select().from(media).where(eq(media.id, id)).limit(1);
 	return stored[0] ?? null;
