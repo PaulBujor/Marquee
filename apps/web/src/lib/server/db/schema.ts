@@ -200,7 +200,7 @@ export const events = sqliteTable(
 			.references(() => users.id, { onDelete: 'cascade' }),
 		sequence: integer('sequence').notNull(),
 		type: text('type', { enum: SYNC_EVENT_TYPES }).notNull(),
-		// The aggregate the event targets — our own media id (see `mediaId()`).
+		// The aggregate the event targets — our own media id (see `seedMediaId()`).
 		entityId: text('entity_id').notNull(),
 		// SQLite has no JSON type, so it's stored as text; Drizzle (de)serializes it per `type`.
 		payload: text('payload', { mode: 'json' }).$type<EventPayload>().notNull(),

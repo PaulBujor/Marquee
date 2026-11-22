@@ -21,7 +21,7 @@ import {
 import { applyEventToIdb, applyEventsToIdb } from './state';
 import {
 	createEvent,
-	mediaId,
+	seedMediaId,
 	tmdbMediaId,
 	type MediaCredit,
 	type MediaRecord
@@ -106,7 +106,12 @@ const DEVICE = '11111111-1111-1111-1111-111111111111';
 
 async function track(externalId: string): Promise<void> {
 	await applyEventToIdb(
-		createEvent('tracking.added', mediaId('tmdb', externalId), { status: 'want_to_watch' }, DEVICE)
+		createEvent(
+			'tracking.added',
+			seedMediaId('tmdb', externalId),
+			{ status: 'want_to_watch' },
+			DEVICE
+		)
 	);
 }
 
@@ -119,9 +124,9 @@ describe('getReferencedMediaIds / getUnsyncedMediaIds / getLinkedMediaRefs / get
 	});
 
 	it('collects ids from non-removed tracking rows and actively watched episodes', async () => {
-		const trackedId = mediaId('tmdb', 'movie/1');
+		const trackedId = seedMediaId('tmdb', 'movie/1');
 		await track('movie/1');
-		const watchedOnlyId = mediaId('tmdb', 'show/2');
+		const watchedOnlyId = seedMediaId('tmdb', 'show/2');
 		const db = await openDb();
 		await db.put('episodeWatches', {
 			id: `${watchedOnlyId}::s1e1`,
@@ -137,7 +142,7 @@ describe('getReferencedMediaIds / getUnsyncedMediaIds / getLinkedMediaRefs / get
 	});
 
 	it('excludes a removed (tombstoned) tracking row', async () => {
-		const id = mediaId('tmdb', 'movie/5');
+		const id = seedMediaId('tmdb', 'movie/5');
 		await track('movie/5');
 		await applyEventToIdb(createEvent('tracking.removed', id, {}, DEVICE));
 
@@ -145,7 +150,7 @@ describe('getReferencedMediaIds / getUnsyncedMediaIds / getLinkedMediaRefs / get
 	});
 
 	it('excludes an unwatched (tombstoned) episode row even with no tracking row at all', async () => {
-		const id = mediaId('tmdb', 'show/6');
+		const id = seedMediaId('tmdb', 'show/6');
 		const db = await openDb();
 		await db.put('episodeWatches', {
 			id: `${id}::s1e1`,
@@ -160,7 +165,7 @@ describe('getReferencedMediaIds / getUnsyncedMediaIds / getLinkedMediaRefs / get
 	});
 
 	it('stops referencing a title once removed, even though its watch history remains unwatched', async () => {
-		const id = mediaId('tmdb', 'show/7');
+		const id = seedMediaId('tmdb', 'show/7');
 		await track('show/7');
 		await applyEventsToIdb([
 			createEvent('episode.watched', id, { season: 1, episode: 1 }, DEVICE),
@@ -172,9 +177,9 @@ describe('getReferencedMediaIds / getUnsyncedMediaIds / getLinkedMediaRefs / get
 	});
 
 	it('flags a referenced id as unsynced when it has no local row or a version-0 placeholder', async () => {
-		const noRow = mediaId('tmdb', 'movie/10');
-		const placeholder = mediaId('tmdb', 'movie/11');
-		const synced = mediaId('tmdb', 'movie/12');
+		const noRow = seedMediaId('tmdb', 'movie/10');
+		const placeholder = seedMediaId('tmdb', 'movie/11');
+		const synced = seedMediaId('tmdb', 'movie/12');
 		await track('movie/10');
 		await track('movie/11');
 		await track('movie/12');
@@ -186,8 +191,8 @@ describe('getReferencedMediaIds / getUnsyncedMediaIds / getLinkedMediaRefs / get
 	});
 
 	it('scopes refs and versions to the requested ids only', async () => {
-		const a = mediaId('tmdb', 'movie/20');
-		const b = mediaId('tmdb', 'movie/21');
+		const a = seedMediaId('tmdb', 'movie/20');
+		const b = seedMediaId('tmdb', 'movie/21');
 		await putMedia(record({ id: a, type: 'movie', title: 'a', externalId: 'movie/20' }));
 		await putMedia(record({ id: b, type: 'movie', title: 'b', externalId: 'movie/21' }));
 
@@ -296,7 +301,7 @@ describe('searchCustomMedia', () => {
 });
 
 describe('credits', () => {
-	const ID = mediaId('tmdb', 'movie/50');
+	const ID = seedMediaId('tmdb', 'movie/50');
 
 	function credit(over: Partial<MediaCredit> & Pick<MediaCredit, 'personId'>): MediaCredit {
 		return {
@@ -344,7 +349,7 @@ describe('credits', () => {
 	});
 
 	it('serves the reverse lookup — every title a person is credited on', async () => {
-		const other = mediaId('tmdb', 'movie/51');
+		const other = seedMediaId('tmdb', 'movie/51');
 		await putMedia(
 			record({ id: ID, type: 'movie', title: 'One', credits: [credit({ personId: '7' })] })
 		);
@@ -423,8 +428,8 @@ describe('pruneStaleMedia', () => {
 	});
 
 	it('deletes a media row and its seasons/episodes when outside the keep set', async () => {
-		const kept = mediaId('tmdb', 'show/30');
-		const dropped = mediaId('tmdb', 'show/31');
+		const kept = seedMediaId('tmdb', 'show/30');
+		const dropped = seedMediaId('tmdb', 'show/31');
 		await putMedia(showRecord(kept, 'show/30', 'Kept Show'));
 		await putMedia(showRecord(dropped, 'show/31', 'Dropped Show'));
 
@@ -442,7 +447,7 @@ describe('pruneStaleMedia', () => {
 	});
 
 	it('keeps everything when nothing is outside the keep set', async () => {
-		const id = mediaId('tmdb', 'movie/40');
+		const id = seedMediaId('tmdb', 'movie/40');
 		await putMedia(record({ id, type: 'movie', title: 'Keep', externalId: 'movie/40' }));
 
 		expect(await pruneStaleMedia(new Set([id]))).toBe(0);
@@ -589,8 +594,8 @@ describe('removal-then-eviction', () => {
 	});
 
 	it('stops caching a title once it is removed from every list', async () => {
-		const kept = mediaId('tmdb', 'show/50');
-		const removed = mediaId('tmdb', 'show/51');
+		const kept = seedMediaId('tmdb', 'show/50');
+		const removed = seedMediaId('tmdb', 'show/51');
 		await track('show/50');
 		await track('show/51');
 		await putMedia(showRecord(kept, 'show/50', 'Kept Show'));

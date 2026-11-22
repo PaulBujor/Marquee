@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { episodes, media, people, seasons, tracking, users } from '#lib/server/db/schema.js';
-import { mediaId, type CreditRole, type MediaCredit } from '#lib/sync/events.js';
+import { seedMediaId, type CreditRole, type MediaCredit } from '#lib/sync/events.js';
 import type { ValidatedCustomMedia } from '#lib/sync/media-protocol.js';
 import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import { loadCredits } from './credits';
@@ -155,7 +155,7 @@ describe('storeCustomMedia', () => {
 	});
 
 	it('refuses to overwrite a shared provider-backed row', async () => {
-		const shared = mediaId('tmdb', 'movie/603');
+		const shared = seedMediaId('tmdb', 'movie/603');
 		await db.insert(media).values({
 			id: shared,
 			provider: 'tmdb',

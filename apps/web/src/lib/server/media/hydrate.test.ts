@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { eq, getTableName } from 'drizzle-orm';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { episodes, media, seasons } from '#lib/server/db/schema.js';
-import { mediaId } from '#lib/sync/events.js';
+import { seedMediaId } from '#lib/sync/events.js';
 import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import { needsRefresh, parseTmdbExternalId, refreshMedia } from './hydrate';
 
@@ -221,7 +221,7 @@ describe('refreshMedia', () => {
 		const { client, detailCalls } = movieStub();
 		const row = await refreshMedia(db, client, 'tmdb', 'movie/603', T0);
 		expect(row).toMatchObject({
-			id: mediaId('tmdb', 'movie/603'),
+			id: seedMediaId('tmdb', 'movie/603'),
 			provider: 'tmdb',
 			externalId: 'movie/603',
 			source: 'linked',
@@ -283,7 +283,7 @@ describe('refreshMedia', () => {
 	it('past the TTL, re-pulls and bumps version when a new episode aired', async () => {
 		const db = createTestDb();
 		const stub = showStub();
-		const id = mediaId('tmdb', 'show/1396');
+		const id = seedMediaId('tmdb', 'show/1396');
 		const first = await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
 		expect(first!.version).toBe(1);
 
@@ -313,7 +313,7 @@ describe('refreshMedia', () => {
 		const [row] = await db
 			.select()
 			.from(media)
-			.where(eq(media.id, mediaId('tmdb', 'show/1396')));
+			.where(eq(media.id, seedMediaId('tmdb', 'show/1396')));
 		expect(row.refreshedAt).toBe(T0);
 	});
 
@@ -340,7 +340,7 @@ describe('refreshMedia', () => {
 	it('updates only the changed episode row, leaving others untouched', async () => {
 		const db = createTestDb();
 		const stub = showStub();
-		const id = mediaId('tmdb', 'show/1396');
+		const id = seedMediaId('tmdb', 'show/1396');
 		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
 		stub.updateEpisode(2, { airDate: '2026-08-15', name: 'E2 renamed' });
 
@@ -377,7 +377,7 @@ describe('refreshMedia', () => {
 	it('deletes an episode that disappeared upstream', async () => {
 		const db = createTestDb();
 		const stub = showStub();
-		const id = mediaId('tmdb', 'show/1396');
+		const id = seedMediaId('tmdb', 'show/1396');
 		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
 		stub.removeEpisode(2);
 
@@ -392,7 +392,7 @@ describe('refreshMedia', () => {
 		// No FK cascade from `seasons` to `episodes` (both just reference `media`), so the diff deletes both explicitly.
 		const db = createTestDb();
 		const stub = showStub();
-		const id = mediaId('tmdb', 'show/1396');
+		const id = seedMediaId('tmdb', 'show/1396');
 		await refreshMedia(db, stub.client, 'tmdb', 'show/1396', T0);
 		await db.insert(seasons).values({
 			mediaId: id,

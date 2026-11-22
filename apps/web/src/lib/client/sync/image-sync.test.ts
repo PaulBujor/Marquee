@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { mediaId, type MediaRecord } from '#lib/sync/events.js';
+import { seedMediaId, type MediaRecord } from '#lib/sync/events.js';
 import { setActiveUser } from '#lib/client/idb/db.js';
 import { putMedia } from '#lib/client/idb/media.js';
 import { getMediaImages, putMediaImages } from '#lib/client/idb/images.js';
@@ -10,7 +10,7 @@ setActiveUser('image-sync-test');
 
 function media(externalId: string): MediaRecord {
 	return {
-		id: mediaId('tmdb', externalId),
+		id: seedMediaId('tmdb', externalId),
 		provider: 'tmdb',
 		externalId,
 		source: 'linked',
@@ -48,14 +48,14 @@ describe('runImageSync', () => {
 		const { fetchFn } = stub();
 		const result = await runImageSync(fetchFn);
 
-		const imgs = await getMediaImages(mediaId('tmdb', 'movie/603'));
+		const imgs = await getMediaImages(seedMediaId('tmdb', 'movie/603'));
 		expect(imgs?.poster?.size).toBeGreaterThan(0);
 		expect(imgs?.backdrop?.size).toBeGreaterThan(0);
 		expect(result.stored).toBe(1);
 	});
 
 	it('skips media whose images are already cached', async () => {
-		const id = mediaId('tmdb', 'movie/778');
+		const id = seedMediaId('tmdb', 'movie/778');
 		await putMedia(media('movie/778'));
 		await putMediaImages(id, {
 			poster: new Blob([new Uint8Array([9])]),

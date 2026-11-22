@@ -4,7 +4,8 @@ import {
 	episodeKey,
 	EVENT_SCHEMA_VERSION,
 	isHydratableProvider,
-	mediaId,
+	SEED_MEDIA_ID_NAMESPACE,
+	seedMediaId,
 	tmdbExternalId,
 	tmdbMediaId,
 	trackingKey,
@@ -26,15 +27,22 @@ describe('media identity', () => {
 
 	it('is deterministic — same inputs always derive the same id', () => {
 		expect(tmdbMediaId('movie', 603)).toBe(tmdbMediaId('movie', 603));
-		expect(tmdbMediaId('movie', 603)).toBe(mediaId('tmdb', 'movie/603'));
+		expect(tmdbMediaId('movie', 603)).toBe(seedMediaId('tmdb', 'movie/603'));
 		expect(tmdbExternalId('movie', 603)).toBe('movie/603');
 	});
 
-	it('pins the derived id so an accidental MEDIA_ID_NAMESPACE change fails CI', () => {
+	it('pins the derived id so an accidental namespace or derivation change fails CI', () => {
 		// Changing the namespace (or the derivation) would silently repoint every media id and
 		// orphan every event that references it. These exact values are hard-pinned so CI catches it.
 		expect(tmdbMediaId('movie', 603)).toBe('9653e713-97d4-5065-b752-93fa34429e37');
 		expect(tmdbMediaId('show', 603)).toBe('c2d609d4-a708-51e4-927b-e8602792143f');
+	});
+
+	it('pins the namespace a seed derives against', () => {
+		// The namespace is what makes stored ids stable across devices and releases: re-pointing it
+		// would mint a fresh id for a title that already has a row, so it is frozen as a literal.
+		expect(SEED_MEDIA_ID_NAMESPACE).toBe('b7c8e9a0-3f2d-4c1b-9e6a-8d5f4a2b1c0e');
+		expect(seedMediaId('tmdb', 'show/1396')).toBe('b7477ad7-728b-5be0-98d0-7e57f33b4d94');
 	});
 
 	it('disambiguates movie vs show sharing a numeric id', () => {

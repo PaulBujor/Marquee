@@ -1,7 +1,12 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyEventToIdb, applyEventsToIdb } from '#lib/client/idb/index.js';
-import { createEvent, mediaId, type EventEnvelope, type MediaRecord } from '#lib/sync/events.js';
+import {
+	createEvent,
+	seedMediaId,
+	type EventEnvelope,
+	type MediaRecord
+} from '#lib/sync/events.js';
 import { openDb, setActiveUser } from '#lib/client/idb/db.js';
 import {
 	getEpisodes,
@@ -42,7 +47,7 @@ async function track(externalId: string): Promise<void> {
 function trackEvent(externalId: string): EventEnvelope<'tracking.added'> {
 	return createEvent(
 		'tracking.added',
-		mediaId('tmdb', externalId),
+		seedMediaId('tmdb', externalId),
 		{ status: 'want_to_watch' },
 		DEVICE
 	);
@@ -57,7 +62,7 @@ async function trackMany(count: number, prefix: string): Promise<string[]> {
 
 function record(externalId: string, over: Partial<MediaRecord> = {}): MediaRecord {
 	return {
-		id: mediaId('tmdb', externalId),
+		id: seedMediaId('tmdb', externalId),
 		provider: 'tmdb',
 		externalId,
 		source: 'linked',
@@ -242,7 +247,7 @@ describe('runMediaSync', () => {
 	});
 
 	it('light pass: asks about a tracked title with no synced copy yet', async () => {
-		const mid = mediaId('tmdb', 'movie/603');
+		const mid = seedMediaId('tmdb', 'movie/603');
 		await track('movie/603');
 		await putMedia(record('movie/603', { version: 0 })); // quick-add snapshot, not yet synced
 
@@ -259,7 +264,7 @@ describe('runMediaSync', () => {
 	});
 
 	it("full pass: reports every tracked title's version, even ones already synced", async () => {
-		const mid = mediaId('tmdb', 'movie/778');
+		const mid = seedMediaId('tmdb', 'movie/778');
 		await track('movie/778');
 		await putMedia(record('movie/778', { version: 1 }));
 
@@ -270,7 +275,7 @@ describe('runMediaSync', () => {
 	});
 
 	it('fans a returned show record out into the seasons/episodes stores', async () => {
-		const showId = mediaId('tmdb', 'show/1396');
+		const showId = seedMediaId('tmdb', 'show/1396');
 		await track('show/1396');
 		const show = record('show/1396', {
 			id: showId,
@@ -361,7 +366,7 @@ describe('runMediaSync', () => {
 
 		expect(sent).toHaveLength(Math.ceil(total / MEDIA_SYNC_MAX)); // one request per chunk
 		expect(sent.every((req) => req.have.length <= MEDIA_SYNC_MAX)).toBe(true); // wire cap intact
-		expect(haveIdsSent(sent)).toEqual(new Set(externalIds.map((e) => mediaId('tmdb', e)))); // none dropped
+		expect(haveIdsSent(sent)).toEqual(new Set(externalIds.map((e) => seedMediaId('tmdb', e)))); // none dropped
 		expect(result.truncated).toBe(false);
 	});
 
@@ -403,7 +408,7 @@ describe('runMediaSync', () => {
 			const sent: MediaSyncRequest[] = [];
 			const result = await runMediaSync({ fullCheck: true }, stubCaughtUp(sent));
 
-			expect(haveIdsSent(sent)).toEqual(new Set(externalIds.map((e) => mediaId('tmdb', e))));
+			expect(haveIdsSent(sent)).toEqual(new Set(externalIds.map((e) => seedMediaId('tmdb', e))));
 			expect(result.truncated).toBe(false);
 		});
 
@@ -417,7 +422,7 @@ describe('runMediaSync', () => {
 			const sent: MediaSyncRequest[] = [];
 			const result = await runMediaSync({ fullCheck: false }, stubCaughtUp(sent));
 
-			expect(haveIdsSent(sent)).toEqual(new Set(externalIds.map((e) => mediaId('tmdb', e))));
+			expect(haveIdsSent(sent)).toEqual(new Set(externalIds.map((e) => seedMediaId('tmdb', e))));
 			expect(sent.flatMap((req) => req.have).every((h) => h.version === 0)).toBe(true);
 			expect(result.truncated).toBe(false);
 		});

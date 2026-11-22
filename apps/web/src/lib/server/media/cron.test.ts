@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { media } from '#lib/server/db/schema.js';
-import { mediaId } from '#lib/sync/events.js';
+import { seedMediaId } from '#lib/sync/events.js';
 import { createMemoryQueue } from '#lib/server/queue/memory.js';
 import { ENQUEUE_MAX, enqueueStaleMedia } from './cron';
 import type { MediaRefreshMessage } from './refresh-consumer';
@@ -20,7 +20,7 @@ async function seedMedia(
 	}
 ) {
 	await db.insert(media).values({
-		id: mediaId('tmdb', externalId),
+		id: seedMediaId('tmdb', externalId),
 		provider: 'tmdb',
 		externalId,
 		source: 'linked',

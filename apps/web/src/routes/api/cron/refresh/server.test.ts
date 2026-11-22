@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { media } from '#lib/server/db/schema.js';
-import { mediaId } from '#lib/sync/events.js';
+import { seedMediaId } from '#lib/sync/events.js';
 import { POST } from './+server';
 import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
@@ -85,7 +85,7 @@ describe('POST /api/cron/refresh', () => {
 	it('enqueues unsettled media onto the queue binding and purges auth, without calling TMDB', async () => {
 		const db = createTestDb();
 		await db.insert(media).values({
-			id: mediaId('tmdb', 'show/1'),
+			id: seedMediaId('tmdb', 'show/1'),
 			provider: 'tmdb',
 			externalId: 'show/1',
 			source: 'linked',
@@ -115,7 +115,7 @@ describe('POST /api/cron/refresh', () => {
 	it('enqueues nothing when TMDB is not configured, and still purges auth', async () => {
 		const db = createTestDb();
 		await db.insert(media).values({
-			id: mediaId('tmdb', 'show/8'),
+			id: seedMediaId('tmdb', 'show/8'),
 			provider: 'tmdb',
 			externalId: 'show/8',
 			source: 'linked',
@@ -142,7 +142,7 @@ describe('POST /api/cron/refresh', () => {
 	it('carries ?force=1 onto the enqueued message', async () => {
 		const db = createTestDb();
 		await db.insert(media).values({
-			id: mediaId('tmdb', 'show/2'),
+			id: seedMediaId('tmdb', 'show/2'),
 			provider: 'tmdb',
 			externalId: 'show/2',
 			source: 'linked',
@@ -162,7 +162,7 @@ describe('POST /api/cron/refresh', () => {
 	it('isolates a queue failure from the auth purge — auth still runs and reports ok', async () => {
 		const db = createTestDb();
 		await db.insert(media).values({
-			id: mediaId('tmdb', 'show/3'),
+			id: seedMediaId('tmdb', 'show/3'),
 			provider: 'tmdb',
 			externalId: 'show/3',
 			source: 'linked',
