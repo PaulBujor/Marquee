@@ -35,3 +35,21 @@ jobs:
           # Resolved from the repo root, not from `working-directory`.
           path: apps/web/coverage/
           if-no-files-found: ignore
+
+  # The bridge deploys on its own, so it gates on its own job: a required check
+  # on `main`, so a broken bridge blocks the bridge and nothing else.
+  bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # No coverage here: the bridge is small, and `test` is the gate.
+      - run: pnpm run lint:bridge
+      - run: pnpm run check:bridge
+      - run: pnpm run build:bridge
+      - run: pnpm run test:bridge

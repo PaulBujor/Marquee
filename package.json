@@ -25,6 +25,15 @@
 		"db:generate": "pnpm --filter @marquee/web db:generate",
 		"db:migrate:local": "pnpm --filter @marquee/web db:migrate:local",
 		"db:migrate:remote": "pnpm --filter @marquee/web db:migrate:remote",
-		"db:studio": "pnpm --filter @marquee/web db:studio"
+		"db:studio": "pnpm --filter @marquee/web db:studio",
+		"dev:bridge": "pnpm --filter @marquee/bridge dev",
+		"build:bridge": "pnpm --filter @marquee/bridge build",
+		"deploy:bridge": "pnpm --filter @marquee/bridge deploy",
+		"check:bridge": "pnpm --filter @marquee/bridge check",
+		"test:bridge": "pnpm --filter @marquee/bridge test",
+		"lint:bridge": "pnpm --filter @marquee/bridge lint",
+		"format:bridge": "pnpm --filter @marquee/bridge format",
+		"lint:all": "pnpm -r --no-bail run lint",
+		"test:all": "pnpm -r --no-bail run test"
 	}
 }
