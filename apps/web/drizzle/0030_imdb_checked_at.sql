@@ -1,0 +1,1 @@
+ALTER TABLE `media` ADD `imdb_checked_at` integer;
