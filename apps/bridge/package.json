@@ -1,0 +1,31 @@
+{
+	"name": "@marquee/bridge",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"engines": {
+		"node": ">=22"
+	},
+	"scripts": {
+		"dev": "wrangler dev",
+		"build": "wrangler deploy --dry-run --outdir dist --env=\"\"",
+		"deploy": "wrangler deploy --env=\"\"",
+		"deploy:preview": "wrangler deploy --env preview",
+		"check": "wrangler types && tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "prettier --check . && eslint .",
+		"format": "prettier --write ."
+	},
+	"devDependencies": {
+		"@eslint/js": "^10.0.1",
+		"eslint": "^10.13.0",
+		"eslint-config-prettier": "^10.1.8",
+		"globals": "^17.13.0",
+		"prettier": "^3.9.10",
+		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.72.1",
+		"vitest": "^4.1.12",
+		"wrangler": "^4.154.0"
+	}
+}

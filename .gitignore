@@ -5,6 +5,7 @@ node_modules/
 .svelte-kit/
 build/
 .output/
+dist/
 
 # Environment files
 .env

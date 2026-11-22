@@ -1,0 +1,26 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "marquee-bridge",
+	"compatibility_date": "2026-10-29",
+	"main": "src/index.ts",
+	"workers_dev": true,
+	"preview_urls": true,
+	"observability": {
+		"enabled": true
+	},
+	// `compatibility_flags` is left unset on purpose: everything here is Web platform
+	// (fetch, Web Crypto). Add `nodejs_compat` only when a dependency genuinely needs a
+	// node builtin, and install `@types/node` in the same change.
+	//
+	// Bindings arrive with the code that uses them, not before: a Durable Object
+	// namespace + migration, KV for handle records, and a Queue for inbound commands.
+	// A declared binding with no consumer fails `wrangler deploy`, and a Durable Object
+	// migration is applied at deploy time, so each lands with its own PR.
+	"env": {
+		"preview": {
+			"name": "marquee-bridge-preview",
+			"workers_dev": true,
+			"preview_urls": true
+		}
+	}
+}

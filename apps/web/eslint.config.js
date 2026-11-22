@@ -6,7 +6,8 @@ import { defineConfig, includeIgnoreFile } from 'eslint/config';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 
-const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
+// The single .gitignore lives at the workspace root; its patterns are path-agnostic, so it applies here.
+const gitignorePath = path.resolve(import.meta.dirname, '../../.gitignore');
 
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),

@@ -1,0 +1,20 @@
+# Package Managers
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# Generated — never hand-edited, and out of style by construction.
+# These live inside the app (not the workspace root) so they need ignoring here.
+.svelte-kit/
+.wrangler/
+coverage/
+worker-configuration.d.ts
+
+# Miscellaneous
+/static/
+/drizzle/
+
+# Throwaway PWA-asset tool output (source of truth is dev-assets/logo.png)
+dev-assets/
