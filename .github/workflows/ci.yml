@@ -6,8 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+# One job per workspace package so neither can block the other's release.
 jobs:
-  check:
+  web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -17,17 +18,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Root scripts delegate to `pnpm --filter @marquee/web …`.
       - run: pnpm run lint
       - run: pnpm run check
       - run: pnpm run build
       - run: pnpm run test:coverage
       - name: Publish coverage summary
         if: always()
+        working-directory: apps/web
         run: node scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage
-          path: coverage/
+          # Resolved from the repo root, not from `working-directory`.
+          path: apps/web/coverage/
           if-no-files-found: ignore

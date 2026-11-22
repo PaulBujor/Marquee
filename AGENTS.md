@@ -2,6 +2,12 @@
 
 Movie & TV tracking PWA. Linear team board (MRQ): https://linear.app/paulbujor/team/MRQ — Core App project: https://linear.app/paulbujor/project/marquee-fad148833ffe
 
+## Repo layout
+
+This is a **pnpm workspace**. `apps/web/` is the SvelteKit app (its own `package.json`, `wrangler.jsonc`, tsconfig and deploy). A second workspace package will hold the Stremio bridge — a separate Worker with its own bindings and its own deploy; nothing under `apps/bridge/` may be imported by `apps/web/` or vice versa, and the only contract between them is the HTTP API.
+
+**Unless a path says otherwise, every path in this file is relative to `apps/web/`** — `src/…`, `static/…`, `wrangler.jsonc`, `drizzle/…`, `.dev.vars` all live there. Root-level files are the workspace only: `package.json` (scripts delegate via `pnpm --filter @marquee/web …`, so `pnpm dev`/`build`/`test` still work from the root), `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.github/`, and this file.
+
 ## Reference
 
 - `reference/watchlist-ui-concept.jsx` — throwaway React mockup for UI/UX reference (carries `data-spec-ref` attributes)
