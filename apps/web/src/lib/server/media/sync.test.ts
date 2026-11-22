@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { media, tracking, users } from '#lib/server/db/schema.js';
+import { writeExternalId } from './external-ids';
 import { seedMediaId, personExternalId, personId } from '#lib/sync/events.js';
 import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import { MEDIA_SYNC_REFRESH_MAX, resolveMediaSync } from './sync';
@@ -60,12 +61,11 @@ function stub() {
 }
 
 /** Seeds the `tracking` projection row the anti-abuse gate validates requests against. */
-async function addTracking(db: Db, i: number, externalId: string): Promise<void> {
-	const id = seedMediaId('tmdb', externalId);
+async function addTracking(db: Db, i: number, mediaId: string): Promise<void> {
 	await db.insert(tracking).values({
-		id: `${USER}::${id}`,
+		id: `${USER}::${mediaId}`,
 		userId: USER,
-		mediaId: id,
+		mediaId,
 		addedAt: new Date(1000 + i),
 		updatedAt: new Date(1000 + i)
 	});
@@ -88,7 +88,7 @@ async function storeFreshMovie(db: Db, externalId: string, over: Record<string, 
 async function seed() {
 	const db = createTestDb();
 	await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
-	await addTracking(db, 1, REFERENCED);
+	await addTracking(db, 1, REF_ID);
 	return db;
 }
 
@@ -197,6 +197,105 @@ describe('resolveMediaSync', () => {
 		expect(behind.media.map((m) => m.id)).toEqual([REF_ID]);
 	});
 
+	it('resolves a ref through a stored alias instead of deriving a second id', async () => {
+		const db = await seed();
+		// A row stored under an id the derivation does not reach (a linked title). The alias is the only
+		// thing that connects the ref to it, so deriving instead would hydrate + store a duplicate.
+		const linkedId = '44444444-4444-4444-8444-444444444444';
+		await db.insert(media).values({
+			id: linkedId,
+			provider: 'tmdb',
+			externalId: REFERENCED,
+			type: 'movie',
+			title: 'linked',
+			version: 3,
+			refreshedAt: T0
+		});
+		await writeExternalId(db, linkedId, 'tmdb', REFERENCED);
+		await addTracking(db, 2, linkedId);
+
+		const { client, calls } = stub();
+		const res = await resolveMediaSync(
+			db,
+			client,
+			USER,
+			{ refs: [{ provider: 'tmdb', externalId: REFERENCED }], have: [] },
+			T0
+		);
+		expect(calls()).toBe(0);
+		expect(res.media.map((m) => m.id)).toEqual([linkedId]);
+		expect(await db.select().from(media)).toHaveLength(1); // no second row under the derived id
+	});
+
+	it('derives the id for a ref no alias names (a title nobody has stored)', async () => {
+		const db = await seed();
+		const { client, calls } = stub();
+		const res = await resolveMediaSync(
+			db,
+			client,
+			USER,
+			{ refs: [{ provider: 'tmdb', externalId: REFERENCED }], have: [] },
+			T0
+		);
+		expect(calls()).toBe(1);
+		expect(res.media.map((m) => m.id)).toEqual([REF_ID]);
+	});
+
+	it('does not let an alias through for an id the user does not track', async () => {
+		const db = await seed();
+		const storedId = '55555555-5555-4555-8555-555555555555';
+		await db.insert(media).values({
+			id: storedId,
+			provider: 'tmdb',
+			externalId: REFERENCED,
+			type: 'movie',
+			title: 'not mine to ask about',
+			version: 1,
+			refreshedAt: T0
+		});
+		await writeExternalId(db, storedId, 'tmdb', REFERENCED);
+
+		const { client, calls } = stub();
+		const res = await resolveMediaSync(
+			db,
+			client,
+			USER,
+			{ refs: [{ provider: 'tmdb', externalId: REFERENCED }], have: [] },
+			T0
+		);
+		// The gate runs on the resolved id, so an alias pointing anywhere else widens nothing.
+		expect(res.media).toEqual([]);
+		expect(calls()).toBe(0);
+	});
+
+	it('still hydrates a ref the alias table does not name', async () => {
+		const db = await seed();
+		// Aliases exist for other titles; a ref they do not name must hydrate exactly as before.
+		// An alias can only name a stored row (the FK to `media` forbids anything else), so "resolved but
+		// not stored" is not a state that exists — the missing-row path is always the derived one.
+		const otherId = seedMediaId('tmdb', UNREFERENCED);
+		await db.insert(media).values({
+			id: otherId,
+			provider: 'tmdb',
+			externalId: UNREFERENCED,
+			type: 'movie',
+			title: 'o'
+		});
+		await writeExternalId(db, otherId, 'tmdb', UNREFERENCED);
+		await writeExternalId(db, otherId, 'imdb', 'tt0133093');
+
+		const { client, calls } = stub();
+		const res = await resolveMediaSync(
+			db,
+			client,
+			USER,
+			{ refs: [{ provider: 'tmdb', externalId: REFERENCED }], have: [] },
+			T0
+		);
+		expect(calls()).toBe(1);
+		expect(res.media.map((m) => m.id)).toEqual([REF_ID]);
+	});
+
 	it('returns nothing when the request is empty', async () => {
 		const db = createTestDb();
 		await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
@@ -225,7 +324,7 @@ describe('resolveMediaSync', () => {
 		const db = createTestDb();
 		await db.insert(users).values({ id: USER, email: 'u1@test.dev', status: 'enabled' });
 		const ext = 'show/1396';
-		await addTracking(db, 1, ext);
+		await addTracking(db, 1, seedMediaId('tmdb', ext));
 		await db.insert(media).values({
 			id: seedMediaId('tmdb', ext),
 			provider: 'tmdb',
@@ -260,7 +359,7 @@ describe('resolveMediaSync', () => {
 		const refs: { provider: 'tmdb'; externalId: string }[] = [];
 		for (let i = 0; i < total; i++) {
 			const ext = `movie/${2000 + i}`;
-			await addTracking(db, i, ext);
+			await addTracking(db, i, seedMediaId('tmdb', ext));
 			refs.push({ provider: 'tmdb', externalId: ext });
 		}
 		const { client, calls } = stub();
@@ -321,7 +420,7 @@ describe('resolveMediaSync', () => {
 		const have: { id: string; version: number }[] = [];
 		for (let i = 0; i < N; i++) {
 			const ext = `movie/${1000 + i}`;
-			await addTracking(db, i, ext);
+			await addTracking(db, i, seedMediaId('tmdb', ext));
 			await storeFreshMovie(db, ext, { title: `t-${i}` });
 			have.push({ id: seedMediaId('tmdb', ext), version: 0 });
 		}
