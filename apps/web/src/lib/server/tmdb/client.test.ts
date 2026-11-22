@@ -771,3 +771,46 @@ describe('createTmdbClient.getSeason', () => {
 		});
 	});
 });
+
+describe('createTmdbClient.externalIds', () => {
+	it('requests the per-title external ids path, not a details payload', async () => {
+		const spy = mockFetch({ id: 27205, imdb_id: 'tt1375666' });
+		await createTmdbClient('secret-key').externalIds('movie', 27205);
+		await createTmdbClient('secret-key').externalIds('show', 1396);
+
+		const urls = (spy.mock.calls as unknown as [URL | string][]).map(
+			([arg]) => new URL(String(arg))
+		);
+		expect(urls.map((url) => `${url.origin}${url.pathname}`)).toEqual([
+			'https://api.themoviedb.org/3/movie/27205/external_ids',
+			'https://api.themoviedb.org/3/tv/1396/external_ids'
+		]);
+		// A full hydrate would append seasons, credits and images — this asks for the id alone.
+		expect(urls.map((url) => url.search)).toEqual(['?api_key=secret-key', '?api_key=secret-key']);
+	});
+
+	it('returns the IMDb id when TMDB has one', async () => {
+		mockFetch({ id: 27205, imdb_id: 'tt1375666' });
+		expect(await createTmdbClient('key').externalIds('movie', 27205)).toBe('tt1375666');
+	});
+
+	it('returns null when imdb_id is null or an empty string', async () => {
+		mockFetch({ id: 27205, imdb_id: null });
+		expect(await createTmdbClient('key').externalIds('movie', 27205)).toBeNull();
+
+		mockFetch({ id: 1396, imdb_id: '' });
+		expect(await createTmdbClient('key').externalIds('show', 1396)).toBeNull();
+
+		mockFetch({ id: 1396 });
+		expect(await createTmdbClient('key').externalIds('show', 1396)).toBeNull();
+	});
+
+	it('throws rather than returning null when TMDB fails', async () => {
+		// A failed lookup must be distinguishable from a title with no IMDb id.
+		mockFetch({}, { status: 401 });
+		await expect(createTmdbClient('bad').externalIds('movie', 27205)).rejects.toMatchObject({
+			name: 'TmdbError',
+			status: 401
+		});
+	});
+});
