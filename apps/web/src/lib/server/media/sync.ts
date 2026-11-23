@@ -1,4 +1,4 @@
-/** Validates against the user's own tracking rows (anti-abuse); TTL refresh is cron-only. */
+/** Resolves refs through the alias table, validates against the user's own tracking rows (anti-abuse); TTL refresh is cron-only. */
 import { and, eq, inArray } from 'drizzle-orm';
 import {
 	episodeWatches,
@@ -15,11 +15,24 @@ import type { createDb } from '#lib/server/db/index.js';
 import type { TmdbClient } from '#lib/server/tmdb/index.js';
 import { loadCreditsForMedia } from './credits';
 import { storeCustomMedia } from './custom';
+import { resolveMediaId } from './external-ids';
 import { refreshMedia } from './hydrate';
 
 type Db = ReturnType<typeof createDb>;
 type SeasonRecord = NonNullable<MediaRecord['seasons']>[number];
 type EpisodeRecord = NonNullable<MediaRecord['episodes']>[number];
+
+/**
+ * The id a ref names: a stored alias if one exists, else the id derivation would give it.
+ *
+ * A miss derives rather than failing — a title nobody has stored yet is the normal case for a ref.
+ */
+async function resolveRefId(db: Db, ref: MediaSyncRequest['refs'][number]): Promise<string> {
+	return (
+		(await resolveMediaId(db, ref.provider, ref.externalId)) ??
+		seedMediaId(ref.provider, ref.externalId)
+	);
+}
 
 /** An unbounded pass blows the Worker CPU limit on a cold client or bulk import; `pending` tells the client to loop. */
 export const MEDIA_SYNC_REFRESH_MAX = 25;
@@ -149,7 +162,12 @@ export async function resolveMediaSync(
 	now: number = Date.now()
 ): Promise<MediaSyncResponse> {
 	// The request's universe is whatever ids appear in refs/have/custom — no recomputation from the log.
-	const refById = new Map(req.refs.map((ref) => [seedMediaId(ref.provider, ref.externalId), ref]));
+	// A ref may name a title already stored under an alias, so the alias is asked first — deriving one
+	// would mint a second id for a title that is already stored. A miss derives, unchanged: that is
+	// exactly the id a title nobody has stored yet gets.
+	const refById = new Map(
+		await Promise.all(req.refs.map(async (ref) => [await resolveRefId(db, ref), ref] as const))
+	);
 	const haveVersion = new Map(req.have.map((h) => [h.id, h.version]));
 	const pushedCustom = req.custom ?? [];
 	const requestedIds = [
