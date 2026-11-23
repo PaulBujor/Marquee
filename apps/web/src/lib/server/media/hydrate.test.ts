@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { eq, getTableName } from 'drizzle-orm';
 import { createTestDb } from '#lib/server/db/test-db.js';
-import { episodes, media, seasons } from '#lib/server/db/schema.js';
+import { episodes, media, mediaExternalIds, seasons } from '#lib/server/db/schema.js';
 import { seedMediaId } from '#lib/sync/events.js';
 import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import { needsRefresh, parseTmdbExternalId, refreshMedia } from './hydrate';
@@ -465,6 +465,72 @@ describe('refreshMedia', () => {
 		expect(result).not.toBeNull();
 		const seasonRows = await db.select().from(seasons).where(eq(seasons.mediaId, result!.id));
 		expect(seasonRows[0]?.overview).toBe('Thin summary.');
+	});
+
+	it('writes the primary and imdb alias and stamps imdb_checked_at', async () => {
+		const db = createTestDb();
+		const { client } = movieStub();
+
+		const row = await refreshMedia(db, client, 'tmdb', 'movie/603', T0);
+
+		expect(row!.imdbCheckedAt).toBe(T0);
+		const aliases = await db
+			.select()
+			.from(mediaExternalIds)
+			.where(eq(mediaExternalIds.mediaId, row!.id));
+		expect(aliases.map((a) => [a.provider, a.externalId]).sort()).toEqual([
+			['imdb', 'tt0133093'],
+			['tmdb', 'movie/603']
+		]);
+	});
+
+	it('writes only the primary alias when the payload carries no IMDb id', async () => {
+		const db = createTestDb();
+		const { client } = movieStub({ imdbId: null });
+
+		const row = await refreshMedia(db, client, 'tmdb', 'movie/603', T0);
+
+		// Still stamped: no IMDb id is an answer, so the backfill must not ask again.
+		expect(row!.imdbCheckedAt).toBe(T0);
+		const aliases = await db
+			.select()
+			.from(mediaExternalIds)
+			.where(eq(mediaExternalIds.mediaId, row!.id));
+		expect(aliases.map((a) => a.provider)).toEqual(['tmdb']);
+	});
+
+	it('does not duplicate alias rows on a re-refresh', async () => {
+		const db = createTestDb();
+		const { client } = movieStub();
+		await refreshMedia(db, client, 'tmdb', 'movie/603', T0);
+
+		await refreshMedia(db, client, 'tmdb', 'movie/603', T0 + 13 * 3600_000, true);
+
+		const aliases = await db.select().from(mediaExternalIds);
+		expect(aliases).toHaveLength(2);
+	});
+
+	it('writes no alias and leaves imdb_checked_at unset when the fetch fails', async () => {
+		const db = createTestDb();
+		const id = seedMediaId('tmdb', 'movie/603');
+		await db
+			.insert(media)
+			.values({ id, externalId: 'movie/603', type: 'movie', title: 'The Matrix' });
+		const failing = {
+			getDetails: async () => {
+				throw new Error('tmdb detail fetch failed');
+			},
+			getSeason: async () => ({ seasonNumber: 0, name: '', overview: '', episodes: [] })
+		};
+
+		await expect(refreshMedia(db, failing, 'tmdb', 'movie/603', T0)).rejects.toThrow(
+			'tmdb detail fetch failed'
+		);
+
+		// A rate-limited title was never asked, so asking again must stay open.
+		const [row] = await db.select().from(media).where(eq(media.id, id));
+		expect(row.imdbCheckedAt).toBeNull();
+		expect(await db.select().from(mediaExternalIds)).toEqual([]);
 	});
 
 	it('returns null for an unknown provider or malformed id without calling TMDB', async () => {
