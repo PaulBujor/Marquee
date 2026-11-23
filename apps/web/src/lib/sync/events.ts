@@ -203,6 +203,14 @@ export const MEDIA_PROVIDERS = [...HYDRATABLE_PROVIDERS, 'local'] as const;
 export type MediaProvider = (typeof MEDIA_PROVIDERS)[number];
 
 /**
+ * Catalogues a title's external ids can come from — an alias names a title in someone else's
+ * catalogue, which is not the same question as which provider we hold metadata from: `imdb` is
+ * never hydrated and `local` never has an id at all. Kept separate so the two can diverge.
+ */
+export const EXTERNAL_ID_PROVIDERS = ['tmdb', 'imdb'] as const;
+export type ExternalIdProvider = (typeof EXTERNAL_ID_PROVIDERS)[number];
+
+/**
  * How a media row is sourced: `linked` = provider-backed (shareable/crowdsourced),
  * `custom` = user-authored (private). Only `linked` rows are ever surfaced to other users.
  */

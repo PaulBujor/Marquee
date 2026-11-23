@@ -204,6 +204,13 @@
 			"when": 1794346550677,
 			"tag": "0028_passkey_challenge_binding",
 			"breakpoints": true
+		},
+		{
+			"idx": 29,
+			"version": "6",
+			"when": 1795347901258,
+			"tag": "0029_media_external_ids",
+			"breakpoints": true
 		}
 	]
 }

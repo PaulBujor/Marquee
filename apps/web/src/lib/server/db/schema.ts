@@ -12,6 +12,7 @@ import {
 import {
 	MEDIA_PROVIDERS,
 	CREDIT_ROLES,
+	EXTERNAL_ID_PROVIDERS,
 	MEDIA_SOURCES,
 	SYNC_EVENT_TYPES,
 	TRACKING_STATUSES,
@@ -269,6 +270,27 @@ export const media = sqliteTable(
 		// A between-seasons show has `in_production` false but an airing status, so that branch needs its own index.
 		index('media_type_status_idx').on(table.type, table.status),
 		index('media_owner_idx').on(table.ownerUserId)
+	]
+);
+
+/**
+ * Every `(provider, externalId)` a title is known by. `(media_id, provider)` is the primary key
+ * because the primary alias — the one matching `media.provider`/`media.external_id` — is what
+ * hydration and refresh resolve through; further aliases are links, appended later.
+ */
+export const mediaExternalIds = sqliteTable(
+	'media_external_ids',
+	{
+		mediaId: text('media_id')
+			.notNull()
+			.references(() => media.id, { onDelete: 'cascade' }),
+		provider: text('provider', { enum: EXTERNAL_ID_PROVIDERS }).notNull(),
+		externalId: text('external_id').notNull()
+	},
+	(table) => [
+		primaryKey({ columns: [table.mediaId, table.provider] }),
+		// An external id names exactly one title: two rows sharing it would make a lookup ambiguous.
+		uniqueIndex('media_external_ids_provider_external_idx').on(table.provider, table.externalId)
 	]
 );
 
