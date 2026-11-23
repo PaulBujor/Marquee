@@ -8,7 +8,7 @@ import {
 	tracking,
 	type Media
 } from '#lib/server/db/schema.js';
-import { mediaId, trackingKey, type MediaCredit, type MediaRecord } from '#lib/sync/events.js';
+import { seedMediaId, trackingKey, type MediaCredit, type MediaRecord } from '#lib/sync/events.js';
 import type { MediaSyncRequest, MediaSyncResponse } from '#lib/sync/media-protocol.js';
 import { chunkIds } from '#lib/server/db/chunk.js';
 import type { createDb } from '#lib/server/db/index.js';
@@ -149,7 +149,7 @@ export async function resolveMediaSync(
 	now: number = Date.now()
 ): Promise<MediaSyncResponse> {
 	// The request's universe is whatever ids appear in refs/have/custom — no recomputation from the log.
-	const refById = new Map(req.refs.map((ref) => [mediaId(ref.provider, ref.externalId), ref]));
+	const refById = new Map(req.refs.map((ref) => [seedMediaId(ref.provider, ref.externalId), ref]));
 	const haveVersion = new Map(req.have.map((h) => [h.id, h.version]));
 	const pushedCustom = req.custom ?? [];
 	const requestedIds = [
@@ -197,7 +197,7 @@ export async function resolveMediaSync(
 	}
 
 	if (toRefresh.length > 0) {
-		const refreshedIds = toRefresh.map((ref) => mediaId(ref.provider, ref.externalId));
+		const refreshedIds = toRefresh.map((ref) => seedMediaId(ref.provider, ref.externalId));
 		for (const row of await loadMedia(refreshedIds)) existingById.set(row.id, row);
 	}
 

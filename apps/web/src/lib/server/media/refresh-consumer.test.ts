@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { media } from '#lib/server/db/schema.js';
-import { mediaId } from '#lib/sync/events.js';
+import { seedMediaId } from '#lib/sync/events.js';
 import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import type { QueueEnvelope } from '#lib/server/queue/types.js';
 import {
@@ -104,7 +104,7 @@ function failingDetailsTmdb() {
 
 async function seedMedia(db: ReturnType<typeof createTestDb>, externalId: string) {
 	await db.insert(media).values({
-		id: mediaId('tmdb', externalId),
+		id: seedMediaId('tmdb', externalId),
 		provider: 'tmdb',
 		externalId,
 		source: 'linked',
@@ -131,7 +131,7 @@ describe('processMediaRefreshBatch', () => {
 		const [row] = await db
 			.select()
 			.from(media)
-			.where(eq(media.id, mediaId('tmdb', 'show/1')));
+			.where(eq(media.id, seedMediaId('tmdb', 'show/1')));
 		expect(row.refreshedAt).toBe(T0);
 	});
 
@@ -151,7 +151,7 @@ describe('processMediaRefreshBatch', () => {
 		const [row] = await db
 			.select()
 			.from(media)
-			.where(eq(media.id, mediaId('tmdb', 'show/9')));
+			.where(eq(media.id, seedMediaId('tmdb', 'show/9')));
 		expect(row.refreshedAt).toBe(0);
 	});
 
@@ -201,7 +201,7 @@ describe('processMediaRefreshBatch', () => {
 	it('carries the force flag through to refreshMedia, bypassing the TTL', async () => {
 		const db = createTestDb();
 		await db.insert(media).values({
-			id: mediaId('tmdb', 'show/6'),
+			id: seedMediaId('tmdb', 'show/6'),
 			provider: 'tmdb',
 			externalId: 'show/6',
 			source: 'linked',

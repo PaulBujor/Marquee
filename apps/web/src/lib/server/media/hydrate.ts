@@ -12,7 +12,7 @@ import {
 import { creditRowsFromDetail, creditSignature, syncCredits, syncProviderPeople } from './credits';
 import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '#lib/server/db/chunk.js';
 import { hasDescription } from '#lib/media.js';
-import { mediaId, type MediaProvider } from '#lib/sync/events.js';
+import { seedMediaId, type MediaProvider } from '#lib/sync/events.js';
 import type { createDb } from '#lib/server/db/index.js';
 import type { MediaDetail, SeasonDetail, TmdbClient } from '#lib/server/tmdb/index.js';
 
@@ -275,7 +275,7 @@ export async function refreshMedia(
 	const parsed = parseTmdbExternalId(externalId);
 	if (!parsed) return null;
 
-	const id = mediaId(provider, externalId);
+	const id = seedMediaId(provider, externalId);
 	const existingRows = await db.select().from(media).where(eq(media.id, id)).limit(1);
 	const existing = existingRows[0] ?? null;
 	if (existing && !force && !needsRefresh(existing, now)) return existing;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { media, tracking, users } from '#lib/server/db/schema.js';
-import { mediaId, personExternalId, personId } from '#lib/sync/events.js';
+import { seedMediaId, personExternalId, personId } from '#lib/sync/events.js';
 import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
 import { MEDIA_SYNC_REFRESH_MAX, resolveMediaSync } from './sync';
 
@@ -10,7 +10,7 @@ type Db = ReturnType<typeof createTestDb>;
 const USER = 'u1';
 const REFERENCED = 'movie/603';
 const UNREFERENCED = 'movie/999';
-const REF_ID = mediaId('tmdb', REFERENCED);
+const REF_ID = seedMediaId('tmdb', REFERENCED);
 const T0 = 1_000_000_000_000;
 /** A client-minted custom media id (random in production; fixed here for assertions). */
 const CUSTOM_ID = '33333333-3333-4333-8333-333333333333';
@@ -60,7 +60,7 @@ function stub() {
 
 /** Seeds the `tracking` projection row the anti-abuse gate validates requests against. */
 async function addTracking(db: Db, i: number, externalId: string): Promise<void> {
-	const id = mediaId('tmdb', externalId);
+	const id = seedMediaId('tmdb', externalId);
 	await db.insert(tracking).values({
 		id: `${USER}::${id}`,
 		userId: USER,
@@ -72,7 +72,7 @@ async function addTracking(db: Db, i: number, externalId: string): Promise<void>
 
 async function storeFreshMovie(db: Db, externalId: string, over: Record<string, unknown> = {}) {
 	await db.insert(media).values({
-		id: mediaId('tmdb', externalId),
+		id: seedMediaId('tmdb', externalId),
 		provider: 'tmdb',
 		externalId,
 		type: 'movie',
@@ -226,7 +226,7 @@ describe('resolveMediaSync', () => {
 		const ext = 'show/1396';
 		await addTracking(db, 1, ext);
 		await db.insert(media).values({
-			id: mediaId('tmdb', ext),
+			id: seedMediaId('tmdb', ext),
 			provider: 'tmdb',
 			externalId: ext,
 			type: 'show',
@@ -243,7 +243,7 @@ describe('resolveMediaSync', () => {
 			USER,
 			{
 				refs: [{ provider: 'tmdb', externalId: ext }],
-				have: [{ id: mediaId('tmdb', ext), version: 1 }]
+				have: [{ id: seedMediaId('tmdb', ext), version: 1 }]
 			},
 			T0
 		);
@@ -322,7 +322,7 @@ describe('resolveMediaSync', () => {
 			const ext = `movie/${1000 + i}`;
 			await addTracking(db, i, ext);
 			await storeFreshMovie(db, ext, { title: `t-${i}` });
-			have.push({ id: mediaId('tmdb', ext), version: 0 });
+			have.push({ id: seedMediaId('tmdb', ext), version: 0 });
 		}
 		const { client, calls } = stub();
 		const res = await resolveMediaSync(db, client, USER, { refs: [], have }, T0);

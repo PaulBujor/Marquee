@@ -9,7 +9,7 @@
 import {
 	createEvent,
 	isHydratableProvider,
-	mediaId as deriveMediaId,
+	seedMediaId,
 	type EventEnvelope,
 	type MediaRecord
 } from '#lib/sync/events.js';
@@ -49,7 +49,7 @@ const MAX_CLOCK = 4102444800000;
  */
 function resolveMediaId(entry: ExportedTitle): string | null {
 	if (isHydratableProvider(entry.provider) && entry.externalId) {
-		return deriveMediaId(entry.provider, entry.externalId);
+		return seedMediaId(entry.provider, entry.externalId);
 	}
 	return UUID.test(entry.mediaId) ? entry.mediaId : null;
 }

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { media } from '#lib/server/db/schema.js';
-import { mediaId } from '#lib/sync/events.js';
+import { seedMediaId } from '#lib/sync/events.js';
 import { POST } from './+server';
 import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
 
@@ -59,7 +59,7 @@ describe('POST /api/queue/media-refresh', () => {
 	it('processes each message and returns one outcome per message, in order', async () => {
 		const db = createTestDb();
 		await db.insert(media).values({
-			id: mediaId('tmdb', 'show/1'),
+			id: seedMediaId('tmdb', 'show/1'),
 			provider: 'tmdb',
 			externalId: 'show/1',
 			source: 'linked',

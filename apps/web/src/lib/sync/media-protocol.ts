@@ -32,7 +32,7 @@ export const MEDIA_SYNC_CUSTOM_MAX = 25;
 /**
  * A **client-minted** id: pinned to v4, the version `crypto.randomUUID()` emits.
  *
- * Our derived ids (`mediaId`, `personId`) are v5, and anyone can compute one from public inputs —
+ * Our derived ids (`seedMediaId`, `personId`) are v5, and anyone can compute one from public inputs —
  * `uuidv5('tmdb:movie/603')`. Accepting any version here let a push claim a derived id for a row
  * this endpoint then stamps as the caller's private property: a squatted media id makes the real
  * title unhydratable for every user (a stored row means `resolveMediaSync` never calls

@@ -164,7 +164,7 @@ export type EventPayload = EventPayloadMap[SyncEventType];
 
 /**
  * An event as produced and stored by a client. `id` is a client-generated UUID that
- * doubles as the global dedup key; `entityId` is the deterministic `mediaId` the event
+ * doubles as the global dedup key; `entityId` is the deterministic media id the event
  * targets. The client never sets `userId`/`sequence` — the server assigns those on persist.
  */
 export interface EventEnvelope<T extends SyncEventType = SyncEventType> {
@@ -219,22 +219,27 @@ export type MediaSource = (typeof MEDIA_SOURCES)[number];
 
 /**
  * Fixed UUIDv5 namespace for Marquee media ids. **Never change this** — it would
- * repoint every derived media id and orphan the events that reference them.
+ * repoint every derived media id and orphan the events that reference them. Exported only so a
+ * test can pin it; nothing else may derive an id against it.
  */
-const MEDIA_ID_NAMESPACE = 'b7c8e9a0-3f2d-4c1b-9e6a-8d5f4a2b1c0e';
+export const SEED_MEDIA_ID_NAMESPACE = 'b7c8e9a0-3f2d-4c1b-9e6a-8d5f4a2b1c0e';
 
 /**
- * Our own, **provider-agnostic** media id: a deterministic UUIDv5 derived from
- * `(provider, externalId)`. Every device derives the same id offline with no
- * coordination, and switching providers (or becoming our own) needs no remap.
+ * Derives the id a **new** provider-backed media row is seeded with — a deterministic UUIDv5 of
+ * `(provider, externalId)`. Every device derives the same id offline with no coordination, and
+ * switching providers (or becoming our own) needs no remap.
+ *
+ * This is a seed, never a lookup: it takes `(provider, externalId)` and can't recover which of
+ * them an existing id came from, so nothing may resolve an id back to a title through it. Ids
+ * that already exist are found by their stored value.
  *
  * Only external providers derive an id this way. User-authored (`local`) media has no
  * `externalId` to derive from and mints a random id instead, which is why the parameter is
  * the narrower {@link HydratableProvider} — deriving one for a private entry would hand every
  * user who guessed the inputs the same id.
  */
-export function mediaId(provider: HydratableProvider, externalId: string): string {
-	return uuidv5(`${provider}:${externalId}`, MEDIA_ID_NAMESPACE);
+export function seedMediaId(provider: HydratableProvider, externalId: string): string {
+	return uuidv5(`${provider}:${externalId}`, SEED_MEDIA_ID_NAMESPACE);
 }
 
 /** Narrows an untrusted/stored provider value to one we can hydrate from. */
@@ -282,7 +287,7 @@ export function personExternalId(tmdbId: number): string {
 
 /** Our own id for a provider-backed person, derived the same way a title's is. */
 export function personId(provider: HydratableProvider, tmdbId: number): string {
-	return mediaId(provider, personExternalId(tmdbId));
+	return seedMediaId(provider, personExternalId(tmdbId));
 }
 
 /** Recover the provider's numeric person id from {@link personExternalId}, or null if it isn't one. */
@@ -301,7 +306,7 @@ export function tmdbExternalId(type: 'movie' | 'show', tmdbId: number): string {
 
 /** Convenience: our media id for a TMDB-sourced title. */
 export function tmdbMediaId(type: 'movie' | 'show', tmdbId: number): string {
-	return mediaId('tmdb', tmdbExternalId(type, tmdbId));
+	return seedMediaId('tmdb', tmdbExternalId(type, tmdbId));
 }
 
 /** Deterministic PK for a user's tracking row of a title. */
@@ -315,8 +320,8 @@ export function episodeKey(userId: string, media: string, season: number, episod
 }
 
 /**
- * Build a new event, stamping the client-owned fields. `entityId` is the target
- * `mediaId`; use {@link mediaId} to derive it.
+ * Build a new event, stamping the client-owned fields. `entityId` is the target media id;
+ * {@link seedMediaId} derives the one a new provider-backed row is seeded with.
  *
  * `clock` defaults to now, which is what a live user action wants. Pass an explicit value only
  * when replaying something that genuinely happened earlier — an import seeding a restored library
