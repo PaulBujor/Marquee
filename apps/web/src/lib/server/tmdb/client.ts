@@ -1,6 +1,7 @@
 import type { ZodType } from 'zod';
 import { CircuitBreaker, fetchWithTimeout, withRetry } from '#lib/resilience.js';
 import {
+	externalIdsResponseSchema,
 	movieDetailsResponseSchema,
 	multiSearchResponseSchema,
 	personResponseSchema,
@@ -364,6 +365,18 @@ export function createTmdbClient(apiKey: string) {
 				TmdbMovieDetailsResponse | TmdbTvDetailsResponse;
 
 			return normalizeDetails(type, data);
+		},
+
+		/**
+		 * One title's aliases without a full hydrate — a backfill asks about many titles at once, and a
+		 * details payload (seasons, cast, images) would cost far more than the one id it reads.
+		 */
+		async externalIds(type: 'movie' | 'show', id: number): Promise<string | null> {
+			const path = type === 'movie' ? `/movie/${id}/external_ids` : `/tv/${id}/external_ids`;
+			const raw = await request(path, {});
+			const data = parseTmdb(externalIdsResponseSchema, raw, `${type} external ids`);
+
+			return data.imdb_id || null;
 		},
 
 		/** TMDB has no paged filmography endpoint — `combined_credits` comes back whole, so the paging is ours. */

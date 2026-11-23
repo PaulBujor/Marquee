@@ -20,6 +20,12 @@ export const tvDetailsResponseSchema = z.looseObject(detailsBase);
 
 export const personResponseSchema = z.looseObject(detailsBase);
 
+/** `/movie|tv/{id}/external_ids` — the same block `getDetails` appends, fetched on its own. */
+export const externalIdsResponseSchema = z.looseObject({
+	...detailsBase,
+	imdb_id: z.string().nullish()
+});
+
 export const seasonDetailResponseSchema = z.looseObject({
 	season_number: z.number(),
 	episodes: z

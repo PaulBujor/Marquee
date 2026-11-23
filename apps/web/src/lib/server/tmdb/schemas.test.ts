@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	externalIdsResponseSchema,
 	movieDetailsResponseSchema,
 	multiSearchResponseSchema,
 	personResponseSchema,
@@ -66,6 +67,15 @@ describe('TMDB response schemas', () => {
 			seasonDetailResponseSchema.safeParse({ season_number: 1, episodes: [{ name: 'no number' }] })
 				.success
 		).toBe(false);
+	});
+
+	it('requires a numeric id on external ids, and rejects a mistyped imdb_id', () => {
+		expect(externalIdsResponseSchema.safeParse({ id: 603, imdb_id: 'tt0133093' }).success).toBe(
+			true
+		);
+		expect(externalIdsResponseSchema.safeParse({ id: 603, imdb_id: null }).success).toBe(true);
+		expect(externalIdsResponseSchema.safeParse({ imdb_id: 'tt0133093' }).success).toBe(false);
+		expect(externalIdsResponseSchema.safeParse({ id: 603, imdb_id: 7 }).success).toBe(false);
 	});
 
 	it('rejects a non-object payload', () => {
