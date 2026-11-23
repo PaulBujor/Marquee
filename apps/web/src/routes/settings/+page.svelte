@@ -3,6 +3,7 @@
 	import PageHeader from '#lib/components/page-header.svelte';
 	import AccountCard from './account-card.svelte';
 	import PasskeyCard from './passkey-card.svelte';
+	import ApiTokensCard from './api-tokens-card.svelte';
 	import AppearanceCard from './appearance-card.svelte';
 	import NotificationsCard from './notifications-card.svelte';
 	import DataCacheCard from './data-cache-card.svelte';
@@ -42,6 +43,7 @@
 	{/if}
 	<AccountCard user={data.user} codeTtlMinutes={data.codeTtlMinutes} {form} />
 	<PasskeyCard email={data.user.email} />
+	<ApiTokensCard />
 	<AppearanceCard />
 	<NotificationsCard />
 	<DataCacheCard />
