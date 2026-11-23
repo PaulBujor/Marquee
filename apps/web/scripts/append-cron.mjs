@@ -62,6 +62,11 @@ worker_default.scheduled = async (event, env, ctx) => {
 		case '0 6 * * *':
 			path = '/api/cron/refresh';
 			break;
+		// Off the :00 slot: this backfill spends a TMDB request per title, so staggering it keeps it
+		// from competing with the sweep's queue drain and the hourly digest for the same rate limit.
+		case '30 6 * * *':
+			path = '/api/cron/imdb-aliases';
+			break;
 		case '0 7 * * *':
 			path = '/api/cron/waitlist-digest';
 			break;
