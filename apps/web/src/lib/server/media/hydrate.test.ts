@@ -26,6 +26,7 @@ const T0 = Date.UTC(2026, 6, 24); // fixed "now" for deterministic TTL tests
 
 const movieDefaults: MediaDetail = {
 	tmdbId: 603,
+	imdbId: 'tt0133093',
 	type: 'movie',
 	title: 'The Matrix',
 	year: 1999,

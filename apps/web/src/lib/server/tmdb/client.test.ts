@@ -207,7 +207,8 @@ const MOVIE_DETAILS: TmdbMovieDetailsResponse = {
 			{ key: 'teaser1', name: 'Teaser', site: 'YouTube', type: 'Teaser' },
 			{ key: 'yt-trailer', name: 'Official Trailer', site: 'YouTube', type: 'Trailer' }
 		]
-	}
+	},
+	external_ids: { imdb_id: 'tt1375666' }
 };
 
 const TV_DETAILS: TmdbTvDetailsResponse = {
@@ -282,6 +283,7 @@ describe('createTmdbClient.getDetails', () => {
 
 		expect(detail).toEqual({
 			tmdbId: 27205,
+			imdbId: 'tt1375666',
 			type: 'movie',
 			title: 'Inception',
 			year: 2010,
@@ -409,7 +411,7 @@ describe('createTmdbClient.getDetails', () => {
 		expect(url.origin + url.pathname).toBe('https://api.themoviedb.org/3/movie/27205');
 		expect(url.searchParams.get('api_key')).toBe('secret-key');
 		expect(url.searchParams.get('append_to_response')).toBe(
-			'credits,images,videos,recommendations,similar'
+			'credits,images,videos,recommendations,similar,external_ids'
 		);
 	});
 
@@ -467,6 +469,7 @@ describe('createTmdbClient.getDetails', () => {
 		const detail = await createTmdbClient('key').getDetails('movie', 1);
 		expect(detail).toEqual({
 			tmdbId: 1,
+			imdbId: null,
 			type: 'movie',
 			title: 'Bare',
 			year: null,
@@ -491,6 +494,20 @@ describe('createTmdbClient.getDetails', () => {
 			seasons: [],
 			similar: []
 		});
+	});
+
+	it('maps external_ids.imdb_id to imdbId', async () => {
+		mockFetch({ ...MOVIE_DETAILS, external_ids: { imdb_id: 'tt0133093' } });
+		const detail = await createTmdbClient('key').getDetails('movie', 27205);
+		expect(detail.imdbId).toBe('tt0133093');
+	});
+
+	it('leaves imdbId null when external_ids is absent or imdb_id is empty', async () => {
+		mockFetch({ ...MOVIE_DETAILS, external_ids: undefined });
+		expect((await createTmdbClient('key').getDetails('movie', 27205)).imdbId).toBeNull();
+
+		mockFetch({ ...MOVIE_DETAILS, external_ids: { imdb_id: '' } });
+		expect((await createTmdbClient('key').getDetails('movie', 27205)).imdbId).toBeNull();
 	});
 
 	it('treats a zero vote_average as unrated (null)', async () => {

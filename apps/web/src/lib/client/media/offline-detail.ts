@@ -112,6 +112,7 @@ async function assembleOfflineDetail(
 		posterPath: m.posterPath,
 		backdropPath: m.backdropPath,
 		// TMDB-only fields we don't cache — shown as an offline placeholder on the page.
+		imdbId: null,
 		rating: null,
 		voteCount: 0,
 		runtime: null,

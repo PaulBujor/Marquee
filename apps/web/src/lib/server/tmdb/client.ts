@@ -170,6 +170,7 @@ function normalizeDetails(
 
 	return {
 		tmdbId: data.id,
+		imdbId: data.external_ids?.imdb_id || null,
 		type,
 		title: (isMovie ? movie.title : tv.name) ?? '',
 		year: parseYear(isMovie ? movie.release_date : tv.first_air_date),
@@ -356,7 +357,7 @@ export function createTmdbClient(apiKey: string) {
 		async getDetails(type: 'movie' | 'show', id: number): Promise<MediaDetail> {
 			const path = type === 'movie' ? `/movie/${id}` : `/tv/${id}`;
 			const raw = await request(path, {
-				append_to_response: 'credits,images,videos,recommendations,similar'
+				append_to_response: 'credits,images,videos,recommendations,similar,external_ids'
 			});
 			const schema = type === 'movie' ? movieDetailsResponseSchema : tvDetailsResponseSchema;
 			const data = parseTmdb(schema, raw, `${type} details`) as unknown as

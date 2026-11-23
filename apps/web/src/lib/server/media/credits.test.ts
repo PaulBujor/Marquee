@@ -21,6 +21,7 @@ const MEDIA_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 function detail(over: Partial<MediaDetail> = {}): MediaDetail {
 	return {
 		tmdbId: 27205,
+		imdbId: 'tt1375666',
 		type: 'movie',
 		title: 'Inception',
 		year: 2010,

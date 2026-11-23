@@ -24,6 +24,7 @@ function stub() {
 				calls++;
 				return {
 					tmdbId: id,
+					imdbId: null,
 					type,
 					title: `title-${id}`,
 					year: 1999,
