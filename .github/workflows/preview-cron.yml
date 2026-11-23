@@ -1,0 +1,102 @@
+---
+name: Preview cron
+
+# Cron Triggers cannot be declared for preview deployments: wrangler's
+# `previews` block rejects `triggers` (its schema sets
+# additionalProperties: false, and `triggers` is not among its keys), and
+# the platform only fires crons for the production deployment. So a
+# preview's scheduled routes are driven from here instead.
+#
+# This hits the preview host, which binds `previews.d1_databases` -> the
+# `marquee-preview` database. It cannot reach the production database:
+# the preview deployment has no production D1 binding at all.
+#
+# Repo settings this needs:
+#   secrets.CRON_SECRET        value the Worker holds, sent as x-cron-key
+#   secrets.CF_ACCESS_CLIENT_ID      Access service token, because previews
+#   secrets.CF_ACCESS_CLIENT_SECRET  sit behind Cloudflare Access; omit
+#                                    both if Access is bypassed
+#   vars.PREVIEW_URL           host to fire at; without it the schedule
+#                              no-ops rather than failing every day
+#
+# Manual run (the normal way to use it):
+#   gh workflow run preview-cron.yml --ref <branch> -f route=imdb-aliases
+on:
+  workflow_dispatch:
+    inputs:
+      route:
+        description: Cron route to fire
+        type: choice
+        default: imdb-aliases
+        options: [imdb-aliases, refresh, notify, waitlist-digest]
+      host:
+        description: Override the host (defaults to this branch preview)
+        type: string
+        required: false
+  schedule:
+    # Mirrors the production IMDb-alias slot, so a preview run is seen daily.
+    - cron: '30 6 * * *'
+
+# Two runs writing IMDb aliases at once would fight over the same rows.
+concurrency:
+  group: preview-cron
+  cancel-in-progress: false
+
+jobs:
+  fire:
+    runs-on: ubuntu-latest
+    # A scheduled run with no host configured is meaningless; skip it
+    # rather than failing once a day.
+    if: github.event_name == 'workflow_dispatch' || vars.PREVIEW_URL != ''
+    steps:
+      - name: POST the cron route
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ACCESS_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          ACCESS_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          ROUTE: ${{ inputs.route || 'imdb-aliases' }}
+          HOST_INPUT: ${{ inputs.host }}
+          PREVIEW_URL: ${{ vars.PREVIEW_URL }}
+        run: |
+          set -euo pipefail
+
+          # Cloudflare's branch host is the ref with slashes flattened.
+          slug="${GITHUB_REF_NAME//\//-}"
+          base="https://${slug}.preview.marquee.paulbujor.net"
+          host="${HOST_INPUT:-${PREVIEW_URL:-${base}}}"
+          url="${host%/}/api/cron/${ROUTE}"
+          echo "POST ${url}"
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::secrets.CRON_SECRET is not set"
+            exit 1
+          fi
+
+          hdrs=(-H "x-cron-key: ${CRON_SECRET}")
+          if [ -n "${ACCESS_ID:-}" ]; then
+            hdrs+=(
+              -H "CF-Access-Client-Id: ${ACCESS_ID}"
+              -H "CF-Access-Client-Secret: ${ACCESS_SECRET}"
+            )
+          fi
+
+          code=$(curl -sS -m 120 -o /tmp/body -w '%{http_code}' \
+            -X POST "${url}" "${hdrs[@]}")
+          echo "HTTP ${code}"
+          cat /tmp/body; echo
+
+          # A 302 means Access swallowed it; a 401 means the key is wrong.
+          # Both look like "nothing happened" in the DB, so fail loudly.
+          case "${code}" in
+            200) ;;
+            302|303)
+              echo "::error::redirected - Cloudflare Access is blocking"
+              echo "::error::set the CF_ACCESS_CLIENT_* secrets"
+              exit 1 ;;
+            401)
+              echo "::error::401 - CRON_SECRET does not match"
+              exit 1 ;;
+            *)
+              echo "::error::cron route returned ${code}"
+              exit 1 ;;
+          esac
