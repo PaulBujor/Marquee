@@ -13,13 +13,16 @@ export interface ApiTokenIdentity {
 
 const BEARER = /^Bearer +([A-Za-z0-9_-]+)$/i;
 
+/** Identifies the secret in logs and secret scanners; not a security boundary. */
+const TOKEN_PREFIX = 'mqr_';
+
 /** Returns the plaintext token itself, once; only its hash is stored. */
 export async function createApiToken(
 	db: Db,
 	userId: string,
 	label: string
 ): Promise<{ token: string; row: ApiToken }> {
-	const token = generateToken();
+	const token = TOKEN_PREFIX + generateToken();
 	const [row] = await db
 		.insert(apiTokens)
 		.values({ userId, label, hash: await hashToken(token), scopes: [] })

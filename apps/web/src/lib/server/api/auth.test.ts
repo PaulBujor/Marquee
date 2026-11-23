@@ -34,7 +34,7 @@ describe('createApiToken', () => {
 		const userId = await seedUser('hash@example.com');
 		const { token, row } = await createApiToken(db, userId, 'laptop');
 
-		expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+		expect(token).toMatch(/^mqr_[A-Za-z0-9_-]{43}$/);
 		expect(row.hash).toBe(await hashToken(token));
 		expect(row.hash).not.toBe(token);
 		expect(row.userId).toBe(userId);
