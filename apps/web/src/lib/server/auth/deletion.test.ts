@@ -120,6 +120,7 @@ describe('deleteUserCascade', () => {
 		// A new user-owned table fails here until deleteUserCascade learns about it.
 		expect(withUserColumn.sort()).toEqual(
 			[
+				'api_tokens',
 				'email_change_tokens',
 				'episode_watches',
 				'events',
