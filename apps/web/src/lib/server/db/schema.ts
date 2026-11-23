@@ -256,6 +256,8 @@ export const media = sqliteTable(
 		version: integer('version').notNull().default(1),
 		// Epoch ms of the last TMDB pull (drives the refresh TTL); default 0 makes existing rows stale.
 		refreshedAt: integer('refreshed_at').notNull().default(0),
+		// Epoch ms of the last IMDb backfill attempt; null means never attempted.
+		imdbCheckedAt: integer('imdb_checked_at'),
 		// Epoch ms, not seconds: an LWW clock compared against event `clientCreatedAt`, so units must match.
 		updatedAt: integer('updated_at')
 			.notNull()
