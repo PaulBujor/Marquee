@@ -75,11 +75,18 @@ worker_default.scheduled = async (event, env, ctx) => {
 		worker_default.fetch(
 			new Request('https://cron' + path, {
 				method: 'POST',
-				headers: { 'x-cron-key': env.CRON_SECRET ?? '' }
+				// SvelteKit's CSRF guard forbids a POST whose Origin is absent or does not match the
+				// URL, and this is an in-process self-fetch, so the header only has to match the
+				// synthetic origin above. Without it every scheduled job is a silent 403.
+				headers: { 'x-cron-key': env.CRON_SECRET ?? '', origin: 'https://cron' }
 			}),
 			env,
 			ctx
-		)
+		).then((res) => {
+			// waitUntil swallows a rejection as well as a 4xx, which is how a forbidden run
+			// looks exactly like a healthy one.
+			if (!res.ok) console.error('cron: ' + path + ' responded ' + res.status);
+		})
 	);
 };
 `,
@@ -108,7 +115,12 @@ worker_default.queue = async (batch, env, ctx) => {
 		const res = await worker_default.fetch(
 			new Request('https://cron' + path, {
 				method: 'POST',
-				headers: { 'x-cron-key': env.CRON_SECRET ?? '', 'content-type': 'application/json' },
+				// Same CSRF guard as the scheduled self-fetch above: a POST is forbidden without it.
+				headers: {
+					'x-cron-key': env.CRON_SECRET ?? '',
+					'content-type': 'application/json',
+					origin: 'https://cron'
+				},
 				body: JSON.stringify({
 					messages: batch.messages.map((m) => ({ body: m.body, attempts: m.attempts }))
 				})
@@ -131,4 +143,16 @@ worker_default.queue = async (batch, env, ctx) => {
 	'utf8'
 );
 await appendFile(WORKER, '\nexport default worker_default;\n', 'utf8');
+
+// Self-check: both self-fetches must carry a matching Origin, or SvelteKit's CSRF guard forbids
+// them and every run silently no-ops. Asserting the built artifact is the only place this is
+// observable, because the guard lives in SvelteKit rather than in our handlers.
+const built = await readFile(WORKER, 'utf8');
+const origins = built.match(/origin: 'https:\/\/cron'/g)?.length ?? 0;
+if (origins !== 2) {
+	throw new Error(
+		`append-cron: expected an Origin header on both self-fetches, found ${origins} - a POST without one is forbidden`
+	);
+}
+
 console.log('append-cron: attached scheduled + queue handlers to', WORKER);
