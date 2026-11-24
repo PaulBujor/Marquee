@@ -18,14 +18,22 @@ export interface ProblemDetails {
 export function problem(
 	status: number,
 	title: string,
-	options: { detail?: string; errors?: ProblemFieldError[]; type?: string } = {}
+	options: {
+		detail?: string;
+		errors?: ProblemFieldError[];
+		type?: string;
+		headers?: HeadersInit;
+	} = {}
 ): Response {
 	const body: ProblemDetails = { type: options.type ?? 'about:blank', title, status };
 	if (options.detail) body.detail = options.detail;
 	if (options.errors) body.errors = options.errors;
 	return new Response(JSON.stringify(body), {
 		status,
-		headers: { 'content-type': 'application/problem+json; charset=utf-8' }
+		headers: {
+			'content-type': 'application/problem+json; charset=utf-8',
+			...options.headers
+		}
 	});
 }
 
