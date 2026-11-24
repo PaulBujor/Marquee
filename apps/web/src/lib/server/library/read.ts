@@ -90,6 +90,98 @@ function decodeCursor(raw: string): Cursor {
 	return { addedAt, id: match[2] };
 }
 
+/** Tracking ⋈ media, the columns every read returns; `id` is the tracking row the page cursor orders by. */
+type EntryRow = { id: string } & Pick<
+	typeof tracking.$inferSelect,
+	| 'mediaId'
+	| 'status'
+	| 'favorite'
+	| 'rating'
+	| 'removed'
+	| 'statusUpdatedAt'
+	| 'favoriteUpdatedAt'
+	| 'ratingUpdatedAt'
+	| 'removedUpdatedAt'
+	| 'addedAt'
+> &
+	Pick<
+		typeof media.$inferSelect,
+		'type' | 'title' | 'year' | 'posterPath' | 'provider' | 'externalId'
+	>;
+
+/** One select shape for both reads, so a paged entry and a single entry can never drift apart. */
+const entryColumns = {
+	id: tracking.id,
+	mediaId: tracking.mediaId,
+	status: tracking.status,
+	favorite: tracking.favorite,
+	rating: tracking.rating,
+	removed: tracking.removed,
+	statusUpdatedAt: tracking.statusUpdatedAt,
+	favoriteUpdatedAt: tracking.favoriteUpdatedAt,
+	ratingUpdatedAt: tracking.ratingUpdatedAt,
+	removedUpdatedAt: tracking.removedUpdatedAt,
+	addedAt: tracking.addedAt,
+	type: media.type,
+	title: media.title,
+	year: media.year,
+	posterPath: media.posterPath,
+	provider: media.provider,
+	externalId: media.externalId
+};
+
+function toEntry(row: EntryRow, watches: LibraryEpisode[]): LibraryEntry {
+	return {
+		tracking: {
+			mediaId: row.mediaId,
+			status: row.status,
+			favorite: row.favorite,
+			rating: row.rating,
+			removed: row.removed,
+			statusUpdatedAt: row.statusUpdatedAt,
+			favoriteUpdatedAt: row.favoriteUpdatedAt,
+			ratingUpdatedAt: row.ratingUpdatedAt,
+			removedUpdatedAt: row.removedUpdatedAt,
+			addedAt: row.addedAt.getTime()
+		},
+		media: {
+			id: row.mediaId,
+			provider: row.provider,
+			externalId: row.externalId,
+			type: row.type,
+			title: row.title,
+			year: row.year,
+			posterPath: row.posterPath
+		},
+		episodes:
+			row.type === 'show'
+				? watches
+						.map(({ season, episode, watched }) => ({ season, episode, watched }))
+						.sort((a, b) => a.season - b.season || a.episode - b.episode)
+				: null
+	};
+}
+
+/** Chunked because a page can reference more titles than one SQLite statement takes parameters. */
+async function readWatches(db: Db, userId: string, mediaIds: string[]) {
+	if (mediaIds.length === 0) return [];
+	return (
+		await Promise.all(
+			chunkIds(mediaIds).map((ids) =>
+				db
+					.select({
+						mediaId: episodeWatches.mediaId,
+						season: episodeWatches.season,
+						episode: episodeWatches.episode,
+						watched: episodeWatches.watched
+					})
+					.from(episodeWatches)
+					.where(and(eq(episodeWatches.userId, userId), inArray(episodeWatches.mediaId, ids)))
+			)
+		)
+	).flat();
+}
+
 /**
  * One page of the user's library, newest add first, tie-broken by row id so a shared timestamp
  * can't make the cursor skip or repeat a row. `userId` must come from the authenticated token.
@@ -114,25 +206,7 @@ export async function readLibraryPage(
 	// Media is joined rather than looked up per row, and the `+ 1` row only proves another page exists.
 	// Inner join drops a tracked id with no media row: there is nothing to render for it yet.
 	const rows = await db
-		.select({
-			id: tracking.id,
-			mediaId: tracking.mediaId,
-			status: tracking.status,
-			favorite: tracking.favorite,
-			rating: tracking.rating,
-			removed: tracking.removed,
-			statusUpdatedAt: tracking.statusUpdatedAt,
-			favoriteUpdatedAt: tracking.favoriteUpdatedAt,
-			ratingUpdatedAt: tracking.ratingUpdatedAt,
-			removedUpdatedAt: tracking.removedUpdatedAt,
-			addedAt: tracking.addedAt,
-			type: media.type,
-			title: media.title,
-			year: media.year,
-			posterPath: media.posterPath,
-			provider: media.provider,
-			externalId: media.externalId
-		})
+		.select(entryColumns)
 		.from(tracking)
 		.innerJoin(media, eq(media.id, tracking.mediaId))
 		.where(and(eq(tracking.userId, userId), after))
@@ -141,24 +215,7 @@ export async function readLibraryPage(
 
 	const page = rows.slice(0, limit);
 	const showIds = page.filter((row) => row.type === 'show').map((row) => row.mediaId);
-	const watchRows =
-		showIds.length === 0
-			? []
-			: (
-					await Promise.all(
-						chunkIds(showIds).map((ids) =>
-							db
-								.select({
-									mediaId: episodeWatches.mediaId,
-									season: episodeWatches.season,
-									episode: episodeWatches.episode,
-									watched: episodeWatches.watched
-								})
-								.from(episodeWatches)
-								.where(and(eq(episodeWatches.userId, userId), inArray(episodeWatches.mediaId, ids)))
-						)
-					)
-				).flat();
+	const watchRows = await readWatches(db, userId, showIds);
 
 	const episodesByMedia = new Map<string, LibraryEpisode[]>();
 	for (const watch of watchRows) {
@@ -167,35 +224,7 @@ export async function readLibraryPage(
 		episodesByMedia.set(watch.mediaId, list);
 	}
 
-	const entries: LibraryEntry[] = page.map((row) => ({
-		tracking: {
-			mediaId: row.mediaId,
-			status: row.status,
-			favorite: row.favorite,
-			rating: row.rating,
-			removed: row.removed,
-			statusUpdatedAt: row.statusUpdatedAt,
-			favoriteUpdatedAt: row.favoriteUpdatedAt,
-			ratingUpdatedAt: row.ratingUpdatedAt,
-			removedUpdatedAt: row.removedUpdatedAt,
-			addedAt: row.addedAt.getTime()
-		},
-		media: {
-			id: row.mediaId,
-			provider: row.provider,
-			externalId: row.externalId,
-			type: row.type,
-			title: row.title,
-			year: row.year,
-			posterPath: row.posterPath
-		},
-		episodes:
-			row.type === 'show'
-				? (episodesByMedia.get(row.mediaId) ?? []).sort(
-						(a, b) => a.season - b.season || a.episode - b.episode
-					)
-				: null
-	}));
+	const entries = page.map((row) => toEntry(row, episodesByMedia.get(row.mediaId) ?? []));
 
 	const last = page.at(-1);
 	return {
@@ -205,4 +234,25 @@ export async function readLibraryPage(
 				? encodeCursor({ addedAt: last.addedAt.getTime(), id: last.id })
 				: null
 	};
+}
+
+/**
+ * One entry, in the same shape a page returns, or null when the user does not track that title (yet).
+ * `userId` must come from the authenticated token.
+ */
+export async function readLibraryEntry(
+	db: Db,
+	userId: string,
+	mediaId: string
+): Promise<LibraryEntry | null> {
+	const [row] = await db
+		.select(entryColumns)
+		.from(tracking)
+		.innerJoin(media, eq(media.id, tracking.mediaId))
+		.where(and(eq(tracking.userId, userId), eq(tracking.mediaId, mediaId)))
+		.limit(1);
+	if (!row) return null;
+
+	const watches = row.type === 'show' ? await readWatches(db, userId, [row.mediaId]) : [];
+	return toEntry(row, watches);
 }
