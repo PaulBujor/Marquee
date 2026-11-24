@@ -1,6 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { createDb } from '#lib/server/db/index.js';
 import {
+	apiTokens,
 	credits,
 	emailChangeTokens,
 	episodeWatches,
@@ -58,6 +59,7 @@ export async function deleteUserCascade(db: Db, user: Pick<User, 'id' | 'email'>
 		db.delete(sessions).where(eq(sessions.userId, user.id)),
 		db.delete(passkeys).where(eq(passkeys.userId, user.id)),
 		db.delete(passkeyChallenges).where(eq(passkeyChallenges.userId, user.id)),
+		db.delete(apiTokens).where(eq(apiTokens.userId, user.id)),
 		db.delete(loginTokens).where(eq(loginTokens.email, user.email)),
 		db.delete(events).where(eq(events.userId, user.id)),
 		db.delete(syncState).where(eq(syncState.userId, user.id)),

@@ -182,11 +182,39 @@ export const passkeyChallenges = sqliteTable(
 	]
 );
 
+/** Credential for the token-authenticated external API; only the SHA-256 hash is stored, so a DB read can't mint one. */
+export const apiTokens = sqliteTable(
+	'api_tokens',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		hash: text('hash').notNull(),
+		label: text('label').notNull(),
+		scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		lastUsedAt: integer('last_used_at', { mode: 'timestamp' }),
+		expiresAt: integer('expires_at', { mode: 'timestamp' }),
+		revokedAt: integer('revoked_at', { mode: 'timestamp' })
+	},
+	(table) => [
+		// Auth is a lookup by hash alone, so uniqueness is also the integrity guarantee: one row per token.
+		uniqueIndex('api_tokens_hash_idx').on(table.hash),
+		index('api_tokens_user_id_idx').on(table.userId)
+	]
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type LoginToken = typeof loginTokens.$inferSelect;
 export type EmailChangeToken = typeof emailChangeTokens.$inferSelect;
 export type Passkey = typeof passkeys.$inferSelect;
+export type ApiToken = typeof apiTokens.$inferSelect;
 
 // Unlike `users`, these tables have no `updated_at` trigger: every write flows through projection code, which sets the LWW clocks explicitly.
 
