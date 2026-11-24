@@ -26,6 +26,12 @@ export const externalIdsResponseSchema = z.looseObject({
 	imdb_id: z.string().nullish()
 });
 
+/** `/find/{id}` — one id's results, split by media type. Only the ids are read; a details payload is the caller's next step. */
+export const findResponseSchema = z.looseObject({
+	movie_results: z.array(z.looseObject({ id: z.number() })).optional(),
+	tv_results: z.array(z.looseObject({ id: z.number() })).optional()
+});
+
 export const seasonDetailResponseSchema = z.looseObject({
 	season_number: z.number(),
 	episodes: z

@@ -342,6 +342,12 @@ export interface Episode {
 	runtime: number | null;
 }
 
+/** `/find/{id}` reduced to the ids alone, one list per media type — an empty list is a type the id is not. */
+export interface TmdbFindResult {
+	movieIds: number[];
+	showIds: number[];
+}
+
 export interface SeasonDetail {
 	seasonNumber: number;
 	name: string;
