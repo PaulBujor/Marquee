@@ -2,6 +2,7 @@ import type { ZodType } from 'zod';
 import { CircuitBreaker, fetchWithTimeout, withRetry } from '#lib/resilience.js';
 import {
 	externalIdsResponseSchema,
+	findResponseSchema,
 	movieDetailsResponseSchema,
 	multiSearchResponseSchema,
 	personResponseSchema,
@@ -20,6 +21,7 @@ import type {
 	TmdbCombinedCreditItem,
 	TmdbCombinedCredits,
 	TmdbCrewMember,
+	TmdbFindResult,
 	TmdbMovieDetailsResponse,
 	TmdbMultiSearchItem,
 	TmdbMultiSearchResponse,
@@ -377,6 +379,22 @@ export function createTmdbClient(apiKey: string) {
 			const data = parseTmdb(externalIdsResponseSchema, raw, `${type} external ids`);
 
 			return data.imdb_id || null;
+		},
+
+		/**
+		 * Which title an IMDb id names, as ids only. A dedicated endpoint rather than a details variant: a
+		 * caller has no type yet, and a details payload (seasons, cast, images) would be mostly wasted.
+		 */
+		async findByExternalId(imdbId: string): Promise<TmdbFindResult> {
+			const raw = await request(`/find/${encodeURIComponent(imdbId)}`, {
+				external_source: 'imdb_id'
+			});
+			const data = parseTmdb(findResponseSchema, raw, 'find');
+
+			return {
+				movieIds: (data.movie_results ?? []).map((r) => r.id),
+				showIds: (data.tv_results ?? []).map((r) => r.id)
+			};
 		},
 
 		/** TMDB has no paged filmography endpoint — `combined_credits` comes back whole, so the paging is ours. */

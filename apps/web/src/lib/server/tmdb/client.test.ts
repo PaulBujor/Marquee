@@ -814,3 +814,63 @@ describe('createTmdbClient.externalIds', () => {
 		});
 	});
 });
+
+describe('createTmdbClient.findByExternalId', () => {
+	it('asks /find with an imdb source, for ids alone rather than a details payload', async () => {
+		const spy = mockFetch({ movie_results: [{ id: 603 }] });
+		await createTmdbClient('secret-key').findByExternalId('tt0133093');
+
+		const [arg] = (spy.mock.calls as unknown as [URL | string][])[0];
+		const url = new URL(String(arg));
+		expect(`${url.origin}${url.pathname}`).toBe('https://api.themoviedb.org/3/find/tt0133093');
+		expect(url.searchParams.get('external_source')).toBe('imdb_id');
+		expect(url.searchParams.has('append_to_response')).toBe(false);
+	});
+
+	it('splits the results by media type', async () => {
+		mockFetch({ movie_results: [{ id: 603 }, { id: 604 }], tv_results: [{ id: 1396 }] });
+
+		expect(await createTmdbClient('key').findByExternalId('tt0133093')).toEqual({
+			movieIds: [603, 604],
+			showIds: [1396]
+		});
+	});
+
+	it('reports an absent result list and an empty one the same way', async () => {
+		mockFetch({ movie_results: [{ id: 603 }] });
+		expect(await createTmdbClient('key').findByExternalId('tt0133093')).toEqual({
+			movieIds: [603],
+			showIds: []
+		});
+
+		mockFetch({});
+		expect(await createTmdbClient('key').findByExternalId('tt0133093')).toEqual({
+			movieIds: [],
+			showIds: []
+		});
+
+		mockFetch({ movie_results: [], tv_results: [] });
+		expect(await createTmdbClient('key').findByExternalId('tt0133093')).toEqual({
+			movieIds: [],
+			showIds: []
+		});
+	});
+
+	it('throws on a result whose id is not a number', async () => {
+		mockFetch({ movie_results: [{ id: 'tt0133093' }] });
+
+		await expect(createTmdbClient('key').findByExternalId('tt0133093')).rejects.toMatchObject({
+			name: 'TmdbError',
+			status: 502
+		});
+	});
+
+	it('throws rather than reporting an empty result when TMDB fails', async () => {
+		mockFetch({}, { status: 500 });
+
+		await expect(createTmdbClient('key').findByExternalId('tt0133093')).rejects.toMatchObject({
+			name: 'TmdbError',
+			status: 500
+		});
+	});
+});
