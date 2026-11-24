@@ -242,4 +242,20 @@ describe('readLibraryPage', () => {
 			);
 		}
 	});
+
+	it('rejects a cursor timestamp that is not a real date', async () => {
+		const db = createTestDb();
+		await seed(db);
+
+		// Sixteen digits passes the format check but is past Date's maximum, so it must be
+		// rejected here rather than reaching the query as an invalid Date.
+		const forged = btoa('9999999999999999:abc')
+			.replace(/\+/g, '-')
+			.replace(/\//g, '_')
+			.replace(/=+$/, '');
+
+		await expect(readLibraryPage(db, U1, { cursor: forged })).rejects.toBeInstanceOf(
+			InvalidLibraryCursorError
+		);
+	});
 });

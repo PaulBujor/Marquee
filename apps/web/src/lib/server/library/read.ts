@@ -82,7 +82,12 @@ function decodeCursor(raw: string): Cursor {
 	}
 	const match = /^(\d{1,16}):(.+)$/.exec(decoded);
 	if (!match) throw new InvalidLibraryCursorError();
-	return { addedAt: Number(match[1]), id: match[2] };
+
+	const addedAt = Number(match[1]);
+	// Past Date's maximum this is an invalid Date, which binds as NULL: the query then matches no
+	// rows and a caller reads the empty page as "this library is empty" rather than a bad cursor.
+	if (!Number.isSafeInteger(addedAt) || addedAt > 8.64e15) throw new InvalidLibraryCursorError();
+	return { addedAt, id: match[2] };
 }
 
 /**
