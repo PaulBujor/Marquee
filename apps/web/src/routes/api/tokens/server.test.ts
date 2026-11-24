@@ -1,104 +1,103 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { isHttpError } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { createTestDb } from '#lib/server/db/test-db.js';
-import { apiTokens, users } from '#lib/server/db/schema.js';
-import { authenticateApiToken, createApiToken } from '#lib/server/api/auth.js';
+import { createTestApi, type TestApi } from '#lib/testing/http.js';
+import { apiTokens } from '#lib/server/db/schema.js';
+import { GET as LIBRARY_GET } from '../v1/library/+server';
 import { GET, POST } from './+server';
 import { DELETE } from './[id]/+server';
-
-type Db = ReturnType<typeof createTestDb>;
 
 const ALICE = 'user-alice';
 const BOB = 'user-bob';
 
-let db: Db;
+let api: TestApi;
 
 beforeEach(async () => {
-	db = createTestDb();
-	await db.insert(users).values({ id: ALICE, email: 'alice@example.com', status: 'enabled' });
-	await db.insert(users).values({ id: BOB, email: 'bob@example.com', status: 'enabled' });
+	api = await createTestApi();
 });
 
-function bearer(token: string): Request {
-	return new Request('https://marquee.test/api/v1/library', {
-		headers: { authorization: `Bearer ${token}` }
-	});
-}
-
-async function statusOf(run: () => unknown): Promise<number> {
-	try {
-		const res = (await run()) as Response;
-		return res.status;
-	} catch (err) {
-		if (isHttpError(err)) return err.status;
-		throw err;
-	}
-}
-
-function getEvent(user: { id: string } | null, database: Db | null = db) {
-	return { locals: { db: database, user } } as unknown as Parameters<typeof GET>[0];
-}
-
-function postEvent(user: { id: string } | null, body: unknown, database: Db | null = db) {
-	const request = new Request('https://marquee.test/api/tokens', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify(body)
-	});
-	return { locals: { db: database, user }, request } as unknown as Parameters<typeof POST>[0];
-}
-
-function deleteEvent(user: { id: string } | null, id: string, database: Db | null = db) {
-	return {
-		locals: { db: database, user },
-		params: { id }
-	} as unknown as Parameters<typeof DELETE>[0];
-}
-
-async function listFor(user: { id: string }): Promise<{ tokens: Record<string, unknown>[] }> {
-	const res = await GET(getEvent(user));
+async function listFor(userId: string): Promise<{ tokens: Record<string, unknown>[] }> {
+	const res = await api.call(GET, { path: '/api/tokens', user: { id: userId } });
+	expect(res.status).toBe(200);
 	return (await res.json()) as { tokens: Record<string, unknown>[] };
+}
+
+/** Proves a token works through the external API, which reads its identity from the bearer alone. */
+async function libraryStatus(token: string): Promise<number> {
+	return (await api.call(LIBRARY_GET, { path: '/api/v1/library', token })).status;
 }
 
 describe('GET /api/tokens', () => {
 	it('401s unauthenticated and 503s without a db', async () => {
-		expect(await statusOf(() => GET(getEvent(null)))).toBe(401);
-		expect(await statusOf(() => GET(getEvent({ id: ALICE }, null)))).toBe(503);
+		expect((await api.call(GET, { path: '/api/tokens' })).status).toBe(401);
+		expect(
+			(await api.call(GET, { path: '/api/tokens', user: { id: ALICE }, db: null })).status
+		).toBe(503);
 	});
 
 	it("returns only the caller's tokens and never the hash", async () => {
-		const alice = await createApiToken(db, ALICE, 'alice laptop');
-		const bob = await createApiToken(db, BOB, 'bob laptop');
-
-		const { tokens } = await listFor({ id: ALICE });
+		const { tokens } = await listFor(ALICE);
 
 		expect(tokens).toHaveLength(1);
 		expect(tokens[0]).toMatchObject({
-			id: alice.row.id,
-			label: 'alice laptop',
-			hint: alice.row.id.slice(-4),
+			id: api.alice.row.id,
+			label: api.alice.row.label,
+			hint: api.alice.row.id.slice(-4),
 			scopes: []
 		});
 		expect(tokens[0]).not.toHaveProperty('hash');
-		expect(JSON.stringify(tokens)).not.toContain(alice.token);
-		expect(JSON.stringify(tokens)).not.toContain(bob.row.id);
+		expect(JSON.stringify(tokens)).not.toContain(api.alice.token);
+		expect(JSON.stringify(tokens)).not.toContain(api.bob.row.id);
 	});
 });
 
 describe('POST /api/tokens', () => {
 	it('401s unauthenticated and 503s without a db', async () => {
-		expect(await statusOf(() => POST(postEvent(null, { label: 'x' })))).toBe(401);
-		expect(await statusOf(() => POST(postEvent({ id: ALICE }, { label: 'x' }, null)))).toBe(503);
+		expect(
+			(await api.call(POST, { path: '/api/tokens', method: 'POST', body: { label: 'x' } })).status
+		).toBe(401);
+		expect(
+			(
+				await api.call(POST, {
+					path: '/api/tokens',
+					method: 'POST',
+					user: { id: ALICE },
+					body: { label: 'x' },
+					db: null
+				})
+			).status
+		).toBe(503);
+	});
+
+	it('401s a bearer token without a session: the management API is session-authenticated', async () => {
+		const res = await api.call(POST, {
+			path: '/api/tokens',
+			method: 'POST',
+			token: api.alice.token,
+			body: { label: 'x' }
+		});
+
+		expect(res.status).toBe(401);
 	});
 
 	it('400s a missing or empty label', async () => {
-		expect(await statusOf(() => POST(postEvent({ id: ALICE }, {})))).toBe(400);
-		expect(await statusOf(() => POST(postEvent({ id: ALICE }, { label: '   ' })))).toBe(400);
+		for (const body of [{}, { label: '   ' }]) {
+			const res = await api.call(POST, {
+				path: '/api/tokens',
+				method: 'POST',
+				user: { id: ALICE },
+				body
+			});
+			expect(res.status).toBe(400);
+		}
 	});
 
 	it('returns the plaintext once and it authenticates as the caller', async () => {
-		const res = await POST(postEvent({ id: ALICE }, { label: 'laptop' }));
+		const res = await api.call(POST, {
+			path: '/api/tokens',
+			method: 'POST',
+			user: { id: ALICE },
+			body: { label: 'laptop' }
+		});
 		expect(res.status).toBe(201);
 
 		const body = (await res.json()) as Record<string, unknown>;
@@ -106,53 +105,84 @@ describe('POST /api/tokens', () => {
 		expect(body).not.toHaveProperty('hash');
 		expect(body.label).toBe('laptop');
 
-		expect(await authenticateApiToken(bearer(body.token as string), db)).toEqual({
-			userId: ALICE,
-			tokenId: body.id,
-			scopes: []
-		});
+		expect(await libraryStatus(body.token as string)).toBe(200);
 	});
 
 	it('binds the new token to the caller only', async () => {
-		await POST(postEvent({ id: ALICE }, { label: 'alice' }));
-		const bob = await createApiToken(db, BOB, 'bob');
+		await api.call(POST, {
+			path: '/api/tokens',
+			method: 'POST',
+			user: { id: ALICE },
+			body: { label: 'alice' }
+		});
 
-		const { tokens } = await listFor({ id: BOB });
-		expect(tokens.map((t) => t.id)).toEqual([bob.row.id]);
+		const { tokens } = await listFor(BOB);
+		expect(tokens.map((t) => t.id)).toEqual([api.bob.row.id]);
 	});
 });
 
 describe('DELETE /api/tokens/[id]', () => {
 	it('401s unauthenticated and 503s without a db', async () => {
-		expect(await statusOf(() => DELETE(deleteEvent(null, 'id')))).toBe(401);
-		expect(await statusOf(() => DELETE(deleteEvent({ id: ALICE }, 'id', null)))).toBe(503);
+		expect(
+			(await api.call(DELETE, { path: '/api/tokens/x', method: 'DELETE', params: { id: 'x' } }))
+				.status
+		).toBe(401);
+		expect(
+			(
+				await api.call(DELETE, {
+					path: '/api/tokens/x',
+					method: 'DELETE',
+					user: { id: ALICE },
+					params: { id: 'x' },
+					db: null
+				})
+			).status
+		).toBe(503);
 	});
 
 	it('revokes the caller-owned token immediately and keeps the row as an audit trail', async () => {
-		const { token, row } = await createApiToken(db, ALICE, 'laptop');
-		expect(await authenticateApiToken(bearer(token), db)).not.toBeNull();
+		expect(await libraryStatus(api.alice.token)).toBe(200);
 
-		const res = await DELETE(deleteEvent({ id: ALICE }, row.id));
+		const res = await api.call(DELETE, {
+			path: `/api/tokens/${api.alice.row.id}`,
+			method: 'DELETE',
+			user: { id: ALICE },
+			params: { id: api.alice.row.id }
+		});
 		expect(res.status).toBe(200);
 
-		expect(await authenticateApiToken(bearer(token), db)).toBeNull();
-		const [stored] = await db.select().from(apiTokens).where(eq(apiTokens.id, row.id));
+		expect(await libraryStatus(api.alice.token)).toBe(401);
+		const [stored] = await api.db
+			.select()
+			.from(apiTokens)
+			.where(eq(apiTokens.id, api.alice.row.id));
 		expect(stored).toBeDefined();
 		expect(stored.revokedAt).not.toBeNull();
 	});
 
 	it("404s for another user's token and leaves it authenticating", async () => {
-		const { token, row } = await createApiToken(db, BOB, 'bob laptop');
+		const res = await api.call(DELETE, {
+			path: `/api/tokens/${api.bob.row.id}`,
+			method: 'DELETE',
+			user: { id: ALICE },
+			params: { id: api.bob.row.id }
+		});
 
-		expect(await statusOf(() => DELETE(deleteEvent({ id: ALICE }, row.id)))).toBe(404);
-		expect(await authenticateApiToken(bearer(token), db)).not.toBeNull();
+		expect(res.status).toBe(404);
+		expect(await libraryStatus(api.bob.token)).toBe(200);
 	});
 
 	it('404s for a non-existent id and for an already-revoked token', async () => {
-		expect(await statusOf(() => DELETE(deleteEvent({ id: ALICE }, 'no-such-id')))).toBe(404);
+		const revoke = (id: string) =>
+			api.call(DELETE, {
+				path: `/api/tokens/${id}`,
+				method: 'DELETE',
+				user: { id: ALICE },
+				params: { id }
+			});
 
-		const { row } = await createApiToken(db, ALICE, 'once');
-		expect(await statusOf(() => DELETE(deleteEvent({ id: ALICE }, row.id)))).toBe(200);
-		expect(await statusOf(() => DELETE(deleteEvent({ id: ALICE }, row.id)))).toBe(404);
+		expect((await revoke('no-such-id')).status).toBe(404);
+		expect((await revoke(api.alice.row.id)).status).toBe(200);
+		expect((await revoke(api.alice.row.id)).status).toBe(404);
 	});
 });
