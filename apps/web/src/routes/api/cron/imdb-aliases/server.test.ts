@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { media } from '#lib/server/db/schema.js';
@@ -12,18 +12,33 @@ type RequestEvent = Parameters<Handler>[0];
 const SECRET = 'cron-secret';
 const T0 = Date.UTC(2026, 6, 24);
 
+function fakeQueue() {
+	const sent: unknown[] = [];
+	return {
+		sent,
+		binding: {
+			async sendBatch(messages: Iterable<{ body: unknown }>) {
+				for (const m of messages) sent.push(m.body);
+				return { metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } };
+			}
+		}
+	};
+}
+
 function makeEvent(opts: {
 	db?: ReturnType<typeof createTestDb>;
 	header?: string | null;
 	tmdbKey?: string | null;
+	queue?: unknown;
 }): RequestEvent {
-	const { db, header = SECRET, tmdbKey = 'tmdb-key' } = opts;
+	const { db, header = SECRET, tmdbKey = 'tmdb-key', queue = fakeQueue().binding } = opts;
 	const request = new Request('https://app/api/cron/imdb-aliases', {
 		method: 'POST',
 		headers: header === null ? {} : { 'x-cron-key': header }
 	});
 	setTestBindings({
 		CRON_SECRET: SECRET,
+		IMDB_ALIAS_QUEUE: queue,
 		...(tmdbKey === null ? {} : { TMDB_API_KEY: tmdbKey })
 	});
 	return {
@@ -42,7 +57,7 @@ async function thrownBy(run: () => unknown): Promise<{ status: number }> {
 	}
 }
 
-async function seedUnasked(db: ReturnType<typeof createTestDb>) {
+async function seedUnasked(db: ReturnType<typeof createTestDb>, stamped = false) {
 	await db.insert(media).values({
 		id: seedMediaId('tmdb', 'movie/603'),
 		provider: 'tmdb',
@@ -51,13 +66,10 @@ async function seedUnasked(db: ReturnType<typeof createTestDb>) {
 		type: 'movie',
 		title: 'The Matrix',
 		version: 1,
-		refreshedAt: T0
+		refreshedAt: T0,
+		imdbCheckedAt: stamped ? T0 : null
 	});
 }
-
-afterEach(() => {
-	vi.unstubAllGlobals();
-});
 
 describe('POST /api/cron/imdb-aliases', () => {
 	it('401s without a valid x-cron-key', async () => {
@@ -74,40 +86,44 @@ describe('POST /api/cron/imdb-aliases', () => {
 		expect((await thrownBy(() => POST(makeEvent({ db: undefined })))).status).toBe(503);
 	});
 
-	// A 200 that stamped nothing would read as a healthy run, so the absence is reported instead.
-	it('no-ops when TMDB is not configured', async () => {
+	// Enqueueing without a key would 503 every batch and dead-letter the whole backlog behind a healthy-looking run.
+	it('no-ops without enqueueing when TMDB is not configured', async () => {
 		const db = createTestDb();
 		await seedUnasked(db);
-		const fetchSpy = vi.fn();
-		vi.stubGlobal('fetch', fetchSpy);
+		const queue = fakeQueue();
 
-		const body = (await (await POST(makeEvent({ db, tmdbKey: null }))).json()) as {
-			ok: boolean;
-			error?: string;
-		};
+		const body = (await (
+			await POST(makeEvent({ db, tmdbKey: null, queue: queue.binding }))
+		).json()) as { ok: boolean; error?: string };
 
 		expect(body.ok).toBe(false);
 		expect(body.error).toMatch(/TMDB/);
-		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(queue.sent).toEqual([]);
 	});
 
-	it('backfills the alias and returns the summary', async () => {
+	it('enqueues one message per unasked title on the IMDB_ALIAS_QUEUE binding', async () => {
 		const db = createTestDb();
 		await seedUnasked(db);
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async () => Response.json({ id: 603, imdb_id: 'tt0133093' }))
-		);
+		const queue = fakeQueue();
 
-		const body = (await (await POST(makeEvent({ db }))).json()) as {
+		const body = (await (await POST(makeEvent({ db, queue: queue.binding }))).json()) as {
 			ok: boolean;
-			aliased: number;
-			noId: number;
-			failed: number;
+			queued: number;
 		};
 
-		expect(body).toMatchObject({ ok: true, aliased: 1, noId: 0, failed: 0 });
-		const [row] = await db.select().from(media);
-		expect(row.imdbCheckedAt).not.toBeNull();
+		expect(body).toMatchObject({ ok: true, queued: 1 });
+		expect(queue.sent).toEqual([
+			{ mediaId: seedMediaId('tmdb', 'movie/603'), provider: 'tmdb', externalId: 'movie/603' }
+		]);
+	});
+
+	it('enqueues nothing for a title already asked', async () => {
+		const db = createTestDb();
+		await seedUnasked(db, true);
+		const queue = fakeQueue();
+
+		await POST(makeEvent({ db, queue: queue.binding }));
+
+		expect(queue.sent).toEqual([]);
 	});
 });
