@@ -44,6 +44,10 @@
 			{
 				"binding": "MEDIA_REFRESH_QUEUE",
 				"queue": "marquee-media-refresh"
+			},
+			{
+				"binding": "IMDB_ALIAS_QUEUE",
+				"queue": "marquee-imdb-alias"
 			}
 		],
 		"consumers": [
@@ -54,6 +58,14 @@
 				"max_retries": 10,
 				"max_concurrency": 2,
 				"dead_letter_queue": "marquee-media-refresh-dlq"
+			},
+			{
+				"queue": "marquee-imdb-alias",
+				"max_batch_size": 10,
+				"max_batch_timeout": 30,
+				"max_retries": 10,
+				"max_concurrency": 2,
+				"dead_letter_queue": "marquee-imdb-alias-dlq"
 			}
 		]
 	},
@@ -111,6 +123,10 @@
 				{
 					"binding": "MEDIA_REFRESH_QUEUE",
 					"queue": "marquee-preview-media-refresh"
+				},
+				{
+					"binding": "IMDB_ALIAS_QUEUE",
+					"queue": "marquee-preview-imdb-alias"
 				}
 			]
 		},

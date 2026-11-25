@@ -30,6 +30,8 @@ export interface CallOptions {
 	token?: string | null;
 	/** JSON body, serialized when present. */
 	body?: unknown;
+	/** Extra request headers, e.g. `x-cron-key` for the internal cron and queue routes. */
+	headers?: Record<string, string>;
 	/** Session identity. Null is the external API's case — no session, so the token must decide. */
 	user?: { id: string } | null;
 	/** Null simulates a request with no D1 binding. */
@@ -79,6 +81,7 @@ async function callHandler(
 		method = 'GET',
 		token = null,
 		body,
+		headers: extraHeaders = {},
 		user = null,
 		db: database = db,
 		params = {}
@@ -88,6 +91,7 @@ async function callHandler(
 	const headers = new Headers();
 	if (token) headers.set('authorization', `Bearer ${token}`);
 	if (body !== undefined) headers.set('content-type', 'application/json');
+	for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
 
 	const request = new Request(url, {
 		method,

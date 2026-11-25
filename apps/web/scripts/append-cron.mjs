@@ -5,7 +5,8 @@ const WORKER = '.svelte-kit/cloudflare/_worker.js';
 const WRANGLER = 'wrangler.jsonc';
 
 const JOB_ROUTES = {
-	MEDIA_REFRESH_QUEUE: '/api/queue/media-refresh'
+	MEDIA_REFRESH_QUEUE: '/api/queue/media-refresh',
+	IMDB_ALIAS_QUEUE: '/api/queue/imdb-aliases'
 };
 
 let src = await readFile(WORKER, 'utf8');
