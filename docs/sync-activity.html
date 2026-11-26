@@ -70,7 +70,7 @@
 				<pre class="mermaid">
 flowchart TD
   subgraph SR["Stremio"]
-    A["user adds tt0133093 to their library"] --&gt; B["GET /{handle}/library/movie/tt0133093.json&lt;br/&gt;action=libraryAdd"]
+    A["user adds tt0133093 to their library"] --&gt; B["GET /{handle}/library/movie/tt0133093/action=libraryAdd.json"]
   end
 
   subgraph BR["bridge (public, no Access)"]
@@ -152,12 +152,12 @@ flowchart TD
 				</p>
 				<pre class="mermaid">
 flowchart TD
-  A["user marks a title watched"] --&gt; B["action=watched&lt;br/&gt;videoId=tt0898266:9:17 - or absent"]
+  A["user marks a title watched"] --&gt; B[".../action=watched.json&lt;br/&gt;optional &amp;amp;videoId=a,b,c (comma-separated)"]
   B --&gt; C{"type?"}
   C --&gt;|"movie"| D["no videoId is normal&lt;br/&gt;PATCH /api/v1/library/movie/tt…&lt;br/&gt;{ status: 'completed' }"]
   C --&gt;|"show"| E{"videoId present?"}
-  E --&gt;|"yes"| F["bridge splits season / episode&lt;br/&gt;PATCH { episodes: [ {season:9, episode:17, watched:true} ] }"]
-  E --&gt;|"no"| G["<b>mark nothing</b>&lt;br/&gt;log it, surface as unmappable&lt;br/&gt;never infer &quot;all episodes&quot;"]
+  E --&gt;|"yes"| F["split the comma-separated list&lt;br/&gt;PATCH { episodes: [ {season, episode, watched:true}, ... ] }&lt;br/&gt;a season mark arrives as up to 100 ids"]
+  E --&gt;|"no"| G["&lt;b&gt;mark nothing&lt;/b&gt;&lt;br/&gt;log it, surface as unmappable&lt;br/&gt;never infer &quot;all episodes&quot;"]
 
   D --&gt; H["translator compares against the projected state"]
   F --&gt; H
@@ -175,6 +175,12 @@ flowchart TD
 						<strong>Why a bare "watched" on a show marks nothing.</strong> An older series can run twenty
 						seasons; reading one ambiguous signal as "every aired episode" would fabricate hundreds of
 						watches, and a wrong bulk mark is tedious to unpick by hand.
+					</li>
+					<li>
+						<strong><code>videoId</code> is a list, not an id.</strong> The protocol doc says
+						"a comma-separated list of the video IDs whose watched state changed", and that marking a
+						season "sends its videos in one event, split into several events of up to 100 videos".
+						So one event can legitimately carry dozens of episodes and the bridge must iterate.
 					</li>
 					<li>
 						<strong>"Mark all watched" still exists</strong> — it is simply never inferred. The app has an
@@ -249,7 +255,7 @@ flowchart TD
 				<h2><span class="num">4</span>Removed <em>in Stremio</em></h2>
 				<pre class="mermaid">
 flowchart TD
-  A["user removes the title in Stremio"] --&gt; B["action=libraryRemove"]
+  A["user removes the title in Stremio"] --&gt; B[".../action=libraryRemove.json"]
   B --&gt; C["enqueue → DO → PATCH { removed: true }"]
   C --&gt; D["translator: only if not already removed"]
   D --&gt; E["one `removed` event"]
