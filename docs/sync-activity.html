@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Sync activity: add / watch / remove</title>
+		<style>
+			:root {
+				--bg: #000; --card: #111417; --inset: #1a1e22; --line: #262b31;
+				--text: #e6e8ea; --muted: #8b949e; --primary: #2dd4bf;
+				--warn: #f0b429; --on-primary: #00201d;
+			}
+			* { box-sizing: border-box; }
+			body {
+				margin: 0; background: var(--bg); color: var(--text);
+				font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+				-webkit-font-smoothing: antialiased;
+			}
+			.wrap { max-width: 1180px; margin: 0 auto; padding: 48px 24px 96px; }
+			header { border-bottom: 1px solid var(--line); padding-bottom: 24px; margin-bottom: 40px; }
+			h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.02em; }
+			h1 .accent { color: var(--primary); }
+			.sub { color: var(--muted); margin: 0; max-width: 74ch; }
+			h2 { font-size: 19px; margin: 0 0 6px; }
+			h2 .num { color: var(--muted); margin-right: 8px; font-variant-numeric: tabular-nums; }
+			section {
+				background: var(--card); border: 1px solid var(--line);
+				border-radius: 14px; padding: 22px 22px 14px; margin: 0 0 28px;
+			}
+			section > p { color: var(--muted); margin: 0 0 16px; max-width: 88ch; }
+			section > p strong { color: var(--text); }
+			pre.mermaid {
+				background: var(--inset); border: 1px solid var(--line); border-radius: 10px;
+				padding: 18px; margin: 0 0 14px; overflow-x: auto; text-align: center; font-size: 12.5px;
+			}
+			pre.mermaid::before { content: 'rendering…'; color: var(--muted); }
+			pre.mermaid[data-processed]::before { content: none; }
+			ul.legend { color: var(--muted); font-size: 13.5px; margin: 0 0 16px; padding-left: 18px; }
+			ul.legend li { margin: 5px 0; }
+			ul.legend strong { color: var(--text); }
+			code {
+				background: var(--inset); border: 1px solid var(--line); border-radius: 5px;
+				padding: 1px 5px; font-size: 0.88em; color: var(--primary);
+			}
+			footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 20px; }
+			#fail { display: none; background: #2a1d00; border: 1px solid var(--warn); color: #ffe6a3;
+				border-radius: 10px; padding: 12px 16px; margin: 0 0 24px; font-size: 14px; }
+		</style>
+	</head>
+	<body>
+		<div class="wrap">
+			<header>
+				<h1>Sync activity: <span class="accent">add</span> · watch · remove</h1>
+				<p class="sub">
+					Five flows through the same machinery: Stremio's addon surface inbound, a token-authenticated
+					model API, and an event log that the bridge only ever nudges. Every branch below is a decision
+					that already exists in code or is specified for the bridge.
+				</p>
+			</header>
+
+			<div id="fail">mermaid didn't load — the diagram sources are still in the page markup.</div>
+
+			<section>
+				<h2><span class="num">1</span>Add a movie in Stremio → it appears in the Marquee watchlist</h2>
+				<p>
+					The long path, including the one place a row is ever created. Note what the client does
+					<em>not</em> do: it never posts an event. It states an intent and lets the server decide which
+					events that means.
+				</p>
+				<pre class="mermaid">
+flowchart TD
+  subgraph SR["Stremio"]
+    A["user adds tt0133093 to their library"] --&gt; B["GET /{handle}/library/movie/tt0133093.json&lt;br/&gt;action=libraryAdd"]
+  end
+
+  subgraph BR["bridge (public, no Access)"]
+    B --&gt; C{"handle known?"}
+    C --&gt;|"no"| C1["404 - identical to any unknown path"]
+    C --&gt;|"yes"| D["200 {success:true}&lt;br/&gt;&lt;i&gt;Stremio ignores the reply and never retries&lt;/i&gt;"]
+    D --&gt; E["enqueue inbound command&lt;br/&gt;durable, at-least-once"]
+  end
+
+  subgraph QQ["Queue"]
+    E --&gt; F["delivered, possibly twice"]
+  end
+
+  subgraph DO["Durable Object per handle"]
+    F --&gt; G["take lock, resolve handle → token"]
+    G --&gt; H["PATCH /api/v1/library/movie/tt0133093&lt;br/&gt;Bearer mqr_…"]
+  end
+
+  subgraph WEB["apps/web"]
+    H --&gt; I["token → user id&lt;br/&gt;from the token row, never the request"]
+    I --&gt; J{"alias (imdb, tt0133093)?"}
+    J --&gt;|"hit"| K["mediaId"]
+    J --&gt;|"miss"| L["TMDB /find/tt0133093&lt;br/&gt;external_source=imdb_id"]
+    L --&gt; M{"one result, declared type?"}
+    M --&gt;|"none"| M1["422 unresolved"]
+    M --&gt;|"ambiguous"| M2["422 unresolved - never a guess"]
+    M --&gt;|"5xx / 429"| M3["502 retryable"]
+    M --&gt;|"yes"| N["tmdb movie/603"]
+    N --&gt; O{"alias (tmdb, movie/603)?"}
+    O --&gt;|"hit"| K
+    O --&gt;|"miss"| P["&lt;b&gt;the only row-creating path&lt;/b&gt;&lt;br/&gt;seed uuid5('tmdb:movie/603'),&lt;br/&gt;hydrate, write BOTH aliases"]
+    P --&gt; K
+    K --&gt; Q["translator: intent → minimal events"]
+    Q --&gt; R{"already in that state?"}
+    R --&gt;|"yes"| R1["emit nothing&lt;br/&gt;&lt;i&gt;this is what makes a replay safe&lt;/i&gt;"]
+    R --&gt;|"no"| S["tracking.added + status_changed&lt;br/&gt;to want_to_watch"]
+    S --&gt; T["projection → tracking row, sequence +1"]
+    T --&gt; U["200 with the resulting entry"]
+  end
+
+  subgraph BACK["bridge (return leg)"]
+    U --&gt; V["record last-applied marker"]
+    V --&gt; W["ack the message"]
+  end
+
+  subgraph DEV["the user's other devices"]
+    W --&gt; X["next GET /api/sync pulls the event&lt;br/&gt;→ IndexedDB → watchlist shows the title"]
+  end
+
+  M1 --&gt; Y["not acked → retry with backoff&lt;br/&gt;after N attempts: visible on /configure"]
+  M3 --&gt; Y
+
+  style P fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+  style R1 fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+  style M1 fill:#1a1e22,stroke:#f0b429,color:#e6e8ea
+  style M2 fill:#1a1e22,stroke:#f0b429,color:#e6e8ea
+  style M3 fill:#1a1e22,stroke:#f0b429,color:#e6e8ea
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong>Why <code>/find</code> exists at all:</strong> Stremio speaks IMDb ids and Marquee
+						speaks TMDB ones. The reverse lookup is the only place the two vocabularies meet, and it
+						happens behind our API so the bridge never holds a TMDB key.
+					</li>
+					<li>
+						<strong>The reply is a lie Stremio accepts.</strong> <code>{success:true}</code> is ignored
+						and the call is never retried, so the bridge cannot answer with the unresolved case. That's
+						why the message stays queued instead.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">2</span>Marked watched <em>in Stremio</em></h2>
+				<p>
+					Same inbound path, different intent. The only new information is <code>videoId</code>, and the
+					rule is deliberately asymmetric: <strong>a movie is one unit, so "watched" needs no episode; a
+					show is not, so we refuse to guess.</strong>
+				</p>
+				<pre class="mermaid">
+flowchart TD
+  A["user marks a title watched"] --&gt; B["action=watched&lt;br/&gt;videoId=tt0898266:9:17 - or absent"]
+  B --&gt; C{"type?"}
+  C --&gt;|"movie"| D["no videoId is normal&lt;br/&gt;PATCH /api/v1/library/movie/tt…&lt;br/&gt;{ status: 'completed' }"]
+  C --&gt;|"show"| E{"videoId present?"}
+  E --&gt;|"yes"| F["bridge splits season / episode&lt;br/&gt;PATCH { episodes: [ {season:9, episode:17, watched:true} ] }"]
+  E --&gt;|"no"| G["<b>mark nothing</b>&lt;br/&gt;log it, surface as unmappable&lt;br/&gt;never infer &quot;all episodes&quot;"]
+
+  D --&gt; H["translator compares against the projected state"]
+  F --&gt; H
+  H --&gt; I{"already watched?"}
+  I --&gt;|"yes"| J["nothing emitted"]
+  I --&gt;|"no"| K["one episode.watched event&lt;br/&gt;or one status_changed"]
+  K --&gt; L["projection: episode_watches / tracking"]
+  L --&gt; M["show status untouched by episode marks"]
+
+  style G fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+  style J fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong>Why a bare "watched" on a show marks nothing.</strong> An older series can run twenty
+						seasons; reading one ambiguous signal as "every aired episode" would fabricate hundreds of
+						watches, and a wrong bulk mark is tedious to unpick by hand.
+					</li>
+					<li>
+						<strong>"Mark all watched" still exists</strong> — it is simply never inferred. The app has an
+						explicit bulk season/series action, and the API accepts an explicit episode list, so a client
+						that really means everything can say so.
+					</li>
+					<li>
+						<strong>The withdrawn intent is visible, not silent.</strong> An unmappable
+						<code>watched</code> lands on the bridge's status page, so "I marked it in Stremio and
+						Marquee never noticed" is answerable.
+					</li>
+					<li>
+						<strong>Aired-only, by air date.</strong> Where a specific episode <em>is</em> named, an unaired
+						episode is still never marked watched — watchability derives from <code>air_date</code>, not from
+						a season count.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">3</span>Marked watched <em>in Marquee</em> → flows back to Stremio</h2>
+				<p>
+					The outbound direction has no local event it can carry: a merge needs Stremio's state, and only
+					an API call gets that. So the trigger is a nudge, and the nudge is the per-handle alarm.
+				</p>
+				<pre class="mermaid">
+flowchart TD
+  subgraph C1["Marquee client"]
+    A["user ticks an episode"] --&gt; B["optimistic IndexedDB write&lt;br/&gt;+ queued episode.watched event"]
+  end
+
+  subgraph W1["apps/web"]
+    B --&gt; C["POST /api/sync (events only)"]
+    C --&gt; D["projection → episode_watches"]
+    D --&gt; E["sequence advances"]
+  end
+
+  subgraph B1["bridge"]
+    E -.-&gt;|"nudge: no payload, just &quot;this user changed&quot;"| F["DO alarm, coalesced ~30s&lt;br/&gt;&lt;i&gt;fifty taps → one reconcile&lt;/i&gt;"]
+    F --&gt; G["GET /api/v1/library?since=cursor"]
+    G --&gt; H["datastoreGet libraryItem"]
+  end
+
+  subgraph M1["3-way merge, per item"]
+    H --&gt; I{"changed since the snapshot?"}
+    I --&gt;|"neither side"| J["nothing to write"]
+    I --&gt;|"Marquee only"| K["watched bits UNION"]
+    I --&gt;|"both, different"| L["union wins for watched&lt;br/&gt;removed: not-removed wins&lt;br/&gt;status: the changed side"]
+  end
+
+  K --&gt; M["datastorePut, changed items only&lt;br/&gt;state.watched bitfield, videoId,&lt;br/&gt;timesWatched, lastWatched"]
+  L --&gt; M
+  M --&gt; N["snapshot = merged"]
+  N --&gt; O["re-arm: daily floor,&lt;br/&gt;backoff on failure"]
+
+  style K fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+  style L fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong>Union, not last-write-wins.</strong> Stremio knowing episode 5 and Marquee knowing
+						episode 6 resolves to both. Choosing a winner would delete a watch that happened.
+					</li>
+					<li>
+						<strong>No clock arbitrates.</strong> <code>_mtime</code> is a device clock bumped by
+						playback progress, so it is recorded and never used to decide a conflict.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">4</span>Removed <em>in Stremio</em></h2>
+				<pre class="mermaid">
+flowchart TD
+  A["user removes the title in Stremio"] --&gt; B["action=libraryRemove"]
+  B --&gt; C["enqueue → DO → PATCH { removed: true }"]
+  C --&gt; D["translator: only if not already removed"]
+  D --&gt; E["one `removed` event"]
+  E --&gt; F["projection: tracking.removed = true&lt;br/&gt;&lt;b&gt;a tombstone, not a delete&lt;/b&gt;"]
+  F --&gt; G["DO records the last-applied marker&lt;br/&gt;so the outbound pass does not re-add it"]
+  G --&gt; H["every device sees the tombstone;&lt;br/&gt;the user can restore it and its progress is intact"]
+
+  style F fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong>Removal is a state, not a deletion.</strong> Episodes watched, the rating and the
+						original add date all survive, so "oops, put it back" is a status change rather than a
+						re-add.
+					</li>
+					<li>
+						<strong>Echo suppression is what makes this safe.</strong> Without the marker, the next
+						reconcile would see "Marquee says not-removed" and write the title straight back.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">5</span>Removed <em>in Marquee</em> → Stremio follows</h2>
+				<pre class="mermaid">
+flowchart TD
+  A["user removes the title in Marquee"] --&gt; B["removed event → projection"]
+  B --&gt; C["DO alarm → reconcile"]
+  C --&gt; D["GET /api/v1/library?since=cursor"]
+  D --&gt; E["datastoreGet"]
+  E --&gt; F["diff against the snapshot"]
+  F --&gt; G["datastorePut: removed = true on that LibraryItem"]
+  G --&gt; H["&lt;b&gt;not&lt;/b&gt; a delete - the item and its&lt;br/&gt;watch history stay in Stremio's datastore"]
+  H --&gt; I["snapshot marks it removed"]
+  I --&gt; J["if the user re-adds it in Stremio,&lt;br/&gt;'not removed wins' and the title comes back"]
+
+  style G fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong><code>removed: true</code>, never a datastore delete.</strong> Deleting the item
+						would discard the watch state that makes a restore possible, and it is the same trap as
+						using <code>removed</code> to signal an unavailable title.
+					</li>
+					<li>
+						<strong>Conflicts preserve data.</strong> If both sides changed in the same window, the
+						merge prefers "not removed" — a wrong re-add is recoverable, a lost watch history is not.
+					</li>
+				</ul>
+			</section>
+
+			<footer>
+				Same-origin notes: the addon surface is public by necessity (Stremio's servers call it and cannot
+				authenticate), which is why the handle is treated as a bearer capability and revoking it is the
+				kill switch. Everything else — tokens, merges, the event log — stays behind
+				<code>/api/v1</code>. The exact <code>extra</code> encoding in the addon URL (query string vs path
+				segment) is the one detail still to be confirmed by the spike against a real Stremio account; the
+				bridge accepts both until then.
+			</footer>
+		</div>
+
+		<script type="module">
+			const fail = document.getElementById('fail');
+			try {
+				const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+				mermaid.initialize({
+					startOnLoad: true,
+					theme: 'dark',
+					themeVariables: {
+						darkMode: true, background: '#1a1e22', primaryColor: '#1a1e22',
+						primaryTextColor: '#e6e8ea', primaryBorderColor: '#2dd4bf', lineColor: '#8b949e',
+						secondaryColor: '#111417', tertiaryColor: '#111417',
+						fontFamily: 'ui-sans-serif, system-ui, sans-serif'
+					},
+					flowchart: { curve: 'basis', htmlLabels: true }
+				});
+			} catch {
+				fail.style.display = 'block';
+			}
+		</script>
+	</body>
+</html>

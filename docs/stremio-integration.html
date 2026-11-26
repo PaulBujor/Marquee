@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Stremio ↔ Marquee — design</title>
+		<style>
+			:root {
+				--bg: #000000;
+				--card: #111417;
+				--inset: #1a1e22;
+				--line: #262b31;
+				--text: #e6e8ea;
+				--muted: #8b949e;
+				--primary: #2dd4bf;
+				--on-primary: #00201d;
+				--warn: #f0b429;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+				font:
+					16px/1.6 ui-sans-serif,
+					system-ui,
+					-apple-system,
+					'Segoe UI',
+					sans-serif;
+				-webkit-font-smoothing: antialiased;
+			}
+			.wrap {
+				max-width: 1080px;
+				margin: 0 auto;
+				padding: 48px 24px 96px;
+			}
+			header {
+				border-bottom: 1px solid var(--line);
+				padding-bottom: 24px;
+				margin-bottom: 40px;
+			}
+			h1 {
+				font-size: 30px;
+				line-height: 1.2;
+				margin: 0 0 8px;
+				letter-spacing: -0.02em;
+			}
+			h1 .accent {
+				color: var(--primary);
+			}
+			.sub {
+				color: var(--muted);
+				margin: 0;
+				max-width: 62ch;
+			}
+			h2 {
+				font-size: 19px;
+				margin: 0 0 4px;
+				letter-spacing: -0.01em;
+			}
+			h2 .num {
+				color: var(--muted);
+				font-variant-numeric: tabular-nums;
+				margin-right: 8px;
+			}
+			section {
+				background: var(--card);
+				border: 1px solid var(--line);
+				border-radius: 14px;
+				padding: 22px 22px 12px;
+				margin: 0 0 28px;
+			}
+			section > p {
+				color: var(--muted);
+				margin: 0 0 18px;
+				max-width: 78ch;
+			}
+			section > p strong {
+				color: var(--text);
+			}
+			pre.mermaid {
+				background: var(--inset);
+				border: 1px solid var(--line);
+				border-radius: 10px;
+				padding: 18px;
+				margin: 0 0 14px;
+				overflow-x: auto;
+				text-align: center;
+				font-size: 13px;
+				line-height: 1.5;
+			}
+			pre.mermaid::before {
+				content: 'rendering…';
+				color: var(--muted);
+			}
+			pre.mermaid[data-processed]::before {
+				content: none;
+			}
+			.legend {
+				color: var(--muted);
+				font-size: 13.5px;
+				margin: 0 0 18px;
+				padding-left: 18px;
+			}
+			.legend li {
+				margin: 3px 0;
+			}
+			.legend code,
+			p code,
+			td code {
+				background: var(--inset);
+				border: 1px solid var(--line);
+				border-radius: 5px;
+				padding: 1px 5px;
+				font-size: 0.88em;
+				color: var(--primary);
+			}
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				font-size: 14px;
+				margin: 0 0 18px;
+			}
+			th,
+			td {
+				text-align: left;
+				padding: 7px 10px;
+				border-bottom: 1px solid var(--line);
+			}
+			th {
+				color: var(--muted);
+				font-weight: 600;
+				font-size: 12.5px;
+				text-transform: uppercase;
+				letter-spacing: 0.04em;
+			}
+			td.num {
+				font-variant-numeric: tabular-nums;
+				color: var(--primary);
+			}
+			.pill {
+				display: inline-block;
+				font-size: 11.5px;
+				font-weight: 600;
+				padding: 2px 8px;
+				border-radius: 999px;
+				background: var(--primary);
+				color: var(--on-primary);
+			}
+			.pill.muted {
+				background: var(--inset);
+				color: var(--muted);
+				border: 1px solid var(--line);
+			}
+			.pill.warn {
+				background: transparent;
+				color: var(--warn);
+				border: 1px solid var(--warn);
+			}
+			footer {
+				color: var(--muted);
+				font-size: 13px;
+				border-top: 1px solid var(--line);
+				padding-top: 20px;
+			}
+			#fail {
+				display: none;
+				background: #2a1d00;
+				border: 1px solid var(--warn);
+				color: #ffe6a3;
+				border-radius: 10px;
+				padding: 12px 16px;
+				margin: 0 0 24px;
+				font-size: 14px;
+			}
+			@media print {
+				body {
+					background: #fff;
+					color: #000;
+				}
+				section,
+				pre.mermaid {
+					background: #fff;
+					border-color: #ccc;
+					break-inside: avoid;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="wrap">
+			<header>
+				<h1>Stremio <span class="accent">↔</span> Marquee</h1>
+				<p class="sub">
+					Two-way library and watch-state sync, without Marquee learning what Stremio is. Eight
+					diagrams: where the pieces run, what identity means, how each direction flows, and the
+					rule that decides conflicts.
+				</p>
+			</header>
+
+			<div id="fail">
+				mermaid didn't load (no network, or the CDN is blocked). The diagram sources are still in
+				the page — view source, or open with a connection once.
+			</div>
+
+			<section>
+				<h2><span class="num">1</span>Two deployments, one HTTP contract</h2>
+				<p>
+					The bridge is a <strong>separate Worker with its own deploy and its own bindings</strong>.
+					It holds no database: everything durable about a user lives in their Stremio account, in
+					the per-handle Durable Object, or in D1. One owner per fact, so no two copies can
+					disagree. The only contract between the two deployables is HTTPS under
+					<code>/api/v1</code>.
+				</p>
+				<pre class="mermaid">
+flowchart TB
+  subgraph EXT["Stremio"]
+    S["Stremio app on the user's device"]
+    X["api.strem.io&lt;br/&gt;datastoreGet · datastorePut"]
+  end
+
+  subgraph BR["apps/bridge — Worker, separate deploy"]
+    ADDON["addon surface&lt;br/&gt;/{handle}/manifest.json"]
+    EV["inbound library events&lt;br/&gt;/{handle}/library/..."]
+    CFG["/configure/{handle}&lt;br/&gt;pairing page"]
+    DO["Durable Object per handle&lt;br/&gt;snapshot · lock · status · last-applied marker"]
+    Q["Queue"]
+    KV["KV&lt;br/&gt;handle records"]
+  end
+
+  subgraph WEB["apps/web — SvelteKit on Workers"]
+    API["/api/v1/*&lt;br/&gt;bearer tokens, not cookies"]
+    DEV["/device&lt;br/&gt;approval page"]
+    TR["translator&lt;br/&gt;intent to minimal event set"]
+    LOG[("events log")]
+    PROJ[("tracking&lt;br/&gt;episode_watches")]
+    IDS[("media_external_ids")]
+  end
+
+  S --&gt;|"addon protocol"| ADDON
+  S --&gt;|"addon protocol"| EV
+  EV --&gt; Q
+  Q --&gt; DO
+  CFG --&gt; KV
+  KV --&gt; DO
+  DEV -.-&gt;|"issues key"| CFG
+  DO &lt;--&gt;|"HTTPS + bearer"| API
+  API --&gt; TR
+  TR --&gt; LOG
+  LOG --&gt; PROJ
+  API --&gt; IDS
+  DO &lt;--&gt;|"reconcile"| X
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong>solid</strong> = request path · <strong>dotted</strong> = one-time pairing
+					</li>
+					<li>
+						The bridge never writes the event log. It states an intent; <code>apps/web</code>
+						decides which events that means — a client that can only say "watched" cannot corrupt
+						the log.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">2</span>Identity: ours, theirs, and the aliases between</h2>
+				<p>
+					Every title has <strong>our own UUID</strong>. A provider-sourced title's UUID is
+					<em>derived</em> from <code>(provider, external_id)</code>, so any device derives the same
+					id offline with no coordination. Stremio is IMDb-keyed and Marquee is TMDB-keyed, so the
+					translation lives in <code>media_external_ids</code> — a table of aliases, never a column
+					on the title.
+				</p>
+				<pre class="mermaid">
+erDiagram
+  users ||--o{ tracking : owns
+
+  media ||--o{ media_external_ids : "known by"
+  media ||--o{ tracking : "on a list"
+  media ||--o{ episodes : has
+
+  media {
+    text id PK "our UUID"
+    text provider "tmdb or local"
+    text external_id "e.g. movie/603"
+    text type "movie or show"
+    integer version "bumped on change"
+    integer refreshed_at "TTL marker"
+    integer imdb_checked_at "null = never asked"
+  }
+
+  media_external_ids {
+    text media_id PK
+    text provider PK "tmdb or imdb"
+    text external_id
+  }
+
+  tracking {
+    text id PK
+    text user_id
+    text media_id
+    text status "want_to_watch, watching, ..."
+    boolean favorite
+    integer rating
+    boolean removed
+  }
+
+  episodes {
+    text media_id PK
+    integer season_number PK
+    integer episode_number PK
+    text air_date "null = not announced yet"
+  }
+
+  users {
+    text id PK
+  }
+				</pre>
+				<ul class="legend">
+					<li>
+						<code>PRIMARY KEY (media_id, provider)</code> + <code>UNIQUE (provider, external_id)</code>
+						— an external id names exactly one title, and a title has at most one id per catalogue.
+					</li>
+					<li>
+						<strong>A miss is a miss.</strong> <code>resolveMediaId()</code> returns null rather
+						than falling back to the derived id: a derived id names a title nobody has stored, and
+						treating it as real would report success for something never hydrated.
+					</li>
+					<li>
+						Watchability is <strong>derived from air dates</strong>, not a season-count field — one
+						source for both "is this out yet" and the upcoming calendar.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">3</span>Inbound: the user acts in Stremio</h2>
+				<p>
+					Stremio calls the addon, we answer immediately, and the real work is
+					<strong>enqueued</strong> — not <code>waitUntil</code>, which caps at 30s and never retries.
+					The queue feeds the Durable Object, which serialises without needing a distributed lock.
+				</p>
+				<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant S as Stremio
+  participant B as bridge addon
+  participant Q as Queue
+  participant D as DO per handle
+  participant W as apps/web
+
+  S-&gt;&gt;B: GET /{handle}/library/movie/tt0133093.json?action=watched
+  B--&gt;&gt;S: 200 success
+  Note over S: the reply is ignored and never retried,&lt;br/&gt;so the bridge cannot rely on a second chance
+  B-&gt;&gt;Q: enqueue inbound command
+  Q-&gt;&gt;D: deliver, at least once
+  D-&gt;&gt;D: take lock, resolve handle
+  D-&gt;&gt;W: PATCH /api/v1/library/movie/tt0133093
+  W-&gt;&gt;W: verify token, resolve id via alias
+  W-&gt;&gt;W: translate intent to events, then project
+  W--&gt;&gt;D: current state
+  D-&gt;&gt;D: record last-applied marker
+  D--&gt;&gt;Q: ack
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong>Deliveries are at-least-once</strong>, so every inbound command must be
+						idempotent — replaying "watched" twice must equal "watched" once.
+					</li>
+					<li>
+						The <strong>last-applied marker</strong> is what stops the outbound reconcile from
+						echoing this change straight back to Stremio as if Marquee had made it.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">4</span>Outbound: the user acts in Marquee</h2>
+				<p>
+					A cron walks every handle. The Durable Object reads both sides, merges against its
+					snapshot, and writes <strong>only what actually changed</strong> — in both directions,
+					because a reconcile is not a one-way push.
+				</p>
+				<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant C as cron
+  participant D as DO per handle
+  participant W as apps/web
+  participant X as api.strem.io
+
+  C-&gt;&gt;D: reconcile(handle)
+  D-&gt;&gt;D: take lock
+  D-&gt;&gt;W: GET /api/v1/library?since=cursor
+  W--&gt;&gt;D: Marquee state
+  D-&gt;&gt;X: datastoreGet libraryItem
+  X--&gt;&gt;D: Stremio state
+  D-&gt;&gt;D: 3-way merge against snapshot
+  alt something changed
+    D-&gt;&gt;X: datastorePut, changed items only
+    D-&gt;&gt;W: PATCH, only what Marquee is missing
+    D-&gt;&gt;D: snapshot = merged
+  else nothing changed
+    D-&gt;&gt;D: no write, no echo
+  end
+  D-&gt;&gt;D: release lock
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong>The state diff is the source of truth</strong>; an event is only a trigger. The
+						merge, not whichever side ran last, decides the outcome.
+					</li>
+					<li>
+						Stremio's write API is <strong>unofficial</strong> — that is why the account client is
+						one isolated module behind a spike that pins the real payloads.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">5</span>The merge: why nothing is ever lost</h2>
+				<p>
+					Per item there are three inputs: the snapshot (what both sides last agreed on), Marquee
+					now, and Stremio now. The snapshot is <strong>a per-episode watched set</strong> — not a
+					hash — because a hash can only say "they differ", and then something has to win.
+				</p>
+				<pre class="mermaid">
+flowchart TD
+  A["one item, present on both sides"] --&gt; B{"in the snapshot?"}
+  B --&gt;|"new on one side"| C["adopt it, no conflict"]
+  B --&gt;|"known"| D{"changed since the snapshot?"}
+  D --&gt;|"neither side"| E["nothing to do"]
+  D --&gt;|"one side"| F["apply that side"]
+  D --&gt;|"both sides"| G{"same field?"}
+  G --&gt;|"yes"| H["they agree"]
+  G --&gt;|"no"| I["watched bits: UNION&lt;br/&gt;removed: not-removed wins&lt;br/&gt;status: follow the changed side"]
+  I --&gt; J["no watched bit is ever deleted"]
+
+  style A fill:#1a1e22,stroke:#2dd4bf,color:#e6e8ea
+  style I fill:#1a1e22,stroke:#f0b429,color:#e6e8ea
+  style J fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong>Union, not last-write-wins:</strong> Stremio knowing episode 5 and Marquee
+						knowing episode 6 resolves to both. Choosing a winner would delete a watch that
+						happened.
+					</li>
+					<li>
+						<strong><code>_mtime</code> is recorded, never arbitrating.</strong> Stremio bumps it on
+						playback progress, so it carries device time, not intent order — using it to resolve
+						conflicts would prefer whichever device was playing most recently.
+					</li>
+					<li>
+						<strong>Scope is movies and series.</strong> <code>channel</code> and <code>tv</code>
+						library items are ignored: never imported, and never mistaken for deletions.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">6</span>An id we have never seen</h2>
+				<p>
+					Stremio is IMDb-keyed and we are TMDB-keyed, so the first time a title arrives from
+					Stremio it has to be <strong>translated, not seeded</strong>. There is exactly one
+					row-creating call in this flow, and its parameter type is what stops the other one from
+					ever existing.
+				</p>
+				<pre class="mermaid">
+flowchart TD
+  A["Stremio: tt0133093"] --&gt; B{"alias for (imdb, tt0133093)?"}
+  B --&gt;|"hit"| C["that media_id"]
+  B --&gt;|"miss"| D["TMDB /find/tt0133093&lt;br/&gt;external_source=imdb_id"]
+  D --&gt; E{"what came back?"}
+  E --&gt;|"one result, type matches"| F{"alias for (tmdb, movie/603)?"}
+  E --&gt;|"nothing"| G["422 unresolved&lt;br/&gt;retry later, never mint"]
+  E --&gt;|"ambiguous, or type mismatch"| H["422 unresolved&lt;br/&gt;never guess"]
+  F --&gt;|"hit"| C
+  F --&gt;|"miss"| I["seedMediaId(tmdb, movie/603)&lt;br/&gt;the only row-creating seed"]
+  I --&gt; J["hydrate, then write BOTH aliases"]
+  J --&gt; C
+  C --&gt; K["done"]
+
+  style I fill:#00201d,stroke:#2dd4bf,color:#2dd4bf
+  style G fill:#1a1e22,stroke:#f0b429,color:#e6e8ea
+  style H fill:#1a1e22,stroke:#f0b429,color:#e6e8ea
+				</pre>
+				<ul class="legend">
+					<li>
+						<code>seedMediaId</code> takes <code>HydratableProvider</code>, which is
+						<code>['tmdb']</code> — so <code>seedMediaId('imdb', …)</code> is a
+						<strong>type error, not a convention</strong>. An IMDb id can only ever be an alias.
+					</li>
+					<li>
+						Because the seed derives from the <strong>TMDB</strong> id, a bridge import and an
+						in-app add that race each other compute the same UUID and collapse into one row.
+						Deriving from the IMDb id would give two — which is the entire bug this avoids.
+					</li>
+					<li>
+						<code>/find</code> is the reverse mapping: an IMDb id in, a TMDB id out. It is the
+						only place the two catalogues meet, and it lives behind our API so the bridge never
+						holds a TMDB key.
+					</li>
+				</ul>
+				<table>
+					<thead>
+						<tr>
+							<th>When</th>
+							<th>Required behaviour</th>
+							<th>Built</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td>TMDB has never heard of it</td>
+							<td>
+								422, retried, listed on <code>/configure</code>. Creating a row from the
+								IMDb id <em>is</em> the duplicate.
+							</td>
+							<td><span class="pill warn">no</span></td>
+						</tr>
+						<tr>
+							<td><code>/find</code> returns a movie and a tv</td>
+							<td>Match the type Stremio declared; a mismatch is a 422, not a guess</td>
+							<td><span class="pill warn">no</span></td>
+						</tr>
+						<tr>
+							<td>TMDB rate-limits the lookup</td>
+							<td>Same unresolved path: no row, retry later</td>
+							<td><span class="pill warn">no</span></td>
+						</tr>
+						<tr>
+							<td>A row stored before its link was known</td>
+							<td><code>media.linked</code> alias write — re-point the events, never delete</td>
+							<td><span class="pill muted">planned</span></td>
+						</tr>
+					</tbody>
+				</table>
+			</section>
+
+			<section>
+				<h2><span class="num">7</span>What actually triggers a reconcile</h2>
+				<p>
+					Outbound work has no local event it can carry: a merge needs Stremio's state, and only
+					an API call gets that. So the trigger is not a payload, it is a <strong>nudge</strong>. The
+					nudge is a Durable Object alarm rather than a Queue, because the DO already owns the lock
+					and the snapshot — and a Queue cannot express per-user partitioning at all.
+				</p>
+				<pre class="mermaid">
+flowchart LR
+  M["a change in Marquee&lt;br/&gt;or a manual sync now"] --&gt; AL
+  Q["inbound command&lt;br/&gt;Queue — the only durable edge"] --&gt; A
+  DF["daily floor"] --&gt; A
+
+  subgraph DOH["Durable Object per handle"]
+    AL["setAlarm(now + 30s)&lt;br/&gt;coalesces a burst into one"]
+    A["alarm() then reconcile"]
+    B["re-arm: backoff on failure,&lt;br/&gt;daily floor otherwise"]
+    AL --&gt; A
+    A --&gt; B
+    B --&gt; AL
+  end
+
+  N["a Queue cannot be the partition:&lt;br/&gt;no per-key ordering, and max_concurrency&lt;br/&gt;is queue-wide, not per user"]
+
+  style N fill:#1a1e22,stroke:#f0b429,color:#e6e8ea
+  style DOH fill:#00201d,stroke:#2dd4bf,color:#e6e8ea
+				</pre>
+				<ul class="legend">
+					<li>
+						<strong>Queue</strong> — inbound only, where the event is born outside the DO and
+						has to survive being dropped on the way in.
+					</li>
+					<li>
+						<strong>Alarm</strong> — one per handle. Debounce, coalescing and retry-with-backoff
+						come with the primitive; there is no extra binding, no DLQ and nothing to shard.
+					</li>
+					<li>
+						<strong>Daily floor</strong> — so a dead alarm means a handle is stale and
+						<em>visible</em> on its status page, not stuck forever.
+					</li>
+					<li>
+						The sweeper that would fix a dead alarm is deliberately skipped: enumerating every
+						handle runs into the 50-subrequest-per-invocation limit, and the bridge keeps no
+						database to page through.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2><span class="num">8</span>Where we are</h2>
+				<p>
+					The identity layer is open as nine stacked PRs. The library API needs no Stremio at all;
+					the bridge is the only part that does, and it is blocked on a spike against a real
+					account.
+				</p>
+				<pre class="mermaid">
+flowchart LR
+  subgraph NOW["open now — stack #295"]
+    I["identity&lt;br/&gt;#291 to #300"]
+  end
+  subgraph NEXT["next — no Stremio needed"]
+    A["library API&lt;br/&gt;tokens · read · write"]
+    P["device pairing"]
+  end
+  subgraph LATER["needs a real Stremio account"]
+    SP["spike 278&lt;br/&gt;log the real events"]
+    BR["bridge&lt;br/&gt;manifest · inbound · account client · reconcile"]
+  end
+
+  I --&gt; A
+  A --&gt; P
+  P --&gt; BR
+  SP --&gt; BR
+
+  style NOW fill:#00201d,stroke:#2dd4bf,color:#e6e8ea
+  style NEXT fill:#1a1e22,stroke:#8b949e,color:#e6e8ea
+  style LATER fill:#1a1e22,stroke:#f0b429,color:#e6e8ea
+				</pre>
+				<table>
+					<thead>
+						<tr>
+							<th>PR</th>
+							<th>Issue</th>
+							<th>What it does</th>
+							<th>State</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td class="num">#291</td>
+							<td>MRQ-249</td>
+							<td><code>media_external_ids</code> + migration 0029 + backfill</td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">#292</td>
+							<td>MRQ-250</td>
+							<td><code>media.imdb_checked_at</code> + migration 0030</td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">#293</td>
+							<td>MRQ-251</td>
+							<td><code>mediaId()</code> to <code>seedMediaId()</code>, namespace frozen</td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">#294</td>
+							<td>MRQ-252</td>
+							<td><code>resolveMediaId()</code> / <code>writeExternalId()</code></td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">#296</td>
+							<td>MRQ-253</td>
+							<td><code>MediaDetail.imdbId</code> from TMDB <code>external_ids</code></td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">#297</td>
+							<td>MRQ-256</td>
+							<td><code>TmdbClient.externalIds()</code> — one request, no re-hydrate</td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">#298</td>
+							<td>MRQ-254</td>
+							<td>hydrate writes both aliases, stamps <code>imdb_checked_at</code></td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">#299</td>
+							<td>MRQ-255</td>
+							<td>media sync resolves refs through the alias table</td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">#300</td>
+							<td>MRQ-257</td>
+							<td><code>/api/cron/imdb-aliases</code> + <code>30 6 * * *</code></td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">—</td>
+							<td>MRQ-278</td>
+							<td>spike: throwaway addon that logs real manifests and events</td>
+							<td><span class="pill warn">needs hardware</span></td>
+						</tr>
+					</tbody>
+				</table>
+			</section>
+
+			<footer>
+				Two invariants worth remembering: <strong>Marquee never learns the word Stremio</strong> (the
+				API is generic, <code>imdb</code> is just another catalogue), and
+				<strong>the bridge owns no data</strong>. Delete the bridge tomorrow and Marquee is a normal
+				app with a public API.
+			</footer>
+		</div>
+
+		<script type="module">
+			const fail = document.getElementById('fail');
+			try {
+				const { default: mermaid } = await import(
+					'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'
+				);
+				mermaid.initialize({
+					startOnLoad: true,
+					theme: 'dark',
+					themeVariables: {
+						darkMode: true,
+						background: '#1a1e22',
+						primaryColor: '#1a1e22',
+						primaryTextColor: '#e6e8ea',
+						primaryBorderColor: '#2dd4bf',
+						lineColor: '#8b949e',
+						secondaryColor: '#111417',
+						tertiaryColor: '#111417',
+						noteBkgColor: '#00201d',
+						noteTextColor: '#e6e8ea',
+						noteBorderColor: '#2dd4bf',
+						fontFamily: 'ui-sans-serif, system-ui, sans-serif'
+					},
+					flowchart: { curve: 'basis', htmlLabels: true },
+					sequence: { useMaxWidth: true, wrap: true }
+				});
+			} catch {
+				fail.style.display = 'block';
+				document.querySelectorAll('pre.mermaid').forEach((el) => {
+					el.removeAttribute('data-processed');
+					el.style.textAlign = 'left';
+				});
+			}
+		</script>
+	</body>
+</html>
