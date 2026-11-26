@@ -1,0 +1,16 @@
+{
+	"$schema": "../node_modules/wrangler/config-schema.json",
+	"name": "marquee-stremio-spike",
+	"compatibility_date": "2026-10-29",
+	"main": "index.ts",
+	"workers_dev": true,
+	"observability": {
+		"enabled": true
+	},
+	"kv_namespaces": [
+		{
+			"binding": "SPIKE_KV",
+			"id": "f279e6e0d6d7429e86135b0e01bd636e"
+		}
+	]
+}
