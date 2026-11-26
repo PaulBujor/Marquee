@@ -1,6 +1,6 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "marquee-bridge",
+	"name": "marquee-stremio-bridge",
 	"compatibility_date": "2026-10-29",
 	"main": "src/index.ts",
 	"workers_dev": true,
@@ -18,7 +18,7 @@
 	// migration is applied at deploy time, so each lands with its own PR.
 	"env": {
 		"preview": {
-			"name": "marquee-bridge-preview",
+			"name": "marquee-stremio-bridge-preview",
 			"workers_dev": true,
 			"preview_urls": true
 		}

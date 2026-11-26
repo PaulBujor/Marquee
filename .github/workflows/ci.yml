@@ -38,7 +38,7 @@ jobs:
 
   # The bridge deploys on its own, so it gates on its own job: a required check
   # on `main`, so a broken bridge blocks the bridge and nothing else.
-  bridge:
+  stremio-bridge:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -49,7 +49,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # No coverage here: the bridge is small, and `test` is the gate.
-      - run: pnpm run lint:bridge
-      - run: pnpm run check:bridge
-      - run: pnpm run build:bridge
-      - run: pnpm run test:bridge
+      - run: pnpm run lint:stremio-bridge
+      - run: pnpm run check:stremio-bridge
+      - run: pnpm run build:stremio-bridge
+      - run: pnpm run test:stremio-bridge
