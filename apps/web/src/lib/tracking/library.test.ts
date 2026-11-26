@@ -36,6 +36,7 @@ function item(over: Partial<LibraryItem> = {}): LibraryItem {
 		releaseDate: null,
 		firstAirDate: null,
 		posterPath: null,
+		unavailableAt: null,
 		genres: [],
 		inProduction: null,
 		episodes: [],

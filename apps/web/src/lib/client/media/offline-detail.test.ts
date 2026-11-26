@@ -131,6 +131,13 @@ describe('buildOfflineDetail', () => {
 		expect(out?.season).toBeNull();
 	});
 
+	it('carries the stored unavailable state through, which MediaDetail itself cannot hold', async () => {
+		await putMedia({ ...movie, unavailableAt: 1_700_000_000_000 });
+		expect((await buildOfflineDetail('movie', 603))?.unavailableAt).toBe(1_700_000_000_000);
+		await putMedia(movie);
+		expect((await buildOfflineDetail('movie', 603))?.unavailableAt).toBeNull();
+	});
+
 	it('rebuilds cast and crew from the cached credits, addressed by TMDB person id', async () => {
 		await putMedia(movie);
 		const detail = (await buildOfflineDetail('movie', 603))?.detail;

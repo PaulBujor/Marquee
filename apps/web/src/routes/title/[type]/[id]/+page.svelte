@@ -17,6 +17,7 @@
 
 	let detail = $state<MediaDetail | null>(untrack(() => data.base?.detail ?? null));
 	let seasonData = $state<SeasonDetail | null>(untrack(() => data.base?.season ?? null));
+	let unavailableAt = $state<number | null>(untrack(() => data.base?.unavailableAt ?? null));
 	let enrichState = $state<'loading' | 'enriched' | 'offline'>('loading');
 
 	let pageState = $state<'content' | 'skeleton' | 'notfound' | 'unavailable'>(
@@ -27,6 +28,7 @@
 		const { base, enriched } = data;
 		detail = base?.detail ?? null;
 		seasonData = base?.season ?? null;
+		unavailableAt = base?.unavailableAt ?? null;
 		enrichState = 'loading';
 		pageState = base ? 'content' : 'skeleton';
 
@@ -39,6 +41,7 @@
 				if (cancelled || !built || pageState === 'content') return;
 				detail = built.detail;
 				seasonData = built.season;
+				unavailableAt = built.unavailableAt;
 				pageState = 'content';
 				if (enrichFailed) enrichState = 'offline';
 			});
@@ -97,7 +100,7 @@
 {/snippet}
 
 {#if pageState === 'content' && detail}
-	<TitleDetail {detail} season={seasonData} {enrichState} />
+	<TitleDetail {detail} season={seasonData} {enrichState} {unavailableAt} />
 {:else if pageState === 'notfound'}
 	{@render backHeader()}
 	<main class="mx-auto w-full px-5 pt-[calc(5.5rem+env(safe-area-inset-top))] pb-tab-bar">

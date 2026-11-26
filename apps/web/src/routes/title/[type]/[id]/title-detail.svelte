@@ -60,11 +60,14 @@
 	let {
 		detail,
 		season,
-		enrichState
+		enrichState,
+		unavailableAt
 	}: {
 		detail: MediaDetail;
 		season: SeasonDetail | null;
 		enrichState: 'loading' | 'enriched' | 'offline';
+		/** Epoch ms the source stopped listing this title; null while it is available. */
+		unavailableAt: number | null;
 	} = $props();
 	const offline = $derived(enrichState === 'offline');
 
@@ -102,7 +105,7 @@
 		inProduction: detail.inProduction,
 		firstAirDate: detail.firstAirDate,
 		lastAirDate: detail.lastAirDate,
-		unavailableAt: null,
+		unavailableAt,
 		version: 0,
 		seasons: null,
 		episodes: null,
@@ -474,9 +477,20 @@
 					{:else if production === 'ended'}
 						<MediaBadge variant="status">Ended</MediaBadge>
 					{/if}
+
+					{#if unavailableAt != null}
+						<MediaBadge variant="unavailable">Unavailable</MediaBadge>
+					{/if}
 				</div>
 			</div>
 		</div>
+
+		<!-- Orthogonal to `offline`: this is about the source catalogue, not the network. -->
+		{#if unavailableAt != null}
+			<p class="text-xs text-muted-foreground">
+				No longer listed on TMDB — details and artwork may be out of date.
+			</p>
+		{/if}
 
 		<TitleMetaRow
 			type={detail.type}
