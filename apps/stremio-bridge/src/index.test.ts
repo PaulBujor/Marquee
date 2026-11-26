@@ -8,6 +8,7 @@ import { stremioAccountApi } from './testing/stremio';
 // anything else would need a cast, and these literals are what the deploy actually configures.
 const MARQUEE = 'https://marquee.paulbujor.net';
 const STREMIO = 'https://api.strem.io/api';
+const STREMIO_ORIGIN = new URL(STREMIO).origin;
 const TOKEN = 'mqr_test_token';
 const AUTH_KEY = 'stremio-test-auth-key';
 
@@ -49,15 +50,18 @@ function stubServices(options: { token?: string; authKey?: string } = {}) {
 
 	const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = String(input instanceof Request ? input.url : input);
+		// Compare the origin exactly rather than as a prefix: a stub that accepted
+		// `https://marquee.paulbujor.net.evil` would hide a real misroute.
+		const { origin } = new URL(url);
 
-		if (url.startsWith(MARQUEE)) {
+		if (origin === MARQUEE) {
 			const auth = new Headers(init?.headers).get('authorization');
 			return auth === `Bearer ${options.token ?? TOKEN}`
 				? Response.json({ items: [], nextCursor: null })
 				: Response.json({ title: 'Unauthorized' }, { status: 401 });
 		}
 
-		if (url.startsWith(STREMIO)) return account.fetch(url, init);
+		if (origin === STREMIO_ORIGIN) return account.fetch(url, init);
 
 		throw new Error(`unexpected fetch: ${url}`);
 	});
