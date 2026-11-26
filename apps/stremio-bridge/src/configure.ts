@@ -159,17 +159,28 @@ export interface FormOptions {
 	error?: { field: PairingInputKey; message: string };
 	/** The handle already holds a record: the only options are rotate the Stremio key, or disconnect. */
 	paired?: boolean;
+	/** Marquee rejected the stored token on this date; nothing from Stremio is being saved. */
+	authFailedAt?: string;
 	status?: number;
 }
 
 export function renderForm(handle: string, options: FormOptions = {}): Response {
-	const { error, paired = false, status = error ? 400 : 200 } = options;
+	const { error, paired = false, authFailedAt, status = error ? 400 : 200 } = options;
 
-	const message = error
-		? `<p class="error" data-field="${error.field}">${escapeHtml(error.message)}</p>`
-		: paired
-			? '<p>This bridge is already paired. Replace its Stremio auth key, or disconnect it.</p>'
-			: '<p>Connect this bridge to your Marquee account and your Stremio account.</p>';
+	// The rejected-token state is reported first: it means every event is being discarded.
+	const rejected = authFailedAt
+		? `<p class="error">Marquee rejected this bridge's token on ${escapeHtml(
+				authFailedAt
+			)}. Nothing from Stremio is being saved. Start a new bridge and add it to Stremio again.</p>`
+		: '';
+
+	const message = `${rejected}${
+		error
+			? `<p class="error" data-field="${error.field}">${escapeHtml(error.message)}</p>`
+			: paired
+				? '<p>This bridge is already paired. Replace its Stremio auth key, or disconnect it.</p>'
+				: '<p>Connect this bridge to your Marquee account and your Stremio account.</p>'
+	}`;
 
 	const token = `
 <label for="marqueeToken">Marquee API token</label>

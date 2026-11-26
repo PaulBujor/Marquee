@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { newHandle, readBridge, writeBridge, type BridgeRecord } from './bridges';
+import { newHandle, readBridge, shortHandle, writeBridge, type BridgeRecord } from './bridges';
 import worker from './index';
 import { memoryKv } from './testing/kv';
+import { fakeQueue, inboundBatch, inboundMessage } from './testing/queue';
 import { stremioAccountApi } from './testing/stremio';
 
 // The generated `Env` pins the deployed URLs as literal types, so the tests use them as-is:
@@ -20,8 +21,9 @@ const record = (overrides: Partial<BridgeRecord> = {}): BridgeRecord => ({
 	...overrides
 });
 
-const env = (BRIDGES = memoryKv()): Env => ({
+const env = (BRIDGES = memoryKv(), INBOUND = fakeQueue().binding): Env => ({
 	BRIDGES,
+	INBOUND,
 	MARQUEE_API_URL: MARQUEE,
 	STREMIO_API_URL: STREMIO
 });
@@ -36,11 +38,16 @@ const form = (fields: Record<string, string>) => {
 };
 
 /** A handle whose KV record already exists, as if pairing had run. */
-async function paired(): Promise<{ handle: string; bindings: Env }> {
-	const bindings = env();
+async function paired(): Promise<{
+	handle: string;
+	bindings: Env;
+	queue: ReturnType<typeof fakeQueue>;
+}> {
+	const queue = fakeQueue();
+	const bindings = env(memoryKv(), queue.binding);
 	const handle = newHandle();
 	await writeBridge(bindings.BRIDGES, handle, record());
-	return { handle, bindings };
+	return { handle, bindings, queue };
 }
 
 /**
@@ -335,8 +342,57 @@ describe('pairing', () => {
 		expect(res.status).toBe(200);
 		expect(await readBridge(bindings.BRIDGES, handle)).toMatchObject({
 			marqueeToken: TOKEN,
-			stremioAuthKey: 'rotated-key'
+			stremioAuthKey: 'rotated-key',
+			// The pairing's identity is part of its state: minting a new `createdAt` here would drop
+			// every message already queued for this bridge, for no security gain.
+			createdAt: record().createdAt
 		});
+	});
+
+	// The rejected-token state is useless if the page does not show it, which is the only place a
+	// user could learn that nothing from Stremio is being saved.
+	it('reports a token Marquee has rejected', async () => {
+		const { handle, bindings } = await paired();
+		await writeBridge(bindings.BRIDGES, handle, {
+			...record(),
+			authFailedAt: '2026-01-02T00:00:00.000Z'
+		});
+
+		const html = await (await call(`/configure/${handle}`, undefined, bindings)).text();
+
+		expect(html).toContain('2026-01-02T00:00:00.000Z');
+		expect(html).toContain('Nothing from Stremio is being saved');
+	});
+
+	// A paired bridge is re-validated against the Marquee it was paired with, not against whatever
+	// the Worker's env says today.
+	it('validates a re-pair against the paired Marquee', async () => {
+		const calls: string[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string) => {
+				calls.push(url);
+				// origin, not a prefix: `https://marquee.example.evil` would pass a startsWith.
+				return new URL(url).origin === 'https://marquee.example'
+					? Response.json({ entries: [], nextCursor: null })
+					: Response.json({ result: { changed: false } });
+			})
+		);
+
+		const bindings = env();
+		const handle = newHandle();
+		await writeBridge(bindings.BRIDGES, handle, {
+			...record(),
+			marqueeUrl: 'https://marquee.example'
+		});
+
+		await call(
+			`/configure/${handle}`,
+			form({ marqueeToken: TOKEN, stremioAuthKey: AUTH_KEY }),
+			bindings
+		);
+
+		expect(calls[0]).toBe('https://marquee.example/api/v1/library?limit=1');
 	});
 
 	it('disconnects only for the holder of the token, and forgets the credentials', async () => {
@@ -373,9 +429,9 @@ describe('pairing', () => {
 describe('library events', () => {
 	const log = () => vi.spyOn(console, 'log').mockImplementation(() => {});
 
-	it('acknowledges a watched movie', async () => {
+	it('acknowledges a watched movie and queues the intent', async () => {
 		const spy = log();
-		const { handle, bindings } = await paired();
+		const { handle, bindings, queue } = await paired();
 
 		const res = await call(
 			`/${handle}/library/movie/tt0133093/action=watched.json`,
@@ -388,7 +444,44 @@ describe('library events', () => {
 		expect(res.headers.get('cache-control')).toBe('no-store');
 		expect(await res.json()).toEqual({ success: true });
 		expect(spy).toHaveBeenCalledWith(
-			`[event] ${handle} {"type":"movie","id":"tt0133093","action":"watched","videoIds":[]}`
+			`[event] ${shortHandle(handle)} {"type":"movie","id":"tt0133093","action":"watched","videoIds":[]}`
+		);
+
+		// The reply is what Stremio waits for, so the work is queued rather than done inline.
+		expect(queue.sent).toEqual([
+			{
+				handle,
+				// The pairing that produced it, so a message cannot cross accounts after a re-pair.
+				pairedAt: record().createdAt,
+				type: 'movie',
+				id: 'tt0133093',
+				action: 'watched',
+				videoIds: [],
+				receivedAt: expect.any(String)
+			}
+		]);
+	});
+
+	// Nothing to fall back to: the client ignores the reply and never retries, so a dead queue
+	// must not turn into a 500 the client cannot act on either.
+	it('still answers success when the queue is unavailable', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const queue = fakeQueue({ fail: true });
+		const bindings = env(memoryKv(), queue.binding);
+		const handle = newHandle();
+		await writeBridge(bindings.BRIDGES, handle, record());
+
+		const res = await call(
+			`/${handle}/library/movie/tt0133093/action=watched.json`,
+			undefined,
+			bindings
+		);
+
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ success: true });
+		expect(error).toHaveBeenCalledWith(
+			expect.stringContaining('could not be queued'),
+			expect.anything()
 		);
 	});
 
@@ -405,7 +498,7 @@ describe('library events', () => {
 
 		expect(await res.json()).toEqual({ success: true });
 		expect(spy).toHaveBeenCalledWith(
-			`[event] ${handle} {"type":"show","id":"tt0944947","action":"watched","videoIds":["tt0944947:1:1","tt0944947:1:2"]}`
+			`[event] ${shortHandle(handle)} {"type":"show","id":"tt0944947","action":"watched","videoIds":["tt0944947:1:1","tt0944947:1:2"]}`
 		);
 	});
 
@@ -423,7 +516,7 @@ describe('library events', () => {
 
 		expect(await res.json()).toEqual({ success: true });
 		expect(spy).toHaveBeenCalledWith(
-			`[event] ${handle} {"type":"show","id":"tt0944947","action":"unwatched","videoIds":["tt0944947:2:5"]}`
+			`[event] ${shortHandle(handle)} {"type":"show","id":"tt0944947","action":"unwatched","videoIds":["tt0944947:2:5"]}`
 		);
 	});
 
@@ -439,15 +532,15 @@ describe('library events', () => {
 		);
 
 		expect(spy).toHaveBeenCalledWith(
-			`[event] ${handle} {"type":"show","id":"tt0944947","action":"watched","videoIds":[]}`
+			`[event] ${shortHandle(handle)} {"type":"show","id":"tt0944947","action":"watched","videoIds":[]}`
 		);
 	});
 
 	// Stremio ignores the reply and never retries, so a deliberate drop still says success —
 	// answering anything else would only make the client retry what we chose to ignore.
-	it('acknowledges an event it deliberately drops', async () => {
+	it('acknowledges an event it deliberately drops, and queues nothing', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const { handle, bindings } = await paired();
+		const { handle, bindings, queue } = await paired();
 
 		for (const path of [
 			`/${handle}/library/channel/tt1/action=libraryAdd.json`,
@@ -460,8 +553,9 @@ describe('library events', () => {
 			expect(await res.json()).toEqual({ success: true });
 		}
 
-		expect(warn).toHaveBeenCalledWith(`[event] ${handle} ignored type:channel`);
-		expect(warn).toHaveBeenCalledWith(`[event] ${handle} ignored action:played`);
+		expect(warn).toHaveBeenCalledWith(`[event] ${shortHandle(handle)} ignored type:channel`);
+		expect(warn).toHaveBeenCalledWith(`[event] ${shortHandle(handle)} ignored action:played`);
+		expect(queue.sent).toHaveLength(0);
 	});
 
 	it('404s a malformed event rather than acknowledging it', async () => {
@@ -482,5 +576,22 @@ describe('library events', () => {
 		const res = await call(`/${newHandle()}/library/movie/tt1/action=watched.json`);
 
 		expect(res.status).toBe(404);
+	});
+});
+
+// The exported `queue()` is the wiring Cloudflare actually calls; `consume` is what it delegates
+// to, so this is the one test that proves the binding between them.
+describe('queue handler', () => {
+	it('drains a batch through the worker\u2019s own queue export', async () => {
+		for (const method of ['log', 'warn', 'error'] as const)
+			vi.spyOn(console, method).mockImplementation(() => {});
+
+		stubServices();
+		const { handle, bindings } = await paired();
+		const message = inboundMessage({ handle });
+
+		await worker.queue(inboundBatch([message]), bindings);
+
+		expect(message.acked).toBe(true);
 	});
 });

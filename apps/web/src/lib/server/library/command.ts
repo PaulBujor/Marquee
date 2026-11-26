@@ -161,9 +161,11 @@ export async function applyLibraryCommand(
 
 	// `tracking.added` is the only event that clears a `removed` tombstone, so a title has to be
 	// asserted back onto the list before anything that needs a row can be written to it.
+	// A status change alone does not: only `removed: false` (or a favourite, a rating, or a watch)
+	// puts a tombstoned title back, so a client restating a status cannot resurrect one.
 	const wantsLive =
 		command.removed === false ||
-		command.status !== undefined ||
+		(command.status !== undefined && !current?.removed) ||
 		command.favorite === true ||
 		command.rating !== undefined ||
 		episodeChanges.some((delta) => delta.watched);

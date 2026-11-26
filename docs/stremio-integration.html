@@ -349,6 +349,12 @@ erDiagram
 					<strong>enqueued</strong> — not <code>waitUntil</code>, which caps at 30s and never retries.
 					The queue feeds the Durable Object, which serialises without needing a distributed lock.
 				</p>
+				<p>
+					<strong>As built today</strong> the queue posts straight to <code>POST /api/v1/library</code>
+					with a one-item batch, and the Durable Object hop, the read model and the last-applied
+					marker in the diagram below all land with the reconcile that needs them. What that costs
+					meanwhile is ordering: two actions on one title can be applied out of order across a retry.
+				</p>
 				<pre class="mermaid">
 sequenceDiagram
   autonumber
@@ -704,6 +710,15 @@ flowchart LR
 							<td>
 								addon surface: manifest, handles, pairing, event receiver (acks, writes
 								nothing yet)
+							</td>
+							<td><span class="pill">open</span></td>
+						</tr>
+						<tr>
+							<td class="num">#331</td>
+							<td>MRQ-270</td>
+							<td>
+								inbound write path: <code>INBOUND</code> queue, intent translation, delivery with
+								retry/ack policy
 							</td>
 							<td><span class="pill">open</span></td>
 						</tr>

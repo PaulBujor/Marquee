@@ -14,8 +14,8 @@
 	//
 	// Bindings arrive with the code that uses them, not before: a declared binding with no
 	// consumer fails the build, and a Durable Object migration is applied at deploy time, so
-	// each lands with its own PR. KV holds the handle records; the per-handle Durable Object
-	// and the inbound-command Queue are still to come.
+	// each lands with its own PR. KV holds the handle records, inbound events go through a Queue,
+	// and the per-handle Durable Object is still to come.
 	"kv_namespaces": [
 		{
 			"binding": "BRIDGES",
@@ -25,6 +25,27 @@
 	"vars": {
 		"MARQUEE_API_URL": "https://marquee.paulbujor.net",
 		"STREMIO_API_URL": "https://api.strem.io/api"
+	},
+	// Inbound events are queued so the reply Stremio waits for never depends on Marquee or TMDB.
+	// The consumer's `max_retries` is only a backstop for a batch that never reached the handler —
+	// the give-up policy itself is `MAX_DELIVERY_ATTEMPTS` in src/queue.ts, so what actually ends a
+	// repeated failure is our code and not the transport's.
+	"queues": {
+		"producers": [
+			{
+				"binding": "INBOUND",
+				"queue": "marquee-stremio-inbound"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "marquee-stremio-inbound",
+				"max_batch_size": 10,
+				"max_batch_timeout": 5,
+				"max_retries": 10,
+				"dead_letter_queue": "marquee-stremio-inbound-dlq"
+			}
+		]
 	},
 	"env": {
 		"preview": {
@@ -42,6 +63,24 @@
 				// per-PR and a token minted against a preview D1 would not outlive that deploy.
 				"MARQUEE_API_URL": "https://marquee.paulbujor.net",
 				"STREMIO_API_URL": "https://api.strem.io/api"
+			},
+			// Its own queues, so a preview deploy can never drain a production backlog.
+			"queues": {
+				"producers": [
+					{
+						"binding": "INBOUND",
+						"queue": "marquee-stremio-inbound-preview"
+					}
+				],
+				"consumers": [
+					{
+						"queue": "marquee-stremio-inbound-preview",
+						"max_batch_size": 10,
+						"max_batch_timeout": 5,
+						"max_retries": 10,
+						"dead_letter_queue": "marquee-stremio-inbound-preview-dlq"
+					}
+				]
 			}
 		}
 	}
