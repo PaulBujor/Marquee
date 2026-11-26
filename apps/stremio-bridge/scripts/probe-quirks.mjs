@@ -3,7 +3,7 @@
  * Mutates one library item to answer the three questions the reconcile depends on, then restores
  * it from a snapshot taken first. Run against a test account only.
  *
- *   node --env-file=.dev.vars scripts/probe-quirks.mjs
+ *   node --env-file=.probe.env scripts/probe-quirks.mjs
  *
  * 1. Does `datastorePut` replace the item, or merge into it?
  * 2. Does a tombstone (`removed: true`) persist, and does it still come back from `datastoreGet`?
@@ -14,7 +14,7 @@ const COLLECTION = 'libraryItem';
 
 const authKey = process.env.STREMIO_AUTH_KEY?.trim();
 if (!authKey) {
-	console.error('STREMIO_AUTH_KEY is not set. Run with: node --env-file=.dev.vars …');
+	console.error('STREMIO_AUTH_KEY is not set. Run with: node --env-file=.probe.env …');
 	process.exitCode = 1;
 } else {
 	await main(authKey);
