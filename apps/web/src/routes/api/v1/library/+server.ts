@@ -14,11 +14,13 @@ import {
 	readLibraryPage
 } from '#lib/server/library/read.js';
 import { resolveTargetMediaId, type TargetMediaResult } from '#lib/server/media/resolve.js';
+import {
+	LIBRARY_BATCH_MAX,
+	type LibraryBatchFailureCode,
+	type LibraryBatchResult
+} from '#lib/server/library/batch.js';
 import { TmdbError } from '#lib/server/tmdb/index.js';
 import type { RequestHandler } from './$types';
-
-/** Ceiling on one batch, because a truncated import that reports success is worse than a refused one. */
-export const LIBRARY_BATCH_MAX = 500;
 
 /** A batch item is a title plus the same command the single-title PATCH takes. */
 const batchItemSchema = libraryCommandSchema.extend({
@@ -39,15 +41,6 @@ const libraryBatchSchema = z
 			.max(LIBRARY_BATCH_MAX)
 	})
 	.strict();
-
-export type LibraryBatchFailureCode = 'unresolved' | 'not_found' | 'upstream_unavailable';
-
-export interface LibraryBatchResult {
-	applied: number;
-	unchanged: number;
-	/** Per-title failures; each carries the id the caller sent, so it can retry exactly those. */
-	failed: { id: string; code: LibraryBatchFailureCode; reason: string }[];
-}
 
 /**
  * Applies many commands in one request, so a first import is not one round trip per title. A title that

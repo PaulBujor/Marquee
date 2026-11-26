@@ -13,7 +13,8 @@ import {
 import { deleteAccount } from '#lib/server/auth/index.js';
 import { LIBRARY_PAGE_MAX, type LibraryPage } from '#lib/server/library/read.js';
 import { episodeKey, seedMediaId, trackingKey } from '#lib/sync/events.js';
-import { GET, LIBRARY_BATCH_MAX, POST, type LibraryBatchResult } from './+server';
+import { GET, POST } from './+server';
+import { LIBRARY_BATCH_MAX, type LibraryBatchResult } from '#lib/server/library/batch.js';
 
 const ALICE = 'user-alice';
 const BOB = 'user-bob';
