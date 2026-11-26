@@ -164,7 +164,7 @@ describe('addonEventRequest', () => {
 	it('builds the movie URL Stremio calls', () => {
 		expect(
 			addonEventRequest({ handle: 'abc123', type: 'movie', id: 'tt0133093', action: 'watched' }).url
-		).toBe('https://bridge.test/abc123/library/movie/tt0133093.json?action=watched');
+		).toBe('https://bridge.test/abc123/library/movie/tt0133093/action=watched.json');
 	});
 
 	it('carries the season:episode videoId for a series', () => {
@@ -177,12 +177,12 @@ describe('addonEventRequest', () => {
 				videoId: 'tt0944947:1:1'
 			}).url
 		).toBe(
-			'https://bridge.test/abc123/library/series/tt0944947.json?action=watched&videoId=tt0944947%3A1%3A1'
+			'https://bridge.test/abc123/library/series/tt0944947/action=watched&videoId=tt0944947%3A1%3A1.json'
 		);
 	});
 
-	// The protocol does not pin down which of the two the client uses, so both are expressible.
-	it('can encode the extra props as a path segment instead', () => {
+	// Stremio sends a path segment, but the protocol allows the query string too, so both are expressible.
+	it('can encode the extra props as the query string instead', () => {
 		expect(
 			addonEventRequest({
 				handle: 'abc123',
@@ -190,11 +190,11 @@ describe('addonEventRequest', () => {
 				id: 'tt0944947',
 				action: 'unwatched',
 				videoId: 'tt0944947:2:5',
-				extra: 'path',
+				extra: 'query',
 				origin: 'https://marquee-bridge.example'
 			}).url
 		).toBe(
-			'https://marquee-bridge.example/abc123/library/series/tt0944947/action=unwatched&videoId=tt0944947%3A2%3A5.json'
+			'https://marquee-bridge.example/abc123/library/series/tt0944947.json?action=unwatched&videoId=tt0944947%3A2%3A5'
 		);
 	});
 });

@@ -110,8 +110,11 @@ export interface AddonEventOptions {
 	/** `tt123:season:episode` for a series whose item id is `tt123`. */
 	videoId?: string;
 	origin?: string;
-	/** The addon protocol allows the extra props as a path segment or as the query string. */
-	extra?: 'query' | 'path';
+	/**
+	 * Stremio sends the extra props as a path segment, so that is the default. `query` stays
+	 * expressible: the protocol allows both, and a client change would surface there first.
+	 */
+	extra?: 'path' | 'query';
 }
 
 /** The request Stremio's addon client makes when the user acts on a library item. */
@@ -121,7 +124,7 @@ export function addonEventRequest(options: AddonEventOptions): Request {
 
 	const path = `${options.origin ?? 'https://bridge.test'}/${options.handle}/library/${options.type}/${options.id}`;
 
-	return new Request(options.extra === 'path' ? `${path}/${extra}.json` : `${path}.json?${extra}`);
+	return new Request(options.extra === 'query' ? `${path}.json?${extra}` : `${path}/${extra}.json`);
 }
 
 export interface AccountRequest {
