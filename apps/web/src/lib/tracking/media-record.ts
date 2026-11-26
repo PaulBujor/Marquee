@@ -42,6 +42,8 @@ export function mediaRecordFromSearch(item: SearchLikeMedia): MediaRecord {
 		inProduction: null,
 		firstAirDate: null,
 		lastAirDate: null,
+		// Unknown until the server sends the real copy (which `version: 0` asks for).
+		unavailableAt: null,
 		version: 0,
 		seasons: null,
 		episodes: null,

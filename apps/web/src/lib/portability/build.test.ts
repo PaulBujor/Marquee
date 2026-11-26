@@ -42,6 +42,7 @@ function media(overrides: Partial<ClientMedia> & { id: string }): ClientMedia {
 		inProduction: null,
 		firstAirDate: null,
 		lastAirDate: null,
+		unavailableAt: null,
 		version: 3,
 		updatedAt: ADDED_AT,
 		...overrides

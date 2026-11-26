@@ -90,6 +90,7 @@ function toRecord(
 		inProduction: row.inProduction ?? null,
 		firstAirDate: row.firstAirDate ?? null,
 		lastAirDate: row.lastAirDate ?? null,
+		unavailableAt: row.unavailableAt?.getTime() ?? null,
 		version: row.version,
 		seasons: isShow ? seasonRows : null,
 		episodes: isShow ? episodeRows : null,

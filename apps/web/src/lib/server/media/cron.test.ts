@@ -17,6 +17,7 @@ async function seedMedia(
 		inProduction?: boolean | null;
 		releaseDate?: string | null;
 		status?: string | null;
+		unavailableAt?: Date | null;
 	}
 ) {
 	await db.insert(media).values({
@@ -29,6 +30,7 @@ async function seedMedia(
 		inProduction: over.inProduction ?? null,
 		releaseDate: over.releaseDate ?? null,
 		status: over.status ?? null,
+		unavailableAt: over.unavailableAt ?? null,
 		version: 1,
 		refreshedAt: 0
 	});
@@ -50,6 +52,29 @@ describe('enqueueStaleMedia', () => {
 		expect(queue.items).toHaveLength(3);
 		expect(queue.items.map((m) => m.externalId).sort()).toEqual(['movie/3', 'movie/4', 'show/1']);
 		expect(queue.items.every((m) => m.provider === 'tmdb' && m.force === undefined)).toBe(true);
+	});
+
+	// The two loopers: an unavailable title in either bucket was selected every night forever, 5 TMDB calls a night.
+	it('skips an unavailable title in every branch', async () => {
+		const db = createTestDb();
+		const unavailableAt = new Date(T0);
+		await seedMedia(db, 'show/20', { type: 'show', inProduction: true, unavailableAt });
+		await seedMedia(db, 'show/21', {
+			type: 'show',
+			inProduction: false,
+			status: 'Returning Series',
+			unavailableAt
+		});
+		await seedMedia(db, 'movie/22', { type: 'movie', releaseDate: null, unavailableAt });
+		await seedMedia(db, 'movie/23', { type: 'movie', releaseDate: '2027-01-01', unavailableAt });
+		const queue = createMemoryQueue<MediaRefreshMessage>();
+
+		expect(await enqueueStaleMedia(db, queue, T0)).toEqual({
+			scanned: 0,
+			queued: 0,
+			capped: false
+		});
+		expect(queue.items).toEqual([]);
 	});
 
 	it('returns zeroes and enqueues nothing when nothing is unsettled', async () => {

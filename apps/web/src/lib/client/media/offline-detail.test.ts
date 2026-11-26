@@ -72,6 +72,7 @@ const movie: MediaRecord = {
 	inProduction: null,
 	firstAirDate: null,
 	lastAirDate: null,
+	unavailableAt: null,
 	version: 1,
 	seasons: null,
 	episodes: null,
@@ -158,6 +159,7 @@ describe('buildOfflineDetail', () => {
 			inProduction: false,
 			firstAirDate: '2008-01-20',
 			lastAirDate: '2013-09-29',
+			unavailableAt: null,
 			version: 1,
 			seasons: [
 				{

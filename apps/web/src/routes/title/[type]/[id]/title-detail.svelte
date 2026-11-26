@@ -102,6 +102,7 @@
 		inProduction: detail.inProduction,
 		firstAirDate: detail.firstAirDate,
 		lastAirDate: detail.lastAirDate,
+		unavailableAt: null,
 		version: 0,
 		seasons: null,
 		episodes: null,

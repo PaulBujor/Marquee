@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { isHttpError } from '@sveltejs/kit';
 import { createTestDb } from '#lib/server/db/test-db.js';
 import { media } from '#lib/server/db/schema.js';
@@ -96,5 +97,36 @@ describe('POST /api/queue/media-refresh', () => {
 		const result = (await res.json()) as { outcomes: string[] };
 
 		expect(result.outcomes).toEqual(['ack']);
+	});
+
+	it('acks a 404 and records the title as unavailable', async () => {
+		const db = createTestDb();
+		const id = seedMediaId('tmdb', 'movie/2');
+		await db.insert(media).values({
+			id,
+			provider: 'tmdb',
+			externalId: 'movie/2',
+			source: 'linked',
+			type: 'movie',
+			title: 'movie/2',
+			releaseDate: null,
+			version: 1,
+			refreshedAt: 0
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response('Not Found', { status: 404 }))
+		);
+
+		const res = await POST(
+			makeEvent({
+				db,
+				body: { messages: [{ body: { provider: 'tmdb', externalId: 'movie/2' }, attempts: 1 }] }
+			})
+		);
+
+		expect(((await res.json()) as { outcomes: string[] }).outcomes).toEqual(['ack']);
+		const [row] = await db.select().from(media).where(eq(media.id, id));
+		expect(row.unavailableAt).not.toBeNull();
 	});
 });

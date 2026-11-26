@@ -4,6 +4,7 @@ import { createTestDb } from '#lib/server/db/test-db.js';
 import { media } from '#lib/server/db/schema.js';
 import { seedMediaId } from '#lib/sync/events.js';
 import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
+import { TmdbError } from '#lib/server/tmdb/client.js';
 import type { QueueEnvelope } from '#lib/server/queue/types.js';
 import {
 	MAX_DELIVERY_ATTEMPTS,
@@ -92,10 +93,10 @@ function failingTmdb() {
 }
 
 /** A stub whose detail fetch always fails — the TMDB rate-limit / 5xx case. */
-function failingDetailsTmdb() {
+function failingDetailsTmdb(status = 500) {
 	return {
 		async getDetails(): Promise<MediaDetail> {
-			throw new Error('tmdb detail fetch failed');
+			throw new TmdbError(`TMDB responded ${status}`, status);
 		},
 		async getSeason(_id: number, seasonNumber: number): Promise<SeasonDetail> {
 			return seasonDetail(seasonNumber);
@@ -154,6 +155,27 @@ describe('processMediaRefreshBatch', () => {
 			.from(media)
 			.where(eq(media.id, seedMediaId('tmdb', 'show/9')));
 		expect(row.refreshedAt).toBe(0);
+		// A transient failure must never look like a deletion.
+		expect(row.unavailableAt).toBeNull();
+	});
+
+	it('acks a title TMDB has deleted, and marks it unavailable', async () => {
+		const db = createTestDb();
+		await seedMedia(db, 'show/10');
+
+		const outcomes = await processMediaRefreshBatch(
+			db,
+			failingDetailsTmdb(404),
+			[envelope('show/10', 1)],
+			T0
+		);
+
+		expect(outcomes).toEqual(['ack']);
+		const [row] = await db
+			.select()
+			.from(media)
+			.where(eq(media.id, seedMediaId('tmdb', 'show/10')));
+		expect(row.unavailableAt?.getTime()).toBe(T0);
 	});
 
 	it('retries a failing title while under the attempt cap', async () => {

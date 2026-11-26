@@ -13,6 +13,7 @@ import { creditRowsFromDetail, creditSignature, syncCredits, syncProviderPeople 
 import { writeExternalId } from './external-ids';
 import { chunkBySize, chunkRows, D1_MAX_BOUND_PARAMS } from '#lib/server/db/chunk.js';
 import { hasDescription } from '#lib/media.js';
+import { TmdbError } from '#lib/server/tmdb/client.js';
 import { seedMediaId, type MediaProvider } from '#lib/sync/events.js';
 import type { createDb } from '#lib/server/db/index.js';
 import type { MediaDetail, SeasonDetail, TmdbClient } from '#lib/server/tmdb/index.js';
@@ -39,14 +40,17 @@ export function parseTmdbExternalId(externalId: string): ParsedTmdbExternalId | 
 }
 
 /** A missing date is treated as end of the current year — a concrete horizon to refresh toward. */
-function movieUnreleased(releaseDate: string | null, now: number): boolean {
+export function movieUnreleased(releaseDate: string | null, now: number): boolean {
 	const today = new Date(now).toISOString().slice(0, 10);
-	const horizon = releaseDate ?? `${new Date(now).getUTCFullYear()}-12-31`;
+	// `''` is bad legacy data, not a date: it fails `IS NULL` and sorts as past, so it must read as undated.
+	const horizon = releaseDate || `${new Date(now).getUTCFullYear()}-12-31`;
 	return horizon >= today;
 }
 
 /** `refreshedAt` 0 marks a row that predates the relational model (migration backfill) — always refresh it once. */
 export function needsRefresh(row: Media, now: number): boolean {
+	// An unavailable title is not stale: it was answered, and re-asking nightly is the loop this state stops.
+	if (row.unavailableAt) return false;
 	if (row.refreshedAt === 0) return true;
 	if (now - row.refreshedAt <= AIRING_TTL_MS) return false;
 	if (row.type === 'movie') return movieUnreleased(row.releaseDate, now);
@@ -263,6 +267,15 @@ export async function syncEpisodes(
 	}
 }
 
+/** Records a source-side deletion. Client-visible, so it bumps `version`; null when the title was never stored. */
+async function markUnavailable(db: Db, existing: Media | null, now: number): Promise<Media | null> {
+	if (!existing) return null;
+	const unavailableAt = new Date(now);
+	const version = existing.version + 1;
+	await db.update(media).set({ unavailableAt, version }).where(eq(media.id, existing.id));
+	return { ...existing, unavailableAt, version };
+}
+
 /** **Throws** when TMDB fails, so a caller can tell a real refresh from a no-op and retry; `force` re-pulls within the TTL. */
 export async function refreshMedia(
 	db: Db,
@@ -282,10 +295,15 @@ export async function refreshMedia(
 	if (existing && !force && !needsRefresh(existing, now)) return existing;
 
 	// Don't swallow a failure: returning the stored row would look like a successful no-op, so the queue consumer would ack a title it never refreshed.
-	const detail = await tmdb.getDetails(parsed.type, parsed.tmdbId).catch((err) => {
+	let detail: MediaDetail;
+	try {
+		detail = await tmdb.getDetails(parsed.type, parsed.tmdbId);
+	} catch (err) {
+		// A 404 is an answer, not a failure: TMDB no longer has the title, so it's recorded and acked, not retried.
+		if (err instanceof TmdbError && err.status === 404) return markUnavailable(db, existing, now);
 		console.error(`refreshMedia: getDetails failed for ${externalId}`, err);
 		throw err;
-	});
+	}
 
 	// Rethrow a season failure — otherwise the show persists with zero episodes.
 	const seasonDetails: SeasonDetail[] =
@@ -341,6 +359,7 @@ export async function refreshMedia(
 				: [];
 		const oldCredits = await db.select().from(credits).where(eq(credits.mediaId, id));
 		const changed =
+			existing.unavailableAt !== null ||
 			existing.title !== scalars.title ||
 			existing.status !== scalars.status ||
 			existing.inProduction !== scalars.inProduction ||
@@ -364,6 +383,8 @@ export async function refreshMedia(
 				source: existing.source,
 				updatedAt: existing.updatedAt,
 				refreshedAt: now,
+				// A successful pull proves the title is back.
+				unavailableAt: null,
 				// Reaching TMDB answered the IMDb question, whatever the answer was; a failed refresh never gets here.
 				imdbCheckedAt: now,
 				version: changed ? existing.version + 1 : existing.version
