@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  apps/bridge:
+  apps/stremio-bridge:
     dependencies:
       stremio-watched-bitfield:
         specifier: ^1.1.0
