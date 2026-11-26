@@ -372,7 +372,8 @@ describe('pairing', () => {
 			'fetch',
 			vi.fn(async (url: string) => {
 				calls.push(url);
-				return url.startsWith('https://marquee.example')
+				// origin, not a prefix: `https://marquee.example.evil` would pass a startsWith.
+				return new URL(url).origin === 'https://marquee.example'
 					? Response.json({ entries: [], nextCursor: null })
 					: Response.json({ result: { changed: false } });
 			})
