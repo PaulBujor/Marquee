@@ -8,7 +8,7 @@
 		children,
 		...restProps
 	}: {
-		variant?: 'default' | 'status' | 'genre' | 'custom' | 'production';
+		variant?: 'default' | 'status' | 'genre' | 'custom' | 'production' | 'unavailable';
 		dashed?: boolean;
 		class?: string;
 		children?: import('svelte').Snippet;
@@ -23,6 +23,9 @@
 		variant === 'genre' && 'bg-secondary text-secondary-foreground',
 		variant === 'custom' && 'border border-dashed border-border text-muted-foreground',
 		variant === 'production' && 'border border-primary/40 bg-primary/10 text-primary',
+		// Informational, not an error: a solid backing keeps it legible where it sits over a poster.
+		variant === 'unavailable' &&
+			'border border-border bg-card/90 text-muted-foreground backdrop-blur-sm',
 		dashed && 'border-dashed',
 		className
 	)}

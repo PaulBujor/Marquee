@@ -165,3 +165,31 @@ describe('LibraryState.load — a custom entry', () => {
 		expect(library.items.find((i) => i.mediaId === CUSTOM_ID)?.status).toBe('completed');
 	});
 });
+
+describe('LibraryState.load — a title the source catalogue dropped', () => {
+	const GONE = tmdbMediaId('movie', 4242);
+
+	it('keeps it on the list and carries the state the card renders', async () => {
+		await putMedia({
+			...baseMedia,
+			id: GONE,
+			externalId: 'movie/4242',
+			type: 'movie',
+			title: 'Dropped At Source',
+			status: null,
+			inProduction: null,
+			firstAirDate: null,
+			lastAirDate: null,
+			unavailableAt: 1_700_000_000_000,
+			seasons: null,
+			episodes: null
+		});
+		await recordEvent('tracking.added', GONE, { status: 'want_to_watch' });
+
+		const library = new LibraryState();
+		await library.load();
+		const item = library.items.find((i) => i.mediaId === GONE);
+		expect(item?.status).toBe('want_to_watch');
+		expect(item?.unavailableAt).toBe(1_700_000_000_000);
+	});
+});

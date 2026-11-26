@@ -2,6 +2,7 @@
 	import { cn } from '#lib/utils.js';
 	import { Film, Tv, Heart, Star, FileQuestion } from '@lucide/svelte';
 	import MediaImage from './media-image.svelte';
+	import MediaBadge from './media-badge.svelte';
 
 	interface Props {
 		type?: 'movie' | 'show';
@@ -15,6 +16,8 @@
 		/** When set (with `posterPath`), the poster renders offline-capably from the cached blob. */
 		mediaId?: string;
 		posterPath?: string | null;
+		/** Epoch ms the source stopped listing the title; shows the "Unavailable" pill. */
+		unavailableAt?: number | null;
 		alt?: string;
 		class?: string;
 		children?: import('svelte').Snippet;
@@ -29,6 +32,7 @@
 		posterUrl,
 		mediaId,
 		posterPath,
+		unavailableAt = null,
 		alt = '',
 		class: className,
 		children,
@@ -82,6 +86,12 @@
 	{#if isFavorite}
 		<div class="absolute top-1.5 right-1.5">
 			<Heart class="size-4 fill-primary text-primary" />
+		</div>
+	{/if}
+
+	{#if unavailableAt != null}
+		<div class="absolute right-1.5 bottom-1.5">
+			<MediaBadge variant="unavailable">Unavailable</MediaBadge>
 		</div>
 	{/if}
 

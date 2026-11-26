@@ -439,6 +439,7 @@
 								isFavorite={item.favorite}
 								isCustom={item.source === 'custom'}
 								rating={canRate(item.type, item.status) ? item.rating : null}
+								unavailableAt={item.unavailableAt}
 								alt={item.title}
 							/>
 							<div class="mt-1.5 truncate text-sm font-medium">{item.title}</div>

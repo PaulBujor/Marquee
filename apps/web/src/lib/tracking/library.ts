@@ -33,6 +33,8 @@ export interface LibraryItem {
 	/** `YYYY-MM-DD` first air date (shows only), or null — the show equivalent for the date sort. */
 	firstAirDate: string | null;
 	posterPath: string | null;
+	/** Epoch ms the source catalogue stopped listing the title, or null while it is available. */
+	unavailableAt: number | null;
 	genres: string[];
 	/** TMDB `in_production` — still-airing signal for completion; null for movies. */
 	inProduction: boolean | null;

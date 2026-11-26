@@ -14,6 +14,8 @@ import type {
 export interface OfflineTitle {
 	detail: MediaDetail;
 	season: SeasonDetail | null;
+	/** Epoch ms the source stopped listing the title, or null — `MediaDetail` has no room for it. */
+	unavailableAt: number | null;
 }
 
 export function offlineSeason(
@@ -143,5 +145,5 @@ async function assembleOfflineDetail(
 		);
 	}
 
-	return { detail, season };
+	return { detail, season, unavailableAt: m.unavailableAt };
 }

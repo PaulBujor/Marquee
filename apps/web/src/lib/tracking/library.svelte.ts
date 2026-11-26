@@ -75,6 +75,7 @@ export class LibraryState {
 				releaseDate: m?.releaseDate ?? null,
 				firstAirDate: m?.firstAirDate ?? null,
 				posterPath: m?.posterPath ?? null,
+				unavailableAt: m?.unavailableAt ?? null,
 				genres: m?.genres ?? [],
 				inProduction: m?.inProduction ?? null,
 				episodes,
