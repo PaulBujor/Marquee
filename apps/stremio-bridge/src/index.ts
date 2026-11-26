@@ -13,6 +13,7 @@
 import { manifest, parseLibraryEvent } from './addon';
 import { deleteBridge, isHandle, newHandle, readBridge, writeBridge } from './bridges';
 import { pair, renderForm, renderResult } from './configure';
+import { type InboundMessage, consume } from './queue';
 
 /** The addon client is a browser page, so every response needs CORS — preflight included. */
 const CORS: Record<string, string> = {
@@ -74,11 +75,15 @@ export default {
 		if (resource === 'manifest.json' && rest.length === 0)
 			return json(manifest(handle), 200, { 'cache-control': 'private, max-age=300' });
 
-		if (resource === 'library' && rest.length > 0) return library(request, handle, url, rest);
+		if (resource === 'library' && rest.length > 0) return library(request, env, handle, url, rest);
 
 		return notFound();
+	},
+
+	async queue(batch: MessageBatch<InboundMessage>, env: Env): Promise<void> {
+		await consume(batch, env);
 	}
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env, InboundMessage>;
 
 /** Exercises the binding, like `apps/web`'s probe exercises D1: a broken KV must not read healthy. */
 async function health(env: Env): Promise<Response> {
@@ -164,6 +169,7 @@ async function configure(request: Request, env: Env, url: URL, handle: string): 
  */
 async function library(
 	request: Request,
+	env: Env,
 	handle: string,
 	url: URL,
 	rest: string[]
@@ -182,8 +188,24 @@ async function library(
 
 	// The handle is in the line on purpose: a dropped event is unrecoverable, so the log is the
 	// only place anyone could notice it, and it has to be attributable.
-	if (parsed.kind === 'ignored') console.warn(`[event] ${handle} ignored ${parsed.reason}`);
-	else console.log(`[event] ${handle} ${JSON.stringify(parsed.event)}`);
+	if (parsed.kind === 'ignored') {
+		console.warn(`[event] ${handle} ignored ${parsed.reason}`);
+	} else {
+		console.log(`[event] ${handle} ${JSON.stringify(parsed.event)}`);
+
+		// Queue, then reply: Stremio is waiting, and Marquee (and TMDB behind it) is not fast.
+		const message: InboundMessage = {
+			...parsed.event,
+			handle,
+			receivedAt: new Date().toISOString()
+		};
+		try {
+			await env.INBOUND.send(message);
+		} catch (error) {
+			// Nothing to fall back to: the client ignores the reply and never retries.
+			console.error(`[event] ${handle} could not be queued`, error);
+		}
+	}
 
 	return json({ success: true }, 200, { 'cache-control': 'no-store' });
 }

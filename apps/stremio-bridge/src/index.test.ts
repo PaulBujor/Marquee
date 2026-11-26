@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { newHandle, readBridge, writeBridge, type BridgeRecord } from './bridges';
 import worker from './index';
 import { memoryKv } from './testing/kv';
+import { fakeQueue } from './testing/queue';
 import { stremioAccountApi } from './testing/stremio';
 
 // The generated `Env` pins the deployed URLs as literal types, so the tests use them as-is:
@@ -20,8 +21,9 @@ const record = (overrides: Partial<BridgeRecord> = {}): BridgeRecord => ({
 	...overrides
 });
 
-const env = (BRIDGES = memoryKv()): Env => ({
+const env = (BRIDGES = memoryKv(), INBOUND = fakeQueue().binding): Env => ({
 	BRIDGES,
+	INBOUND,
 	MARQUEE_API_URL: MARQUEE,
 	STREMIO_API_URL: STREMIO
 });
@@ -36,11 +38,16 @@ const form = (fields: Record<string, string>) => {
 };
 
 /** A handle whose KV record already exists, as if pairing had run. */
-async function paired(): Promise<{ handle: string; bindings: Env }> {
-	const bindings = env();
+async function paired(): Promise<{
+	handle: string;
+	bindings: Env;
+	queue: ReturnType<typeof fakeQueue>;
+}> {
+	const queue = fakeQueue();
+	const bindings = env(memoryKv(), queue.binding);
 	const handle = newHandle();
 	await writeBridge(bindings.BRIDGES, handle, record());
-	return { handle, bindings };
+	return { handle, bindings, queue };
 }
 
 /**
@@ -373,9 +380,9 @@ describe('pairing', () => {
 describe('library events', () => {
 	const log = () => vi.spyOn(console, 'log').mockImplementation(() => {});
 
-	it('acknowledges a watched movie', async () => {
+	it('acknowledges a watched movie and queues the intent', async () => {
 		const spy = log();
-		const { handle, bindings } = await paired();
+		const { handle, bindings, queue } = await paired();
 
 		const res = await call(
 			`/${handle}/library/movie/tt0133093/action=watched.json`,
@@ -390,6 +397,18 @@ describe('library events', () => {
 		expect(spy).toHaveBeenCalledWith(
 			`[event] ${handle} {"type":"movie","id":"tt0133093","action":"watched","videoIds":[]}`
 		);
+
+		// The reply is what Stremio waits for, so the work is queued rather than done inline.
+		expect(queue.sent).toEqual([
+			{
+				handle,
+				type: 'movie',
+				id: 'tt0133093',
+				action: 'watched',
+				videoIds: [],
+				receivedAt: expect.any(String)
+			}
+		]);
 	});
 
 	// The whole list arrives in one event, so a season mark must decode as one intent.
@@ -445,9 +464,9 @@ describe('library events', () => {
 
 	// Stremio ignores the reply and never retries, so a deliberate drop still says success —
 	// answering anything else would only make the client retry what we chose to ignore.
-	it('acknowledges an event it deliberately drops', async () => {
+	it('acknowledges an event it deliberately drops, and queues nothing', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const { handle, bindings } = await paired();
+		const { handle, bindings, queue } = await paired();
 
 		for (const path of [
 			`/${handle}/library/channel/tt1/action=libraryAdd.json`,
@@ -462,6 +481,7 @@ describe('library events', () => {
 
 		expect(warn).toHaveBeenCalledWith(`[event] ${handle} ignored type:channel`);
 		expect(warn).toHaveBeenCalledWith(`[event] ${handle} ignored action:played`);
+		expect(queue.sent).toHaveLength(0);
 	});
 
 	it('404s a malformed event rather than acknowledging it', async () => {
