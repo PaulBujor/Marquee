@@ -141,14 +141,19 @@ describe('deliver', () => {
 		expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('earlier pairing'));
 	});
 
-	it('drops a malformed message before it reaches KV', async () => {
+	// The trust boundary the guard defends: a second producer sending a shape the route would
+	// never produce. Paired first, so the guard is the only thing that can stop the request.
+	it('drops a malformed message even when its handle is paired', async () => {
 		const calls = marqueeAnswers();
-		const bindings = env();
+		const { handle, bindings } = await paired();
 
 		for (const body of [
-			inboundBody({ handle: 'not-a-handle' }),
-			inboundBody({ id: 'yt:abc' }),
-			inboundBody({ action: 'played' as never })
+			inboundBody({ handle, id: 'yt:abc' }),
+			inboundBody({ handle, action: 'played' as never }),
+			inboundBody({ handle, videoIds: 'tt1:1:1' as never }),
+			{ ...inboundBody({ handle }), handle: 123 as never },
+			null,
+			undefined
 		]) {
 			expect(await deliver(bindings, body)).toBe('ack');
 		}
@@ -177,13 +182,31 @@ describe('deliver', () => {
 		const { handle, bindings } = await paired();
 
 		expect(await deliver(bindings, inboundBody({ handle }))).toBe('ack');
-		expect((await readBridge(bindings.BRIDGES, handle))?.authFailedAt).toEqual(expect.any(String));
+		const first = (await readBridge(bindings.BRIDGES, handle))?.authFailedAt;
+		expect(first).toEqual(expect.any(String));
 		expect(console.error).toHaveBeenCalledWith(expect.stringContaining('new bridge'));
+
+		// A second rejection must not rewrite the stamp: the first failure is the informative one.
+		await deliver(bindings, inboundBody({ handle }));
+		expect((await readBridge(bindings.BRIDGES, handle))?.authFailedAt).toBe(first);
+
+		// 403 is the same answer as 401.
+		marqueeAnswers(403, { title: 'Forbidden' });
+		expect(await deliver(bindings, inboundBody({ handle }))).toBe('ack');
 
 		marqueeAnswers();
 		await deliver(bindings, inboundBody({ handle }));
 
 		expect((await readBridge(bindings.BRIDGES, handle))?.authFailedAt).toBeUndefined();
+	});
+
+	// A redirect means the configured url is wrong; retrying it would never make it right.
+	it('treats a redirect as permanent', async () => {
+		marqueeAnswers(301, {});
+		const { handle, bindings } = await paired();
+
+		expect(await deliver(bindings, inboundBody({ handle }))).toBe('ack');
+		expect(console.error).toHaveBeenCalledWith(expect.stringContaining('301'));
 	});
 
 	it('retries what can resolve itself', async () => {
@@ -243,6 +266,34 @@ describe('deliver', () => {
 		expect(await deliver(bindings, inboundBody({ handle }))).toBe('ack');
 	});
 
+	// The chunks are independent, so a refusal of one must not discard the rest — and the count
+	// has to say so, or a partial mark looks exactly like a complete one.
+	it('applies the chunks that succeed when one is refused', async () => {
+		const calls: Call[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string, init?: RequestInit) => {
+				calls.push({ url, init });
+				return calls.length === 2
+					? Response.json({ applied: 0, unchanged: 0, failed: [{ code: 'unresolved' }] })
+					: Response.json({ applied: 1, unchanged: 0, failed: [] });
+			})
+		);
+		const { handle, bindings } = await paired();
+		const videoIds = Array.from({ length: 600 }, (_, index) => `tt1:1:${index + 1}`);
+
+		const outcome = await deliver(
+			bindings,
+			inboundBody({ handle, type: 'show', id: 'tt1', action: 'watched', videoIds })
+		);
+
+		expect(outcome).toBe('ack');
+		expect(calls).toHaveLength(2);
+		expect(console.log).toHaveBeenCalledWith(
+			expect.stringContaining('1 request(s) applied, 1 refused')
+		);
+	});
+
 	// The API rejects a command with more than 500 episodes outright, and a rejection is permanent
 	// here — so a series-wide mark has to be split rather than dropped in full.
 	it('splits a mark bigger than the API accepts', async () => {
@@ -266,14 +317,25 @@ describe('consume', () => {
 	it('retries a message that has attempts left, with a growing delay', async () => {
 		marqueeAnswers(503, {});
 		const { handle, bindings } = await paired();
-		const message = inboundMessage({ handle }, 2);
 
-		await consume(inboundBatch([message]), bindings);
+		for (const [attempts, delay] of [
+			[2, 60],
+			[3, 90]
+		] as const) {
+			const message = inboundMessage({ handle }, attempts);
 
-		expect(message.retried).toBe(true);
-		expect(message.acked).toBe(false);
-		// Backoff, so a burst that failed together does not redeliver in lockstep.
-		expect(message.retryDelaySeconds).toBe(60);
+			await consume(inboundBatch([message]), bindings);
+
+			expect(message.retried).toBe(true);
+			expect(message.acked).toBe(false);
+			// Backoff, so a burst that failed together does not redeliver in lockstep.
+			expect(message.retryDelaySeconds).toBe(delay);
+		}
+	});
+
+	// The cap is ours, and it has to stay below the transport's own limit to mean anything.
+	it('gives up after five attempts', () => {
+		expect(MAX_DELIVERY_ATTEMPTS).toBe(5);
 	});
 
 	// The give-up policy is ours: past the cap the message is acknowledged and logged, so a
@@ -287,7 +349,10 @@ describe('consume', () => {
 
 		expect(last.acked).toBe(true);
 		expect(last.retried).toBe(false);
-		expect(console.error).toHaveBeenCalledWith(expect.stringContaining('giving up'));
+		// The timestamp is the only handle on a message that has been sitting in the queue.
+		expect(console.error).toHaveBeenCalledWith(
+			expect.stringContaining('giving up after 5 attempts (received 1970-01-01T00:00:00.000Z)')
+		);
 
 		// One attempt earlier it would still have been retried.
 		const remaining = inboundMessage({ handle }, MAX_DELIVERY_ATTEMPTS - 1);

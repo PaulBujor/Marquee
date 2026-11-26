@@ -50,10 +50,18 @@ interface BatchResult {
  * an upstream outage, a network error. Anything else — a dead token, an id nobody can resolve, a
  * request Marquee refuses — is `ack`, because a retry would only repeat the same answer.
  */
-export async function deliver(env: Env, body: InboundMessage): Promise<Outcome> {
+export async function deliver(env: Env, body: InboundMessage | null | undefined): Promise<Outcome> {
 	// The queue is a trust boundary. The route validates before enqueueing, but a body arrives
 	// typed rather than checked, and a second producer will not inherit that discipline.
-	if (!isHandle(body.handle) || !isImdbId(body.id) || !isAddonAction(body.action)) {
+	if (
+		!body ||
+		typeof body.handle !== 'string' ||
+		!isHandle(body.handle) ||
+		!isImdbId(body.id) ||
+		!isAddonAction(body.action) ||
+		// Checked here so a malformed list is a dropped message rather than a throw inside toIntent.
+		!Array.isArray(body.videoIds)
+	) {
 		console.warn('[queue] malformed message, dropping');
 		return 'ack';
 	}
@@ -78,6 +86,7 @@ export async function deliver(env: Env, body: InboundMessage): Promise<Outcome> 
 	}
 
 	let applied = 0;
+	let refused = 0;
 	for (const part of chunk(intent)) {
 		const delivery = await post(bridge, body, part);
 
@@ -87,7 +96,12 @@ export async function deliver(env: Env, body: InboundMessage): Promise<Outcome> 
 			console.error(`[queue] ${handle} Marquee rejected the token; only a new bridge recovers`);
 			return 'ack';
 		}
-		if (delivery === 'permanent') return 'ack';
+		// The chunks are independent: one refusal is no reason to abandon the rest, and the count
+		// is what makes a partial application visible instead of looking like a clean success.
+		if (delivery === 'permanent') {
+			refused += 1;
+			continue;
+		}
 
 		applied += 1;
 	}
@@ -95,7 +109,11 @@ export async function deliver(env: Env, body: InboundMessage): Promise<Outcome> 
 	// Back in business: a bridge that is working must not keep advertising an old rejection.
 	if (bridge.authFailedAt) await clearAuthFailed(env, body.handle, bridge);
 
-	console.log(`[queue] ${handle} ${body.id} ${body.action}: ${applied} request(s) applied`);
+	console.log(
+		`[queue] ${handle} ${body.id} ${body.action}: ${applied} request(s) applied${
+			refused > 0 ? `, ${refused} refused` : ''
+		}`
+	);
 	return 'ack';
 }
 
@@ -165,22 +183,37 @@ async function post(bridge: BridgeRecord, body: InboundMessage, intent: Intent):
 
 async function markAuthFailed(env: Env, handle: string, bridge: BridgeRecord): Promise<void> {
 	if (bridge.authFailedAt) return;
-	await writeBridge(env.BRIDGES, handle, { ...bridge, authFailedAt: new Date().toISOString() });
+	// Re-read: a record written from a stale snapshot would restore the credentials a concurrent
+	// re-pair has already replaced, which is the premise of the cross-account bug this check exists for.
+	const fresh = await readBridge(env.BRIDGES, handle);
+	if (fresh?.createdAt !== bridge.createdAt) return;
+
+	await writeBridge(env.BRIDGES, handle, { ...fresh, authFailedAt: new Date().toISOString() });
 }
 
 async function clearAuthFailed(env: Env, handle: string, bridge: BridgeRecord): Promise<void> {
-	const cleared = { ...bridge };
+	const fresh = await readBridge(env.BRIDGES, handle);
+	if (fresh?.createdAt !== bridge.createdAt) return;
+
+	const cleared = { ...fresh };
 	delete cleared.authFailedAt;
 	await writeBridge(env.BRIDGES, handle, cleared);
 }
 
 export async function consume(batch: MessageBatch<InboundMessage>, env: Env): Promise<void> {
 	for (const message of batch.messages) {
-		const handle = message.body?.handle ? shortHandle(message.body.handle) : 'unknown';
-		const id = message.body?.id ?? '?';
+		// Labels are computed defensively and inside the guard: a body that is not even the right
+		// shape must not be able to throw here and take the whole batch down with it.
+		let handle = 'unknown';
+		let id = '?';
 
 		let outcome: Outcome;
 		try {
+			const body: unknown = message.body;
+			const named = body as { handle?: unknown; id?: unknown } | null;
+			if (typeof named?.handle === 'string') handle = shortHandle(named.handle);
+			if (typeof named?.id === 'string') id = named.id;
+
 			outcome = await deliver(env, message.body);
 		} catch (error) {
 			// One message's unexpected failure must not fail its siblings: they would all be
@@ -204,7 +237,7 @@ export async function consume(batch: MessageBatch<InboundMessage>, env: Env): Pr
 		if (outcome === 'retry')
 			console.error(
 				`[queue] ${handle} ${id} giving up after ${message.attempts} attempts (received ${
-					message.body?.receivedAt ?? '?'
+					typeof message.body?.receivedAt === 'string' ? message.body.receivedAt : '?'
 				})`
 			);
 

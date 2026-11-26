@@ -342,8 +342,56 @@ describe('pairing', () => {
 		expect(res.status).toBe(200);
 		expect(await readBridge(bindings.BRIDGES, handle)).toMatchObject({
 			marqueeToken: TOKEN,
-			stremioAuthKey: 'rotated-key'
+			stremioAuthKey: 'rotated-key',
+			// The pairing's identity is part of its state: minting a new `createdAt` here would drop
+			// every message already queued for this bridge, for no security gain.
+			createdAt: record().createdAt
 		});
+	});
+
+	// The rejected-token state is useless if the page does not show it, which is the only place a
+	// user could learn that nothing from Stremio is being saved.
+	it('reports a token Marquee has rejected', async () => {
+		const { handle, bindings } = await paired();
+		await writeBridge(bindings.BRIDGES, handle, {
+			...record(),
+			authFailedAt: '2026-01-02T00:00:00.000Z'
+		});
+
+		const html = await (await call(`/configure/${handle}`, undefined, bindings)).text();
+
+		expect(html).toContain('2026-01-02T00:00:00.000Z');
+		expect(html).toContain('Nothing from Stremio is being saved');
+	});
+
+	// A paired bridge is re-validated against the Marquee it was paired with, not against whatever
+	// the Worker's env says today.
+	it('validates a re-pair against the paired Marquee', async () => {
+		const calls: string[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string) => {
+				calls.push(url);
+				return url.startsWith('https://marquee.example')
+					? Response.json({ entries: [], nextCursor: null })
+					: Response.json({ result: { changed: false } });
+			})
+		);
+
+		const bindings = env();
+		const handle = newHandle();
+		await writeBridge(bindings.BRIDGES, handle, {
+			...record(),
+			marqueeUrl: 'https://marquee.example'
+		});
+
+		await call(
+			`/configure/${handle}`,
+			form({ marqueeToken: TOKEN, stremioAuthKey: AUTH_KEY }),
+			bindings
+		);
+
+		expect(calls[0]).toBe('https://marquee.example/api/v1/library?limit=1');
 	});
 
 	it('disconnects only for the holder of the token, and forgets the credentials', async () => {

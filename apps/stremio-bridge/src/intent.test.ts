@@ -74,6 +74,10 @@ describe('toIntent', () => {
 			'tt1:-1:2',
 			'tt1:one:two',
 			'tt1:',
+			// `Number('')` is 0 and `Number('0x2')` is 2, so coercion alone would accept these.
+			'tt1::2',
+			'tt1:0x2:3',
+			'tt1:1:2.5',
 			'tt0000001:1:1'
 		]) {
 			expect(toIntent(event({ type: 'show', id: 'tt1', videoIds: [videoId] }))).toBeNull();

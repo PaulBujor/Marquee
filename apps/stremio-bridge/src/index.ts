@@ -168,7 +168,13 @@ async function configure(request: Request, env: Env, url: URL, handle: string): 
 			error: { field: result.field, message: result.message }
 		});
 
-	await writeBridge(env.BRIDGES, handle, result.record);
+	// A same-owner rotation keeps the pairing's identity: `createdAt` is what a queued message is
+	// checked against, so minting a new one would drop every message already in flight for no
+	// security gain — the token that proves ownership is unchanged.
+	await writeBridge(env.BRIDGES, handle, {
+		...result.record,
+		createdAt: existing?.createdAt ?? result.record.createdAt
+	});
 	return renderResult(url.host, handle);
 }
 

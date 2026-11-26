@@ -8,6 +8,9 @@
  * Two stated losses, both structural rather than accidental:
  * - `unwatched` on a movie becomes `want_to_watch`, so a title marked `did_not_finish` loses that
  *   flag. Stremio has no intent for "keep the status I have", and no wire shape can express it.
+ * - an `unwatched` for a movie Marquee has never seen *adds* it to the watchlist as
+ *   `want_to_watch`: the server cannot tell "un-watch" from "put on my list", since both are a
+ *   status on a title with no row.
  * - Stremio's `id:season:episode` is **assumed** to be TMDB's numbering; nothing validates it
  *   against the catalogue. Where a show numbers differently (absolute numbering is the usual
  *   case) an episode watch lands on a coordinate that may be missing or may be another episode.
@@ -72,6 +75,9 @@ function coordinateOf(id: string, videoId: string): { season: number; episode: n
 
 	const [season, episode, ...extra] = videoId.slice(id.length + 1).split(':');
 	if (extra.length > 0 || season === undefined || episode === undefined) return null;
+	// Digits only: `Number('')` is 0 and `Number('0x2')` is 2, so coercion alone would accept
+	// `tt1::2` as S0E2 and `tt1:0x2:3` as S2E3.
+	if (!/^\d+$/.test(season) || !/^\d+$/.test(episode)) return null;
 
 	const coordinate = { season: Number(season), episode: Number(episode) };
 	// Season 0 is TMDB's Specials, so only the episode within a season is 1-based.
