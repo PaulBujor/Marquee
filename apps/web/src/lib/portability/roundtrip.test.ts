@@ -21,6 +21,8 @@ type Db = ReturnType<typeof createTestDb>;
 
 const USER = 'user-1';
 const DEVICE = '11111111-1111-1111-1111-111111111111';
+/** A re-import pushes its events through the app's own sync path. */
+const APP_ORIGIN = { surface: 'app' } as const;
 const EXPORTED_AT = new Date('2026-08-01T14:22:03.451Z');
 
 const SEVERANCE = tmdbMediaId('show', 95396);
@@ -141,7 +143,7 @@ describe('export → import round trip', () => {
 
 	it('restores every title with its status, rating and favorite', async () => {
 		const plan = planImport(exportAndReparse(), DEVICE);
-		await applyEvents(db, USER, plan.events);
+		await applyEvents(db, USER, APP_ORIGIN, plan.events);
 
 		const rows = await db.select().from(tracking).where(eq(tracking.userId, USER));
 		expect(rows).toHaveLength(2);
@@ -155,7 +157,7 @@ describe('export → import round trip', () => {
 
 	it('restores episode progress without reviving un-watched episodes', async () => {
 		const plan = planImport(exportAndReparse(), DEVICE);
-		await applyEvents(db, USER, plan.events);
+		await applyEvents(db, USER, APP_ORIGIN, plan.events);
 
 		const rows = await db.select().from(episodeWatches).where(eq(episodeWatches.userId, USER));
 
@@ -169,7 +171,7 @@ describe('export → import round trip', () => {
 
 	it('preserves the original date added rather than stamping the import time', async () => {
 		const plan = planImport(exportAndReparse(), DEVICE);
-		await applyEvents(db, USER, plan.events);
+		await applyEvents(db, USER, APP_ORIGIN, plan.events);
 
 		const rows = await db.select().from(tracking).where(eq(tracking.userId, USER));
 		expect(rows.find((r) => r.mediaId === SEVERANCE)?.addedAt).toEqual(
@@ -182,7 +184,7 @@ describe('export → import round trip', () => {
 
 	it("restores a movie's watch date, which is its completion clock", async () => {
 		const plan = planImport(exportAndReparse(), DEVICE);
-		await applyEvents(db, USER, plan.events);
+		await applyEvents(db, USER, APP_ORIGIN, plan.events);
 
 		const rows = await db.select().from(tracking).where(eq(tracking.userId, USER));
 		const inception = rows.find((r) => r.mediaId === INCEPTION);
@@ -193,7 +195,7 @@ describe('export → import round trip', () => {
 
 	it('restores the date each episode was marked watched', async () => {
 		const plan = planImport(exportAndReparse(), DEVICE);
-		await applyEvents(db, USER, plan.events);
+		await applyEvents(db, USER, APP_ORIGIN, plan.events);
 
 		const rows = await db.select().from(episodeWatches).where(eq(episodeWatches.userId, USER));
 		const byCoord = new Map(rows.map((r) => [`s${r.season}e${r.episode}`, r.updatedAt]));
@@ -204,7 +206,7 @@ describe('export → import round trip', () => {
 
 	it("restores a show's last-watched date as its newest episode watch", async () => {
 		const plan = planImport(exportAndReparse(), DEVICE);
-		await applyEvents(db, USER, plan.events);
+		await applyEvents(db, USER, APP_ORIGIN, plan.events);
 
 		const rows = await db.select().from(episodeWatches).where(eq(episodeWatches.userId, USER));
 		const newest = Math.max(...rows.filter((r) => r.watched).map((r) => r.updatedAt));
@@ -220,7 +222,7 @@ describe('export → import round trip', () => {
 		});
 
 		const plan = planImport(exportAndReparse(), DEVICE);
-		await applyEvents(db, USER, plan.events);
+		await applyEvents(db, USER, APP_ORIGIN, plan.events);
 
 		// Rebuild client-shaped rows from what the server now holds, then export those.
 		const trackingRows = await db.select().from(tracking).where(eq(tracking.userId, USER));

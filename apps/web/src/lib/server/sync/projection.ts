@@ -196,7 +196,7 @@ function earliestTrackingClocks(events: ServerEvent[]): Map<string, number> {
 	return earliest;
 }
 
-function insertEventStatement(db: Db, event: ServerEvent): Statement {
+function insertEventStatement(db: Db, event: ServerEvent, origin: EventOrigin): Statement {
 	return db
 		.insert(eventsTable)
 		.values({
@@ -207,6 +207,8 @@ function insertEventStatement(db: Db, event: ServerEvent): Statement {
 			entityId: event.entityId,
 			payload: event.payload,
 			deviceId: event.deviceId,
+			origin: origin.surface,
+			apiTokenId: origin.apiTokenId ?? null,
 			schemaVersion: event.schemaVersion,
 			clientCreatedAt: event.clientCreatedAt,
 			serverReceivedAt: new Date(event.serverReceivedAt)
@@ -214,10 +216,20 @@ function insertEventStatement(db: Db, event: ServerEvent): Statement {
 		.onConflictDoNothing();
 }
 
+/**
+ * Where a write entered the system. Stated by the authenticated route that received it — an event
+ * body never carries one, so a caller can't declare its own origin.
+ */
+export interface EventOrigin {
+	surface: 'app' | 'api';
+	apiTokenId?: string | null;
+}
+
 // Log insert and projection share one batch, so a mid-way failure can't persist an event without its projection.
 export async function applyEvents(
 	db: Db,
 	userId: string,
+	origin: EventOrigin,
 	incoming: EventEnvelope[]
 ): Promise<ServerEvent[]> {
 	if (incoming.length === 0) return [];
@@ -258,7 +270,7 @@ export async function applyEvents(
 		}
 	};
 	for (const event of serverEvents) {
-		const statements = [insertEventStatement(db, event), ...projectEvent(db, event)];
+		const statements = [insertEventStatement(db, event, origin), ...projectEvent(db, event)];
 		if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) await flush();
 		batch.push(...statements);
 	}

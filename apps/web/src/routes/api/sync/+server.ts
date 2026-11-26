@@ -40,7 +40,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!parsed.success) return zodProblem(parsed.error);
 	const { cursor, events } = parsed.data;
 
-	await applyEvents(locals.db, locals.user.id, events as EventEnvelope[]);
+	await applyEvents(locals.db, locals.user.id, { surface: 'app' }, events as EventEnvelope[]);
 
 	const rows = await locals.db
 		.select()

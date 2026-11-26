@@ -93,6 +93,37 @@ describe('POST /api/sync guards', () => {
 	});
 });
 
+describe('POST /api/sync event origin', () => {
+	it('records the session surface and no API token', async () => {
+		await post(
+			reqEvent(
+				db,
+				{ id: USER },
+				{
+					deviceId: DEVICE,
+					cursor: 0,
+					events: [ev('tracking.added', { status: 'watching' }, 100)]
+				}
+			)
+		);
+
+		const [row] = await db.select().from(eventsTable);
+		expect(row).toMatchObject({ origin: 'app', apiTokenId: null });
+	});
+
+	it('ignores an origin the client declares in the body', async () => {
+		const forged = {
+			...ev('tracking.added', { status: 'watching' }, 100),
+			origin: 'api',
+			apiTokenId: 'forged-token'
+		};
+		await post(reqEvent(db, { id: USER }, { deviceId: DEVICE, cursor: 0, events: [forged] }));
+
+		const [row] = await db.select().from(eventsTable);
+		expect(row).toMatchObject({ origin: 'app', apiTokenId: null });
+	});
+});
+
 describe('POST /api/sync push + pull', () => {
 	it('persists a push and assigns monotonic sequence from 1', async () => {
 		const body: SyncRequest = {

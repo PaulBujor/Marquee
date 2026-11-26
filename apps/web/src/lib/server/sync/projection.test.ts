@@ -22,6 +22,8 @@ type Db = ReturnType<typeof createTestDb>;
 const USER = 'user-1';
 const DEVICE = '11111111-1111-1111-1111-111111111111';
 const MID = tmdbMediaId('movie', 603);
+/** These tests replay the sync path a client's own events arrive on. */
+const APP_ORIGIN = { surface: 'app' } as const;
 
 let uuidCounter = 0;
 function nextUuid(): string {
@@ -62,15 +64,17 @@ beforeEach(async () => {
 
 describe('projectEvent via applyEvents', () => {
 	it('tracking.added creates the tracking row', async () => {
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, 100)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'watching' }, 100)
+		]);
 		const t = await trackingRow(db);
 		expect(t).toMatchObject({ status: 'watching', removed: false });
 	});
 
 	it('is idempotent — replaying the same event id is a no-op', async () => {
 		const e = ev('tracking.added', MID, { status: 'watching' }, 100);
-		await applyEvents(db, USER, [e]);
-		const applied = await applyEvents(db, USER, [e]);
+		await applyEvents(db, USER, APP_ORIGIN, [e]);
+		const applied = await applyEvents(db, USER, APP_ORIGIN, [e]);
 		expect(applied).toHaveLength(0);
 		expect(await db.select().from(tracking)).toHaveLength(1);
 	});
@@ -83,7 +87,7 @@ describe('projectEvent via applyEvents', () => {
 			payload: { status: 'completed' as const },
 			clientCreatedAt: 200
 		};
-		const applied = await applyEvents(db, USER, [first, collidingId]);
+		const applied = await applyEvents(db, USER, APP_ORIGIN, [first, collidingId]);
 		expect(applied).toHaveLength(1);
 		expect(await db.select().from(eventsTable)).toHaveLength(1);
 		expect((await trackingRow(db)).status).toBe('watching');
@@ -97,20 +101,26 @@ describe('projectEvent via applyEvents', () => {
 		await db.insert(users).values({ id: USER2, email: 'u2@x.com', status: 'enabled' });
 		// Same event id, different users: the composite (user_id, id) PK keeps them distinct.
 		const shared = ev('tracking.status_changed', MID, { status: 'watching' }, 100);
-		expect(await applyEvents(db, USER, [shared])).toHaveLength(1);
-		expect(await applyEvents(db, USER2, [shared])).toHaveLength(1);
+		expect(await applyEvents(db, USER, APP_ORIGIN, [shared])).toHaveLength(1);
+		expect(await applyEvents(db, USER2, APP_ORIGIN, [shared])).toHaveLength(1);
 		expect(await db.select().from(eventsTable)).toHaveLength(2);
 	});
 
 	it('resolves status by last-write-wins in both arrival orders', async () => {
-		await applyEvents(db, USER, [ev('tracking.status_changed', MID, { status: 'completed' }, 200)]);
-		await applyEvents(db, USER, [ev('tracking.status_changed', MID, { status: 'watching' }, 100)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.status_changed', MID, { status: 'completed' }, 200)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.status_changed', MID, { status: 'watching' }, 100)
+		]);
 		expect((await trackingRow(db)).status).toBe('completed');
 
 		const db2 = createTestDb();
 		await db2.insert(users).values({ id: USER, email: 'u1@x.com', status: 'enabled' });
-		await applyEvents(db2, USER, [ev('tracking.status_changed', MID, { status: 'watching' }, 100)]);
-		await applyEvents(db2, USER, [
+		await applyEvents(db2, USER, APP_ORIGIN, [
+			ev('tracking.status_changed', MID, { status: 'watching' }, 100)
+		]);
+		await applyEvents(db2, USER, APP_ORIGIN, [
 			ev('tracking.status_changed', MID, { status: 'completed' }, 200)
 		]);
 		const [t2] = await db2
@@ -121,51 +131,69 @@ describe('projectEvent via applyEvents', () => {
 	});
 
 	it('favorite is independent of status (per-field clocks)', async () => {
-		await applyEvents(db, USER, [ev('tracking.status_changed', MID, { status: 'completed' }, 500)]);
-		await applyEvents(db, USER, [ev('tracking.favorite_toggled', MID, { favorite: true }, 100)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.status_changed', MID, { status: 'completed' }, 500)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.favorite_toggled', MID, { favorite: true }, 100)
+		]);
 		const t = await trackingRow(db);
 		expect(t.status).toBe('completed');
 		expect(t.favorite).toBe(true);
 	});
 
 	it('rating is an independent LWW field (and clearable)', async () => {
-		await applyEvents(db, USER, [ev('tracking.status_changed', MID, { status: 'watching' }, 500)]);
-		await applyEvents(db, USER, [ev('tracking.rated', MID, { rating: 4 }, 100)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.status_changed', MID, { status: 'watching' }, 500)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [ev('tracking.rated', MID, { rating: 4 }, 100)]);
 		expect((await trackingRow(db)).rating).toBe(4);
-		await applyEvents(db, USER, [ev('tracking.rated', MID, { rating: null }, 200)]);
+		await applyEvents(db, USER, APP_ORIGIN, [ev('tracking.rated', MID, { rating: null }, 200)]);
 		expect((await trackingRow(db)).rating).toBeNull();
 		expect((await trackingRow(db)).status).toBe('watching');
 	});
 
 	it('episode watched/unwatched follows LWW', async () => {
-		await applyEvents(db, USER, [ev('episode.watched', MID, { season: 1, episode: 1 }, 200)]);
-		await applyEvents(db, USER, [ev('episode.unwatched', MID, { season: 1, episode: 1 }, 100)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('episode.watched', MID, { season: 1, episode: 1 }, 200)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('episode.unwatched', MID, { season: 1, episode: 1 }, 100)
+		]);
 		const [older] = await db.select().from(episodeWatches);
 		expect(older.watched).toBe(true);
-		await applyEvents(db, USER, [ev('episode.unwatched', MID, { season: 1, episode: 1 }, 300)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('episode.unwatched', MID, { season: 1, episode: 1 }, 300)
+		]);
 		const [newer] = await db.select().from(episodeWatches);
 		expect(newer.watched).toBe(false);
 	});
 
 	it('removed tombstone loses to a later re-add', async () => {
-		await applyEvents(db, USER, [ev('tracking.removed', MID, {}, 100)]);
+		await applyEvents(db, USER, APP_ORIGIN, [ev('tracking.removed', MID, {}, 100)]);
 		expect((await trackingRow(db)).removed).toBe(true);
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, 200)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'watching' }, 200)
+		]);
 		expect((await trackingRow(db)).removed).toBe(false);
 	});
 
 	it('a newer removal is not undone by an older re-add arriving afterward', async () => {
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, 100)]);
-		await applyEvents(db, USER, [ev('tracking.removed', MID, {}, 300)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'watching' }, 100)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [ev('tracking.removed', MID, {}, 300)]);
 		// A stale re-add (clock 200 < removal 300) arrives later — e.g. a delayed event from another device.
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, 200)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'watching' }, 200)
+		]);
 		expect((await trackingRow(db)).removed).toBe(true);
 	});
 
 	it('persists media.* events without materializing anything from them', async () => {
 		// Must reach the log to carry links to other devices, but must not touch a materialized table.
 		const custom = '22222222-2222-4222-8222-222222222222';
-		const applied = await applyEvents(db, USER, [
+		const applied = await applyEvents(db, USER, APP_ORIGIN, [
 			ev('media.linked', custom, { targetId: MID, provider: 'tmdb', externalId: 'movie/603' }, 100),
 			ev('media.match_declined', custom, {}, 200)
 		]);
@@ -181,7 +209,7 @@ describe('projectEvent via applyEvents', () => {
 			ev('media.linked', custom, { targetId: MID, provider: 'tmdb', externalId: 'movie/603' }, 100),
 			ev('media.unlinked', custom, {}, 200)
 		];
-		await applyEvents(db, USER, events);
+		await applyEvents(db, USER, APP_ORIGIN, events);
 		expect(await db.select().from(tracking).where(eq(tracking.userId, USER))).toEqual([]);
 	});
 
@@ -189,8 +217,10 @@ describe('projectEvent via applyEvents', () => {
 		// `addedAt` is defined over `tracking.*` only — here an *older* link would otherwise pull the floor down.
 		const added = Date.UTC(2026, 1, 5);
 		const older = Date.UTC(2025, 0, 1);
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, added)]);
-		await applyEvents(db, USER, [
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'watching' }, added)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
 			ev('media.linked', MID, { targetId: MID, provider: 'tmdb', externalId: 'movie/603' }, older)
 		]);
 		expect((await trackingRow(db)).addedAt.getTime()).toBe(added);
@@ -207,7 +237,7 @@ describe('projectEvent via applyEvents', () => {
 			title: 'Mine'
 		});
 
-		await applyEvents(db, USER, [ev('media.deleted', custom, {}, 100)]);
+		await applyEvents(db, USER, APP_ORIGIN, [ev('media.deleted', custom, {}, 100)]);
 
 		expect(await db.select().from(media)).toEqual([]);
 	});
@@ -236,7 +266,7 @@ describe('projectEvent via applyEvents', () => {
 			}
 		]);
 
-		await applyEvents(db, USER, [
+		await applyEvents(db, USER, APP_ORIGIN, [
 			ev('media.deleted', MID, {}, 100),
 			ev('media.deleted', theirs, {}, 200)
 		]);
@@ -255,7 +285,7 @@ describe('projectEvent via applyEvents', () => {
 			type: 'movie',
 			title: 'Mine'
 		});
-		await applyEvents(db, USER, [ev('media.deleted', custom, {}, 100)]);
+		await applyEvents(db, USER, APP_ORIGIN, [ev('media.deleted', custom, {}, 100)]);
 
 		await rebuildProjection(db, USER);
 
@@ -263,10 +293,18 @@ describe('projectEvent via applyEvents', () => {
 	});
 
 	it('rebuildProjection replays the log to the same materialized state', async () => {
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'want_to_watch' }, 100)]);
-		await applyEvents(db, USER, [ev('tracking.status_changed', MID, { status: 'watching' }, 200)]);
-		await applyEvents(db, USER, [ev('episode.watched', MID, { season: 1, episode: 1 }, 300)]);
-		await applyEvents(db, USER, [ev('tracking.favorite_toggled', MID, { favorite: true }, 400)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'want_to_watch' }, 100)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.status_changed', MID, { status: 'watching' }, 200)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('episode.watched', MID, { season: 1, episode: 1 }, 300)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.favorite_toggled', MID, { favorite: true }, 400)
+		]);
 
 		const before = await trackingRow(db);
 		const epsBefore = await db.select().from(episodeWatches);
@@ -288,19 +326,27 @@ describe('addedAt parity with the client projection', () => {
 
 	it('is the earliest event clock even when the newer event arrives first', async () => {
 		// Separate pushes: a single push is clock-sorted before it is applied, so only a round trip delivers newer first.
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, MAR)]);
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'watching' }, MAR)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)
+		]);
 		expect((await trackingRow(db)).addedAt.getTime()).toBe(JAN);
 	});
 
 	it('is unchanged when events arrive oldest-first', async () => {
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)]);
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, MAR)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'watching' }, MAR)
+		]);
 		expect((await trackingRow(db)).addedAt.getTime()).toBe(JAN);
 	});
 
 	it('takes the minimum across a mixed push, matching the client projection', async () => {
-		await applyEvents(db, USER, [
+		await applyEvents(db, USER, APP_ORIGIN, [
 			ev('tracking.added', MID, { status: 'want_to_watch' }, MAR),
 			ev('tracking.rated', MID, { rating: 4 }, JAN),
 			ev('tracking.favorite_toggled', MID, { favorite: true }, FEB)
@@ -309,15 +355,23 @@ describe('addedAt parity with the client projection', () => {
 	});
 
 	it('ignores episode events, which never touch a tracking row', async () => {
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, FEB)]);
-		await applyEvents(db, USER, [ev('episode.watched', MID, { season: 1, episode: 1 }, JAN)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'watching' }, FEB)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('episode.watched', MID, { season: 1, episode: 1 }, JAN)
+		]);
 		// The client's addedAt is a min over tracking.* events only — an earlier episode watch must not pull it back.
 		expect((await trackingRow(db)).addedAt.getTime()).toBe(FEB);
 	});
 
 	it('is reproduced exactly by a rebuild from the log', async () => {
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'watching' }, MAR)]);
-		await applyEvents(db, USER, [ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'watching' }, MAR)
+		]);
+		await applyEvents(db, USER, APP_ORIGIN, [
+			ev('tracking.added', MID, { status: 'want_to_watch' }, JAN)
+		]);
 		const live = (await trackingRow(db)).addedAt.getTime();
 		await rebuildProjection(db, USER);
 		expect((await trackingRow(db)).addedAt.getTime()).toBe(live);

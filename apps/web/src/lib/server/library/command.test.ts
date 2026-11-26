@@ -13,6 +13,8 @@ import {
 type Db = ReturnType<typeof createTestDb>;
 
 const U1 = 'user-1';
+/** The command path is only reachable through the token-authenticated API. */
+const API_ORIGIN = { surface: 'api' } as const;
 const U2 = 'user-2';
 const MOVIE = 'movie-1';
 const SHOW = 'show-1';
@@ -77,7 +79,7 @@ async function state(db: Db, userId: string, mediaId: string) {
 }
 
 function run(db: Db, mediaId: string, command: LibraryCommand, userId = U1) {
-	return applyLibraryCommand(db, userId, mediaId, command);
+	return applyLibraryCommand(db, userId, mediaId, command, API_ORIGIN);
 }
 
 describe('applyLibraryCommand', () => {
