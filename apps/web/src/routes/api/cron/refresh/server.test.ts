@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isHttpError } from '@sveltejs/kit';
 import { createTestDb } from '#lib/server/db/test-db.js';
-import { media } from '#lib/server/db/schema.js';
+import { apiTokens, media, users } from '#lib/server/db/schema.js';
 import { seedMediaId } from '#lib/sync/events.js';
 import { POST } from './+server';
 import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
@@ -95,6 +95,14 @@ describe('POST /api/cron/refresh', () => {
 			version: 1,
 			refreshedAt: 0
 		});
+		const [user] = await db.insert(users).values({ email: 'u@x.com' }).returning();
+		await db.insert(apiTokens).values({
+			userId: user.id,
+			hash: 'revoked-old',
+			label: 'revoked',
+			scopes: [],
+			revokedAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000)
+		});
 		const { sent, binding } = fakeQueue();
 		const fetchSpy = vi.fn();
 		vi.stubGlobal('fetch', fetchSpy);
@@ -102,11 +110,11 @@ describe('POST /api/cron/refresh', () => {
 		const res = await POST(makeEvent({ db, queue: binding }));
 		const body = (await res.json()) as {
 			media: { ok: boolean; queued?: number; scanned?: number };
-			auth: { ok: boolean };
+			auth: { ok: boolean; apiTokens?: number };
 		};
 
 		expect(body.media).toMatchObject({ ok: true, scanned: 1, queued: 1 });
-		expect(body.auth.ok).toBe(true);
+		expect(body.auth).toMatchObject({ ok: true, apiTokens: 1 });
 		expect(sent).toEqual([{ provider: 'tmdb', externalId: 'show/1' }]);
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});

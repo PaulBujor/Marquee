@@ -32,7 +32,8 @@ async function purgeAuth(db: Db) {
 		const purged = await purgeExpiredAuth(db, Date.now());
 		console.log(
 			`cron: purged ${purged.loginTokens} stale login tokens, ${purged.sessions} expired sessions, ` +
-				`${purged.passkeyChallenges} passkey challenges and ${purged.notifications} old notification-log rows`
+				`${purged.passkeyChallenges} passkey challenges, ${purged.notifications} old notification-log rows ` +
+				`and ${purged.apiTokens} revoked or expired API tokens`
 		);
 		return { ok: true as const, ...purged };
 	} catch (err) {
