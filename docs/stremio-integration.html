@@ -221,7 +221,7 @@ flowchart TB
     X["api.strem.io&lt;br/&gt;datastoreGet · datastorePut"]
   end
 
-  subgraph BR["apps/bridge — Worker, separate deploy"]
+  subgraph BR["apps/stremio-bridge — Worker, separate deploy"]
     ADDON["addon surface&lt;br/&gt;/{handle}/manifest.json"]
     EV["inbound library events&lt;br/&gt;/{handle}/library/..."]
     CFG["/configure/{handle}&lt;br/&gt;pairing page"]
@@ -261,6 +261,12 @@ flowchart TB
 						The bridge never writes the event log. It states an intent; <code>apps/web</code>
 						decides which events that means — a client that can only say "watched" cannot corrupt
 						the log.
+					</li>
+					<li>
+						<strong>Pairing today</strong> is the user pasting a token minted in Marquee's
+						settings plus their Stremio <code>authKey</code> — no Stremio password, and no
+						<code>/device</code> page. The dotted arrow is the target; the token is a stopgap
+						until scopes exist to narrow one to "the Stremio bridge".
 					</li>
 				</ul>
 			</section>
@@ -593,9 +599,11 @@ flowchart LR
 			<section>
 				<h2><span class="num">8</span>Where we are</h2>
 				<p>
-					The identity layer is open as nine stacked PRs. The library API needs no Stremio at all;
-					the bridge is the only part that does, and it is blocked on a spike against a real
-					account.
+					A snapshot of the build order, with its state as of the last edit: <strong>identity and
+					the library API are merged</strong>, <strong>the spike ran</strong> against a real client
+					(the shapes in §3 are its output), and <strong>the addon surface ships next</strong> —
+					manifest, handles, pairing and the event receiver, acknowledging events and writing
+					nothing yet. The write path and the reconcile are what remain.
 				</p>
 				<pre class="mermaid">
 flowchart LR
@@ -634,61 +642,70 @@ flowchart LR
 							<td class="num">#291</td>
 							<td>MRQ-249</td>
 							<td><code>media_external_ids</code> + migration 0029 + backfill</td>
-							<td><span class="pill">open</span></td>
+							<td><span class="pill muted">merged</span></td>
 						</tr>
 						<tr>
 							<td class="num">#292</td>
 							<td>MRQ-250</td>
 							<td><code>media.imdb_checked_at</code> + migration 0030</td>
-							<td><span class="pill">open</span></td>
+							<td><span class="pill muted">merged</span></td>
 						</tr>
 						<tr>
 							<td class="num">#293</td>
 							<td>MRQ-251</td>
 							<td><code>mediaId()</code> to <code>seedMediaId()</code>, namespace frozen</td>
-							<td><span class="pill">open</span></td>
+							<td><span class="pill muted">merged</span></td>
 						</tr>
 						<tr>
 							<td class="num">#294</td>
 							<td>MRQ-252</td>
 							<td><code>resolveMediaId()</code> / <code>writeExternalId()</code></td>
-							<td><span class="pill">open</span></td>
+							<td><span class="pill muted">merged</span></td>
 						</tr>
 						<tr>
 							<td class="num">#296</td>
 							<td>MRQ-253</td>
 							<td><code>MediaDetail.imdbId</code> from TMDB <code>external_ids</code></td>
-							<td><span class="pill">open</span></td>
+							<td><span class="pill muted">merged</span></td>
 						</tr>
 						<tr>
 							<td class="num">#297</td>
 							<td>MRQ-256</td>
 							<td><code>TmdbClient.externalIds()</code> — one request, no re-hydrate</td>
-							<td><span class="pill">open</span></td>
+							<td><span class="pill muted">merged</span></td>
 						</tr>
 						<tr>
 							<td class="num">#298</td>
 							<td>MRQ-254</td>
 							<td>hydrate writes both aliases, stamps <code>imdb_checked_at</code></td>
-							<td><span class="pill">open</span></td>
+							<td><span class="pill muted">merged</span></td>
 						</tr>
 						<tr>
 							<td class="num">#299</td>
 							<td>MRQ-255</td>
 							<td>media sync resolves refs through the alias table</td>
-							<td><span class="pill">open</span></td>
+							<td><span class="pill muted">merged</span></td>
 						</tr>
 						<tr>
 							<td class="num">#300</td>
 							<td>MRQ-257</td>
 							<td><code>/api/cron/imdb-aliases</code> + <code>30 6 * * *</code></td>
-							<td><span class="pill">open</span></td>
+							<td><span class="pill muted">merged</span></td>
 						</tr>
 						<tr>
 							<td class="num">—</td>
 							<td>MRQ-278</td>
 							<td>spike: throwaway addon that logs real manifests and events</td>
-							<td><span class="pill warn">needs hardware</span></td>
+							<td><span class="pill muted">done — 29 events</span></td>
+						</tr>
+						<tr>
+							<td class="num">#330</td>
+							<td>MRQ-269</td>
+							<td>
+								addon surface: manifest, handles, pairing, event receiver (acks, writes
+								nothing yet)
+							</td>
+							<td><span class="pill">open</span></td>
 						</tr>
 					</tbody>
 				</table>

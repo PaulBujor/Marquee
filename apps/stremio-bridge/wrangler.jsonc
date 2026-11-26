@@ -12,15 +12,37 @@
 	// (fetch, Web Crypto). Add `nodejs_compat` only when a dependency genuinely needs a
 	// node builtin, and install `@types/node` in the same change.
 	//
-	// Bindings arrive with the code that uses them, not before: a Durable Object
-	// namespace + migration, KV for handle records, and a Queue for inbound commands.
-	// A declared binding with no consumer fails `wrangler deploy`, and a Durable Object
-	// migration is applied at deploy time, so each lands with its own PR.
+	// Bindings arrive with the code that uses them, not before: a declared binding with no
+	// consumer fails the build, and a Durable Object migration is applied at deploy time, so
+	// each lands with its own PR. KV holds the handle records; the per-handle Durable Object
+	// and the inbound-command Queue are still to come.
+	"kv_namespaces": [
+		{
+			"binding": "BRIDGES",
+			"id": "7631d1a93e8e42e69bd32f2a4eeb55c3"
+		}
+	],
+	"vars": {
+		"MARQUEE_API_URL": "https://marquee.paulbujor.net",
+		"STREMIO_API_URL": "https://api.strem.io/api"
+	},
 	"env": {
 		"preview": {
 			"name": "marquee-stremio-bridge-preview",
 			"workers_dev": true,
-			"preview_urls": true
+			"preview_urls": true,
+			"kv_namespaces": [
+				{
+					"binding": "BRIDGES",
+					"id": "c54b91bb5da741aaa97ba9e8e4260efc"
+				}
+			],
+			"vars": {
+				// The preview bridge pairs against the production Marquee, because preview hosts are
+				// per-PR and a token minted against a preview D1 would not outlive that deploy.
+				"MARQUEE_API_URL": "https://marquee.paulbujor.net",
+				"STREMIO_API_URL": "https://api.strem.io/api"
+			}
 		}
 	}
 }
