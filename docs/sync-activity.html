@@ -152,11 +152,11 @@ flowchart TD
 				</p>
 				<pre class="mermaid">
 flowchart TD
-  A["user marks a title watched"] --&gt; B[".../action=watched.json&lt;br/&gt;optional &amp;amp;videoId=a,b,c (comma-separated)"]
+  A["user marks a title watched"] --&gt; B[".../action=watched.json&lt;br/&gt;optional &amp;videoId=tt…%3A1%3A1%2Ctt…%3A1%3A2"]
   B --&gt; C{"type?"}
   C --&gt;|"movie"| D["no videoId is normal&lt;br/&gt;PATCH /api/v1/library/movie/tt…&lt;br/&gt;{ status: 'completed' }"]
   C --&gt;|"show"| E{"videoId present?"}
-  E --&gt;|"yes"| F["split the comma-separated list&lt;br/&gt;PATCH { episodes: [ {season, episode, watched:true}, ... ] }&lt;br/&gt;a season mark arrives as up to 100 ids"]
+  E --&gt;|"yes"| F["decode, then split on &quot;,&quot;&lt;br/&gt;PATCH { episodes: [ {season, episode, watched:true}, ... ] }&lt;br/&gt;one event can carry the whole list"]
   E --&gt;|"no"| G["&lt;b&gt;mark nothing&lt;/b&gt;&lt;br/&gt;log it, surface as unmappable&lt;br/&gt;never infer &quot;all episodes&quot;"]
 
   D --&gt; H["translator compares against the projected state"]
