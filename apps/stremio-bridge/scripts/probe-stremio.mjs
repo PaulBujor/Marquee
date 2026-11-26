@@ -6,8 +6,8 @@
  * `datastorePut` **exactly as it was read** and re-reads it, so the diff shows which fields
  * Stremio owns and which it preserves. That is the question this exists to answer.
  *
- *   node --env-file=.dev.vars scripts/probe-stremio.mjs
- *   node --env-file=.dev.vars scripts/probe-stremio.mjs --write
+ *   node --env-file=.probe.env scripts/probe-stremio.mjs
+ *   node --env-file=.probe.env scripts/probe-stremio.mjs --write
  *
  * Values are redacted on output — the auth key never reaches stdout, and neither does any
  * library text beyond the title, which you need to confirm what was touched.
@@ -147,7 +147,7 @@ async function probeBitfield(call, target) {
 async function main() {
 	const authKey = process.env.STREMIO_AUTH_KEY?.trim();
 	if (!authKey) {
-		console.error('STREMIO_AUTH_KEY is not set. Run with: node --env-file=.dev.vars …');
+		console.error('STREMIO_AUTH_KEY is not set. Run with: node --env-file=.probe.env …');
 		process.exitCode = 1;
 		return;
 	}

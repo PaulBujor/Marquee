@@ -29,6 +29,10 @@ Thumbs.db
 # Cloudflare
 .wrangler/
 .dev.vars
+# Tooling-only secrets (the probe scripts). Deliberately NOT `.dev.vars`: `wrangler types`
+# folds that file into the generated Env, so a key there becomes a required member of the
+# Worker's config and breaks `pnpm check` for anyone who set it.
+.probe.env
 # Generated per-environment by `wrangler types` (regenerated in build/check).
 # Not committed: its output depends on local .dev.vars/.env and build state.
 worker-configuration.d.ts
