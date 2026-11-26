@@ -1,15 +1,24 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDb } from '#lib/server/db/test-db.js';
-import { loginTokens, passkeyChallenges, sessions, users } from '#lib/server/db/schema.js';
+import {
+	apiTokens,
+	events,
+	loginTokens,
+	passkeyChallenges,
+	sessions,
+	users
+} from '#lib/server/db/schema.js';
 import { hashToken } from './tokens';
-import { purgeExpiredAuth } from './cleanup';
+import { API_TOKEN_RETENTION_DAYS, purgeExpiredAuth } from './cleanup';
 
 type Db = ReturnType<typeof createTestDb>;
 
 let db: Db;
 const NOW = Date.now();
 const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+const PAST_RETENTION = new Date(NOW - (API_TOKEN_RETENTION_DAYS + 1) * DAY);
 
 beforeEach(() => {
 	db = createTestDb();
@@ -94,7 +103,71 @@ describe('purgeExpiredAuth', () => {
 			loginTokens: 0,
 			sessions: 0,
 			passkeyChallenges: 0,
-			notifications: 0
+			notifications: 0,
+			apiTokens: 0
 		});
+	});
+});
+
+describe('purgeExpiredAuth — API tokens', () => {
+	async function seedToken(hash: string, stamps: Partial<typeof apiTokens.$inferInsert>) {
+		const user = await seedUser(`${hash}@x.com`);
+		const [row] = await db
+			.insert(apiTokens)
+			.values({ userId: user.id, hash, label: hash, scopes: [], ...stamps })
+			.returning();
+		return row;
+	}
+
+	it('deletes a token revoked before the retention window', async () => {
+		await seedToken('revoked-old', { revokedAt: PAST_RETENTION });
+
+		expect(await purgeExpiredAuth(db, NOW)).toMatchObject({ apiTokens: 1 });
+		expect(await db.select().from(apiTokens)).toEqual([]);
+	});
+
+	it('keeps a recently revoked token — the revocation itself is the audit trail', async () => {
+		await seedToken('revoked-recent', { revokedAt: new Date(NOW - DAY) });
+
+		expect(await purgeExpiredAuth(db, NOW)).toMatchObject({ apiTokens: 0 });
+		expect((await db.select().from(apiTokens)).map((r) => r.hash)).toEqual(['revoked-recent']);
+	});
+
+	it('deletes a token that expired before the retention window', async () => {
+		await seedToken('expired-old', { expiresAt: PAST_RETENTION });
+
+		expect(await purgeExpiredAuth(db, NOW)).toMatchObject({ apiTokens: 1 });
+		expect(await db.select().from(apiTokens)).toEqual([]);
+	});
+
+	it('never deletes a live token, whether it has no expiry or one in the future', async () => {
+		await seedToken('live-forever', {});
+		await seedToken('live-for-now', { expiresAt: new Date(NOW + DAY) });
+
+		expect(await purgeExpiredAuth(db, NOW)).toMatchObject({ apiTokens: 0 });
+		expect((await db.select().from(apiTokens)).map((r) => r.hash).sort()).toEqual([
+			'live-for-now',
+			'live-forever'
+		]);
+	});
+
+	it("leaves the purged token's events intact, with their attribution nulled", async () => {
+		const token = await seedToken('revoked-old', { revokedAt: PAST_RETENTION });
+		await db.insert(events).values({
+			id: 'e1',
+			userId: token.userId,
+			sequence: 1,
+			type: 'tracking.added',
+			entityId: 'media-1',
+			payload: { status: 'watching' },
+			deviceId: 'device-1',
+			origin: 'api',
+			apiTokenId: token.id,
+			clientCreatedAt: NOW
+		});
+
+		expect(await purgeExpiredAuth(db, NOW)).toMatchObject({ apiTokens: 1 });
+		const [event] = await db.select().from(events);
+		expect(event).toMatchObject({ origin: 'api', apiTokenId: null });
 	});
 });
