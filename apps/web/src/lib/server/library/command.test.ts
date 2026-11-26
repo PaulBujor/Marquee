@@ -219,6 +219,19 @@ describe('applyLibraryCommand', () => {
 		expect(await state(db, U1, MOVIE)).toMatchObject({ status: 'completed', removed: false });
 	});
 
+	// A client restating a status must not undo a removal: `removed: false` is how you put a title
+	// back, and without this the Stremio bridge's unwatch would resurrect a removed movie.
+	it('does not resurrect a removed title from a status change alone', async () => {
+		const db = createTestDb();
+		await seed(db);
+		await track(db, U1, MOVIE, { status: 'completed', removed: true });
+
+		const events = await run(db, MOVIE, { status: 'want_to_watch' });
+
+		expect(events).toEqual([]);
+		expect(await state(db, U1, MOVIE)).toMatchObject({ status: 'completed', removed: true });
+	});
+
 	it('rejects a media id that does not exist', async () => {
 		const db = createTestDb();
 		await seed(db);

@@ -4,6 +4,16 @@
  * The bridge names an *intent* — "this is on the list", "these episodes are watched" — and never
  * an event. `apps/web`'s command translator decides which events that implies, and replaying the
  * same command is a no-op the second time, which is what makes at-least-once delivery safe.
+ *
+ * Two stated losses, both structural rather than accidental:
+ * - `unwatched` on a movie becomes `want_to_watch`, so a title marked `did_not_finish` loses that
+ *   flag. Stremio has no intent for "keep the status I have", and no wire shape can express it.
+ * - Stremio's `id:season:episode` is **assumed** to be TMDB's numbering; nothing validates it
+ *   against the catalogue. Where a show numbers differently (absolute numbering is the usual
+ *   case) an episode watch lands on a coordinate that may be missing or may be another episode.
+ *
+ * shortcut: episode coordinates are not checked against the `episodes` table, validate them when
+ * the reconcile starts reading the same catalogue and can tell a shifted season from a real one.
  */
 import type { LibraryEvent } from './addon';
 
@@ -55,6 +65,11 @@ function episodesOf(event: LibraryEvent): EpisodeIntent[] {
 
 /** `tt123:2:5` → `{ season: 2, episode: 5 }`. Anything else names no episode we can act on. */
 function coordinateOf(id: string, videoId: string): { season: number; episode: number } | null {
+	// Checked rather than assumed: the ingress filters, but a queue body is typed, not validated,
+	// and slicing a foreign id by `id.length` can land on a plausible pair (id `tt1`, videoId
+	// `tt192:5` → `2:5`).
+	if (!videoId.startsWith(`${id}:`)) return null;
+
 	const [season, episode, ...extra] = videoId.slice(id.length + 1).split(':');
 	if (extra.length > 0 || season === undefined || episode === undefined) return null;
 

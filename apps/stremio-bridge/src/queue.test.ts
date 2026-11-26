@@ -1,18 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { newHandle, writeBridge, type BridgeRecord } from './bridges';
+import { newHandle, readBridge, writeBridge, type BridgeRecord } from './bridges';
 import { MAX_DELIVERY_ATTEMPTS, consume, deliver } from './queue';
 import { memoryKv } from './testing/kv';
-import { fakeQueue, inboundBatch, inboundBody, inboundMessage } from './testing/queue';
+import {
+	PAIRED_AT,
+	VALID_HANDLE,
+	fakeQueue,
+	inboundBatch,
+	inboundBody,
+	inboundMessage
+} from './testing/queue';
 
 const MARQUEE = 'https://marquee.paulbujor.net';
 const STREMIO = 'https://api.strem.io/api';
+/** Deliberately NOT the env URL: the record's own url is what the consumer must use. */
+const PAIRED_URL = 'https://marquee.example';
 const TOKEN = 'mqr_test_token';
 
-const record = (): BridgeRecord => ({
+const record = (overrides: Partial<BridgeRecord> = {}): BridgeRecord => ({
 	marqueeToken: TOKEN,
 	stremioAuthKey: 'stremio-key',
-	marqueeUrl: MARQUEE,
-	createdAt: new Date(0).toISOString()
+	marqueeUrl: PAIRED_URL,
+	createdAt: PAIRED_AT,
+	...overrides
 });
 
 const env = (BRIDGES = memoryKv()): Env => ({
@@ -22,10 +32,10 @@ const env = (BRIDGES = memoryKv()): Env => ({
 	STREMIO_API_URL: STREMIO
 });
 
-async function paired(): Promise<{ handle: string; bindings: Env }> {
+async function paired(overrides: Partial<BridgeRecord> = {}) {
 	const bindings = env();
 	const handle = newHandle();
-	await writeBridge(bindings.BRIDGES, handle, record());
+	await writeBridge(bindings.BRIDGES, handle, record(overrides));
 	return { handle, bindings };
 }
 
@@ -34,7 +44,7 @@ interface Call {
 	init?: RequestInit;
 }
 
-/** Answers Marquee with `body` at `status`, recording every call so the request is assertable. */
+/** Marquee answers `body` at `status`, recording every call so the request is assertable. */
 function marqueeAnswers(status = 200, body: unknown = { applied: 1, unchanged: 0, failed: [] }) {
 	const calls: Call[] = [];
 
@@ -49,15 +59,20 @@ function marqueeAnswers(status = 200, body: unknown = { applied: 1, unchanged: 0
 	return calls;
 }
 
+const items = (call: Call) => JSON.parse(String(call.init?.body)).items;
+
 beforeEach(() => {
 	for (const method of ['log', 'warn', 'error'] as const)
 		vi.spyOn(console, method).mockImplementation(() => {});
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
+});
 
 describe('deliver', () => {
-	it('posts the intent to the Marquee the bridge was paired with', async () => {
+	it("posts the intent with the record's own credentials and url", async () => {
 		const calls = marqueeAnswers();
 		const { handle, bindings } = await paired();
 
@@ -74,28 +89,70 @@ describe('deliver', () => {
 
 		expect(outcome).toBe('ack');
 		expect(calls).toHaveLength(1);
-		expect(calls[0].url).toBe(`${MARQUEE}/api/v1/library`);
-		expect(new Headers(calls[0].init?.headers).get('authorization')).toBe(`Bearer ${TOKEN}`);
-		expect(JSON.parse(String(calls[0].init?.body))).toEqual({
-			items: [
-				{
-					type: 'show',
-					id: 'tt0944947',
-					episodes: [
-						{ season: 1, episode: 1, watched: true },
-						{ season: 1, episode: 2, watched: true }
-					]
-				}
-			]
-		});
+
+		const [call] = calls;
+		// The record's url, not `env.MARQUEE_API_URL` — the two are different on purpose here.
+		expect(call.url).toBe(`${PAIRED_URL}/api/v1/library`);
+		expect(call.init?.method).toBe('POST');
+		// A redirect would carry the bearer wherever it pointed.
+		expect(call.init?.redirect).toBe('manual');
+		expect(call.init?.signal).toBeDefined();
+		expect(new Headers(call.init?.headers).get('authorization')).toBe(`Bearer ${TOKEN}`);
+		expect(items(call)).toEqual([
+			{
+				type: 'show',
+				id: 'tt0944947',
+				episodes: [
+					{ season: 1, episode: 1, watched: true },
+					{ season: 1, episode: 2, watched: true }
+				]
+			}
+		]);
+	});
+
+	// Every intent must carry at least one command field: the API rejects an item that names
+	// only `type` and `id`, so an empty intent would be a 400 that we would then ack.
+	it('always sends a command field', async () => {
+		const calls = marqueeAnswers();
+		const { handle, bindings } = await paired();
+
+		await deliver(bindings, inboundBody({ handle }));
+
+		expect(Object.keys(items(calls[0])[0]).sort()).toEqual(['id', 'status', 'type']);
 	});
 
 	it('drops a message whose bridge is gone before calling anything', async () => {
 		const calls = marqueeAnswers();
 
-		const outcome = await deliver(env(), inboundBody({ handle: newHandle() }));
+		expect(await deliver(env(), inboundBody({ handle: newHandle() }))).toBe('ack');
+		expect(calls).toHaveLength(0);
+	});
+
+	// A message outlives its pairing: if the handle was unpaired and paired again since, this
+	// intent belongs to an account that is no longer behind it.
+	it('drops a message produced by an earlier pairing', async () => {
+		const calls = marqueeAnswers();
+		const { handle, bindings } = await paired();
+
+		const outcome = await deliver(bindings, inboundBody({ handle, pairedAt: 'older' }));
 
 		expect(outcome).toBe('ack');
+		expect(calls).toHaveLength(0);
+		expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('earlier pairing'));
+	});
+
+	it('drops a malformed message before it reaches KV', async () => {
+		const calls = marqueeAnswers();
+		const bindings = env();
+
+		for (const body of [
+			inboundBody({ handle: 'not-a-handle' }),
+			inboundBody({ id: 'yt:abc' }),
+			inboundBody({ action: 'played' as never })
+		]) {
+			expect(await deliver(bindings, body)).toBe('ack');
+		}
+
 		expect(calls).toHaveLength(0);
 	});
 
@@ -113,13 +170,20 @@ describe('deliver', () => {
 		expect(calls).toHaveLength(0);
 	});
 
-	// A dead token does not heal by itself, so retrying it would only burn the attempt budget.
-	it('gives up on a rejected token instead of retrying it', async () => {
+	// A dead token does not heal by itself, so the record carries the failure and the configure
+	// page can say so — otherwise a user who revokes a leaked token loses sync in silence.
+	it('records a rejected token on the bridge, and clears it once a delivery succeeds', async () => {
 		marqueeAnswers(401, { title: 'Unauthorized' });
 		const { handle, bindings } = await paired();
 
 		expect(await deliver(bindings, inboundBody({ handle }))).toBe('ack');
-		expect(console.error).toHaveBeenCalledWith(expect.stringContaining('re-pair'));
+		expect((await readBridge(bindings.BRIDGES, handle))?.authFailedAt).toEqual(expect.any(String));
+		expect(console.error).toHaveBeenCalledWith(expect.stringContaining('new bridge'));
+
+		marqueeAnswers();
+		await deliver(bindings, inboundBody({ handle }));
+
+		expect((await readBridge(bindings.BRIDGES, handle))?.authFailedAt).toBeUndefined();
 	});
 
 	it('retries what can resolve itself', async () => {
@@ -127,6 +191,7 @@ describe('deliver', () => {
 
 		const transient: [number, unknown][] = [
 			[429, { title: 'Too many requests' }],
+			[500, { title: 'Server error' }],
 			[503, { title: 'Unavailable' }],
 			[200, { applied: 0, unchanged: 0, failed: [{ code: 'upstream_unavailable' }] }]
 		];
@@ -177,18 +242,38 @@ describe('deliver', () => {
 
 		expect(await deliver(bindings, inboundBody({ handle }))).toBe('ack');
 	});
+
+	// The API rejects a command with more than 500 episodes outright, and a rejection is permanent
+	// here — so a series-wide mark has to be split rather than dropped in full.
+	it('splits a mark bigger than the API accepts', async () => {
+		const calls = marqueeAnswers();
+		const { handle, bindings } = await paired();
+		const videoIds = Array.from({ length: 600 }, (_, index) => `tt1:1:${index + 1}`);
+
+		const outcome = await deliver(
+			bindings,
+			inboundBody({ handle, type: 'show', id: 'tt1', action: 'watched', videoIds })
+		);
+
+		expect(outcome).toBe('ack');
+		expect(calls).toHaveLength(2);
+		expect(items(calls[0])[0].episodes).toHaveLength(500);
+		expect(items(calls[1])[0].episodes).toHaveLength(100);
+	});
 });
 
 describe('consume', () => {
-	it('retries a message that has attempts left', async () => {
+	it('retries a message that has attempts left, with a growing delay', async () => {
 		marqueeAnswers(503, {});
 		const { handle, bindings } = await paired();
-		const message = inboundMessage({ handle }, 1);
+		const message = inboundMessage({ handle }, 2);
 
 		await consume(inboundBatch([message]), bindings);
 
 		expect(message.retried).toBe(true);
 		expect(message.acked).toBe(false);
+		// Backoff, so a burst that failed together does not redeliver in lockstep.
+		expect(message.retryDelaySeconds).toBe(60);
 	});
 
 	// The give-up policy is ours: past the cap the message is acknowledged and logged, so a
@@ -196,13 +281,18 @@ describe('consume', () => {
 	it('acknowledges a message on its last allowed attempt', async () => {
 		marqueeAnswers(503, {});
 		const { handle, bindings } = await paired();
-		const message = inboundMessage({ handle }, MAX_DELIVERY_ATTEMPTS);
+		const last = inboundMessage({ handle }, MAX_DELIVERY_ATTEMPTS);
 
-		await consume(inboundBatch([message]), bindings);
+		await consume(inboundBatch([last]), bindings);
 
-		expect(message.acked).toBe(true);
-		expect(message.retried).toBe(false);
+		expect(last.acked).toBe(true);
+		expect(last.retried).toBe(false);
 		expect(console.error).toHaveBeenCalledWith(expect.stringContaining('giving up'));
+
+		// One attempt earlier it would still have been retried.
+		const remaining = inboundMessage({ handle }, MAX_DELIVERY_ATTEMPTS - 1);
+		await consume(inboundBatch([remaining]), bindings);
+		expect(remaining.retried).toBe(true);
 	});
 
 	it('acknowledges a message that was applied, and keeps draining the batch', async () => {
@@ -215,6 +305,29 @@ describe('consume', () => {
 
 		expect(applied.acked).toBe(true);
 		expect(gone.acked).toBe(true);
-		expect(console.log).toHaveBeenCalledWith(expect.stringContaining('1 applied'));
+		expect(console.log).toHaveBeenCalledWith(expect.stringContaining('1 request(s) applied'));
+	});
+
+	// One message's unexpected failure must not fail its siblings and inflate every attempt count.
+	it('isolates a message whose delivery throws', async () => {
+		marqueeAnswers();
+		let reads = 0;
+		// SAFETY: deliver only calls `get`; the first call throws, the rest behave like KV.
+		const flaky = {
+			get: async () => {
+				reads += 1;
+				if (reads === 1) throw new Error('kv down');
+				return null;
+			}
+		} as unknown as KVNamespace;
+		const bindings = env(flaky);
+
+		const first = inboundMessage({ handle: VALID_HANDLE });
+		const second = inboundMessage({ handle: newHandle() });
+
+		await consume(inboundBatch([first, second]), bindings);
+
+		expect(first.retried).toBe(true);
+		expect(second.acked).toBe(true);
 	});
 });

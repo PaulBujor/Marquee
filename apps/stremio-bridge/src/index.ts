@@ -11,7 +11,15 @@
  * the "Stremio integration" project for the design.
  */
 import { manifest, parseLibraryEvent } from './addon';
-import { deleteBridge, isHandle, newHandle, readBridge, writeBridge } from './bridges';
+import {
+	type BridgeRecord,
+	deleteBridge,
+	isHandle,
+	newHandle,
+	readBridge,
+	shortHandle,
+	writeBridge
+} from './bridges';
 import { pair, renderForm, renderResult } from './configure';
 import { type InboundMessage, consume } from './queue';
 
@@ -75,7 +83,8 @@ export default {
 		if (resource === 'manifest.json' && rest.length === 0)
 			return json(manifest(handle), 200, { 'cache-control': 'private, max-age=300' });
 
-		if (resource === 'library' && rest.length > 0) return library(request, env, handle, url, rest);
+		if (resource === 'library' && rest.length > 0)
+			return library(request, env, handle, bridge, url, rest);
 
 		return notFound();
 	},
@@ -97,8 +106,10 @@ async function health(env: Env): Promise<Response> {
 
 async function configure(request: Request, env: Env, url: URL, handle: string): Promise<Response> {
 	const existing = await readBridge(env.BRIDGES, handle);
+	// A rejected token is the one state the user has to act on, and this page is where they learn it.
+	const state = { paired: Boolean(existing), authFailedAt: existing?.authFailedAt };
 
-	if (request.method === 'GET') return renderForm(handle, { paired: Boolean(existing) });
+	if (request.method === 'GET') return renderForm(handle, state);
 	if (request.method !== 'POST') return methodNotAllowed('GET, POST, OPTIONS');
 
 	const form = await request.formData().catch(() => null);
@@ -115,7 +126,7 @@ async function configure(request: Request, env: Env, url: URL, handle: string): 
 
 	if (!marqueeToken)
 		return renderForm(handle, {
-			paired: Boolean(existing),
+			...state,
 			error: { field: 'marqueeToken', message: 'The Marquee token is required.' }
 		});
 
@@ -123,7 +134,7 @@ async function configure(request: Request, env: Env, url: URL, handle: string): 
 	// the token it is already paired with. Changing account means starting a new bridge.
 	if (existing && marqueeToken !== existing.marqueeToken)
 		return renderForm(handle, {
-			paired: true,
+			...state,
 			status: 409,
 			error: {
 				field: 'marqueeToken',
@@ -138,7 +149,7 @@ async function configure(request: Request, env: Env, url: URL, handle: string): 
 
 	if (!stremioAuthKey)
 		return renderForm(handle, {
-			paired: Boolean(existing),
+			...state,
 			error: { field: 'stremioAuthKey', message: 'The Stremio auth key is required.' }
 		});
 
@@ -153,7 +164,7 @@ async function configure(request: Request, env: Env, url: URL, handle: string): 
 
 	if (!result.ok)
 		return renderForm(handle, {
-			paired: Boolean(existing),
+			...state,
 			error: { field: result.field, message: result.message }
 		});
 
@@ -171,6 +182,7 @@ async function library(
 	request: Request,
 	env: Env,
 	handle: string,
+	bridge: BridgeRecord,
 	url: URL,
 	rest: string[]
 ): Promise<Response> {
@@ -186,24 +198,27 @@ async function library(
 	const parsed = parseLibraryEvent(type, id, tail[0] ?? url.search.slice(1));
 	if (parsed.kind === 'invalid') return notFound();
 
-	// The handle is in the line on purpose: a dropped event is unrecoverable, so the log is the
-	// only place anyone could notice it, and it has to be attributable.
+	// The handle is in the line so a dropped event — which is unrecoverable, since the client never
+	// retries — is attributable. Truncated, because the full handle is a capability to paste.
+	const where = shortHandle(handle);
+
 	if (parsed.kind === 'ignored') {
-		console.warn(`[event] ${handle} ignored ${parsed.reason}`);
+		console.warn(`[event] ${where} ignored ${parsed.reason}`);
 	} else {
-		console.log(`[event] ${handle} ${JSON.stringify(parsed.event)}`);
+		console.log(`[event] ${where} ${JSON.stringify(parsed.event)}`);
 
 		// Queue, then reply: Stremio is waiting, and Marquee (and TMDB behind it) is not fast.
 		const message: InboundMessage = {
 			...parsed.event,
 			handle,
+			pairedAt: bridge.createdAt,
 			receivedAt: new Date().toISOString()
 		};
 		try {
 			await env.INBOUND.send(message);
 		} catch (error) {
 			// Nothing to fall back to: the client ignores the reply and never retries.
-			console.error(`[event] ${handle} could not be queued`, error);
+			console.error(`[event] ${where} could not be queued`, error);
 		}
 	}
 

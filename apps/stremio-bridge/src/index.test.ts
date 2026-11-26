@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { newHandle, readBridge, writeBridge, type BridgeRecord } from './bridges';
+import { newHandle, readBridge, shortHandle, writeBridge, type BridgeRecord } from './bridges';
 import worker from './index';
 import { memoryKv } from './testing/kv';
-import { fakeQueue } from './testing/queue';
+import { fakeQueue, inboundBatch, inboundMessage } from './testing/queue';
 import { stremioAccountApi } from './testing/stremio';
 
 // The generated `Env` pins the deployed URLs as literal types, so the tests use them as-is:
@@ -395,13 +395,15 @@ describe('library events', () => {
 		expect(res.headers.get('cache-control')).toBe('no-store');
 		expect(await res.json()).toEqual({ success: true });
 		expect(spy).toHaveBeenCalledWith(
-			`[event] ${handle} {"type":"movie","id":"tt0133093","action":"watched","videoIds":[]}`
+			`[event] ${shortHandle(handle)} {"type":"movie","id":"tt0133093","action":"watched","videoIds":[]}`
 		);
 
 		// The reply is what Stremio waits for, so the work is queued rather than done inline.
 		expect(queue.sent).toEqual([
 			{
 				handle,
+				// The pairing that produced it, so a message cannot cross accounts after a re-pair.
+				pairedAt: record().createdAt,
 				type: 'movie',
 				id: 'tt0133093',
 				action: 'watched',
@@ -409,6 +411,29 @@ describe('library events', () => {
 				receivedAt: expect.any(String)
 			}
 		]);
+	});
+
+	// Nothing to fall back to: the client ignores the reply and never retries, so a dead queue
+	// must not turn into a 500 the client cannot act on either.
+	it('still answers success when the queue is unavailable', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const queue = fakeQueue({ fail: true });
+		const bindings = env(memoryKv(), queue.binding);
+		const handle = newHandle();
+		await writeBridge(bindings.BRIDGES, handle, record());
+
+		const res = await call(
+			`/${handle}/library/movie/tt0133093/action=watched.json`,
+			undefined,
+			bindings
+		);
+
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ success: true });
+		expect(error).toHaveBeenCalledWith(
+			expect.stringContaining('could not be queued'),
+			expect.anything()
+		);
 	});
 
 	// The whole list arrives in one event, so a season mark must decode as one intent.
@@ -424,7 +449,7 @@ describe('library events', () => {
 
 		expect(await res.json()).toEqual({ success: true });
 		expect(spy).toHaveBeenCalledWith(
-			`[event] ${handle} {"type":"show","id":"tt0944947","action":"watched","videoIds":["tt0944947:1:1","tt0944947:1:2"]}`
+			`[event] ${shortHandle(handle)} {"type":"show","id":"tt0944947","action":"watched","videoIds":["tt0944947:1:1","tt0944947:1:2"]}`
 		);
 	});
 
@@ -442,7 +467,7 @@ describe('library events', () => {
 
 		expect(await res.json()).toEqual({ success: true });
 		expect(spy).toHaveBeenCalledWith(
-			`[event] ${handle} {"type":"show","id":"tt0944947","action":"unwatched","videoIds":["tt0944947:2:5"]}`
+			`[event] ${shortHandle(handle)} {"type":"show","id":"tt0944947","action":"unwatched","videoIds":["tt0944947:2:5"]}`
 		);
 	});
 
@@ -458,7 +483,7 @@ describe('library events', () => {
 		);
 
 		expect(spy).toHaveBeenCalledWith(
-			`[event] ${handle} {"type":"show","id":"tt0944947","action":"watched","videoIds":[]}`
+			`[event] ${shortHandle(handle)} {"type":"show","id":"tt0944947","action":"watched","videoIds":[]}`
 		);
 	});
 
@@ -479,8 +504,8 @@ describe('library events', () => {
 			expect(await res.json()).toEqual({ success: true });
 		}
 
-		expect(warn).toHaveBeenCalledWith(`[event] ${handle} ignored type:channel`);
-		expect(warn).toHaveBeenCalledWith(`[event] ${handle} ignored action:played`);
+		expect(warn).toHaveBeenCalledWith(`[event] ${shortHandle(handle)} ignored type:channel`);
+		expect(warn).toHaveBeenCalledWith(`[event] ${shortHandle(handle)} ignored action:played`);
 		expect(queue.sent).toHaveLength(0);
 	});
 
@@ -502,5 +527,22 @@ describe('library events', () => {
 		const res = await call(`/${newHandle()}/library/movie/tt1/action=watched.json`);
 
 		expect(res.status).toBe(404);
+	});
+});
+
+// The exported `queue()` is the wiring Cloudflare actually calls; `consume` is what it delegates
+// to, so this is the one test that proves the binding between them.
+describe('queue handler', () => {
+	it('drains a batch through the worker\u2019s own queue export', async () => {
+		for (const method of ['log', 'warn', 'error'] as const)
+			vi.spyOn(console, method).mockImplementation(() => {});
+
+		stubServices();
+		const { handle, bindings } = await paired();
+		const message = inboundMessage({ handle });
+
+		await worker.queue(inboundBatch([message]), bindings);
+
+		expect(message.acked).toBe(true);
 	});
 });

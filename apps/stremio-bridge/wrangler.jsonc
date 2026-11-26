@@ -14,8 +14,8 @@
 	//
 	// Bindings arrive with the code that uses them, not before: a declared binding with no
 	// consumer fails the build, and a Durable Object migration is applied at deploy time, so
-	// each lands with its own PR. KV holds the handle records; the per-handle Durable Object
-	// and the inbound-command Queue are still to come.
+	// each lands with its own PR. KV holds the handle records, inbound events go through a Queue,
+	// and the per-handle Durable Object is still to come.
 	"kv_namespaces": [
 		{
 			"binding": "BRIDGES",

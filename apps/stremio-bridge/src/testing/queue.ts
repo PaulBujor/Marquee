@@ -1,13 +1,23 @@
 import type { InboundMessage } from '../queue';
 
-/** The slice of `Queue` the bridge uses — `send` — recording everything sent. */
-export function fakeQueue(): { binding: Queue; sent: InboundMessage[] } {
+/** A handle shaped like one the bridge mints, so the consumer's format check accepts it. */
+export const VALID_HANDLE = `sbr_${'A'.repeat(43)}`;
+
+/** The `createdAt` the tests' bridge record carries; a message must repeat it to be delivered. */
+export const PAIRED_AT = new Date(0).toISOString();
+
+/** The slice of `Queue` the bridge uses — `send` — recording everything sent, optionally failing. */
+export function fakeQueue(options: { fail?: boolean } = {}): {
+	binding: Queue;
+	sent: InboundMessage[];
+} {
 	const sent: InboundMessage[] = [];
 
 	// SAFETY: the bridge only calls `send`; `sendBatch` exists so the shape is recognisably a
 	// Queue. Nothing else on the interface is reached from src/.
 	const binding = {
 		send: async (body: InboundMessage) => {
+			if (options.fail) throw new Error('queue unavailable');
 			sent.push(body);
 		},
 		sendBatch: async () => {}
@@ -21,14 +31,16 @@ export interface FakeMessage {
 	attempts: number;
 	acked: boolean;
 	retried: boolean;
+	/** The delay the consumer asked for, so the backoff is assertable rather than invisible. */
+	retryDelaySeconds?: number;
 	ack(): void;
 	retry(options?: { delaySeconds?: number }): void;
 }
 
-/** The body alone, for driving `deliver` directly. */
 export function inboundBody(overrides: Partial<InboundMessage> = {}): InboundMessage {
 	return {
-		handle: 'sbr_test',
+		handle: VALID_HANDLE,
+		pairedAt: PAIRED_AT,
 		type: 'movie',
 		id: 'tt0133093',
 		action: 'watched',
@@ -48,7 +60,8 @@ export function inboundMessage(overrides: Partial<InboundMessage> = {}, attempts
 			message.acked = true;
 			message.retried = false;
 		},
-		retry() {
+		retry(options) {
+			message.retryDelaySeconds = options?.delaySeconds;
 			message.retried = true;
 			message.acked = false;
 		}

@@ -26,7 +26,16 @@ export interface BridgeRecord {
 	marqueeUrl: string;
 	/** ISO timestamp of pairing. */
 	createdAt: string;
+	/**
+	 * Set when Marquee rejected the stored token. The bridge keeps failing identically until someone
+	 * pairs a new one, and this is the only place that state can live — so the configure page can say
+	 * so instead of claiming the bridge is connected.
+	 */
+	authFailedAt?: string;
 }
+
+/** Enough to correlate log lines, too little to replay: the handle is a capability. */
+export const shortHandle = (handle: string): string => `${handle.slice(0, 12)}…`;
 
 export function newHandle(): string {
 	const bytes = crypto.getRandomValues(new Uint8Array(32));

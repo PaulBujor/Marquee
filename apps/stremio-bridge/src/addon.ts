@@ -21,6 +21,12 @@ const ACTIONS: ReadonlySet<string> = new Set([
 /** An IMDb id. Stremio is IMDb-keyed, and the manifest only claims that prefix. */
 const IMDB_ID = /^tt\d+$/;
 
+/** The id shape `idPrefixes: ['tt']` promises — the consumer validates it too. */
+export const isImdbId = (value: string): boolean => IMDB_ID.test(value);
+
+/** One of the four actions the protocol can send. */
+export const isAddonAction = (value: string): value is AddonAction => ACTIONS.has(value);
+
 /**
  * `resources: ['library']` and `idPrefixes: ['tt']` are what make Stremio route library events
  * here at all — an addon claiming neither is never asked. `catalogs: []` keeps us out of the
