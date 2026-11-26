@@ -113,6 +113,7 @@ async function probeBitfield(call, target) {
 	};
 
 	const original = target.state?.watched ?? '';
+	const originalVideo = target.state?.video_id ?? '';
 	const first = keys[0];
 	console.log(`original bitfield: ${original === '' ? '(empty)' : `string(${original.length})`}`);
 
@@ -128,15 +129,17 @@ async function probeBitfield(call, target) {
 	console.log(`wrote ${first} -> reads back as: ${read.length ? read.join(', ') : '(nothing)'}`);
 	console.log(`video_id: ${item?.state?.video_id === first ? 'kept' : 'rewritten'}`);
 
-	// Leave the account exactly as it was found.
+	// Leave the account exactly as it was found — including `video_id`, which is part of the
+	// state we touched and would otherwise be left pointing at the episode we marked.
 	await call('datastorePut', {
 		collection: 'libraryItem',
-		changes: [{ ...item, state: { ...item.state, watched: original } }]
+		changes: [{ ...item, state: { ...item.state, watched: original, video_id: originalVideo } }]
 	});
 	const restored = await call('datastoreGet', { collection: 'libraryItem', ids: [target._id] });
+	const back = restored.result?.[0]?.state;
 	console.log(
-		`restored to the original bitfield: ${
-			(restored.result?.[0]?.state?.watched ?? '') === original
+		`restored: watched ${(back?.watched ?? '') === original}, video_id ${
+			(back?.video_id ?? '') === originalVideo
 		}`
 	);
 }
