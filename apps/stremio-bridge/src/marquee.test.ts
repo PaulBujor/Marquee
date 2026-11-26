@@ -11,19 +11,20 @@ const MARQUEE = 'https://marquee.test';
 const TOKEN = 'mqr_test_token';
 
 /**
- * Answers only the URLs a test registers and throws on anything else, so a request the client makes
- * of its own accord cannot pass unnoticed.
+ * Answers only the URLs a test registers — or, for a read that never ends, whatever `fallback` says —
+ * and throws on anything else, so a request the client makes of its own accord cannot go unnoticed.
  */
-function stubFetch(routes: Record<string, () => Response>) {
+function stubFetch(routes: Record<string, () => Response>, fallback?: (url: URL) => Response) {
 	const calls: { url: string; init?: RequestInit }[] = [];
 
 	const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = String(input instanceof Request ? input.url : input);
-		const route = routes[url];
-		if (!route) throw new Error(`unexpected fetch: ${url}`);
-
 		calls.push({ url, init });
-		return route();
+
+		const route = routes[url];
+		if (route) return route();
+		if (fallback) return fallback(new URL(url));
+		throw new Error(`unexpected fetch: ${url}`);
 	}) as typeof fetch;
 
 	return { fetchImpl, calls };
@@ -72,6 +73,83 @@ describe('listLibrary', () => {
 		expect(init?.redirect).toBe('manual');
 	});
 
+	// A receiver whose cursor echoes or never ends must not be paged until the Worker is killed.
+	it('stops on a cursor that does not advance', async () => {
+		const { fetchImpl, calls } = stubFetch({}, () => page([], 'same'));
+
+		const error = await listLibrary(client(fetchImpl)).catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(MarqueeError);
+		expect((error as MarqueeError).message).toMatch(/repeated a cursor/);
+		expect(calls).toHaveLength(2);
+	});
+
+	it('stops paging a cursor that never ends', async () => {
+		const { fetchImpl, calls } = stubFetch({}, (url) =>
+			page([], String(Number(url.searchParams.get('cursor') ?? 0) + 1))
+		);
+
+		const error = await listLibrary(client(fetchImpl)).catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(MarqueeError);
+		expect((error as MarqueeError).message).toMatch(/longer than/);
+		expect(calls).toHaveLength(100);
+	});
+
+	// A 200 whose body is not a page must not read as a library — nor as a string's characters.
+	it('refuses a success that is not a page of entries', async () => {
+		const { fetchImpl } = stubFetch({
+			[`${MARQUEE}/api/v1/library`]: () => Response.json({ entries: 'oops', nextCursor: null })
+		});
+
+		const error = await listLibrary(client(fetchImpl)).catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(MarqueeError);
+		expect((error as MarqueeError).status).toBe(200);
+	});
+
+	it('reports a call that never got an answer as status 0', async () => {
+		for (const failure of [
+			new TypeError('fetch failed'),
+			Object.assign(new Error('timed out'), { name: 'TimeoutError' })
+		]) {
+			const fetchImpl = (async () => {
+				throw failure;
+			}) as typeof fetch;
+
+			const error = await listLibrary(client(fetchImpl)).catch((err: unknown) => err);
+
+			expect(error).toBeInstanceOf(MarqueeError);
+			expect((error as MarqueeError).status).toBe(0);
+			expect((error as MarqueeError).message).toContain(failure.name);
+		}
+	});
+
+	// A 400 from one bad item has to say which field it refused, or it is undiagnosable.
+	it('carries the problem detail of a refusal, capped', async () => {
+		const detail = `items[3].episodes: ${'x'.repeat(500)}`;
+
+		const { fetchImpl } = stubFetch({
+			[`${MARQUEE}/api/v1/library`]: () =>
+				Response.json({ title: 'Bad request', detail }, { status: 400 })
+		});
+
+		const error = await listLibrary(client(fetchImpl)).catch((err: unknown) => err);
+
+		expect((error as MarqueeError).status).toBe(400);
+		expect((error as MarqueeError).message).toBe(`Marquee answered 400: ${detail.slice(0, 200)}`);
+	});
+
+	it('names no detail when the refusal carries none', async () => {
+		const { fetchImpl } = stubFetch({
+			[`${MARQUEE}/api/v1/library`]: () => new Response('gateway', { status: 502 })
+		});
+
+		const error = await listLibrary(client(fetchImpl)).catch((err: unknown) => err);
+
+		expect((error as MarqueeError).message).toBe('Marquee answered 502');
+	});
+
 	it.each([401, 403, 429, 500, 503])('throws a typed error for %i', async (status) => {
 		const { fetchImpl } = stubFetch({
 			[`${MARQUEE}/api/v1/library`]: () => new Response('nope', { status })
@@ -118,9 +196,81 @@ describe('applyCommands', () => {
 			[`${MARQUEE}/api/v1/library`]: () => Response.json({ title: 'Bad request' }, { status: 400 })
 		});
 
-		const error = await applyCommands(client(fetchImpl), []).catch((err: unknown) => err);
+		const error = await applyCommands(client(fetchImpl), [
+			{ type: 'movie', id: 'tt0133093', status: 'completed' }
+		]).catch((err: unknown) => err);
 
 		expect(error).toBeInstanceOf(MarqueeError);
 		expect((error as MarqueeError).status).toBe(400);
+	});
+
+	// A plan with nothing to apply is not a request: the stub throws on any call.
+	it('sends nothing for an empty plan', async () => {
+		const { fetchImpl, calls } = stubFetch({});
+
+		await expect(applyCommands(client(fetchImpl), [])).resolves.toEqual({
+			applied: 0,
+			unchanged: 0,
+			failed: []
+		});
+		expect(calls).toEqual([]);
+	});
+
+	// The receiver refuses an oversized batch outright, and a refusal applies nothing at all.
+	it('splits a batch at the receiver’s ceiling and merges the results', async () => {
+		const { fetchImpl, calls } = stubFetch({
+			[`${MARQUEE}/api/v1/library`]: () => Response.json({ applied: 1, unchanged: 0, failed: [] })
+		});
+
+		const items = Array.from({ length: 501 }, (_, index) => ({
+			type: 'movie' as const,
+			id: `tt${1000 + index}`
+		}));
+
+		await expect(applyCommands(client(fetchImpl), items)).resolves.toEqual({
+			applied: 2,
+			unchanged: 0,
+			failed: []
+		});
+
+		expect(calls).toHaveLength(2);
+		expect(JSON.parse(String(calls[0]?.init?.body)).items).toHaveLength(500);
+		expect(JSON.parse(String(calls[1]?.init?.body)).items).toHaveLength(1);
+	});
+
+	// One command naming a whole series is refused too, so it goes as several items in one batch.
+	it('splits one item’s episodes at the receiver’s ceiling', async () => {
+		const { fetchImpl, calls } = stubFetch({
+			[`${MARQUEE}/api/v1/library`]: () => Response.json({ applied: 2, unchanged: 0, failed: [] })
+		});
+
+		const episodes = Array.from({ length: 501 }, (_, index) => ({
+			season: 1,
+			episode: index + 1,
+			watched: true
+		}));
+
+		await applyCommands(client(fetchImpl), [
+			{ type: 'show', id: 'tt0944947', removed: false, episodes }
+		]);
+
+		expect(calls).toHaveLength(1);
+		const sent = JSON.parse(String(calls[0]?.init?.body)).items;
+		expect(sent).toHaveLength(2);
+		expect(sent[0].episodes).toHaveLength(500);
+		expect(sent[1].episodes).toEqual([{ season: 1, episode: 501, watched: true }]);
+	});
+
+	it('refuses a batch result it cannot read', async () => {
+		const { fetchImpl } = stubFetch({
+			[`${MARQUEE}/api/v1/library`]: () => Response.json({ ok: true })
+		});
+
+		const error = await applyCommands(client(fetchImpl), [
+			{ type: 'movie', id: 'tt0133093', removed: false }
+		]).catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(MarqueeError);
+		expect((error as MarqueeError).status).toBe(200);
 	});
 });

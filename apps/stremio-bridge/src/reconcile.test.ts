@@ -120,7 +120,7 @@ describe('Marquee moved, Stremio still equals the snapshot', () => {
 			snapshot: { [SERIES]: { removed: false, watched: [KEYS[0]] } }
 		});
 
-		expect(bitfield.decode(result.puts[0]?.state.watched ?? '')).toEqual([KEYS[0], KEYS[2]]);
+		expect(bitfield.decode(result.puts[0]?.state?.watched ?? '')).toEqual([KEYS[0], KEYS[2]]);
 		expect(result.snapshot[SERIES]).toEqual({ removed: false, watched: [KEYS[0], KEYS[2]] });
 	});
 
@@ -273,10 +273,75 @@ describe('what it refuses to decide', () => {
 		}
 	});
 
+	it('conflicts rather than throwing on an item with no state to read', () => {
+		const base = seriesItem();
+
+		for (const item of [
+			{ ...base, state: undefined },
+			{ ...base, state: { watched: 42 as unknown as string } }
+		]) {
+			const result = plan({ items: [item] });
+
+			expect(result.conflicts).toEqual([{ id: SERIES, reason: 'unreadable-watched' }]);
+		}
+	});
+
+	// The stored field names its own universe size, so a shorter catalogue would drop bits while
+	// still reporting a set — that is a conflict, not a resize.
+	it('skips a field written over a longer universe than the caller has', () => {
+		const base = seriesItem();
+		const longer = `${SERIES}:1:2:3:AA==`;
+
+		const result = planReconcile({
+			items: [{ ...base, state: { ...base.state, watched: longer } }],
+			entries: [],
+			snapshot: {},
+			videoKeys: { [SERIES]: KEYS.slice(0, 2) }
+		});
+
+		expect(result.conflicts).toEqual([{ id: SERIES, reason: 'unreadable-watched' }]);
+	});
+
 	it('forgets a title both sides have dropped', () => {
 		const result = plan({ snapshot: { [SERIES]: { removed: true, watched: [] } } });
 
 		expect(result.snapshot).toEqual({});
 		expect(result.conflicts).toEqual([]);
+	});
+});
+
+describe('writing only what actually changed', () => {
+	// Stremio writes one bitfield per episode count, so a stored field can cover fewer videos than the
+	// catalogue and still name the same set. Re-encoding it would be a write for no reason.
+	it('does not re-encode a shorter field that already means the same', () => {
+		const base = seriesItem();
+		const shorter = watchedBitfield([KEYS[0], KEYS[1]]).encode([KEYS[0]]);
+
+		const result = plan({
+			items: [{ ...base, state: { ...base.state, watched: shorter } }],
+			// Marquee dropped the bit: an un-watch is not expressible, so there is nothing to write.
+			entries: [title({ watched: [] })],
+			snapshot: { [SERIES]: { removed: false, watched: [KEYS[0]] } }
+		});
+
+		expect(result.puts).toEqual([]);
+		expect(result.snapshot[SERIES]).toEqual({ removed: false, watched: [KEYS[0]] });
+	});
+
+	// A `temp` item is outside the user's library: agreeing on the values is not enough when Marquee
+	// tracks the title, or it would never enter that library.
+	it('promotes a temp item that Marquee already tracks', () => {
+		const item = seriesItem({ watched: [KEYS[0]], item: { temp: true, removed: true } });
+
+		const result = plan({
+			items: [item],
+			entries: [title({ watched: [KEYS[0]] })],
+			snapshot: { [SERIES]: { removed: false, watched: [KEYS[0]] } }
+		});
+
+		expect(result.puts).toHaveLength(1);
+		expect(result.puts[0]).toMatchObject({ removed: false, temp: false });
+		expect(bitfield.decode(result.puts[0]?.state?.watched ?? '')).toEqual([KEYS[0]]);
+		expect(result.commands).toEqual([]);
 	});
 });

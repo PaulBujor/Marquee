@@ -51,7 +51,8 @@ export interface StremioItem {
 	type: 'movie' | 'series' | 'channel' | 'tv';
 	temp: boolean;
 	removed: boolean;
-	state: { watched: string };
+	/** Read, never rebuilt. Absent on a body that is not the shape this type hopes for. */
+	state?: { watched?: string };
 }
 
 export interface ReconcileInput {
@@ -160,7 +161,7 @@ export function planReconcile(input: ReconcileInput): ReconcilePlan {
 			continue;
 		}
 
-		const watched = readWatched(item.state.watched, keys);
+		const watched = readWatched(item.state?.watched, keys);
 		if (!watched) {
 			conflict('unreadable-watched');
 			continue;
@@ -174,7 +175,9 @@ export function planReconcile(input: ReconcileInput): ReconcilePlan {
 			watched: title.watched
 		};
 
-		if (marquee && agrees(stremio, marquee)) {
+		// Agreement is not just the same values: a `temp` item is not in the user's library, so a title
+		// Marquee tracks has to be promoted into one — otherwise it stays outside that library for ever.
+		if (marquee && !item.temp && agrees(stremio, marquee)) {
 			plan.snapshot[id] = stremio;
 			continue;
 		}
@@ -182,6 +185,11 @@ export function planReconcile(input: ReconcileInput): ReconcilePlan {
 		if (agreed && !agrees(stremio, agreed)) {
 			// Stremio is not where we left it. That change reached Marquee through the inbound queue as
 			// the user's intent; writing over it here would replace a newer state with an older one.
+			//
+			// shortcut: the conflict never resolves on its own — this branch leaves the snapshot where it
+			// is, so the same divergence is reported every run until the inbound path catches up with
+			// Stremio, and if that path lost the event nothing ever will. A resolution rule needs the
+			// applied marker the Durable Object will own, so it is not invented here.
 			conflict('stremio-changed');
 			continue;
 		}
@@ -191,18 +199,20 @@ export function planReconcile(input: ReconcileInput): ReconcilePlan {
 			// decides the watched set: a bit either side knows is a watch that happened.
 			const union = new Set([...watched, ...marquee.watched]);
 			const merged = keys.filter((key) => union.has(key));
-			const encoded = encode(keys, merged);
-			const removed = marquee.removed;
+			const target: SnapshotItem = { removed: marquee.removed, watched: merged };
 
-			plan.snapshot[id] = { removed, watched: merged };
-			// A difference that no field can express — an un-watched bit — is a loss by design, not a write.
-			if (encoded === item.state.watched && item.removed === removed && !item.temp) continue;
+			plan.snapshot[id] = target;
+			// What matters is what the stored field means, not the string it is stored as: Stremio writes
+			// one per episode count, so a shorter universe holding the same set re-encodes to a longer
+			// string, and that is not a change. A `temp` item is always written, to promote it.
+			// A difference no field can express — an un-watched bit — is a loss by design, not a write.
+			if (!item.temp && agrees(stremio, target)) continue;
 
 			plan.puts.push({
 				...item,
-				removed,
+				removed: target.removed,
 				temp: false,
-				state: { ...item.state, watched: encoded }
+				state: { ...item.state, watched: encode(keys, merged) }
 			});
 			continue;
 		}
@@ -239,17 +249,26 @@ function listing(item: StremioItem, type: MediaType, watched: string[]): Library
 
 /**
  * The watched set a serialized bitfield names, or null when it cannot be read against `keys`.
- * `keys` must hold the video the bitfield ends at: the format is `{lastVideoId}:{length}:{buffer}`,
- * and a bitfield whose end is not in the catalogue cannot be resized — the library answers with a
- * blank field rather than an error, which would silently look like "nothing watched".
+ *
+ * The format is `{lastVideoId}:{length}:{buffer}` — a universe, its size and the bits over it. `keys`
+ * has to hold the video it ends at, or the library resizes to a blank field instead of raising,
+ * which would read as "nothing watched". And it has to be at least as long as the stored field:
+ * a shorter catalogue would drop bits while still reporting a set.
  */
-function readWatched(serialized: string, keys: string[]): string[] | null {
+function readWatched(serialized: string | undefined, keys: string[]): string[] | null {
 	// An item never played carries no bitfield at all: nothing is watched, rather than unknown.
 	if (serialized === '') return [];
+	// Absent, or not a string: a body that is not the shape this module reads, never a crash.
+	if (typeof serialized !== 'string') return null;
 
 	const parts = serialized.split(':');
 	if (parts.length < 3) return null;
 	if (!keys.includes(parts.slice(0, -2).join(':'))) return null;
+
+	// Shorter is the catalogue growing at the back, which the field is designed to absorb; longer is
+	// a universe we do not have, where reading would mean dropping bits we cannot see.
+	const length = Number(parts[parts.length - 2]);
+	if (!Number.isInteger(length) || length > keys.length) return null;
 
 	try {
 		const field = watchedBitfield.constructAndResize(serialized, keys);
