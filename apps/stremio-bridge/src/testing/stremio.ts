@@ -21,11 +21,15 @@ export interface LibraryItemState {
 	timesWatched?: number;
 	flaggedWatched?: number;
 	duration?: number;
-	videoId: string;
+	/** The last video played. `video_id` on the wire — snake_case, as Stremio actually sends it. */
+	video_id: string;
 	/** Serialized watched bitfield — build it with `watchedBitfield()`, never by hand. */
 	watched: string;
 	lastVidReleased?: string;
 	noNotif?: boolean;
+	/** Present on items played from the player, even movies. */
+	season?: number;
+	episode?: number;
 }
 
 export interface LibraryItemBehaviorHints {
@@ -48,7 +52,11 @@ export interface LibraryItem {
 	behaviorHints?: LibraryItemBehaviorHints;
 }
 
-type StateOverrides = Partial<Omit<LibraryItemState, 'watched'>> & { watched?: Iterable<string> };
+/** `videoId` is the ergonomic option name; the wire field it fills is `video_id`. */
+type StateOverrides = Partial<Omit<LibraryItemState, 'watched' | 'video_id'>> & {
+	watched?: Iterable<string>;
+	videoId?: string;
+};
 
 /** A library item as Stremio stores it, defaulting to an unwatched movie. */
 export function libraryItem(
@@ -70,7 +78,7 @@ export function libraryItem(
 		...overrides,
 		state: {
 			...state,
-			videoId,
+			video_id: videoId,
 			// A movie is indexed by its single video; a series with episodes must pass its
 			// episode keys through `state.watched` instead of relying on this default.
 			watched: watchedBitfield([videoId]).encode(watched)
@@ -186,8 +194,11 @@ export function stremioAccountApi(options: StremioAccountOptions = {}): StremioA
 				// Observed against a real account: `collection` is required, and omitting it answers
 				// 5992 — the same code as an unknown key — so a client that forgets it looks revoked.
 				if (typeof body.collection !== 'string') return fail(SYNC_DISABLED);
-				// Also observed: the result is an array of collection metadata, not an object.
-				return ok([]);
+				// Also observed: `[[id, mtime], …]`, a per-item change index rather than collection
+				// metadata. `changed`/`lastModified` — this double's earlier guess — do not exist.
+				return ok(
+					[...collection(body)].map(([id, item]) => [id, Date.parse(item._mtime ?? '') || 0])
+				);
 
 			case 'datastoreGet': {
 				if (body.authKey !== authKey) return fail(SYNC_DISABLED);
@@ -202,7 +213,8 @@ export function stremioAccountApi(options: StremioAccountOptions = {}): StremioA
 				const items = collection(body);
 				const changes = (body.changes ?? []) as LibraryItem[];
 				for (const item of changes) items.set(item._id, item);
-				return ok(true);
+				// Observed: an object, not `true`.
+				return ok({ success: true });
 			}
 
 			default:

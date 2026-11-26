@@ -14,6 +14,8 @@
  */
 const API = 'https://api.strem.io/api';
 
+import watchedBitfield from 'stremio-watched-bitfield';
+
 /** Never print a value we cannot vouch for. */
 const shape = (value) => {
 	if (value === null) return 'null';
@@ -70,6 +72,75 @@ function diff(before, after) {
 	};
 }
 
+/**
+ * Writes one episode's watched bit back, reads it again, then restores the item.
+ *
+ * The bitfield is positional — the serialized string carries no keys — so it only means anything
+ * against the catalogue order Stremio itself uses, which is the meta provider's video list. That
+ * is the assumption this checks: if the round trip reads back the episode we wrote, the ordering
+ * matches and per-episode state is writable at all.
+ */
+async function probeBitfield(call, target) {
+	if (target.type !== 'series') {
+		console.log(`\n--bitfield needs a series; this item is a ${target.type}.`);
+		return;
+	}
+
+	const meta = await (
+		await fetch(`https://v3-cinemeta.strem.io/meta/series/${target._id}.json`)
+	).json();
+	const keys = (meta?.meta?.videos ?? []).map((video) => video.id);
+	console.log(
+		`\nCinemeta lists ${keys.length} videos; first three: ${keys.slice(0, 3).join(', ')}`
+	);
+	if (keys.length === 0) {
+		console.log('No catalogue videos — cannot build a bitfield.');
+		return;
+	}
+
+	const encode = (ids) => {
+		const set = new Set(ids);
+		return watchedBitfield
+			.constructFromArray(
+				keys.map((key) => set.has(key)),
+				keys
+			)
+			.serialize();
+	};
+	const decode = (serialized) => {
+		const field = watchedBitfield.constructAndResize(serialized, keys);
+		return keys.filter((key) => field.getVideo(key));
+	};
+
+	const original = target.state?.watched ?? '';
+	const first = keys[0];
+	console.log(`original bitfield: ${original === '' ? '(empty)' : `string(${original.length})`}`);
+
+	await call('datastorePut', {
+		collection: 'libraryItem',
+		changes: [{ ...target, state: { ...target.state, watched: encode([first]), video_id: first } }]
+	});
+
+	const after = await call('datastoreGet', { collection: 'libraryItem', ids: [target._id] });
+	const item = Array.isArray(after.result) ? after.result[0] : null;
+	const read = decode(item?.state?.watched ?? '');
+
+	console.log(`wrote ${first} -> reads back as: ${read.length ? read.join(', ') : '(nothing)'}`);
+	console.log(`video_id: ${item?.state?.video_id === first ? 'kept' : 'rewritten'}`);
+
+	// Leave the account exactly as it was found.
+	await call('datastorePut', {
+		collection: 'libraryItem',
+		changes: [{ ...item, state: { ...item.state, watched: original } }]
+	});
+	const restored = await call('datastoreGet', { collection: 'libraryItem', ids: [target._id] });
+	console.log(
+		`restored to the original bitfield: ${
+			(restored.result?.[0]?.state?.watched ?? '') === original
+		}`
+	);
+}
+
 async function main() {
 	const authKey = process.env.STREMIO_AUTH_KEY?.trim();
 	if (!authKey) {
@@ -113,6 +184,11 @@ async function main() {
 
 	console.log('\n--- target item ---');
 	console.log(JSON.stringify(summary(target), null, 2));
+
+	if (process.argv.includes('--bitfield')) {
+		await probeBitfield(call, target);
+		return;
+	}
 
 	if (!process.argv.includes('--write')) {
 		console.log('\nRead-only. Re-run with --write to test datastorePut on this item.');

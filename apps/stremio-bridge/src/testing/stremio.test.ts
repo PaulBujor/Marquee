@@ -28,7 +28,7 @@ describe('stremioAccountApi', () => {
 			changes: [item]
 		});
 		expect(put.status).toBe(200);
-		expect(await put.json()).toEqual({ result: true });
+		expect(await put.json()).toEqual({ result: { success: true } });
 
 		expect(
 			await get(api, { authKey: 'marquee-test-auth-key', collection: 'libraryItem', all: true })
@@ -125,7 +125,7 @@ describe('stremioAccountApi', () => {
 			collection: 'libraryItem',
 			changes: []
 		});
-		expect(await res.json()).toEqual({ result: true });
+		expect(await res.json()).toEqual({ result: { success: true } });
 
 		const after = await get(api, {
 			authKey: 'marquee-test-auth-key',
