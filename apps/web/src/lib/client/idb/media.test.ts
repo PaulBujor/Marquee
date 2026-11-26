@@ -46,6 +46,7 @@ function record(over: Partial<MediaRecord> & Pick<MediaRecord, 'type' | 'title'>
 		inProduction: null,
 		firstAirDate: null,
 		lastAirDate: null,
+		unavailableAt: null,
 		version: 1,
 		seasons: null,
 		episodes: null,

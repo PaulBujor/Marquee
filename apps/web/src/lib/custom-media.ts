@@ -94,6 +94,8 @@ export function createCustomMedia(
 		inProduction: isShow ? false : null,
 		firstAirDate: null,
 		lastAirDate: null,
+		// A user-authored title has no provider to be missing from.
+		unavailableAt: null,
 		version: 0,
 		seasons: isShow ? synthesizeSeasons(seasons, airDate) : null,
 		episodes: isShow ? synthesizeEpisodes(seasons, airDate) : null,

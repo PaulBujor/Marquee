@@ -286,6 +286,8 @@ export const media = sqliteTable(
 		refreshedAt: integer('refreshed_at').notNull().default(0),
 		// Epoch ms of the last IMDb backfill attempt; null means never attempted.
 		imdbCheckedAt: integer('imdb_checked_at'),
+		// Epoch ms TMDB last confirmed this title is gone (a 404); null means available. Never terminal — a later check clears it.
+		unavailableAt: integer('unavailable_at', { mode: 'timestamp' }),
 		// Epoch ms, not seconds: an LWW clock compared against event `clientCreatedAt`, so units must match.
 		updatedAt: integer('updated_at')
 			.notNull()

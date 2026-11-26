@@ -84,6 +84,7 @@ function media(id: string, type: 'movie' | 'show', title: string, external: stri
 		inProduction: null,
 		firstAirDate: null,
 		lastAirDate: null,
+		unavailableAt: null,
 		version: 7,
 		updatedAt: 1_700_000_000_000
 	};
@@ -288,6 +289,7 @@ describe('a user-authored entry survives the round trip', () => {
 		inProduction: false,
 		firstAirDate: null,
 		lastAirDate: null,
+		unavailableAt: null,
 		version: 1,
 		updatedAt: 0
 	};

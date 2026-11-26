@@ -149,6 +149,20 @@ describe('resolveMediaSync', () => {
 		expect(res.media[0].credits).toEqual([]);
 	});
 
+	it('carries unavailableAt (epoch ms) once the version moved, so the client learns the state', async () => {
+		const db = await seed();
+		// Version 2 is what a 404 write produces: the field changed, so the version-diff can see it.
+		await storeFreshMovie(db, REFERENCED, { unavailableAt: new Date(T0), version: 2 });
+		const { client } = stub();
+
+		const res = await resolveMediaSync(db, client, USER, {
+			refs: [],
+			have: [{ id: REF_ID, version: 1 }]
+		});
+
+		expect(res.media[0].unavailableAt).toBe(T0);
+	});
+
 	it('returns a stored row the client reports version 0 for (cross-device catch-up)', async () => {
 		const db = await seed();
 		const { client } = stub();

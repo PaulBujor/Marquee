@@ -32,32 +32,34 @@ export async function enqueueStaleMedia(
 		externalId: media.externalId,
 		refreshedAt: media.refreshedAt
 	};
+	// Every branch excludes an unavailable title: without this an undated or future-dated deleted movie is selected every night forever.
+	const available = isNull(media.unavailableAt);
 	// Three separate indexed queries rather than one OR across branches: D1 won't reliably plan a single index scan over an OR of different-column predicates.
 	// Limit per branch, not just the merged result — an unbounded SELECT pulls the whole catalog into Worker memory; the `+ 1` makes overflow distinguishable from exhaustion.
 	const [airingShows, betweenSeasonShows, undatedMovies, upcomingMovies] = await Promise.all([
 		db
 			.select(columns)
 			.from(media)
-			.where(and(eq(media.type, 'show'), eq(media.inProduction, true)))
+			.where(and(eq(media.type, 'show'), eq(media.inProduction, true), available))
 			.orderBy(asc(media.refreshedAt))
 			.limit(max + 1),
 		// `in_production` alone misses a between-seasons show, so the sweep has to match `needsRefresh`'s AIRING_STATUSES rule.
 		db
 			.select(columns)
 			.from(media)
-			.where(and(eq(media.type, 'show'), inArray(media.status, [...AIRING_STATUSES])))
+			.where(and(eq(media.type, 'show'), inArray(media.status, [...AIRING_STATUSES]), available))
 			.orderBy(asc(media.refreshedAt))
 			.limit(max + 1),
 		db
 			.select(columns)
 			.from(media)
-			.where(and(eq(media.type, 'movie'), isNull(media.releaseDate)))
+			.where(and(eq(media.type, 'movie'), isNull(media.releaseDate), available))
 			.orderBy(asc(media.refreshedAt))
 			.limit(max + 1),
 		db
 			.select(columns)
 			.from(media)
-			.where(and(eq(media.type, 'movie'), gte(media.releaseDate, today)))
+			.where(and(eq(media.type, 'movie'), gte(media.releaseDate, today), available))
 			.orderBy(asc(media.refreshedAt))
 			.limit(max + 1)
 	]);

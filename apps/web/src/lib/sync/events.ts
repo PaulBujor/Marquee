@@ -104,6 +104,11 @@ export interface MediaRecord {
 	firstAirDate: string | null;
 	/** `YYYY-MM-DD`. Shows only. */
 	lastAirDate: string | null;
+	/**
+	 * Epoch ms the source last confirmed the title is gone (a TMDB 404), or null while it is available.
+	 * Never terminal: a later successful pull clears it, and `version` bumps whenever it changes.
+	 */
+	unavailableAt: number | null;
 	version: number;
 	/** Null for movies. */
 	seasons: MediaSeason[] | null;

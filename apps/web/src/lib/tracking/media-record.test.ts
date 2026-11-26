@@ -47,6 +47,7 @@ describe('mediaRecordFromSearch', () => {
 			inProduction: null,
 			firstAirDate: null,
 			lastAirDate: null,
+			unavailableAt: null,
 			version: 0,
 			seasons: null,
 			episodes: null,

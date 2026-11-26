@@ -4,7 +4,8 @@ import { createTestDb } from '#lib/server/db/test-db.js';
 import { episodes, media, mediaExternalIds, seasons } from '#lib/server/db/schema.js';
 import { seedMediaId } from '#lib/sync/events.js';
 import type { MediaDetail, SeasonDetail } from '#lib/server/tmdb/index.js';
-import { needsRefresh, parseTmdbExternalId, refreshMedia } from './hydrate';
+import { TmdbError } from '#lib/server/tmdb/client.js';
+import { movieUnreleased, needsRefresh, parseTmdbExternalId, refreshMedia } from './hydrate';
 
 type Db = ReturnType<typeof createTestDb>;
 
@@ -214,6 +215,23 @@ describe('needsRefresh', () => {
 		const ended = { type: 'show' as const, status: 'Ended', inProduction: false };
 		expect(needsRefresh({ ...ended, refreshedAt: T0 } as never, T0 + 5e9)).toBe(false);
 	});
+	it('never refreshes an unavailable title, whatever bucket it would otherwise fall in', () => {
+		const gone = {
+			type: 'movie' as const,
+			releaseDate: '2030-01-01',
+			refreshedAt: 0,
+			unavailableAt: new Date(T0)
+		};
+		expect(needsRefresh(gone as never, T0 + 5e9)).toBe(false);
+	});
+});
+
+describe('movieUnreleased', () => {
+	it('treats an empty release date as no date, not as a date in the past', () => {
+		expect(movieUnreleased('', T0)).toBe(movieUnreleased(null, T0));
+		expect(movieUnreleased('', T0)).toBe(true);
+		expect(movieUnreleased('2020-01-01', T0)).toBe(false);
+	});
 });
 
 describe('refreshMedia', () => {
@@ -307,6 +325,7 @@ describe('refreshMedia', () => {
 			},
 			getSeason: stub.client.getSeason
 		};
+
 		await expect(
 			refreshMedia(db, failing, 'tmdb', 'show/1396', T0 + 13 * 3600_000)
 		).rejects.toThrow('tmdb detail fetch failed');
@@ -316,6 +335,58 @@ describe('refreshMedia', () => {
 			.from(media)
 			.where(eq(media.id, seedMediaId('tmdb', 'show/1396')));
 		expect(row.refreshedAt).toBe(T0);
+	});
+
+	it('marks the row unavailable when TMDB answers 404, instead of throwing', async () => {
+		const db = createTestDb();
+		const id = seedMediaId('tmdb', 'show/4242');
+		await db.insert(media).values({
+			id,
+			provider: 'tmdb',
+			externalId: 'show/4242',
+			source: 'linked',
+			type: 'show',
+			title: 'Deleted Show',
+			inProduction: true,
+			version: 1,
+			refreshedAt: 0
+		});
+		const deleted = {
+			getDetails: async () => {
+				throw new TmdbError('TMDB responded 404', 404);
+			},
+			getSeason: async () => ({ seasonNumber: 0, name: '', overview: '', episodes: [] })
+		};
+
+		const row = await refreshMedia(db, deleted, 'tmdb', 'show/4242', T0);
+
+		expect(row!.unavailableAt?.getTime()).toBe(T0);
+		// Client-visible, so the sync channel learns it through the version it already diffs on.
+		expect(row!.version).toBe(2);
+	});
+
+	it('clears the marker and bumps version on a later successful refresh', async () => {
+		const db = createTestDb();
+		const id = seedMediaId('tmdb', 'movie/603');
+		await db.insert(media).values({
+			id,
+			provider: 'tmdb',
+			externalId: 'movie/603',
+			source: 'linked',
+			type: 'movie',
+			title: 'The Matrix',
+			releaseDate: '1999-03-31',
+			version: 1,
+			refreshedAt: T0,
+			unavailableAt: new Date(T0)
+		});
+		const { client } = movieStub();
+
+		// Forced: `needsRefresh` is false for an unavailable row, so nothing scheduled would ask again.
+		const row = await refreshMedia(db, client, 'tmdb', 'movie/603', T0 + 1000, true);
+
+		expect(row!.unavailableAt).toBeNull();
+		expect(row!.version).toBe(2);
 	});
 
 	it('past the TTL, re-pulls but keeps version when nothing changed', async () => {

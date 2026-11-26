@@ -100,8 +100,16 @@ export async function processImdbAliasBatch(
 			const imdbId = await tmdb.externalIds(parsed.type, parsed.tmdbId);
 			// Alias before stamp: a write that throws must leave the row unstamped so the next run retries.
 			if (imdbId) await writeExternalId(db, mediaId, 'imdb', imdbId);
-			// No `version` bump: `imdb_checked_at` isn't client-visible, and a bump would force needless re-pulls.
-			await db.update(media).set({ imdbCheckedAt: now }).where(eq(media.id, mediaId));
+			// A 200 proves the title exists again. Only *clearing* the marker is client-visible, so only it
+			// bumps `version` — a plain stamp that did would force a needless re-pull of every backfilled title.
+			await db
+				.update(media)
+				.set({
+					imdbCheckedAt: now,
+					unavailableAt: null,
+					version: sql`case when ${media.unavailableAt} is null then ${media.version} else ${media.version} + 1 end`
+				})
+				.where(eq(media.id, mediaId));
 			outcomes.push('ack');
 			if (imdbId) aliased++;
 			else noId++;
@@ -109,7 +117,14 @@ export async function processImdbAliasBatch(
 			// A 404 means the title is not on TMDB at all, so the question was answered: stamp it rather
 			// than re-enqueueing a dead id every night and failing five times a day forever.
 			if (err instanceof TmdbError && err.status === 404) {
-				await db.update(media).set({ imdbCheckedAt: now }).where(eq(media.id, mediaId));
+				await db
+					.update(media)
+					.set({
+						imdbCheckedAt: now,
+						unavailableAt: new Date(now),
+						version: sql`${media.version} + 1`
+					})
+					.where(eq(media.id, mediaId));
 				console.warn(`imdb-aliases: ${externalId} is not on TMDB, stamped instead of retried`);
 				outcomes.push('ack');
 				gone++;

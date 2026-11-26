@@ -306,6 +306,8 @@ export async function getPendingCustomMedia(limit: number): Promise<CustomMediaP
 				inProduction: row.inProduction,
 				firstAirDate: row.firstAirDate,
 				lastAirDate: row.lastAirDate,
+				// A user-authored title has no provider to be missing from.
+				unavailableAt: null,
 				version: row.version,
 				// The child stores add a composite key and a back-reference; the wire shape has neither.
 				seasons: isShow

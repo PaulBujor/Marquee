@@ -26,6 +26,7 @@ const baseMedia: Omit<MediaRecord, 'episodes' | 'seasons'> = {
 	inProduction: false,
 	firstAirDate: '2020-01-01',
 	lastAirDate: '2020-01-08',
+	unavailableAt: null,
 	version: 1,
 	credits: null
 };
@@ -123,6 +124,7 @@ describe('LibraryState.load — a custom entry', () => {
 			inProduction: false,
 			firstAirDate: null,
 			lastAirDate: null,
+			unavailableAt: null,
 			version: 0,
 			seasons: [
 				{

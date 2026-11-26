@@ -92,6 +92,8 @@ describe('POST /api/queue/imdb-aliases', () => {
 		expect(await aliasesFor(withoutId)).toEqual([]);
 		const rows = await api.db.select().from(media);
 		expect(rows.every((row) => row.imdbCheckedAt !== null)).toBe(true);
+		// Stamping alone isn't client-visible, so it must not bump `version` and force a re-pull.
+		expect(rows.every((row) => row.version === 1)).toBe(true);
 		// The queue's job is one request per title, not a details payload.
 		expect(stub.requested).toHaveLength(2);
 	});
@@ -125,6 +127,26 @@ describe('POST /api/queue/imdb-aliases', () => {
 		expect(outcomes).toEqual(['ack']);
 		const [row] = await api.db.select().from(media).where(eq(media.id, gone));
 		expect(row?.imdbCheckedAt).not.toBeNull();
+		expect(row?.unavailableAt).not.toBeNull();
+	});
+
+	it('clears the unavailable marker (bumping version) when the title is back', async () => {
+		const back = await seedMedia('movie/608');
+		await api.db
+			.update(media)
+			.set({ unavailableAt: new Date(1_000_000_000_000) })
+			.where(eq(media.id, back));
+		stub.on('/3/movie/608/external_ids', { id: 608, imdb_id: 'tt0000608' });
+
+		const outcomes = await outcomesOf([
+			{ body: { mediaId: back, provider: 'tmdb', externalId: 'movie/608' }, attempts: 1 }
+		]);
+
+		// A 200 proves the entry exists again, and a client that never learns the cleared marker shows it as gone forever.
+		expect(outcomes).toEqual(['ack']);
+		const [row] = await api.db.select().from(media).where(eq(media.id, back));
+		expect(row?.unavailableAt).toBeNull();
+		expect(row?.version).toBe(2);
 	});
 
 	it('drops a title that keeps failing once the attempt cap is reached', async () => {
