@@ -113,6 +113,20 @@ describe('POST /api/queue/imdb-aliases', () => {
 		expect(rows.get(ok)?.imdbCheckedAt).not.toBeNull();
 	});
 
+	it('stamps a title TMDB has never heard of instead of retrying it forever', async () => {
+		const gone = await seedMedia('movie/1178539');
+		stub.on('/3/movie/1178539/external_ids', {}, { status: 404 });
+
+		const outcomes = await outcomesOf([
+			{ body: { mediaId: gone, provider: 'tmdb', externalId: 'movie/1178539' }, attempts: 1 }
+		]);
+
+		// A 404 is an answered question: asking again tomorrow would only ever fail again.
+		expect(outcomes).toEqual(['ack']);
+		const [row] = await api.db.select().from(media).where(eq(media.id, gone));
+		expect(row?.imdbCheckedAt).not.toBeNull();
+	});
+
 	it('drops a title that keeps failing once the attempt cap is reached', async () => {
 		const failing = await seedMedia('movie/607');
 		stub.on('/3/movie/607/external_ids', {}, { status: 500 });

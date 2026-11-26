@@ -5,6 +5,7 @@ import type { createDb } from '#lib/server/db/index.js';
 import { HYDRATABLE_PROVIDERS } from '#lib/sync/events.js';
 import type { MediaProvider } from '#lib/sync/events.js';
 import type { TmdbClient } from '#lib/server/tmdb/index.js';
+import { TmdbError } from '#lib/server/tmdb/client.js';
 import type { QueueEnvelope, QueueOutcome, QueueProducer } from '#lib/server/queue/types.js';
 import { writeExternalId } from './external-ids';
 import { MAX_DELIVERY_ATTEMPTS } from './refresh-consumer';
@@ -81,6 +82,7 @@ export async function processImdbAliasBatch(
 	const outcomes: QueueOutcome[] = [];
 	let aliased = 0;
 	let noId = 0;
+	let gone = 0;
 	let retrying = 0;
 	let dropped = 0;
 	for (const envelope of envelopes) {
@@ -104,6 +106,15 @@ export async function processImdbAliasBatch(
 			if (imdbId) aliased++;
 			else noId++;
 		} catch (err) {
+			// A 404 means the title is not on TMDB at all, so the question was answered: stamp it rather
+			// than re-enqueueing a dead id every night and failing five times a day forever.
+			if (err instanceof TmdbError && err.status === 404) {
+				await db.update(media).set({ imdbCheckedAt: now }).where(eq(media.id, mediaId));
+				console.warn(`imdb-aliases: ${externalId} is not on TMDB, stamped instead of retried`);
+				outcomes.push('ack');
+				gone++;
+				continue;
+			}
 			const giveUp = envelope.attempts >= MAX_DELIVERY_ATTEMPTS;
 			// Leaving the row unstamped is what queues the retry; one rate-limited title must not fail the batch.
 			console.error(
@@ -119,7 +130,8 @@ export async function processImdbAliasBatch(
 	// One line per batch, always — a queue acking nothing but no-ops would look healthy from the enqueue-side log alone.
 	console.log(
 		`imdb-aliases queue: batch of ${envelopes.length} — ${aliased} aliased, ` +
-			`${noId} without an IMDb id, ${retrying} retrying, ${dropped} dropped`
+			`${noId} without an IMDb id, ${gone} gone from TMDB, ` +
+			`${retrying} retrying, ${dropped} dropped`
 	);
 	return outcomes;
 }
