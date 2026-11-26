@@ -352,7 +352,7 @@ sequenceDiagram
   participant D as DO per handle
   participant W as apps/web
 
-  S-&gt;&gt;B: GET /{handle}/library/movie/tt0133093.json?action=watched
+  S-&gt;&gt;B: GET /{handle}/library/movie/tt0133093/action=watched.json
   B--&gt;&gt;S: 200 success
   Note over S: the reply is ignored and never retried,&lt;br/&gt;so the bridge cannot rely on a second chance
   B-&gt;&gt;Q: enqueue inbound command
