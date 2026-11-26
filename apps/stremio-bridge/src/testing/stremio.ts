@@ -160,7 +160,6 @@ export function stremioAccountApi(options: StremioAccountOptions = {}): StremioA
 	for (const item of options.items ?? []) library.set(item._id, item);
 
 	const requests: AccountRequest[] = [];
-	let lastModified = new Date(0).toISOString();
 
 	const ok = (result: unknown) => Response.json({ result });
 	const fail = (error: { code: number; message: string }) => Response.json({ error });
@@ -184,7 +183,11 @@ export function stremioAccountApi(options: StremioAccountOptions = {}): StremioA
 
 			case 'datastoreMeta':
 				if (body.authKey !== authKey) return fail(SYNC_DISABLED);
-				return ok({ changed: collection(body).size > 0, lastModified });
+				// Observed against a real account: `collection` is required, and omitting it answers
+				// 5992 — the same code as an unknown key — so a client that forgets it looks revoked.
+				if (typeof body.collection !== 'string') return fail(SYNC_DISABLED);
+				// Also observed: the result is an array of collection metadata, not an object.
+				return ok([]);
 
 			case 'datastoreGet': {
 				if (body.authKey !== authKey) return fail(SYNC_DISABLED);
@@ -199,7 +202,6 @@ export function stremioAccountApi(options: StremioAccountOptions = {}): StremioA
 				const items = collection(body);
 				const changes = (body.changes ?? []) as LibraryItem[];
 				for (const item of changes) items.set(item._id, item);
-				if (changes.length > 0) lastModified = new Date().toISOString();
 				return ok(true);
 			}
 

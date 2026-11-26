@@ -96,6 +96,22 @@ describe('stremioAccountApi', () => {
 		}
 	});
 
+	// Observed against a live account: the result is an array, and `collection` is required —
+	// omitting it answers the same 5992 as an unknown key, so a client that forgets it looks
+	// exactly like one whose token was revoked.
+	it('models datastoreMeta as the live API does', async () => {
+		const api = stremioAccountApi();
+
+		const withCollection = await post(api, 'datastoreMeta', {
+			authKey: 'marquee-test-auth-key',
+			collection: 'libraryItem'
+		});
+		expect(await withCollection.json()).toEqual({ result: [] });
+
+		const without = await post(api, 'datastoreMeta', { authKey: 'marquee-test-auth-key' });
+		expect(await without.json()).toEqual({ error: { code: 5992, message: 'Sync disabled' } });
+	});
+
 	it('treats a datastorePut with no changes as a no-op', async () => {
 		const api = stremioAccountApi({ items: [libraryItem({ _id: 'tt0133093' })] });
 		const before = await get(api, {

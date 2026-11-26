@@ -1,0 +1,8 @@
+# Local development secrets (copy to .dev.vars and fill in real values).
+#
+# Not read by the Worker — its bindings and wrangler.jsonc vars cover it, and a user's
+# credentials arrive by pairing into KV. This is for local tooling only.
+
+# Stremio auth key of a *test* account (it is account-wide, so it is the account).
+# web.stremio.com in a private window → DevTools → Application → Local Storage → authKey
+STREMIO_AUTH_KEY=
