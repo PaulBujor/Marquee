@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { isHandle, newHandle, readBridge, writeBridge, type BridgeRecord } from './bridges';
+import {
+	deleteBridge,
+	isHandle,
+	newHandle,
+	readBridge,
+	writeBridge,
+	type BridgeRecord
+} from './bridges';
 import { memoryKv } from './testing/kv';
 
 const record: BridgeRecord = {
 	marqueeToken: 'mqr_token',
 	stremioAuthKey: 'stremio-key',
+	marqueeUrl: 'https://marquee.example',
 	createdAt: '2026-01-01T00:00:00.000Z'
 };
 
@@ -64,5 +72,15 @@ describe('bridge records', () => {
 		await writeBridge(kv, handle, rotated);
 
 		expect(await readBridge(kv, handle)).toEqual(rotated);
+	});
+
+	it('forgets the handle entirely when it is unpaired', async () => {
+		const kv = memoryKv();
+		const handle = newHandle();
+
+		await writeBridge(kv, handle, record);
+		await deleteBridge(kv, handle);
+
+		expect(await readBridge(kv, handle)).toBeNull();
 	});
 });

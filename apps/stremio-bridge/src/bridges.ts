@@ -2,6 +2,10 @@
  * The handle record — the only thing the bridge stores. Everything else about a user lives in
  * their Stremio account, the per-handle Durable Object, or Marquee's D1: one owner per fact, so
  * no two copies can disagree.
+ *
+ * KV is the credential home permanently, not a staging area for the Durable Object that lands
+ * with the reconcile — that owns the snapshot, the lock and the status, and only ever reads
+ * these credentials.
  */
 
 /** 32 random bytes as base64url: 256 bits. The handle is the only credential on the addon surface. */
@@ -14,6 +18,12 @@ export interface BridgeRecord {
 	marqueeToken: string;
 	/** Stremio's account `authKey` — the credential for `api.strem.io`. */
 	stremioAuthKey: string;
+	/**
+	 * The Marquee this pairing was minted against, captured at pairing time rather than read from
+	 * the Worker's env on every request: otherwise changing `MARQUEE_API_URL` would silently
+	 * repoint every existing bridge at a host its token was never issued for.
+	 */
+	marqueeUrl: string;
 	/** ISO timestamp of pairing. */
 	createdAt: string;
 }
@@ -39,4 +49,8 @@ export async function writeBridge(
 	record: BridgeRecord
 ): Promise<void> {
 	await kv.put(key(handle), JSON.stringify(record));
+}
+
+export async function deleteBridge(kv: KVNamespace, handle: string): Promise<void> {
+	await kv.delete(key(handle));
 }

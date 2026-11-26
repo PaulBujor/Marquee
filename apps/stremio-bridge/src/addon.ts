@@ -3,7 +3,7 @@
  *
  * Every shape here comes from a real Stremio client, recorded by the spike against a live
  * account — the extra props arrive as a **path segment** with `&` literal and values
- * percent-encoded, never as a query string.
+ * percent-encoded. The protocol also allows the query string, so the router accepts both.
  */
 
 /** Marquee's vocabulary. Stremio's `series` becomes `show`; the translation stops here. */
@@ -17,6 +17,9 @@ const ACTIONS: ReadonlySet<string> = new Set([
 	'watched',
 	'unwatched'
 ] satisfies AddonAction[]);
+
+/** An IMDb id. Stremio is IMDb-keyed, and the manifest only claims that prefix. */
+const IMDB_ID = /^tt\d+$/;
 
 /**
  * `resources: ['library']` and `idPrefixes: ['tt']` are what make Stremio route library events
@@ -75,12 +78,14 @@ export function parseLibraryEvent(
 	// Marquee has no model for either.
 	const mediaType = translateType(type);
 	if (!mediaType) return { kind: 'ignored', reason: `type:${type}` };
-	if (!id) return { kind: 'invalid' };
+
+	// `idPrefixes` is a routing hint Stremio honours, not a gate we control.
+	if (!IMDB_ID.test(id)) return { kind: 'invalid' };
 
 	const params = parseExtra(extra);
 	if (!params) return { kind: 'invalid' };
 
-	const action = params.get('action') ?? '';
+	const action = last(params, 'action') ?? '';
 	if (!ACTIONS.has(action)) return { kind: 'ignored', reason: `action:${action || 'none'}` };
 
 	return {
@@ -89,28 +94,46 @@ export function parseLibraryEvent(
 			type: mediaType,
 			id,
 			action: action as AddonAction,
-			videoIds: (params.get('videoId') ?? '').split(',').filter(Boolean)
+			videoIds: videoIdsFor(id, params)
 		}
 	};
 }
 
 /**
- * `extra` is a single path segment of `key=value` pairs joined by a literal `&`. A malformed
- * percent-escape makes the whole segment a bad path rather than a bad action, so a garbled
- * request can't look like a deliberate one.
+ * A videoId belongs to this event's title or it is not ours to act on: a foreign `tt…:s:e`
+ * would otherwise be applied to whichever show the event named, putting an episode watch on the
+ * wrong title. A movie's videoId is the title id itself; a series' is `id:season:episode`.
  */
-function parseExtra(extra: string | undefined): Map<string, string> | null {
-	const params = new Map<string, string>();
+function videoIdsFor(id: string, params: Map<string, string[]>): string[] {
+	// Every `videoId` parameter counts: one event carries the whole season as a comma-separated
+	// list, and a client that repeats the parameter instead would otherwise lose all but the last.
+	return (params.get('videoId') ?? [])
+		.flatMap((value) => value.split(','))
+		.map((value) => value.trim())
+		.filter((value) => value === id || value.startsWith(`${id}:`));
+}
+
+const last = (params: Map<string, string[]>, name: string): string | undefined =>
+	params.get(name)?.at(-1);
+
+/**
+ * `extra` is `key=value` pairs joined by a literal `&`. A malformed percent-escape makes the
+ * whole segment a bad path rather than a bad action, so a garbled request can't look like a
+ * deliberate one.
+ */
+function parseExtra(extra: string | undefined): Map<string, string[]> | null {
+	const params = new Map<string, string[]>();
 
 	for (const pair of (extra ?? '').split('&')) {
 		if (!pair) continue;
 		const at = pair.indexOf('=');
 		if (at < 0) continue;
 
+		const name = pair.slice(0, at);
 		try {
 			// Decode before splitting: the observed wire form encodes the separators inside the
 			// value (`%3A` for the colons, sometimes `%2C` for the commas).
-			params.set(pair.slice(0, at), decodeURIComponent(pair.slice(at + 1)));
+			params.set(name, [...(params.get(name) ?? []), decodeURIComponent(pair.slice(at + 1))]);
 		} catch {
 			return null;
 		}

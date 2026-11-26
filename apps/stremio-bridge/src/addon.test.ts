@@ -101,4 +101,29 @@ describe('parseLibraryEvent', () => {
 			event: { action: 'watched' }
 		});
 	});
+
+	// `idPrefixes` is a routing hint Stremio honours, not a gate we control.
+	it('rejects an id that is not an imdb id', () => {
+		for (const id of ['yt:abc', 'tt12x', 'tt', '1tt1', 'tt%2F1']) {
+			expect(parseLibraryEvent('movie', id, 'action=watched')).toEqual({ kind: 'invalid' });
+		}
+	});
+
+	// A videoId naming another title would put an episode watch on the wrong show.
+	it('keeps only the videoIds that belong to the event id', () => {
+		expect(
+			parseLibraryEvent(
+				'series',
+				'tt2',
+				'action=watched&videoId=tt2%3A1%3A1,tt0133093%3A1%3A1,tt2%3A1%3A2'
+			)
+		).toMatchObject({ event: { videoIds: ['tt2:1:1', 'tt2:1:2'] } });
+	});
+
+	// A client that repeats the parameter instead of joining the list must not lose all but the last.
+	it('collects every videoId parameter', () => {
+		expect(
+			parseLibraryEvent('series', 'tt2', 'action=watched&videoId=tt2%3A1%3A1&videoId=tt2%3A1%3A2')
+		).toMatchObject({ event: { videoIds: ['tt2:1:1', 'tt2:1:2'] } });
+	});
 });

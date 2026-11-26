@@ -100,7 +100,7 @@ export function watchedBitfield(keys: string[]) {
 	};
 }
 
-export type AddonAction = 'libraryAdd' | 'libraryRemove' | 'watched' | 'unwatched';
+export type AddonAction = import('../addon').AddonAction;
 
 export interface AddonEventOptions {
 	handle: string;
