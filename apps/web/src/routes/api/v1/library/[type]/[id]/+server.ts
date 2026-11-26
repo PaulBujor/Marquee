@@ -71,7 +71,10 @@ export const PATCH: RequestHandler = async ({ request, locals, params }) => {
 	}
 
 	try {
-		await applyLibraryCommand(locals.db, identity.userId, mediaId, parsed.data);
+		await applyLibraryCommand(locals.db, identity.userId, mediaId, parsed.data, {
+			surface: 'api',
+			apiTokenId: identity.tokenId
+		});
 	} catch (err) {
 		// Another user's private entry answers exactly like one that does not exist.
 		if (err instanceof UnknownMediaError)

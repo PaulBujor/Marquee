@@ -233,6 +233,13 @@ export const events = sqliteTable(
 		// SQLite has no JSON type, so it's stored as text; Drizzle (de)serializes it per `type`.
 		payload: text('payload', { mode: 'json' }).$type<EventPayload>().notNull(),
 		deviceId: text('device_id').notNull(),
+		// Which surface wrote this row. Set from the authenticated route, never from the payload; 'app'
+		// is the correct default for every row written before the column existed.
+		origin: text('origin', { enum: ['app', 'api'] })
+			.notNull()
+			.default('app'),
+		// The API credential that wrote it, kept as attribution after the token is revoked or deleted.
+		apiTokenId: text('api_token_id').references(() => apiTokens.id, { onDelete: 'set null' }),
 		schemaVersion: integer('schema_version').notNull().default(1),
 		// Epoch **ms** — the LWW ordering clock; `timestamp` mode would be seconds and lose precision.
 		clientCreatedAt: integer('client_created_at').notNull(),

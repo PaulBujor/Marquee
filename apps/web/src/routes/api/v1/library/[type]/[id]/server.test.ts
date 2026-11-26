@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestApi, installTmdbFetch, type TestApi, type TmdbStub } from '#lib/testing/http.js';
 import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
-import { episodeWatches, events, media, tracking } from '#lib/server/db/schema.js';
+import { eq } from 'drizzle-orm';
+import { apiTokens, episodeWatches, events, media, tracking } from '#lib/server/db/schema.js';
 import { seedMediaId, trackingKey } from '#lib/sync/events.js';
 import type { LibraryEntry, LibraryPage } from '#lib/server/library/read.js';
 import { PATCH } from './+server';
@@ -234,5 +235,38 @@ describe('PATCH /api/v1/library/{type}/{id}', () => {
 			{ season: 1, episode: 1, watched: true },
 			{ season: 1, episode: 2, watched: true }
 		]);
+	});
+});
+
+describe('PATCH /api/v1/library/{type}/{id} event origin', () => {
+	it('records the API surface and the token that wrote it', async () => {
+		await seedMedia(MOVIE);
+
+		const res = await patch({ body: { status: 'completed' } });
+		expect(res.status).toBe(200);
+
+		const rows = await api.db.select().from(events);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ origin: 'api', apiTokenId: api.alice.row.id });
+	});
+
+	it('refuses a body that declares its own origin, and writes nothing', async () => {
+		await seedMedia(MOVIE);
+
+		const res = await patch({ body: { status: 'completed', origin: 'app', apiTokenId: null } });
+
+		expect(res.status).toBe(400);
+		expect(await eventCount()).toBe(0);
+		expect(await api.db.select().from(tracking)).toEqual([]);
+	});
+
+	it('keeps the attribution when the token is deleted', async () => {
+		await seedMedia(MOVIE);
+		await patch({ body: { status: 'completed' } });
+
+		await api.db.delete(apiTokens).where(eq(apiTokens.id, api.alice.row.id));
+
+		const [row] = await api.db.select().from(events);
+		expect(row).toMatchObject({ origin: 'api', apiTokenId: null });
 	});
 });

@@ -10,7 +10,7 @@ import { and, eq, lte } from 'drizzle-orm';
 import { z } from 'zod';
 import type { createDb } from '#lib/server/db/index.js';
 import { episodeWatches, episodes, media, tracking } from '#lib/server/db/schema.js';
-import { applyEvents } from '#lib/server/sync/projection.js';
+import { applyEvents, type EventOrigin } from '#lib/server/sync/projection.js';
 import {
 	TRACKING_STATUSES,
 	createEvent,
@@ -82,7 +82,8 @@ export async function applyLibraryCommand(
 	db: Db,
 	userId: string,
 	mediaId: string,
-	command: LibraryCommand
+	command: LibraryCommand,
+	origin: EventOrigin
 ): Promise<ServerEvent[]> {
 	const [title] = await db
 		.select({ type: media.type, source: media.source, ownerUserId: media.ownerUserId })
@@ -205,5 +206,5 @@ export async function applyLibraryCommand(
 		emit('tracking.removed', {});
 	}
 
-	return applyEvents(db, userId, events);
+	return applyEvents(db, userId, origin, events);
 }
