@@ -8,12 +8,9 @@ import {
 	UnknownMediaError
 } from '#lib/server/library/command.js';
 import { readLibraryEntry } from '#lib/server/library/read.js';
-import { resolveMediaIdOrHydrate, type ResolveMediaResult } from '#lib/server/media/resolve.js';
-import { createTmdbClient, TmdbError } from '#lib/server/tmdb/index.js';
+import { resolveTargetMediaId, type TargetMediaResult } from '#lib/server/media/resolve.js';
+import { TmdbError } from '#lib/server/tmdb/index.js';
 import type { RequestHandler } from './$types';
-
-/** Our media ids are UUIDs; anything else in that position is an external id the resolver has to translate. */
-const MEDIA_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Applies a partial command to one title and answers with the read model's entry, so a retried PATCH,
@@ -42,33 +39,25 @@ export const PATCH: RequestHandler = async ({ request, locals, params }) => {
 	if (Object.keys(parsed.data).length === 0)
 		return problem(400, 'Empty command', { detail: 'Name at least one field to change.' });
 
-	let mediaId: string;
-	if (MEDIA_ID.test(params.id)) {
-		mediaId = params.id;
-	} else {
-		const apiKey = env.TMDB_API_KEY;
-		if (!apiKey) return problem(503, 'Media is not configured');
-
-		let resolved: ResolveMediaResult;
-		try {
-			resolved = await resolveMediaIdOrHydrate(locals.db, createTmdbClient(apiKey), {
-				type,
-				// A bare TMDB id is the numeric half of the `movie/603` form the resolver speaks.
-				externalId: /^\d+$/.test(params.id) ? `${type}/${params.id}` : params.id
+	let resolved: TargetMediaResult;
+	try {
+		resolved = await resolveTargetMediaId(locals.db, env.TMDB_API_KEY, {
+			type,
+			id: params.id
+		});
+	} catch (err) {
+		if (err instanceof TmdbError)
+			return problem(502, 'Upstream failure', {
+				detail: 'The media provider could not be reached. Try again later.'
 			});
-		} catch (err) {
-			if (err instanceof TmdbError)
-				return problem(502, 'Upstream failure', {
-					detail: 'The media provider could not be reached. Try again later.'
-				});
-			throw err;
-		}
-		if (!('mediaId' in resolved))
-			return problem(422, 'Unresolved media', {
-				detail: 'The id does not name a single title we can act on.'
-			});
-		mediaId = resolved.mediaId;
+		throw err;
 	}
+	if ('unavailable' in resolved) return problem(503, 'Media is not configured');
+	if ('unresolved' in resolved)
+		return problem(422, 'Unresolved media', {
+			detail: 'The id does not name a single title we can act on.'
+		});
+	const mediaId = resolved.mediaId;
 
 	try {
 		await applyLibraryCommand(locals.db, identity.userId, mediaId, parsed.data, {

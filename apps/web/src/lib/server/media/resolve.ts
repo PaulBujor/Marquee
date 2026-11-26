@@ -5,7 +5,7 @@
 import { resolveMediaId } from './external-ids';
 import { parseTmdbExternalId, refreshMedia } from './hydrate';
 import type { createDb } from '#lib/server/db/index.js';
-import type { TmdbClient } from '#lib/server/tmdb/index.js';
+import { createTmdbClient, type TmdbClient } from '#lib/server/tmdb/index.js';
 
 type Db = ReturnType<typeof createDb>;
 type TmdbResolver = Pick<TmdbClient, 'findByExternalId' | 'getDetails' | 'getSeason'>;
@@ -57,4 +57,28 @@ async function hydrate(
 ): Promise<ResolveMediaResult> {
 	const row = await refreshMedia(db, tmdb, 'tmdb', externalId);
 	return row ? { mediaId: row.id } : UNRESOLVED;
+}
+
+/** Our media ids are UUIDs; anything else in that position is an external id the resolver translates. */
+const MEDIA_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** An id as a caller addressed it; `unavailable` is our missing configuration, not the caller's id. */
+export type TargetMediaResult = ResolveMediaResult | { unavailable: true };
+
+/**
+ * The id a caller addressed — ours, an IMDb id, or a bare TMDB id — as the media id to act on. A TMDB
+ * failure throws, so "no such title" and "ask again later" stay different answers.
+ */
+export async function resolveTargetMediaId(
+	db: Db,
+	apiKey: string | undefined,
+	{ type, id }: { type: 'movie' | 'show'; id: string }
+): Promise<TargetMediaResult> {
+	if (MEDIA_ID.test(id)) return { mediaId: id };
+	if (!apiKey) return { unavailable: true };
+	return resolveMediaIdOrHydrate(db, createTmdbClient(apiKey), {
+		type,
+		// A bare TMDB id is the numeric half of the `movie/603` form the resolver speaks.
+		externalId: /^\d+$/.test(id) ? `${type}/${id}` : id
+	});
 }

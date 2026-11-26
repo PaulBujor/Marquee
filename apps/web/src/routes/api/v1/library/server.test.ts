@@ -1,20 +1,34 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestApi, type TestApi } from '#lib/testing/http.js';
-import { apiTokens, episodeWatches, media, tracking, users } from '#lib/server/db/schema.js';
+import { createTestApi, installTmdbFetch, type TestApi, type TmdbStub } from '#lib/testing/http.js';
+import { setTestBindings } from '#lib/server/test/cloudflare-workers.js';
+import {
+	apiTokens,
+	episodeWatches,
+	events,
+	media,
+	tracking,
+	users
+} from '#lib/server/db/schema.js';
 import { deleteAccount } from '#lib/server/auth/index.js';
 import { LIBRARY_PAGE_MAX, type LibraryPage } from '#lib/server/library/read.js';
-import { episodeKey, trackingKey } from '#lib/sync/events.js';
-import { GET } from './+server';
+import { episodeKey, seedMediaId, trackingKey } from '#lib/sync/events.js';
+import { GET, LIBRARY_BATCH_MAX, POST, type LibraryBatchResult } from './+server';
 
 const ALICE = 'user-alice';
 const BOB = 'user-bob';
 const ADDED = Date.UTC(2026, 0, 1);
 
 let api: TestApi;
+let stub: TmdbStub | undefined;
 
 beforeEach(async () => {
 	api = await createTestApi();
+	setTestBindings({ TMDB_API_KEY: 'test-key' });
+});
+afterEach(() => {
+	stub?.restore();
+	stub = undefined;
 });
 
 async function seedMedia(id: string, over: Partial<typeof media.$inferInsert> = {}): Promise<void> {
@@ -172,5 +186,252 @@ describe('GET /api/v1/library', () => {
 			});
 			expect(res.status).toBe(400);
 		}
+	});
+});
+
+/** Real ids, because a UUID is taken as ours while anything else goes to TMDB. */
+const MOVIE_A = seedMediaId('tmdb', 'movie/603');
+const MOVIE_B = seedMediaId('tmdb', 'movie/604');
+const SHOW = seedMediaId('tmdb', 'show/1396');
+const PRIVATE = '0190a3f0-0000-7000-8000-000000000001';
+
+/** The Matrix, as TMDB answers it: one movie on the `/find` side, then the details a hydrate reads. */
+const MATRIX_IMDB = 'tt0133093';
+const FIND_MATRIX = { movie_results: [{ id: 603, title: 'The Matrix' }], tv_results: [] };
+const MATRIX_DETAILS = {
+	id: 603,
+	title: 'The Matrix',
+	release_date: '1999-03-31',
+	external_ids: { imdb_id: MATRIX_IMDB },
+	credits: { cast: [], crew: [] }
+};
+
+async function postBatch(
+	options: { body?: unknown; token?: string | null } = {}
+): Promise<Response> {
+	const { body = {}, token = api.alice.token } = options;
+	return api.call(POST, { path: '/api/v1/library', method: 'POST', token, body });
+}
+
+async function eventCount(): Promise<number> {
+	return (await api.db.select({ id: events.id }).from(events)).length;
+}
+
+describe('POST /api/v1/library', () => {
+	it('401s without a bearer token, and writes nothing', async () => {
+		await seedMedia(MOVIE_A);
+
+		const res = await postBatch({ token: null, body: { items: [] } });
+
+		expect(res.status).toBe(401);
+		expect(res.headers.get('www-authenticate')).toBe('Bearer');
+		expect(await eventCount()).toBe(0);
+	});
+
+	it('applies a batch of two movies and a show, and a following GET agrees', async () => {
+		await seedMedia(MOVIE_A);
+		await seedMedia(MOVIE_B);
+		await seedMedia(SHOW, { type: 'show', title: 'title-show' });
+
+		const res = await postBatch({
+			body: {
+				items: [
+					{ type: 'movie', id: MOVIE_A, status: 'completed', rating: 5 },
+					{ type: 'movie', id: MOVIE_B, status: 'want_to_watch', favorite: true },
+					{
+						type: 'show',
+						id: SHOW,
+						status: 'watching',
+						episodes: [{ season: 1, episode: 1, watched: true }]
+					}
+				]
+			}
+		});
+
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual<LibraryBatchResult>({
+			applied: 3,
+			unchanged: 0,
+			failed: []
+		});
+
+		const byId = new Map((await getPage(api.alice.token)).entries.map((e) => [e.media.id, e]));
+		expect(byId.get(MOVIE_A)!.tracking).toMatchObject({ status: 'completed', rating: 5 });
+		expect(byId.get(MOVIE_B)!.tracking).toMatchObject({
+			status: 'want_to_watch',
+			favorite: true
+		});
+		expect(byId.get(SHOW)!.tracking).toMatchObject({ status: 'watching' });
+		expect(byId.get(SHOW)!.episodes).toEqual([{ season: 1, episode: 1, watched: true }]);
+	});
+
+	it('is idempotent: replaying the identical batch changes nothing and still answers 200', async () => {
+		await seedMedia(MOVIE_A);
+		await seedMedia(MOVIE_B);
+		const body = {
+			items: [
+				{ type: 'movie', id: MOVIE_A, status: 'completed', rating: 4 },
+				{ type: 'movie', id: MOVIE_B, status: 'watching' }
+			]
+		};
+
+		const first = await postBatch({ body });
+		const afterFirst = await eventCount();
+		const pageAfterFirst = await getPage(api.alice.token);
+		const second = await postBatch({ body });
+
+		expect(first.status).toBe(200);
+		expect(second.status).toBe(200);
+		expect(await second.json()).toEqual<LibraryBatchResult>({
+			applied: 0,
+			unchanged: 2,
+			failed: []
+		});
+		expect(await eventCount()).toBe(afterFirst);
+		expect(await getPage(api.alice.token)).toEqual(pageAfterFirst);
+	});
+
+	it('reports an unresolvable id while its siblings still apply', async () => {
+		await seedMedia(MOVIE_A);
+		stub = installTmdbFetch().on('/3/find/tt9999999', { movie_results: [], tv_results: [] });
+
+		const res = await postBatch({
+			body: {
+				items: [
+					{ type: 'movie', id: 'tt9999999', status: 'completed' },
+					{ type: 'movie', id: MOVIE_A, status: 'completed' }
+				]
+			}
+		});
+
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual<LibraryBatchResult>({
+			applied: 1,
+			unchanged: 0,
+			failed: [
+				{ id: 'tt9999999', code: 'unresolved', reason: expect.stringContaining('single title') }
+			]
+		});
+		expect((await getPage(api.alice.token)).entries.map((e) => e.media.id)).toEqual([MOVIE_A]);
+		expect(await api.db.select().from(media)).toHaveLength(1);
+	});
+
+	it('keeps the rest of the batch when one title hits a TMDB rate limit', async () => {
+		stub = installTmdbFetch()
+			.on('/3/find/tt0133093', { message: 'rate limited' }, { status: 429 })
+			.on('/3/find/tt0000002', FIND_MATRIX)
+			.on('/3/movie/603', MATRIX_DETAILS);
+
+		const res = await postBatch({
+			body: {
+				items: [
+					{ type: 'movie', id: MATRIX_IMDB, status: 'completed' },
+					{ type: 'movie', id: 'tt0000002', status: 'watching' }
+				]
+			}
+		});
+
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual<LibraryBatchResult>({
+			applied: 1,
+			unchanged: 0,
+			failed: [
+				{
+					id: MATRIX_IMDB,
+					code: 'upstream_unavailable',
+					reason: expect.stringContaining('Retry')
+				}
+			]
+		});
+		const [entry] = (await getPage(api.alice.token)).entries;
+		expect(entry.tracking).toMatchObject({ status: 'watching' });
+		expect(entry.media.title).toBe('The Matrix');
+	});
+
+	it('400s a batch over the cap and writes nothing', async () => {
+		const items = Array.from({ length: LIBRARY_BATCH_MAX + 1 }, (_, i) => ({
+			type: 'movie',
+			id: `0190a3f0-0000-7000-8000-${String(i).padStart(12, '0')}`,
+			status: 'want_to_watch'
+		}));
+
+		const res = await postBatch({ body: { items } });
+
+		expect(res.status).toBe(400);
+		expect(await eventCount()).toBe(0);
+		expect(await api.db.select().from(tracking)).toEqual([]);
+	});
+
+	it("404s another user's private title per item, and leaves their rows untouched", async () => {
+		await seedMedia(MOVIE_A);
+		await seedMedia(PRIVATE, {
+			provider: 'tmdb',
+			externalId: null,
+			source: 'custom',
+			ownerUserId: ALICE
+		});
+		await track(ALICE, MOVIE_A, { status: 'completed' });
+		await track(ALICE, PRIVATE, { status: 'want_to_watch' });
+
+		const res = await postBatch({
+			token: api.bob.token,
+			body: {
+				items: [
+					{ type: 'movie', id: PRIVATE, status: 'completed' },
+					{ type: 'movie', id: MOVIE_A, status: 'watching' }
+				]
+			}
+		});
+
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual<LibraryBatchResult>({
+			applied: 1,
+			unchanged: 0,
+			failed: [{ id: PRIVATE, code: 'not_found', reason: expect.stringContaining('No such title') }]
+		});
+
+		const rows = await api.db.select().from(tracking);
+		const rowFor = (userId: string, mediaId: string) =>
+			rows.find((row) => row.userId === userId && row.mediaId === mediaId);
+		expect(rowFor(ALICE, PRIVATE)).toMatchObject({ status: 'want_to_watch' });
+		expect(rowFor(ALICE, MOVIE_A)).toMatchObject({ status: 'completed' });
+		expect(rowFor(BOB, MOVIE_A)).toMatchObject({ status: 'watching' });
+		expect(rowFor(BOB, PRIVATE)).toBeUndefined();
+		expect((await api.db.select().from(events)).every((row) => row.userId === BOB)).toBe(true);
+	});
+});
+
+describe('POST /api/v1/library event origin', () => {
+	it('refuses an item that declares its own origin, and writes nothing', async () => {
+		await seedMedia(MOVIE_A);
+
+		const res = await postBatch({
+			body: {
+				items: [{ type: 'movie', id: MOVIE_A, status: 'completed', origin: 'app' }]
+			}
+		});
+
+		expect(res.status).toBe(400);
+		expect(await eventCount()).toBe(0);
+	});
+
+	it('records the API surface and the token that wrote each event', async () => {
+		await seedMedia(MOVIE_A);
+		await seedMedia(MOVIE_B);
+
+		const res = await postBatch({
+			body: {
+				items: [
+					{ type: 'movie', id: MOVIE_A, status: 'completed' },
+					{ type: 'movie', id: MOVIE_B, favorite: true }
+				]
+			}
+		});
+		expect(res.status).toBe(200);
+
+		const rows = await api.db.select().from(events);
+		expect(rows.length).toBeGreaterThan(0);
+		for (const row of rows)
+			expect(row).toMatchObject({ origin: 'api', apiTokenId: api.alice.row.id });
 	});
 });
