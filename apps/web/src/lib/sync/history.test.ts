@@ -6,12 +6,8 @@ import {
 	type SyncEventType
 } from './events.js';
 import {
-	DETENT_CAPACITY,
-	backFromProgress,
-	backStep,
 	compensatingEventCount,
 	compensatingEvents,
-	densityFor,
 	diffStates,
 	eventAtStep,
 	eventDiff,
@@ -23,7 +19,6 @@ import {
 	stateAtStep,
 	summarize,
 	touchedAfterStep,
-	touchedSince,
 	type HistoryState
 } from './history.js';
 
@@ -230,24 +225,6 @@ describe('summarize', () => {
 	});
 });
 
-describe('touchedSince', () => {
-	it('lists titles touched in the window, newest first', () => {
-		const events = [
-			ev('tracking.added', 'movie/a', { status: 'watching' }, NOW - 30),
-			ev('episode.watched', 'show/b', { season: 1, episode: 1 }, NOW - 20),
-			ev('tracking.status_changed', 'movie/a', { status: 'completed' }, NOW - 10),
-			ev(
-				'media.linked',
-				'custom/c',
-				{ targetId: 'movie/c', provider: 'tmdb', externalId: '1' },
-				NOW - 5
-			)
-		];
-		expect(touchedSince(events, NOW - 25, NOW)).toEqual(['movie/a', 'show/b']);
-		expect(touchedSince(events, NOW, NOW)).toEqual([]);
-	});
-});
-
 describe('relativeAgo', () => {
 	it('reads in the coarsest sensible unit', () => {
 		expect(relativeAgo(0)).toBe('now');
@@ -256,7 +233,7 @@ describe('relativeAgo', () => {
 	});
 });
 
-describe('the event dial', () => {
+describe('the event step projection', () => {
 	/** A log whose events interleave two titles, so order matters. */
 	function log(): EventEnvelope[] {
 		return orderedLog([
@@ -331,37 +308,5 @@ describe('the event dial', () => {
 		expect(eventSummary(events[0])).toBe('Added · Watching');
 		expect(eventSummary(events[2])).toBe('S1E1 watched');
 		expect(eventSummary(events[3])).toBe('Removed from your lists');
-	});
-});
-
-describe('detent density', () => {
-	it('is one event per detent near now and decimates with distance', () => {
-		expect(densityFor(0)).toBe(1);
-		expect(densityFor(DETENT_CAPACITY)).toBe(1);
-		expect(densityFor(DETENT_CAPACITY * 4)).toBe(4);
-		expect(densityFor(20_000)).toBe(167);
-	});
-
-	it('a fine step is always exactly one event', () => {
-		expect(densityFor(20_000, true)).toBe(1);
-	});
-
-	it('steps back and forward without leaving the log', () => {
-		expect(backStep(1000, 0, 1)).toBe(1);
-		expect(backStep(1000, 0, -1)).toBe(0);
-		expect(backStep(1000, 1000, 1)).toBe(1000);
-		expect(backStep(1000, 500, 1)).toBe(500 + densityFor(500));
-		expect(backStep(1000, 500, 1, true)).toBe(501);
-	});
-
-	it('maps a dial position onto the nearest detent', () => {
-		expect(backFromProgress(0, 0.5)).toBe(0);
-		expect(backFromProgress(1000, 0)).toBe(0);
-		expect(backFromProgress(1000, 1)).toBe(1000);
-		expect(backFromProgress(1000, 0.5)).toBe(500);
-		// A long log snaps to its density grid rather than landing between events.
-		const snapped = backFromProgress(20_000, 0.5);
-		expect(snapped % densityFor(snapped)).toBe(0);
-		expect(backFromProgress(20_000, 0.5, true)).toBe(10_000);
 	});
 });
