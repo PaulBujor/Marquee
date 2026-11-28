@@ -2,7 +2,14 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { createEvent } from '#lib/sync/events.js';
 import { setActiveUser } from './db';
-import { enqueueEvent, enqueueEvents, getUnsynced, markSynced } from './outbox';
+import {
+	enqueueEvent,
+	enqueueEvents,
+	getAllEvents,
+	getUnsynced,
+	markSynced,
+	putPulledEvents
+} from './outbox';
 
 setActiveUser('test-user'); // the store is namespaced per user; scope it before opening
 
@@ -55,5 +62,27 @@ describe('outbox', () => {
 
 	it('accepts an empty batch without opening a transaction', async () => {
 		await expect(enqueueEvents([])).resolves.toBeUndefined();
+	});
+
+	it('keeps pulled events as synced log rows, so history holds other devices too', async () => {
+		const pulled = createEvent(
+			'tracking.added',
+			'movie:5000',
+			{ status: 'watching' },
+			'other',
+			5000
+		);
+		await putPulledEvents([pulled]);
+		await putPulledEvents([pulled]); // idempotent — a re-pull must not duplicate
+
+		const log = await getAllEvents();
+		expect(log.filter((e) => e.id === pulled.id)).toHaveLength(1);
+		expect(await getUnsynced()).not.toContainEqual(expect.objectContaining({ id: pulled.id }));
+	});
+
+	it('never marks a still-unsynced local write as synced when it is pulled back', async () => {
+		const local = await enqueue(6000);
+		await putPulledEvents([local]);
+		expect((await getUnsynced()).some((e) => e.id === local.id)).toBe(true);
 	});
 });

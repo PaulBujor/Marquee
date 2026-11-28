@@ -4,6 +4,7 @@ import {
 	getCursor,
 	getUnsynced,
 	markSynced,
+	putPulledEvents,
 	setCursor
 } from '#lib/client/idb/index.js';
 import { assertAuthed } from '#lib/client/session.js';
@@ -99,7 +100,11 @@ export async function runSync(
 		const data = (await res.json()) as SyncResponse;
 		if (data.applied.length > 0) await markSynced(data.applied);
 		for (const event of data.events) await applyEventToIdb(event);
-		if (data.events.length > 0) await setCursor(data.cursor);
+		if (data.events.length > 0) {
+			// Also kept as log rows: the local history must hold other devices' events, not just ours.
+			await putPulledEvents(data.events);
+			await setCursor(data.cursor);
+		}
 
 		pushed += events.length;
 		pulled += data.events.length;

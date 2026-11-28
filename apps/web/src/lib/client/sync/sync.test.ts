@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { createEvent, type ServerEvent } from '#lib/sync/events.js';
 import { setActiveUser } from '#lib/client/idb/db.js';
-import { enqueueEvent, getUnsynced } from '#lib/client/idb/outbox.js';
+import { enqueueEvent, getAllEvents, getUnsynced } from '#lib/client/idb/outbox.js';
 import { getTracking } from '#lib/client/idb/state.js';
 import { getCursor } from '#lib/client/idb/meta.js';
 import type { SyncRequest, SyncResponse } from '#lib/sync/protocol.js';
@@ -71,6 +71,14 @@ describe('runSync', () => {
 		expect(await getCursor()).toBe(5);
 		expect((await getTracking()).find((t) => t.mediaId === 'agg-1')?.status).toBe('watching');
 		expect(result).toEqual({ pushed: 1, pulled: 1 });
+	});
+
+	it('keeps pulled events in the local log', async () => {
+		const remote = pulled('agg-log', 9, 2000);
+		const { fetchFn } = stub([{ cursor: 9, events: [remote], applied: [], hasMore: false }]);
+		await runSync(fetchFn);
+
+		expect((await getAllEvents()).some((e) => e.id === remote.id)).toBe(true);
 	});
 
 	it('loops until the server reports no more pages', async () => {
