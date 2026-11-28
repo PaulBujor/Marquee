@@ -162,17 +162,35 @@ describe('deliver', () => {
 	});
 
 	// Nothing to say is not a failure: acked, and no request is made on its behalf.
+	// A bare gesture on a show is a whole-title claim now, so "names nothing" means the videoIds
+	// were present but named no episode of this title.
 	it('drops a message that names nothing to change before calling anything', async () => {
 		const calls = marqueeAnswers();
 		const { handle, bindings } = await paired();
 
 		const outcome = await deliver(
 			bindings,
-			inboundBody({ handle, type: 'show', action: 'watched', videoIds: [] })
+			inboundBody({ handle, type: 'show', action: 'watched', videoIds: ['tt2:1:1'] })
 		);
 
 		expect(outcome).toBe('ack');
 		expect(calls).toHaveLength(0);
+	});
+
+	// The bare gesture really does reach the API, as one field rather than an enumerated list.
+	it('sends a bare show gesture as a whole-title intent', async () => {
+		const calls = marqueeAnswers();
+		const { handle, bindings } = await paired();
+
+		await deliver(
+			bindings,
+			inboundBody({ handle, type: 'show', action: 'unwatched', videoIds: [] })
+		);
+
+		expect(calls).toHaveLength(1);
+		expect(JSON.parse(String(calls[0].init?.body)).items).toEqual([
+			{ type: 'show', id: 'tt0133093', allEpisodes: { watched: false } }
+		]);
 	});
 
 	// A dead token does not heal by itself, so the record carries the failure and the configure

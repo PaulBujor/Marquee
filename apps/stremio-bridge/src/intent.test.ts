@@ -60,10 +60,21 @@ describe('toIntent', () => {
 		).toEqual({ episodes: [{ season: 2, episode: 5, watched: false }] });
 	});
 
-	// The product rule: a bare `watched` on a show marks nothing, never "every aired episode".
-	it('says nothing at all for a series event with no videoIds', () => {
-		expect(toIntent(event({ type: 'show', action: 'watched', videoIds: [] }))).toBeNull();
-		expect(toIntent(event({ type: 'show', action: 'unwatched', videoIds: [] }))).toBeNull();
+	// The product rule, revised: a bare gesture on a show is a claim about the whole title, so it is
+	// sent as one field and the server decides which episodes that means. VideoIds that were present
+	// but unparseable are a different case — they must not widen to the series.
+	it('sends a bare show gesture as a whole-title intent', () => {
+		expect(toIntent(event({ type: 'show', action: 'watched', videoIds: [] }))).toEqual({
+			allEpisodes: { watched: true }
+		});
+		expect(toIntent(event({ type: 'show', action: 'unwatched', videoIds: [] }))).toEqual({
+			allEpisodes: { watched: false }
+		});
+	});
+
+	it('does not widen to the whole title when the videoIds were merely unparseable', () => {
+		expect(toIntent(event({ type: 'show', id: 'tt1', videoIds: ['tt1:1'] }))).toBeNull();
+		expect(toIntent(event({ type: 'show', id: 'tt1', videoIds: ['tt2:1:1'] }))).toBeNull();
 	});
 
 	it('drops a videoId that is not a season:episode of this title', () => {

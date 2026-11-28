@@ -162,6 +162,57 @@ describe('applyLibraryCommand', () => {
 		expect(await state(db, U1, SHOW)).toMatchObject({ watched: ['2x1'] });
 	});
 
+	// `allEpisodes` is the whole-title version of the same gesture: Stremio sends no videoIds when
+	// the user means the entire series, so the scope arrives as one field instead of a long list.
+	it('seeds every aired episode of the whole title, across seasons', async () => {
+		const db = createTestDb();
+		await seed(db);
+		for (const episode of [1, 2]) await seedEpisode(db, 1, episode);
+		await seedEpisode(db, 2, 1);
+		await seedEpisode(db, 2, 2, UNAIRED);
+
+		const events = await run(db, SHOW, { allEpisodes: { watched: true } });
+		const replay = await run(db, SHOW, { allEpisodes: { watched: true } });
+
+		expect(events.filter((e) => e.type === 'episode.watched')).toHaveLength(3);
+		expect(replay).toEqual([]);
+		// The unaired episode is not something the user can have watched.
+		expect(await state(db, U1, SHOW)).toMatchObject({ watched: ['1x1', '1x2', '2x1'] });
+	});
+
+	it('un-watches every watched episode of the whole title, and only those', async () => {
+		const db = createTestDb();
+		await seed(db);
+		await track(db, U1, SHOW, { status: 'completed' });
+		for (const [season, episode] of [
+			[1, 1],
+			[2, 1],
+			[2, 2]
+		] as const) {
+			await db.insert(episodeWatches).values({
+				id: `${U1}::${SHOW}::s${season}e${episode}`,
+				userId: U1,
+				mediaId: SHOW,
+				season,
+				episode,
+				watched: true
+			});
+		}
+
+		const events = await run(db, SHOW, { allEpisodes: { watched: false } });
+
+		expect(events.filter((e) => e.type === 'episode.unwatched')).toHaveLength(3);
+		expect(await state(db, U1, SHOW)).toMatchObject({ watched: [] });
+	});
+
+	// A movie has no episodes, so an episode intent against one names nothing to mark.
+	it('emits nothing for an all-episodes intent against a movie', async () => {
+		const db = createTestDb();
+		await seed(db);
+
+		expect(await run(db, MOVIE, { allEpisodes: { watched: true } })).toEqual([]);
+	});
+
 	it('emits nothing for an episode delta that repeats the stored state', async () => {
 		const db = createTestDb();
 		await seed(db);
