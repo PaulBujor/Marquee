@@ -8,6 +8,7 @@
 	import NotificationsCard from './notifications-card.svelte';
 	import DataCacheCard from './data-cache-card.svelte';
 	import DataPortabilityCard from './data-portability-card.svelte';
+	import HistoryCard from './history-card.svelte';
 	import DiagnosticsCard from './diagnostics-card.svelte';
 	import CreditsCard from './credits-card.svelte';
 	import AdminCard from './admin-card.svelte';
@@ -48,6 +49,7 @@
 	<NotificationsCard />
 	<DataCacheCard />
 	<DataPortabilityCard />
+	<HistoryCard />
 	<DiagnosticsCard />
 	<CreditsCard />
 	<DeleteAccountCard userEmail={data.user.email} {form} />

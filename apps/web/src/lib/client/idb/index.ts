@@ -14,7 +14,14 @@ export type {
 	ClientMediaLink,
 	MarqueeDatabase
 } from './db';
-export { getUnsynced, markSynced, enqueueEvent, enqueueEvents } from './outbox';
+export {
+	getUnsynced,
+	getAllEvents,
+	putPulledEvents,
+	markSynced,
+	enqueueEvent,
+	enqueueEvents
+} from './outbox';
 export {
 	applyEventToIdb,
 	applyEventsToIdb,
