@@ -1,0 +1,1894 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Rewind: five ways to turn a dial through the event log</title>
+		<style>
+			:root {
+				--bg: #000;
+				--card: #111417;
+				--inset: #1a1e22;
+				--line: #262c31;
+				--text: #e6e8ea;
+				--muted: #8b949e;
+				--primary: #2dd4bf;
+				--on-primary: #00201d;
+				--warn: #f0b429;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+				font:
+					16px/1.62 ui-sans-serif,
+					system-ui,
+					-apple-system,
+					'Segoe UI',
+					sans-serif;
+				-webkit-font-smoothing: antialiased;
+			}
+			.shell {
+				display: grid;
+				grid-template-columns: 218px minmax(0, 1fr);
+				gap: 52px;
+				max-width: 1240px;
+				margin: 0 auto;
+				padding: 44px 26px 110px;
+			}
+			header.head {
+				grid-column: 1 / -1;
+				border-bottom: 1px solid var(--line);
+				padding-bottom: 22px;
+				margin-bottom: 4px;
+			}
+			h1 {
+				font-size: 30px;
+				line-height: 1.18;
+				margin: 0 0 10px;
+				letter-spacing: -0.02em;
+				max-width: 30ch;
+			}
+			h1 .accent {
+				color: var(--primary);
+			}
+			.sub {
+				color: var(--muted);
+				margin: 0;
+				max-width: 76ch;
+				font-size: 15px;
+			}
+			.status {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px;
+				margin: 16px 0 0;
+				font-size: 12.5px;
+				color: var(--muted);
+			}
+			.status span {
+				border: 1px solid var(--line);
+				border-radius: 999px;
+				padding: 3px 10px;
+				background: var(--card);
+			}
+			.status strong {
+				color: var(--primary);
+				font-weight: 600;
+			}
+			nav.toc {
+				position: sticky;
+				top: 26px;
+				align-self: start;
+				max-height: calc(100vh - 52px);
+				overflow-y: auto;
+				padding-right: 6px;
+			}
+			nav.toc p {
+				margin: 0 0 10px;
+				font-size: 11px;
+				letter-spacing: 0.14em;
+				text-transform: uppercase;
+				color: var(--muted);
+			}
+			nav.toc ol {
+				list-style: none;
+				margin: 0;
+				padding: 0;
+				font-size: 13.5px;
+			}
+			nav.toc li {
+				margin: 0 0 2px;
+			}
+			nav.toc li li {
+				margin-left: 12px;
+				font-size: 12.5px;
+			}
+			nav.toc a {
+				color: var(--muted);
+				text-decoration: none;
+				display: block;
+				padding: 3px 8px;
+				border-left: 2px solid transparent;
+				border-radius: 0 6px 6px 0;
+			}
+			nav.toc a:hover {
+				color: var(--text);
+				background: var(--card);
+				border-left-color: var(--primary);
+			}
+			main {
+				min-width: 0;
+			}
+			section,
+			article.option {
+				background: var(--card);
+				border: 1px solid var(--line);
+				border-radius: 14px;
+				padding: 24px 24px 20px;
+				margin: 0 0 26px;
+				scroll-margin-top: 20px;
+			}
+			h2 {
+				font-size: 19px;
+				margin: 0 0 10px;
+				line-height: 1.3;
+			}
+			h2 .num {
+				color: var(--muted);
+				margin-right: 8px;
+				font-variant-numeric: tabular-nums;
+				font-weight: 400;
+			}
+			h3 {
+				font-size: 14.5px;
+				margin: 22px 0 6px;
+				color: var(--text);
+			}
+			h3:first-of-type {
+				margin-top: 12px;
+			}
+			p,
+			li {
+				color: var(--muted);
+			}
+			strong {
+				color: var(--text);
+				font-weight: 600;
+			}
+			em {
+				color: var(--text);
+				font-style: italic;
+			}
+			a {
+				color: var(--primary);
+			}
+			ul,
+			ol {
+				padding-left: 20px;
+				margin: 8px 0;
+			}
+			li {
+				margin: 5px 0;
+			}
+			code {
+				background: var(--inset);
+				border: 1px solid var(--line);
+				border-radius: 5px;
+				padding: 1px 5px;
+				font-size: 0.86em;
+				color: var(--primary);
+				white-space: nowrap;
+			}
+			pre {
+				background: var(--inset);
+				border: 1px solid var(--line);
+				border-radius: 10px;
+				padding: 16px;
+				overflow-x: auto;
+				font-size: 12.6px;
+				line-height: 1.55;
+				margin: 10px 0;
+			}
+			pre code {
+				background: none;
+				border: 0;
+				padding: 0;
+				color: var(--text);
+				white-space: pre;
+			}
+			pre .c {
+				color: var(--muted);
+			}
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				margin: 14px 0;
+				font-size: 13.4px;
+			}
+			th,
+			td {
+				text-align: left;
+				padding: 8px 10px;
+				border-bottom: 1px solid var(--line);
+				vertical-align: top;
+			}
+			th {
+				color: var(--muted);
+				font-weight: 600;
+				font-size: 11.5px;
+				letter-spacing: 0.06em;
+				text-transform: uppercase;
+			}
+			td {
+				color: var(--muted);
+			}
+			td strong {
+				color: var(--text);
+			}
+			tbody tr:last-child td {
+				border-bottom: 0;
+			}
+			figure {
+				margin: 18px 0 8px;
+				background: var(--inset);
+				border: 1px solid var(--line);
+				border-radius: 12px;
+				padding: 14px 14px 10px;
+			}
+			figure svg {
+				display: block;
+				width: 100%;
+				height: auto;
+			}
+			figcaption {
+				color: var(--muted);
+				font-size: 12.4px;
+				margin-top: 8px;
+				line-height: 1.5;
+			}
+			.tag {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				width: 26px;
+				height: 26px;
+				border-radius: 8px;
+				background: var(--primary);
+				color: var(--on-primary);
+				font-weight: 700;
+				font-size: 13px;
+				margin-right: 10px;
+				vertical-align: 2px;
+			}
+			.option > header {
+				display: flex;
+				align-items: baseline;
+				flex-wrap: wrap;
+				gap: 6px 0;
+				margin-bottom: 4px;
+			}
+			.option > header h2 {
+				flex: 1 1 auto;
+			}
+			.idea {
+				color: var(--text) !important;
+				font-size: 15.5px;
+				margin: 4px 0 4px;
+				border-left: 2px solid var(--primary);
+				padding-left: 12px;
+			}
+			dl.spec {
+				margin: 14px 0 0;
+				display: grid;
+				grid-template-columns: 132px minmax(0, 1fr);
+				gap: 0 16px;
+			}
+			dl.spec dt {
+				color: var(--muted);
+				font-size: 11.4px;
+				letter-spacing: 0.07em;
+				text-transform: uppercase;
+				padding: 9px 0;
+				border-top: 1px solid var(--line);
+			}
+			dl.spec dd {
+				margin: 0;
+				padding: 9px 0;
+				border-top: 1px solid var(--line);
+				color: var(--muted);
+				font-size: 14px;
+			}
+			dl.spec dt:first-of-type,
+			dl.spec dd:first-of-type {
+				border-top: 0;
+			}
+			.callout {
+				border-left: 2px solid var(--warn);
+				background: #1d1704;
+				border-radius: 0 8px 8px 0;
+				padding: 10px 14px;
+				margin: 16px 0;
+				font-size: 14px;
+				color: #ffe6a3;
+			}
+			.callout.plain {
+				border-left-color: var(--primary);
+				background: var(--inset);
+				color: var(--muted);
+			}
+			.verdict {
+				border: 1px solid var(--primary);
+				background: #05211f;
+				border-radius: 12px;
+				padding: 16px 18px;
+				margin: 16px 0 4px;
+				color: var(--text);
+			}
+			.verdict p {
+				color: var(--text);
+				margin: 0;
+				font-size: 15px;
+			}
+			.verdict p + p {
+				margin-top: 10px;
+				color: var(--muted);
+				font-size: 14px;
+			}
+			footer {
+				grid-column: 1 / -1;
+				border-top: 1px solid var(--line);
+				padding-top: 18px;
+				color: var(--muted);
+				font-size: 12.6px;
+			}
+			@media (max-width: 860px) {
+				.shell {
+					grid-template-columns: minmax(0, 1fr);
+					gap: 26px;
+					padding: 28px 18px 80px;
+				}
+				nav.toc {
+					position: static;
+					max-height: none;
+					border-bottom: 1px solid var(--line);
+					padding-bottom: 14px;
+				}
+				dl.spec {
+					grid-template-columns: minmax(0, 1fr);
+				}
+				dl.spec dt {
+					padding-bottom: 0;
+					border-top: 1px solid var(--line);
+				}
+				dl.spec dd {
+					padding-top: 2px;
+					border-top: 0;
+				}
+			}
+			/* Surfaces here cannot read the app's variables in print, so the ramp is restated light. */
+			@media print {
+				:root {
+					--bg: #fff;
+					--card: #f7f8f9;
+					--inset: #f1f3f5;
+					--line: #c9ced4;
+					--text: #16191c;
+					--muted: #4b545e;
+					--primary: #0f766e;
+					--on-primary: #fff;
+					--warn: #8a5a00;
+				}
+				.shell {
+					display: block;
+					max-width: none;
+					padding: 0;
+				}
+				nav.toc {
+					display: none;
+				}
+				section,
+				article.option,
+				figure {
+					break-inside: avoid;
+					border-color: #c9ced4;
+				}
+				.callout {
+					background: #fff6e0;
+					color: #5c3d00;
+				}
+				.verdict {
+					background: #eef9f7;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="shell">
+			<header class="head">
+				<h1>Rewind: <span class="accent">five ways</span> to turn a dial through the event log</h1>
+				<p class="sub">
+					A design document, not an implementation. The rewind dial currently maps the entire log
+					onto one half-circle, then trades precision for range with a distance-based decimator. This
+					document measures that trade, names the hardware it comes from, and lays out five distinct
+					interaction models concrete enough to build — with the one change that makes all of them
+					better, and the questions that are the user's to answer.
+				</p>
+				<p class="status">
+					<span>status: <strong>proposal</strong></span>
+					<span>code: untouched</span>
+					<span><code>src/lib/components/history/time-dial.svelte</code></span>
+					<span><code>src/lib/sync/history.ts</code></span>
+				</p>
+			</header>
+
+			<nav class="toc" aria-label="Contents">
+				<p>Contents</p>
+				<ol>
+					<li><a href="#problem">1 · The problem, measured</a></li>
+					<li><a href="#precedents">2 · Precedents</a></li>
+					<li><a href="#invariant">3 · The invariant: what one turn means</a></li>
+					<li>
+						<a href="#options">4 · Five models</a>
+						<ol>
+							<li><a href="#opt-a">A · Endless jog + gear</a></li>
+							<li><a href="#opt-b">B · Jog / shuttle</a></li>
+							<li><a href="#opt-c">C · Wrap by unit</a></li>
+							<li><a href="#opt-d">D · The log turns</a></li>
+							<li><a href="#opt-e">E · Jump-first</a></li>
+						</ol>
+					</li>
+					<li><a href="#compare">5 · Comparison</a></li>
+					<li><a href="#haptics">6 · Haptics</a></li>
+					<li><a href="#access">7 · Keyboard &amp; accessibility</a></li>
+					<li><a href="#svelte">8 · Svelte 5 notes</a></li>
+					<li><a href="#recommend">9 · Recommendation</a></li>
+					<li><a href="#questions">10 · Questions for you</a></li>
+					<li><a href="#assumptions">11 · Assumptions</a></li>
+				</ol>
+			</nav>
+
+			<main>
+				<section id="problem">
+					<h2><span class="num">1</span>The problem, measured</h2>
+					<p>
+						The ask: <em>"I expect to be able to rotate the dial multiple times over so I can have fine
+						control over the events, instead of just half the circle we have now."</em> That is three
+						complaints in one sentence, and they resolve at different layers.
+					</p>
+					<ul>
+						<li>
+							<strong>Range is tied to angle.</strong> <code>SWEEP = 180</code> maps the whole ordered
+							log onto half a face. At <code>RADIUS = 84</code> the usable arc is
+							<code>π·84 ≈ 264 px</code> of thumb travel — for the whole log, forever.
+						</li>
+						<li>
+							<strong>Precision is paid for with decimation.</strong>
+							<code>DETENT_CAPACITY = 120</code> means one detent every
+							<code>264 / 120 ≈ 2.2 px</code> of arc. With ≈800 events in the log, one detent is
+							<code>800 / 120 ≈ 6.7</code> events (<code>densityFor(800)</code> = 7; the unit test
+							cites the same curve at <code>densityFor(20_000)</code> = 167). One thumb-pixel ≈ 3
+							events.
+						</li>
+						<li>
+							<strong>The decimation is by distance, not by speed.</strong>
+							<code>densityFor(distance)</code> makes coarseness a function of <em>where you are in the
+							log</em>. It is applied while you are standing still, reading, trying to land exactly.
+							That is the smell: the control is coarse precisely where the user wants it fine.
+						</li>
+					</ul>
+					<figure>
+						<svg viewBox="0 0 520 214" role="img" aria-labelledby="f0t">
+							<title id="f0t">
+								Today's dial: a half-circle of 264 px of travel carrying 800 events, with 120 detents
+								2.2 px apart.
+							</title>
+							<!-- face -->
+							<circle cx="126" cy="108" r="80" fill="var(--card)" stroke="var(--line)" />
+							<path
+								d="M 126 44 A 64 64 0 0 0 126 172"
+								fill="none"
+								stroke="var(--line)"
+								stroke-width="2"
+								stroke-linecap="round"
+							/>
+							<!-- 24 of the 120 detents, to scale for the drawing -->
+							<g stroke="var(--muted)" stroke-width="1.4" opacity="0.85">
+								<line x1="126.0" y1="44.0" x2="126.0" y2="52.0" />
+								<line x1="117.3" y1="44.6" x2="118.4" y2="52.5" />
+								<line x1="108.7" y1="46.4" x2="110.9" y2="54.1" />
+								<line x1="100.5" y1="49.3" x2="103.7" y2="56.6" />
+								<line x1="92.7" y1="53.3" x2="96.9" y2="60.2" />
+								<line x1="85.6" y1="58.4" x2="90.7" y2="64.6" />
+								<line x1="79.2" y1="64.3" x2="85.1" y2="69.8" />
+								<line x1="73.7" y1="71.1" x2="80.2" y2="75.7" />
+								<line x1="69.2" y1="78.6" x2="76.3" y2="82.2" />
+								<line x1="65.7" y1="86.6" x2="73.2" y2="89.2" />
+								<line x1="63.3" y1="95.0" x2="71.2" y2="96.6" />
+								<line x1="62.1" y1="103.6" x2="70.1" y2="104.2" />
+								<line x1="62.1" y1="112.4" x2="70.1" y2="111.8" />
+								<line x1="63.3" y1="121.0" x2="71.2" y2="119.4" />
+								<line x1="65.7" y1="129.4" x2="73.2" y2="126.8" />
+								<line x1="69.2" y1="137.4" x2="76.3" y2="133.8" />
+								<line x1="73.7" y1="144.9" x2="80.2" y2="140.3" />
+								<line x1="79.2" y1="151.7" x2="85.1" y2="146.2" />
+								<line x1="85.6" y1="157.6" x2="90.7" y2="151.4" />
+								<line x1="92.7" y1="162.7" x2="96.9" y2="155.8" />
+								<line x1="100.5" y1="166.7" x2="103.7" y2="159.4" />
+								<line x1="108.7" y1="169.6" x2="110.9" y2="161.9" />
+								<line x1="117.3" y1="171.4" x2="118.4" y2="163.5" />
+								<line x1="126.0" y1="172.0" x2="126.0" y2="164.0" />
+							</g>
+							<!-- the pickable half is only the left sweep: right half clamps -->
+							<path
+								d="M 126 44 A 64 64 0 0 1 126 172"
+								fill="none"
+								stroke="var(--warn)"
+								stroke-width="2"
+								stroke-dasharray="3 5"
+								opacity="0.55"
+							/>
+							<text x="214" y="112" fill="var(--warn)" font-size="10">dead half</text>
+							<!-- hand at 70% -->
+							<g stroke="var(--primary)" stroke-width="3" stroke-linecap="round">
+								<line x1="126" y1="108" x2="68" y2="145" />
+							</g>
+							<circle cx="68" cy="145" r="6" fill="var(--primary)" />
+							<circle cx="126" cy="108" r="4" fill="var(--primary)" />
+							<text x="126" y="34" fill="var(--muted)" font-size="10" text-anchor="middle">now</text>
+							<text x="126" y="192" fill="var(--muted)" font-size="10" text-anchor="middle">
+								oldest
+							</text>
+							<text x="126" y="208" fill="var(--muted)" font-size="10" text-anchor="middle">
+								264 px of travel
+							</text>
+							<!-- magnifier -->
+							<rect x="300" y="46" width="200" height="112" rx="10" fill="var(--card)" stroke="var(--line)" />
+							<text x="316" y="66" fill="var(--muted)" font-size="10">zoom ×8 on the arc</text>
+							<g stroke="var(--primary)" stroke-width="2">
+								<line x1="320" y1="84" x2="320" y2="120" />
+								<line x1="370" y1="84" x2="370" y2="120" />
+								<line x1="420" y1="84" x2="420" y2="120" />
+								<line x1="470" y1="84" x2="470" y2="120" />
+							</g>
+							<g fill="var(--muted)" font-size="9.5" text-anchor="middle">
+								<text x="345" y="132">1 event?</text>
+								<text x="395" y="132">7 events</text>
+								<text x="445" y="132">7 events</text>
+							</g>
+							<text x="316" y="150" fill="var(--warn)" font-size="10">
+								2.2 px per detent → 6.7 events per detent
+							</text>
+						</svg>
+						<figcaption>
+							<strong>Figure 0 — the geometry as shipped.</strong> Half the face is unusable (the right
+							sweep clamps). The 120-detent grid packs a 2.2 px pitch into the usable half, and
+							<code>densityFor</code> then spends that pitch on 6–7 events each. A bigger dial only
+							delays this: at 10,000 events even a 4× radius gives ≈0.1 px per event.
+						</figcaption>
+					</figure>
+					<h3>Two structural problems under the geometry</h3>
+					<ul>
+						<li>
+							<strong>The position is a fraction, so it cannot survive a reload.</strong> The page
+							derives <code>progress</code> from <code>back</code>, and the dial hands back a 0→1
+							fraction that the page re-derives <code>back</code> from
+							(<code>backFromProgress(log.length, position)</code>). Any change to the log — another
+							device's event arriving through <code>sync.revision</code> — silently moves the dial,
+							because the same fraction of a larger log is a different event. An identity-anchored
+							dial cannot be expressed in this contract at all.
+						</li>
+						<li>
+							<strong>The accessible value is a percentage of the log.</strong>
+							<code>aria-valuenow</code> is <code>round(progress × 100)</code> and
+							<code>aria-valuemax</code> is 1. A screen reader says "12, slider" where the useful
+							thing to say is "3 events back, S1E3 watched, Breaking Bad". The fraction leaked into
+							the accessibility tree because it is the only thing the component knows.
+						</li>
+					</ul>
+					<div class="callout plain">
+						<strong>The one-line thesis.</strong> Precision should be a function of how carefully you
+						turn, not of how far back you are. Today it is the second; every option below makes it the
+						first — and the cheapest part of every option is <em>deleting</em>
+						<code>densityFor</code> and <code>DETENT_CAPACITY</code>.
+					</div>
+				</section>
+
+				<section id="precedents">
+					<h2><span class="num">2</span>Precedents worth citing</h2>
+					<p>
+						Nothing here is invented. Every part of this problem — unbounded rotation, discrete targets,
+						range versus precision on one control — was solved physically, decades before it was solved
+						on glass.
+					</p>
+					<table>
+						<thead>
+							<tr>
+								<th>Mechanism</th>
+								<th>What it is</th>
+								<th>What transfers</th>
+								<th>What does not</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><strong>Broadcast jog / shuttle wheel</strong></td>
+								<td>
+									A sprung wheel with two regimes: <em>jog</em> steps exactly one frame per detent,
+									<em>shuttle</em> winds continuously as you push against spring tension.
+								</td>
+								<td>
+									One control, two ratios, no mode switch. Unbounded rotation. Operators trust it
+									for frame-accurate trims <em>and</em> for crossing an hour of tape — the closest
+									analogue to this problem that exists.
+								</td>
+								<td>
+									Shuttle's rate comes from <em>displacement</em> of a lever with real resistance.
+									A touchscreen gives no displacement, only velocity and acceleration — a worse,
+									noisier signal.
+								</td>
+							</tr>
+							<tr>
+								<td><strong>Endless rotary encoder</strong></td>
+								<td>
+									No end stops; reports only quadrature deltas. The host device owns the value.
+									(Volume knobs, CNC manual pulse generators.)
+								</td>
+								<td>
+									The exact contract this component is missing: <code>step(delta)</code>, not
+									<code>position(fraction)</code>. The knob never knows what it controls.
+								</td>
+								<td>
+									An encoder has no absolute position, so the panel must print the value — which is
+									why the hub readout is load-bearing, not decoration.
+								</td>
+							</tr>
+							<tr>
+								<td><strong>Combination lock / safe dial</strong></td>
+								<td>
+									~100 divisions a turn, deliberate multiple revolutions, detents you feel through a
+									glove.
+								</td>
+								<td>
+									Multiple turns are learnable <em>when each turn has a name</em> — "three left, two
+									right". It also names the failure: counting laps is the user's memory burden, so a
+									multi-turn dial must <em>show</em> the lap.
+								</td>
+								<td>
+									The precision of 100 divisions a turn is not needed. We are not dialling a secret;
+									we are landing on one event among hundreds.
+								</td>
+							</tr>
+							<tr>
+								<td><strong>Mechanical counter / odometer</strong></td>
+								<td>
+									The digits move; nothing rotates. Carries are automatic and free.
+								</td>
+								<td>
+									<strong>The value carries the range, not the angle.</strong> Six digits cover 10⁶
+									with perfect resolution at the last one, and no visual ever repeats.
+								</td>
+								<td>
+									Reading six digits sequentially is slow. Good for confirmation, poor for
+									scrubbing; hence a hub readout, not a face of digits.
+								</td>
+							</tr>
+							<tr>
+								<td><strong>Camera command dial</strong></td>
+								<td>
+									A clicky dial with a fixed ratio per click, plus a mode dial that changes what the
+									clicks mean.
+								</td>
+								<td>
+									Gearing as an explicit control is legitimate and learnable — photographers choose
+									it, and it never surprises them.
+								</td>
+								<td>
+									A hidden gear is a support burden. If the ratio can change under the user, it has
+									to be visible at all times.
+								</td>
+							</tr>
+							<tr>
+								<td><strong>Scroll wheel with momentum</strong></td>
+								<td>Fling, coast with exponential decay, settle on a snap point.</td>
+								<td>
+									Momentum is how a small control crosses a big list cheaply, and the
+									fling→coast→snap math is the same integral used below.
+								</td>
+								<td>
+									Pixels are continuous and free. Our targets are discrete and each one is a
+									candidate write, so overshoot must <em>return</em>, not just stop.
+								</td>
+							</tr>
+						</tbody>
+					</table>
+					<p>
+						One more, from outside the list: <strong>film scrubbing in a video player</strong>. It is
+						the same user need, and it converged on a thumbnail strip <em>plus</em> positional precision
+						on release (release-to-scrub, then frame step). That is a jump affordance bolted onto a
+						coarse drag — and it is a hint at the recommendation below.
+					</p>
+				</section>
+
+				<section id="invariant">
+					<h2><span class="num">3</span>The invariant: what one turn means</h2>
+					<p>
+						Before the models, four decisions that should hold in all of them. They are what makes the
+						options comparable rather than five unrelated sketches.
+					</p>
+					<h3>3.1 A detent is 15° — 24 to a turn (proposal)</h3>
+					<p>
+						At <code>RADIUS = 84</code> a 15° detent is <code>84 × 0.2618 ≈ 22 px</code> of arc: coarse
+						enough to feel with a thumb, fine enough to land on. 24 detents a turn is the number every
+						option below assumes. It is a proposal, not a measurement — the only measured thing here is
+						that today's 2.2 px pitch is too small to resolve.
+					</p>
+					<h3>3.2 At rest, one detent is exactly one event — everywhere in the log</h3>
+					<p>
+						<code>densityFor</code> and <code>DETENT_CAPACITY</code> go. Coarseness is allowed
+						<em>only while winding</em>, and then it is a function of speed, not position. This single
+						sentence is the difference between "a bigger dial" (a dead end) and a control that still
+						works at 10,000 events.
+					</p>
+					<h3>3.3 Zoom is not a scale — it is a ladder of units</h3>
+					<p>
+						An unbounded list cannot be zoomed continuously: a screen is not unbounded, so a continuous
+						scale has to re-map "fraction of the whole log" onto "fraction of the screen", which is
+						exactly the operation that gets coarser as the log grows. Instead, zoom selects a
+						<strong>unit the detent walks</strong>, from a short ladder — event, ten events, hour, day,
+						week, month — each of which is traversable in a bounded number of detents per screen. The
+						existing <code>REWIND_STOPS</code> ladder (Now · 15m · 1h · 6h · 1d · 3d · 1w · 1mo) is
+						already this idea, used only in time mode; the proposal is to make it the single ladder both
+						modes read.
+					</p>
+					<h3>3.4 Zoom preserves identity, never a fraction</h3>
+					<p>
+						The anchor is the value itself: the event index in event mode, the cutoff in ms in time
+						mode. Both are absolute, so changing the unit changes nothing about where you are — the
+						event you were on stays the event you are on, with more or fewer neighbours per turn. This
+						is the crux, and it is cheap: it is the difference between storing
+						<code>back: number</code> and storing <code>progress: number</code> and deriving
+						<code>back</code> from it.
+					</p>
+					<div class="callout">
+						<strong>The bounded-screen consequence.</strong> With 3.4 in place, the dial never draws
+						"position within the whole log" as an angle. What it draws is the <em>window</em> — the
+						current unit and its immediate neighbours — plus, at most, a track showing coarse extent
+						with a marker (a minimap), never a handle. Any option that tries to draw the whole log as an
+						angle has rebuilt today's problem at a larger radius.
+					</div>
+				</section>
+
+				<section id="options">
+					<h2><span class="num">4</span>Five models</h2>
+					<p>
+						Each is a different answer to one question — <em>where does the range come from, if a turn
+						is fixed precision?</em> — not a variation on a single wheel. They are ordered from "the
+						smallest change to what exists" to "rotation is the wrong control".
+					</p>
+				</section>
+
+				<article class="option" id="opt-a">
+					<header>
+						<span class="tag">A</span>
+						<h2>Endless jog with a gear lever</h2>
+					</header>
+					<p class="idea">
+						The dial becomes an endless encoder — 24 detents a turn, one event per detent — and range
+						comes from a gear the user sets (1× / 8× / 64×) instead of from the angle.
+					</p>
+					<dl class="spec">
+						<dt>Mapping</dt>
+						<dd>
+							Unbounded integer <code>detents</code>; value = <code>clamp(anchor + detents × gear)</code>.
+							At 800 events: 1× → 33.3 turns, 8× → 4.2 turns, 64× → 0.52 turns. The gear multiplies
+							the <em>step</em> only, so changing it never moves you.
+						</dd>
+						<dt>Visual state</dt>
+						<dd>
+							The transform is <code>(detents % 24) × 15°</code> — one lap, forever, no re-basing and no
+							float drift (see §8). The lap count lives in a chip ("turn 07"), the gear in a pill
+							("8×"), and the choice of chip over angle is the whole trick: the wheel stays a physical
+							object while the <em>number</em> carries the depth.
+						</dd>
+						<dt>Feel</dt>
+						<dd>
+							Clicky and predictable — "I know how far one turn is". No momentum: a gear is a decision
+							instead of a guess, and that predictability is exactly what a settled wheel is for.
+						</dd>
+						<dt>Zoom</dt>
+						<dd>
+							The gear <em>is</em> the zoom, and it is resolution-only. Because the value is an integer
+							event index, switching 1× ↔ 64× leaves you exactly where you were. This is the cheapest
+							correct zoom in the document.
+						</dd>
+						<dt>Haptics</dt>
+						<dd>One 10 ms pulse per detent; a distinct <code>[8, 30, 8]</code> when the gear changes.</dd>
+						<dt>Trade-off</dt>
+						<dd>
+							Two controls where the user asked for one. A gear left on 64× overshoots by 64 events per
+							detent, and it is invisible until it bites.
+						</dd>
+						<dt>Build cost</dt>
+						<dd>
+							<strong>Smallest of the five.</strong> Add unbounded detent accumulation, delete
+							<code>densityFor</code>/<code>DETENT_CAPACITY</code>, keep <code>ondetent</code>, add a
+							three-way pill. The existing Fine/Shift modifier becomes gear 1×, so that rename is
+							nearly free.
+						</dd>
+						<dt>Hard part</dt>
+						<dd>
+							It does not fix the complaint's <em>feel</em> — it fixes precision by adding a mode, and a
+							mode is a tax on every use. Fine for a power user; a permanent small papercut.
+						</dd>
+					</dl>
+					<figure>
+						<svg viewBox="0 0 520 208" role="img" aria-labelledby="fat">
+							<title id="fat">
+								Option A: a wheel whose angle never exceeds one lap, with a gear pill beside it and a
+								turn counter chip.
+							</title>
+							<circle cx="128" cy="104" r="84" fill="var(--card)" stroke="var(--line)" />
+							<circle cx="128" cy="104" r="70" fill="none" stroke="var(--line)" stroke-width="2" />
+							<!-- 24 detents around the full circle -->
+							<g stroke="var(--muted)" stroke-width="1.4" opacity="0.85">
+								<line x1="128.0" y1="34.0" x2="128.0" y2="43.0" />
+								<line x1="146.1" y1="36.4" x2="143.8" y2="45.1" />
+								<line x1="163.0" y1="43.4" x2="158.5" y2="51.2" />
+								<line x1="177.5" y1="54.5" x2="171.1" y2="60.9" />
+								<line x1="188.6" y1="69.0" x2="180.8" y2="73.5" />
+								<line x1="195.6" y1="85.9" x2="186.9" y2="88.2" />
+								<line x1="198.0" y1="104.0" x2="189.0" y2="104.0" />
+								<line x1="195.6" y1="122.1" x2="186.9" y2="119.8" />
+								<line x1="188.6" y1="139.0" x2="180.8" y2="134.5" />
+								<line x1="177.5" y1="153.5" x2="171.1" y2="147.1" />
+								<line x1="163.0" y1="164.6" x2="158.5" y2="156.8" />
+								<line x1="146.1" y1="171.6" x2="143.8" y2="162.9" />
+								<line x1="128.0" y1="174.0" x2="128.0" y2="165.0" />
+								<line x1="109.9" y1="171.6" x2="112.2" y2="162.9" />
+								<line x1="93.0" y1="164.6" x2="97.5" y2="156.8" />
+								<line x1="78.5" y1="153.5" x2="84.9" y2="147.1" />
+								<line x1="67.4" y1="139.0" x2="75.2" y2="134.5" />
+								<line x1="60.4" y1="122.1" x2="69.1" y2="119.8" />
+								<line x1="58.0" y1="104.0" x2="67.0" y2="104.0" />
+								<line x1="60.4" y1="85.9" x2="69.1" y2="88.2" />
+								<line x1="67.4" y1="69.0" x2="75.2" y2="73.5" />
+								<line x1="78.5" y1="54.5" x2="84.9" y2="60.9" />
+								<line x1="93.0" y1="43.4" x2="97.5" y2="51.2" />
+								<line x1="109.9" y1="36.4" x2="112.2" y2="45.1" />
+							</g>
+							<!-- hand, mid-lap -->
+							<line
+								x1="128"
+								y1="104"
+								x2="128"
+								y2="52"
+								stroke="var(--primary)"
+								stroke-width="3"
+								stroke-linecap="round"
+								transform="rotate(60 128 104)"
+							/>
+							<circle cx="128" cy="104" r="5" fill="var(--primary)" />
+							<text x="128" y="120" fill="var(--muted)" font-size="9.5" text-anchor="middle">
+								angle = detents % 24
+							</text>
+							<!-- gear pills -->
+							<text x="252" y="58" fill="var(--muted)" font-size="10">gear</text>
+							<g font-size="11" text-anchor="middle">
+								<rect x="246" y="68" width="44" height="26" rx="8" fill="var(--card)" stroke="var(--line)" />
+								<text x="268" y="85" fill="var(--muted)">1×</text>
+								<rect x="296" y="68" width="44" height="26" rx="8" fill="var(--primary)" />
+								<text x="318" y="85" fill="var(--on-primary)" font-weight="700">8×</text>
+								<rect x="346" y="68" width="52" height="26" rx="8" fill="var(--card)" stroke="var(--line)" />
+								<text x="372" y="85" fill="var(--muted)">64×</text>
+							</g>
+							<path d="M 206 78 C 226 70 232 82 244 82" fill="none" stroke="var(--muted)" stroke-dasharray="3 4" />
+							<!-- chips -->
+							<rect x="246" y="112" width="152" height="30" rx="8" fill="var(--inset)" stroke="var(--line)" />
+							<text x="258" y="131" fill="var(--text)" font-size="11">turn 07 · 8× · 1 detent = 8 events</text>
+							<text x="246" y="162" fill="var(--muted)" font-size="10.5">800 events at 8× ≈ 4.2 turns</text>
+							<text x="246" y="180" fill="var(--muted)" font-size="10.5">at 64× ≈ half a turn</text>
+						</svg>
+						<figcaption>
+							<strong>Figure A.</strong> The face never turns more than one lap; depth is a number.
+							Zeros of rotation are bought back by increasing step size, not by hiding the lap.
+						</figcaption>
+					</figure>
+				</article>
+
+				<article class="option" id="opt-b">
+					<header>
+						<span class="tag">B</span>
+						<h2>Jog / shuttle</h2>
+					</header>
+					<p class="idea">
+						One wheel, two regimes: below about a turn a second every detent is one event; above it the
+						wheel stops stepping and <em>winds</em>, at a rate driven by how fast it is spinning.
+					</p>
+					<dl class="spec">
+						<dt>Mapping</dt>
+						<dd>
+							24 detents a turn. Jog: 1 event per detent (24 events a second at one turn a second).
+							Wind: <code>rate = min(400, 24 · |ω|^1.6)</code> events a second, for ω in turns a second
+							— 24 at one turn a second (continuous with jog), ≈220 at four, capped at 400, which
+							crosses 800 events in about 2 seconds. <em>A proposal; the exponent is the tuning
+							knob.</em>
+						</dd>
+						<dt>Momentum</dt>
+						<dd>
+							A flick is just wind that outlives the finger: <code>v *= exp(−dt/τ)</code> with
+							<code>τ ≈ 280 ms</code>, plus a detent friction floor below ~0.5 detents a second so it
+							always stops on a detent.
+						</dd>
+						<dt>Not sliding past</dt>
+						<dd>
+							Two rules. (1) <strong>Wind cannot settle between detents</strong>: on release the value
+							snaps to the nearest one with a 120 ms ease, and if the overshoot was 8 events or more the
+							panel offers a "−9" back-step button rather than making the user hunt. (2) <strong>Tap to
+							brake</strong>: any pointerdown during coast kills the velocity instantly, no deceleration
+							curve.
+						</dd>
+						<dt>Visual</dt>
+						<dd>
+							During wind, per-event rendering is <em>suspended</em>: the rim becomes a dashed arc whose
+							dash <em>pitch</em> encodes speed, the hub reads "×12", and the panel replays once, on
+							settle. This is where decimation belongs — inside the wind, by speed, instead of
+							permanently, by distance.
+						</dd>
+						<dt>Zoom</dt>
+						<dd>
+							None. Range is speed, so the unit ladder (§3.3) is the only zoom, and anchoring is free
+							because the value is an event index.
+						</dd>
+						<dt>Haptics</dt>
+						<dd>
+							Jog: 10 ms per detent. Wind: the per-detent pulse stops being possible above ~25 a second
+							(the existing <code>MIN_GAP_MS = 40</code> ceiling) — so the switch into wind gets its own
+							pattern, and the stop gets one more.
+						</dd>
+						<dt>Trade-off</dt>
+						<dd>
+							Mistuning. A super-linear rate is deliberate at speed and twitchy in the middle of the
+							range, and it is tuned by feel once, then frozen. Reduced motion loses the primary wind
+							feedback (no blur, no fast rim), so that path needs a different display, not a disabled
+							one.
+						</dd>
+						<dt>Build cost</dt>
+						<dd>
+							<strong>Medium.</strong> A rAF loop, velocity from the last two pointer samples, quantised
+							rendering, and a page that must survive ~60 value commits a second while winding.
+						</dd>
+						<dt>Hard part</dt>
+						<dd>
+							Velocity→rate has no physical ground truth on a touchscreen. There is no lever to push,
+							so the mapping is an invention that will feel arbitrary to someone, and it cannot be
+							discovered by the user — only tuned by us.
+						</dd>
+					</dl>
+					<figure>
+						<svg viewBox="0 0 520 208" role="img" aria-labelledby="fbt">
+							<title id="fbt">
+								Option B: a jog region and a shuttle wind, one wheel, with a settle marker and a rate
+								readout.
+							</title>
+							<!-- wheel -->
+							<circle cx="96" cy="102" r="62" fill="var(--card)" stroke="var(--line)" />
+							<!-- dashed rim, pitch = speed -->
+							<g stroke="var(--primary)" stroke-width="2" stroke-dasharray="2 6">
+								<circle cx="96" cy="102" r="54" fill="none" />
+							</g>
+							<g stroke="var(--primary)" stroke-width="2" stroke-dasharray="14 3" opacity="0.5">
+								<circle cx="96" cy="102" r="62" fill="none" />
+							</g>
+							<line x1="96" y1="102" x2="96" y2="56" stroke="var(--primary)" stroke-width="3" stroke-linecap="round" transform="rotate(-40 96 102)" />
+							<circle cx="96" cy="102" r="5" fill="var(--primary)" />
+							<text x="96" y="176" fill="var(--muted)" font-size="10" text-anchor="middle">rim pitch = speed</text>
+							<!-- transport bar -->
+							<text x="176" y="48" fill="var(--muted)" font-size="10">ratio</text>
+							<rect x="176" y="58" width="316" height="18" rx="9" fill="var(--inset)" stroke="var(--line)" />
+							<rect x="176" y="58" width="86" height="18" rx="9" fill="var(--primary)" opacity="0.22" />
+							<g stroke="var(--muted)" stroke-width="1.2">
+								<line x1="196" y1="58" x2="196" y2="76" />
+								<line x1="216" y1="58" x2="216" y2="76" />
+								<line x1="236" y1="58" x2="236" y2="76" />
+								<line x1="256" y1="58" x2="256" y2="76" />
+								<line x1="300" y1="58" x2="300" y2="76" />
+								<line x1="344" y1="58" x2="344" y2="76" />
+								<line x1="388" y1="58" x2="388" y2="76" />
+								<line x1="432" y1="58" x2="432" y2="76" />
+							</g>
+							<text x="190" y="92" fill="var(--primary)" font-size="10.5" font-weight="600">JOG · 1 event/detent</text>
+							<text x="318" y="92" fill="var(--muted)" font-size="10.5">SHUTTLE · up to 400 ev/s</text>
+							<!-- readout -->
+							<rect x="176" y="106" width="152" height="34" rx="8" fill="var(--card)" stroke="var(--line)" />
+							<text x="188" y="128" fill="var(--text)" font-size="12">×12 · 96 ev/s</text>
+							<rect x="344" y="106" width="148" height="34" rx="8" fill="var(--card)" stroke="var(--line)" />
+							<text x="356" y="128" fill="var(--muted)" font-size="11">detent 4 312 · S1E3</text>
+							<!-- settle -->
+							<path d="M 200 150 L 200 166 L 202.5 161 L 197.5 161 Z" fill="var(--warn)" />
+							<text x="210" y="164" fill="var(--warn)" font-size="10.5">settle: snap 120 ms, overshoot → “−9”</text>
+							<text x="200" y="184" fill="var(--muted)" font-size="10.5">tap to brake · release stops on a detent</text>
+						</svg>
+						<figcaption>
+							<strong>Figure B.</strong> The two regimes share one wheel and one gesture; the region
+							shading exists because a hidden threshold is a trap, not a feature.
+						</figcaption>
+					</figure>
+				</article>
+
+				<article class="option" id="opt-c">
+					<header>
+						<span class="tag">C</span>
+						<h2>Wrap by unit: each lap has a name</h2>
+					</header>
+					<p class="idea">
+						The wheel never turns past one lap — it wraps at a named boundary (a day), and the
+						<em>hub</em> counts the wraps, so thirty turns is not a blind disc but "three days back,
+						second lap".
+					</p>
+					<dl class="spec">
+						<dt>Mapping</dt>
+						<dd>
+							24 detents a turn; the angle is the position <em>within the unit</em> (a day, or 24
+							events in event mode); crossing the unit's end rolls the unit index by one at 12 o'clock,
+							with a wrap tick. Unbounded value, bounded angle: there is no re-basing maths at all — the
+							transform is always <code>(positionInUnit / 24) × 360°</code>.
+						</dd>
+						<dt>Momentum</dt>
+						<dd>
+							Gentle, and deliberately interrupted: the wrap boundary acts as a detent plateau, so a
+							fast wind slows at every day. In a journal-shaped log that is a feature — days are how
+							people remember — but it does cap the wind at one unit per lap.
+						</dd>
+						<dt>Visual</dt>
+						<dd>
+							Two concentric bands: the inner one carries the 24 detents and the hand; the outer carries
+							the last few unit names ("Tue · <em>Wed 3 Jun</em> · Thu") with the current unit lit. The
+							wrap is a short roll animation at the top, matched to the announcement so the eye and the
+							haptic agree.
+						</dd>
+						<dt>Zoom</dt>
+						<dd>
+							The ladder chooses the <em>unit</em>, and the anchor is the timestamp you are on, so
+							"day" → "hour" keeps you at the same moment on a finer wheel. This is the option where
+							the §3.4 invariant feels most natural, because the unit is already named on the rim.
+						</dd>
+						<dt>Jumping</dt>
+						<dd>
+							The hub doubles as the jump: tap it to open a small drum of units ("Wed 3 Jun", "Tue
+							2 Jun"…), which also answers "how did I get here" and "how do I get back".
+						</dd>
+						<dt>Haptics</dt>
+						<dd>
+							10 ms per detent; <code>[10, 20, 10]</code> on a wrap; <code>[12, 40, 12]</code> on
+							reaching the present.
+						</dd>
+						<dt>Trade-off</dt>
+						<dd>
+							Unequal laps. A quiet day holds 3 events and a binge evening holds 200, so one lap buys a
+							very different distance depending on where you are — and users read absolute angle as
+							distance. The angle is honest about <em>time</em> and dishonest about <em>events</em>.
+						</dd>
+						<dt>Build cost</dt>
+						<dd>
+							<strong>Medium.</strong> Wrap detection, a unit index, and a wrap animation. No new
+							momentum maths.
+						</dd>
+						<dt>Hard part</dt>
+						<dd>
+							The wheel becomes calendar-locked in event mode: at 24 events a wrap, an 800-event log
+							wraps 33 times with no meaning attached, so the unit must be the day — and then the
+							mapping is "day per lap", which is not the event-precision the user asked for. C is
+							strongest as a <em>layer</em> on another option, not as one.
+						</dd>
+					</dl>
+					<figure>
+						<svg viewBox="0 0 520 208" role="img" aria-labelledby="fct">
+							<title id="fct">
+								Option C: an inner detent band inside an outer band of named units, with a wrap arrow
+								at twelve o'clock.
+							</title>
+							<circle cx="130" cy="104" r="88" fill="var(--card)" stroke="var(--line)" />
+							<!-- outer unit band: three segments -->
+							<g fill="none" stroke-width="10">
+								<path d="M 130 16 A 88 88 0 0 0 42 104" stroke="var(--line)" />
+								<path d="M 42 104 A 88 88 0 0 0 130 192" stroke="var(--line)" />
+								<path d="M 130 192 A 88 88 0 0 0 218 104" stroke="var(--line)" />
+								<path d="M 218 104 A 88 88 0 0 0 130 16" stroke="var(--primary)" opacity="0.55" />
+							</g>
+							<text x="78" y="72" fill="var(--muted)" font-size="10" text-anchor="middle">Tue</text>
+							<text x="196" y="72" fill="var(--muted)" font-size="10" text-anchor="middle">Thu</text>
+							<text x="200" y="130" fill="var(--primary)" font-size="10.5" text-anchor="middle" font-weight="600">
+								Wed 3 Jun
+							</text>
+							<!-- inner detent band -->
+							<g stroke="var(--muted)" stroke-width="1.4" opacity="0.85">
+								<line x1="130.0" y1="38.0" x2="130.0" y2="48.0" />
+								<line x1="147.1" y1="40.2" x2="144.5" y2="49.9" />
+								<line x1="163.0" y1="46.8" x2="158.0" y2="55.5" />
+								<line x1="176.7" y1="57.3" x2="169.6" y2="64.4" />
+								<line x1="187.2" y1="71.0" x2="178.5" y2="76.0" />
+								<line x1="193.8" y1="86.9" x2="184.1" y2="89.5" />
+								<line x1="196.0" y1="104.0" x2="186.0" y2="104.0" />
+								<line x1="193.8" y1="121.1" x2="184.1" y2="118.5" />
+								<line x1="187.2" y1="137.0" x2="178.5" y2="132.0" />
+								<line x1="176.7" y1="150.7" x2="169.6" y2="143.6" />
+								<line x1="163.0" y1="161.2" x2="158.0" y2="152.5" />
+								<line x1="147.1" y1="167.8" x2="144.5" y2="158.1" />
+								<line x1="130.0" y1="170.0" x2="130.0" y2="160.0" />
+								<line x1="112.9" y1="167.8" x2="115.5" y2="158.1" />
+								<line x1="97.0" y1="161.2" x2="102.0" y2="152.5" />
+								<line x1="83.3" y1="150.7" x2="90.4" y2="143.6" />
+								<line x1="72.8" y1="137.0" x2="81.5" y2="132.0" />
+								<line x1="66.2" y1="121.1" x2="75.9" y2="118.5" />
+								<line x1="64.0" y1="104.0" x2="74.0" y2="104.0" />
+								<line x1="66.2" y1="86.9" x2="75.9" y2="89.5" />
+								<line x1="72.8" y1="71.0" x2="81.5" y2="76.0" />
+								<line x1="83.3" y1="57.3" x2="90.4" y2="64.4" />
+								<line x1="97.0" y1="46.8" x2="102.0" y2="55.5" />
+								<line x1="112.9" y1="40.2" x2="115.5" y2="49.9" />
+							</g>
+							<line x1="130" y1="104" x2="130" y2="58" stroke="var(--primary)" stroke-width="3" stroke-linecap="round" transform="rotate(150 130 104)" />
+							<circle cx="130" cy="104" r="5" fill="var(--primary)" />
+							<text x="130" y="124" fill="var(--text)" font-size="9.5" text-anchor="middle">lap 2 of 3</text>
+							<!-- wrap marker -->
+							<path d="M 236 30 C 250 44 240 56 218 54" fill="none" stroke="var(--warn)" stroke-width="2" stroke-dasharray="4 3" />
+							<path d="M 214 54 L 221 51 L 219 58 Z" fill="var(--warn)" />
+							<text x="252" y="28" fill="var(--warn)" font-size="10">wrap → next day</text>
+							<!-- copy -->
+							<text x="286" y="92" fill="var(--muted)" font-size="11">angle = position inside the unit</text>
+							<text x="286" y="112" fill="var(--muted)" font-size="11">the hub counts the wraps</text>
+							<text x="286" y="140" fill="var(--text)" font-size="11">“two laps back = one day”</text>
+							<text x="286" y="160" fill="var(--muted)" font-size="11">unequal laps: 3 events Tue,</text>
+							<text x="286" y="176" fill="var(--muted)" font-size="11">200 on Wed</text>
+						</svg>
+						<figcaption>
+							<strong>Figure C.</strong> Multi-turn without a growing angle: every lap ends at a named
+							boundary, so depth is told, not inferred. The cost is that the lap is a day, not a count.
+						</figcaption>
+					</figure>
+				</article>
+
+				<article class="option" id="opt-d">
+					<header>
+						<span class="tag">D</span>
+						<h2>The log turns under a fixed pointer</h2>
+					</header>
+					<p class="idea">
+						Invert the mechanism: the rim carries the events themselves and turns under a fixed pointer
+						at 12 o'clock, so a repeating angle is fine because the content under the pointer never
+						repeats.
+					</p>
+					<dl class="spec">
+						<dt>Mapping</dt>
+						<dd>
+							24 event slivers a lap; one detent, one event; orientation is <code>−detents × 15°</code>
+							applied to the <em>ring group</em>, not to a hand. Unbounded and unrebased, because the
+							thing rotating is content, not an indicator.
+						</dd>
+						<dt>Why it survives 30 turns</dt>
+						<dd>
+							The "blind spinning disc" objection attacks the <em>indicator</em>: its angle repeats, so
+							after a lap you learn nothing from it. A ring of posters repeats its angle too — but at
+							turn 30 the pointer is over different slivers, and the hub prints the depth ("03·07" =
+							third turn, seventh event). Repetition of angle, novelty of content.
+						</dd>
+						<dt>Momentum</dt>
+						<dd>
+							The content <em>smears</em>: slivers streak tangentially while winding and snap into the
+							pointer's gate on settle — the slot-machine reel, which is exactly a discrete target with
+							momentum. Deceleration is capped so a sliver can never flash past at a rate that reads as
+							a strobe.
+						</dd>
+						<dt>Visual</dt>
+						<dd>
+							Rim: 24 slivers, each a tick plus a poster colour plus an event glyph — texture, not text.
+							Gate at 12: one full-width window holding the landed event's words. Hub: the lap odometer.
+						</dd>
+						<dt>Zoom</dt>
+						<dd>
+							The number of slivers a lap changes: 24 events, 12 hours, 31 days. This is the only option
+							where zoom's anchor is <em>geometrically</em> trivial — the pointer never moves, so the
+							thing under it stays under it by construction.
+						</dd>
+						<dt>Trade-off</dt>
+						<dd>
+							Cost, and the loss of a familiar affordance: people recognise a clock's hand. A rotating
+							face reads as a reel — which is the right metaphor here, but it is a new one in this app.
+						</dd>
+						<dt>Build cost</dt>
+						<dd>
+							<strong>Highest.</strong> Per-sliver layout and keys, the smear effect, a gate that must
+							stay legible while everything else moves, and a reduced-motion substitute for the smear.
+						</dd>
+						<dt>Hard part</dt>
+						<dd>
+							Legibility of 24 slivers on an 84 radius ring: each is ≈22 px wide, enough for a colour
+							and a glyph, not a title. So the words must live in the gate — and a gate that changes
+							content 24 times a lap is a lot of small type changes to keep from flickering.
+						</dd>
+					</dl>
+					<figure>
+						<svg viewBox="0 0 520 208" role="img" aria-labelledby="fdt">
+							<title id="fdt">
+								Option D: a fixed pointer at twelve o'clock with a ring of 24 event slivers turning
+								beneath it, and an odometer hub.
+							</title>
+							<circle cx="124" cy="108" r="84" fill="var(--card)" stroke="var(--line)" />
+							<!-- ring of slivers -->
+							<!-- 24 slivers, one detent apart; the one in the gate is lit -->
+							<g fill="var(--muted)" opacity="0.5">
+								<rect x="118.0" y="15.0" width="12" height="18" rx="3" fill="var(--primary)" transform="rotate(0 124.0 24.0)" />
+								<rect x="139.7" y="17.9" width="12" height="18" rx="3" transform="rotate(15 145.7 26.9)" />
+								<rect x="160.0" y="26.3" width="12" height="18" rx="3" transform="rotate(30 166.0 35.3)" />
+								<rect x="177.4" y="39.6" width="12" height="18" rx="3" transform="rotate(45 183.4 48.6)" />
+								<rect x="190.7" y="57.0" width="12" height="18" rx="3" transform="rotate(60 196.7 66.0)" />
+								<rect x="199.1" y="77.3" width="12" height="18" rx="3" transform="rotate(75 205.1 86.3)" />
+								<rect x="202.0" y="99.0" width="12" height="18" rx="3" transform="rotate(90 208.0 108.0)" />
+								<rect x="199.1" y="120.7" width="12" height="18" rx="3" transform="rotate(105 205.1 129.7)" />
+								<rect x="190.7" y="141.0" width="12" height="18" rx="3" transform="rotate(120 196.7 150.0)" />
+								<rect x="177.4" y="158.4" width="12" height="18" rx="3" transform="rotate(135 183.4 167.4)" />
+								<rect x="160.0" y="171.7" width="12" height="18" rx="3" transform="rotate(150 166.0 180.7)" />
+								<rect x="139.7" y="180.1" width="12" height="18" rx="3" transform="rotate(165 145.7 189.1)" />
+								<rect x="118.0" y="183.0" width="12" height="18" rx="3" transform="rotate(180 124.0 192.0)" />
+								<rect x="96.3" y="180.1" width="12" height="18" rx="3" transform="rotate(195 102.3 189.1)" />
+								<rect x="76.0" y="171.7" width="12" height="18" rx="3" transform="rotate(210 82.0 180.7)" />
+								<rect x="58.6" y="158.4" width="12" height="18" rx="3" transform="rotate(225 64.6 167.4)" />
+								<rect x="45.3" y="141.0" width="12" height="18" rx="3" transform="rotate(240 51.3 150.0)" />
+								<rect x="36.9" y="120.7" width="12" height="18" rx="3" transform="rotate(255 42.9 129.7)" />
+								<rect x="34.0" y="99.0" width="12" height="18" rx="3" transform="rotate(270 40.0 108.0)" />
+								<rect x="36.9" y="77.3" width="12" height="18" rx="3" transform="rotate(285 42.9 86.3)" />
+								<rect x="45.3" y="57.0" width="12" height="18" rx="3" transform="rotate(300 51.3 66.0)" />
+								<rect x="58.6" y="39.6" width="12" height="18" rx="3" transform="rotate(315 64.6 48.6)" />
+								<rect x="76.0" y="26.3" width="12" height="18" rx="3" transform="rotate(330 82.0 35.3)" />
+								<rect x="96.3" y="17.9" width="12" height="18" rx="3" transform="rotate(345 102.3 26.9)" />
+							</g>
+							<!-- gate + pointer -->
+							<rect x="100" y="8" width="48" height="34" rx="7" fill="none" stroke="var(--primary)" stroke-width="1.5" />
+							<path d="M 124 20 L 130 10 L 118 10 Z" fill="var(--primary)" />
+							<text x="124" y="196" fill="var(--muted)" font-size="10" text-anchor="middle">pointer fixed</text>
+							<!-- hub -->
+							<circle cx="124" cy="108" r="30" fill="var(--inset)" stroke="var(--line)" />
+							<text x="124" y="113" fill="var(--text)" font-size="13" text-anchor="middle" font-weight="600">
+								03·07
+							</text>
+							<text x="124" y="127" fill="var(--muted)" font-size="8" text-anchor="middle">turn · event</text>
+							<!-- copy -->
+							<text x="238" y="52" fill="var(--muted)" font-size="11">the rim turns — 24 slivers a lap</text>
+							<text x="238" y="74" fill="var(--muted)" font-size="11">the gate holds the words</text>
+							<text x="238" y="96" fill="var(--primary)" font-size="11">angle repeats, content does not</text>
+							<rect x="238" y="112" width="252" height="56" rx="8" fill="var(--inset)" stroke="var(--line)" />
+							<text x="250" y="132" fill="var(--text)" font-size="11">Breaking Bad</text>
+							<text x="250" y="150" fill="var(--muted)" font-size="10.5">S1E3 watched · 3 events back</text>
+							<text x="238" y="188" fill="var(--muted)" font-size="10.5">smear on wind, snap into the gate</text>
+						</svg>
+						<figcaption>
+							<strong>Figure D.</strong> The inversion is the answer to "how does the wheel's state
+							survive thirty turns": it does not need to, because the wheel is the content.
+						</figcaption>
+					</figure>
+				</article>
+
+				<article class="option" id="opt-e">
+					<header>
+						<span class="tag">E</span>
+						<h2>Jump-first: rotation demoted</h2>
+					</header>
+					<p class="idea">
+						Rotation is the wrong control for a log this long — keep it as a fine nudge (±1 event, ±1
+						turn for a day) and put all range into jumps: a title palette, day chips, and "rewind to
+						before this event".
+					</p>
+					<dl class="spec">
+						<dt>Mapping</dt>
+						<dd>
+							The wheel shows the <em>local</em> neighbourhood — the selected event and ±12 around it —
+							rather than the log. One detent, one event, and a turn past the window's edge loads the
+							next 24. Value is the event index; jumps set it absolutely.
+						</dd>
+						<dt>Zoom</dt>
+						<dd>
+							There is none: the wheel is permanently at "one event per detent", and the ladder of jump
+							targets (event → day → title) is what changes scale. Anchoring is exact by construction,
+							which is the point: no fraction, no recomputation.
+						</dd>
+						<dt>Jumping</dt>
+						<dd>
+							Three specifically: <strong>⌘K palette</strong> (type a title → its events → "before
+							this" — an 800-event scan is trivial client-side, and this is the only affordance that
+							survives 10,000 events); <strong>day chips</strong> from the strip; and
+							<strong>"rewind to before this"</strong> on the event panel, which already knows how — the
+							per-event Undo in <code>restore.ts</code> is the same diff, one step earlier.
+						</dd>
+						<dt>Momentum</dt>
+						<dd>Not needed. A window of 24 events is one turn.</dd>
+						<dt>Haptics</dt>
+						<dd>10 ms per detent, <code>[30]</code> as a wall at the window's edge — this is the option where "hitting a limit" is a real, frequent signal.</dd>
+						<dt>Trade-off</dt>
+						<dd>
+							It is not what was asked for. The dial becomes a nudge wheel, and a nudge wheel that
+							cannot travel teaches the user that the wheel is decoration.
+						</dd>
+						<dt>Build cost</dt>
+						<dd>
+							<strong>Low for the wheel</strong> (it only needs a window and a clamp),
+							<strong>medium for the index</strong> (title → event positions, day buckets) and low for
+							the panel.
+						</dd>
+						<dt>Hard part</dt>
+						<dd>
+							Two metaphors on one screen: a wheel that cannot travel, next to a search that can. The
+							honest version of this option deletes the wheel entirely — which is a product decision,
+							not a design one.
+						</dd>
+					</dl>
+					<figure>
+						<svg viewBox="0 0 520 208" role="img" aria-labelledby="fet">
+							<title id="fet">
+								Option E: a jump rail with day chips and a search field, with the dial reduced to a
+								small nudge wheel.
+							</title>
+							<!-- rail -->
+							<line x1="70" y1="30" x2="70" y2="190" stroke="var(--line)" stroke-width="2" />
+							<g>
+								<circle cx="70" cy="38" r="4" fill="var(--primary)" />
+								<circle cx="70" cy="74" r="4" fill="var(--muted)" />
+								<circle cx="70" cy="110" r="4" fill="var(--muted)" />
+								<circle cx="70" cy="146" r="4" fill="var(--muted)" />
+								<circle cx="70" cy="184" r="4" fill="var(--muted)" />
+							</g>
+							<g font-size="10.5">
+								<text x="84" y="42" fill="var(--primary)">today</text>
+								<text x="84" y="78" fill="var(--muted)">Thu 4 Jun</text>
+								<text x="84" y="114" fill="var(--muted)">Wed 3 Jun</text>
+								<text x="84" y="150" fill="var(--muted)">Tue 2 Jun</text>
+								<text x="84" y="188" fill="var(--muted)">start of log</text>
+							</g>
+							<!-- selection marker -->
+							<rect x="60" y="140" width="20" height="12" rx="6" fill="none" stroke="var(--primary)" />
+							<!-- palette -->
+							<rect x="196" y="26" width="300" height="34" rx="8" fill="var(--inset)" stroke="var(--primary)" />
+							<text x="210" y="47" fill="var(--muted)" font-size="11">⌘K · breaking b</text>
+							<rect x="196" y="68" width="300" height="76" rx="8" fill="var(--card)" stroke="var(--line)" />
+							<text x="210" y="88" fill="var(--text)" font-size="11">Breaking Bad · 214 events</text>
+							<text x="210" y="106" fill="var(--muted)" font-size="10.5">before “S1E3 watched” · 3 back</text>
+							<text x="210" y="124" fill="var(--muted)" font-size="10.5">before “status → Watching” · 19 back</text>
+							<text x="210" y="138" fill="var(--muted)" font-size="10.5">first add · 402 back</text>
+							<!-- nudge wheel -->
+							<circle cx="396" cy="172" r="30" fill="var(--card)" stroke="var(--line)" />
+							<line x1="396" y1="172" x2="396" y2="150" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" transform="rotate(24 396 172)" />
+							<circle cx="396" cy="172" r="3.5" fill="var(--primary)" />
+							<text x="338" y="176" fill="var(--muted)" font-size="10.5">nudge ±1 event</text>
+							<text x="338" y="190" fill="var(--muted)" font-size="10.5">±1 turn = a day</text>
+						</svg>
+						<figcaption>
+							<strong>Figure E.</strong> Rotation keeps its precision job and loses its travel job
+							entirely; the rail and the palette do the travelling, and they scale to any log length.
+						</figcaption>
+					</figure>
+				</article>
+
+				<section id="compare">
+					<h2><span class="num">5</span>Comparison</h2>
+					<table>
+						<thead>
+							<tr>
+								<th>&nbsp;</th>
+								<th>A · Gear</th>
+								<th>B · Jog/shuttle</th>
+								<th>C · Wrap by unit</th>
+								<th>D · Log turns</th>
+								<th>E · Jump-first</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><strong>Where range comes from</strong></td>
+								<td>a set gear</td>
+								<td>spin speed</td>
+								<td>carried laps</td>
+								<td>nothing new — laps self-label</td>
+								<td>jumps</td>
+							</tr>
+							<tr>
+								<td><strong>Turns for 800 events</strong></td>
+								<td>0.5 – 33 depending on gear</td>
+								<td>2 s at full wind</td>
+								<td>one per day</td>
+								<td>33.3 — it does not solve range</td>
+								<td>one jump</td>
+							</tr>
+							<tr>
+								<td><strong>Precision at rest</strong></td>
+								<td>one event, always</td>
+								<td>one event, always</td>
+								<td>one event, but laps unequal</td>
+								<td>one event, always</td>
+								<td>one event, windowed</td>
+							</tr>
+							<tr>
+								<td><strong>Zoom anchor</strong></td>
+								<td>exact (index)</td>
+								<td>exact (index)</td>
+								<td>exact (timestamp)</td>
+								<td>exact (geometry)</td>
+								<td>exact (absolute index)</td>
+							</tr>
+							<tr>
+								<td><strong>New state</strong></td>
+								<td>1 integer + gear</td>
+								<td>1 integer + velocity</td>
+								<td>integer + unit index</td>
+								<td>integer + ring window</td>
+								<td>integer + index</td>
+							</tr>
+							<tr>
+								<td><strong>Peak render cost</strong></td>
+								<td>flat</td>
+								<td>flat (wind suspends detail)</td>
+								<td>flat + wrap animation</td>
+								<td>24 slivers + smear</td>
+								<td>flat</td>
+							</tr>
+							<tr>
+								<td><strong>Build cost</strong></td>
+								<td>smallest</td>
+								<td>medium</td>
+								<td>medium</td>
+								<td>highest</td>
+								<td>low wheel / medium index</td>
+							</tr>
+							<tr>
+								<td><strong>Still works at 10k events</strong></td>
+								<td>no (83 turns at 1×)</td>
+								<td>with jumps</td>
+								<td>no (a lap stops meaning anything)</td>
+								<td>no</td>
+								<td>yes</td>
+							</tr>
+						</tbody>
+					</table>
+				</section>
+
+				<section id="haptics">
+					<h2><span class="num">6</span>Haptics: additive, never load-bearing</h2>
+					<p>
+						The only channel that exists today is <code>haptics.tick()</code> — 10 ms, floored to one
+						pulse per 40 ms, so at most ~25 a second. That ceiling is the same number that makes a fast
+						wind's per-detent pulse impossible, which is why the patterns below are about
+						<em>transitions</em>, not counts.
+					</p>
+					<p>
+						Reality check before designing on it: <code>navigator.vibrate</code> does not exist on iOS
+						at all, is largely ignored on desktop, and on Android needs the document to have been
+						touched at least once (sticky activation). So every pattern below is a bonus.
+					</p>
+					<table>
+						<thead>
+							<tr>
+								<th>Event</th>
+								<th>Pattern (ms)</th>
+								<th>Why that shape</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>Detent, at rest</td>
+								<td><code>10</code></td>
+								<td>The existing tick. A single short pulse reads as a click, not a buzz.</td>
+							</tr>
+							<tr>
+								<td>Entering wind</td>
+								<td><code>[8, 30, 8]</code></td>
+								<td>Two pulses: "detail is suspended, you are now travelling".</td>
+							</tr>
+							<tr>
+								<td>Gear / unit change</td>
+								<td><code>[8, 30, 8]</code>, then 10 ms per detent as usual</td>
+								<td>Same shape reused, so it means "the scale changed" everywhere.</td>
+							</tr>
+							<tr>
+								<td>Wrap into a new day (C)</td>
+								<td><code>[10, 20, 10]</code></td>
+								<td>Tighter than the gear pattern; it fires many times a session, so it must stay
+									subtle.</td>
+							</tr>
+							<tr>
+								<td>Reaching the present</td>
+								<td><code>[12, 40, 12]</code></td>
+								<td>Deliberately the longest: this is the case where overshoot costs the most.</td>
+							</tr>
+							<tr>
+								<td>Limit (either end of the log)</td>
+								<td><code>40</code></td>
+								<td>A wall, not a click. With the detent tick suppressed past it, absence becomes the
+									signal.</td>
+							</tr>
+						</tbody>
+					</table>
+					<h3>What the user loses without it</h3>
+					<p>
+						Not much, if the visual carries the same information — which is the requirement, not an
+						aspiration. The one thing genuinely lost is the <em>confirmation of a single detent while
+						the eye is on the panel</em>: watching the event text change is slower than feeling a click,
+						so on iOS the digit in the hub must flash for ~90 ms on every detent, and the ring must step
+						visibly. A phone with vibration off is the design target, not the degraded case.
+					</p>
+					<div class="callout plain">
+						<strong>A judgement call worth naming.</strong> A tick <em>sound</em> would be the better
+						channel for a jog wheel (broadcast decks click because you can hear a detent), but an app
+						that clicks on every scroll is a nuisance, and Web Audio needs a gesture to unlock. Left out
+						deliberately; mentioned so it can be re-proposed with intent.
+					</div>
+				</section>
+
+				<section id="access">
+					<h2><span class="num">7</span>Keyboard and accessibility</h2>
+					<p>
+						One key map for every option, because the map is the model's only non-pointer path and
+						should not be per-option.
+					</p>
+					<table>
+						<thead>
+							<tr>
+								<th>Keys</th>
+								<th>Does</th>
+								<th>Notes</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>←</code> <code>→</code> (<code>↑</code> <code>↓</code>)</td>
+								<td>one detent</td>
+								<td>← is further back, matching the current hand direction.</td>
+							</tr>
+							<tr>
+								<td><code>Shift</code> + arrows</td>
+								<td>one turn (24)</td>
+								<td>Today Shift means "one event"; under 3.2 that is already the plain arrow, so Shift
+									free to mean a turn is a consequence of the plan, not a new concept.</td>
+							</tr>
+							<tr>
+								<td><code>PageUp</code> / <code>PageDown</code></td>
+								<td>one unit (a day at the default rung)</td>
+								<td>Always moves by the selected unit, never by a screen.</td>
+							</tr>
+							<tr>
+								<td><code>Home</code> / <code>End</code></td>
+								<td>now / start of log</td>
+								<td>Already implemented.</td>
+							</tr>
+							<tr>
+								<td><code>⌘K</code> / <code>Ctrl+K</code></td>
+								<td>jump palette</td>
+								<td>Must be reachable <em>without</em> the wheel having focus — a header button too.</td>
+							</tr>
+							<tr>
+								<td><code>+</code> / <code>−</code></td>
+								<td>unit ladder up / down</td>
+								<td>Same as the gear pill or the ladder control; two affordances, one state.</td>
+							</tr>
+							<tr>
+								<td><code>Escape</code></td>
+								<td>stop wind, close palette</td>
+								<td>Inert at rest.</td>
+							</tr>
+						</tbody>
+					</table>
+					<h3>The screen-reader story</h3>
+					<p>
+						Change the role. A bounded <code>slider</code> with <code>aria-valuemin="0"</code> /
+						<code>aria-valuemax="1"</code> is now a lie: the value has no maximum. The honest role is
+						<code>spinbutton</code> — a value with arrow-key steps and no upper bound, which is exactly
+						what this is. Then:
+					</p>
+					<ul>
+						<li>
+							<code>aria-valuetext</code> = the sentence, in this order:
+							<strong>"3 events back, S1E3 watched, Breaking Bad, yesterday"</strong>. Distance first
+							(that is what the control does), then the action, then which title, then when.
+						</li>
+						<li>
+							Drop the percentage entirely. "12%" of an event log is not a position anyone can use, and
+							it is the current tree's only value.
+						</li>
+						<li>
+							Announcement policy: the focused spinbutton's own <code>aria-valuetext</code> is
+							announced by the AT on change, so do <em>not</em> also mirror it into a live region —
+							that double-speaks. The page's existing <code>role="status"</code> line stays for
+							<em>status</em> ("Rewound 3 titles — 4 events written"), not for the dial value. During a
+							wind, throttle the value announcements to the settled value only (one announcement on
+							stop), or a screen-reader user gets 400 of them.
+						</li>
+						<li>
+							The film strip stays <code>aria-hidden</code> (it already is): it is motion, and the panel
+							below is the accessible account.
+						</li>
+						<li>
+							Focus is one tab stop. The event panel's Undo is next; the jump palette button must be in
+							the header, before the wheel, since a keyboard user who starts at the wheel should not
+							have to spin.
+						</li>
+					</ul>
+					<h3><code>prefers-reduced-motion</code></h3>
+					<ul>
+						<li>No settle transition (already the pattern: <code>reduced</code> gates the hand's 320 ms).</li>
+						<li>No smear, no dashed-speed rim, no strip translate: the wind renders at ≤5 Hz with the
+							ring <em>stepping</em> instead of spinning, and the hub rate becomes text ("winding
+							×40").</li>
+						<li>Momentum is halved rather than removed — a flick still has to be able to reach
+							something — and the brake gets more aggressive.</li>
+						<li>Announcements and the final value are identical: reduced motion changes the journey,
+							never the destination.</li>
+					</ul>
+				</section>
+
+				<section id="svelte">
+					<h2><span class="num">8</span>Implementation notes (Svelte 5)</h2>
+					<h3>8.1 What the current contract can and cannot say</h3>
+					<pre><code><span class="c">// today — documented as "deliberately dumb about what a position means"</span>
+interface Props {
+  progress: number;                                  <span class="c">// 0 = now, 1 = far end</span>
+  valueLabel: string;                                <span class="c">// spoken value</span>
+  labels?: readonly string[];
+  onseek: (progress: number, fine: boolean) =&gt; void;  <span class="c">// pointer landed</span>
+  ondetent: (direction: 1 | -1, fine: boolean) =&gt; void; <span class="c">// one step</span>
+}</code></pre>
+					<p>
+						It cannot express <strong>a turn</strong> (only a direction), a <strong>rate</strong>, a
+						<strong>jump</strong>, or an <strong>unbounded value</strong> — and the page's round trip
+						<code>back → progress → backFromProgress(...)</code> is lossy every time the log changes
+						length. Every option above stresses this the same way, so the contract change is not an
+						option-specific cost:
+					</p>
+					<pre><code><span class="c">// proposal — the dial owns deltas and rate; the page owns truth</span>
+interface Props {
+  <span class="c">/** Spoken and drawn value; the page composes it from the event under the hand. */</span>
+  valueText: string;
+  <span class="c">/** Hub readout: the anchored moment, never a fraction of the log. */</span>
+  center: { label: string; sub: string };
+  <span class="c">/** What one detent means, in words: "every event", "1 hour". */</span>
+  unitLabel: string;
+  <span class="c">/** Integer detents since the gesture started: the only thing the wheel emits at rest. */</span>
+  onnudge: (detents: number, phase: 'rest' | 'wind') =&gt; void;
+  <span class="c">/** Events per second while winding, signed; 0 on stop. Not called while jogging. */</span>
+  onwind?: (rate: number) =&gt; void;
+  <span class="c">/** Settled: the page may commit once and render the diff. */</span>
+  onsettle: () =&gt; void;
+  onjump?: (target: 'now' | 'oldest' | 'unit-up' | 'unit-down') =&gt; void;
+}</code></pre>
+					<p>
+						<code>onnudge</code> collapses <code>ondetent</code> + <code>onseek</code>: a pointer drag is
+						just detents at a high rate, so a flick and a drag stop being two code paths. This is also
+						what makes option B cheap — it is A plus <code>onwind</code>.
+					</p>
+					<h3>8.2 Unbounded rotation without re-basing the transform</h3>
+					<pre><code>const DEG = 15;                       <span class="c">// 24 detents a turn</span>
+let detents = $state(0);              <span class="c">// unbounded, integer: the value</span>
+let phase = $state(0);                <span class="c">// raw angle remainder, kept inside ±DEG</span>
+
+const angle = $derived(((detents * DEG) % 360) * -1);   <span class="c">// the visual: bounded forever</span>
+
+function onPointerMove(e: PointerEvent) {
+  phase += deltaDegrees(e);           <span class="c">// unwrapped across the ±180 seam</span>
+  const whole = Math.trunc(phase / DEG);
+  if (whole === 0) return;
+  phase -= whole * DEG;               <span class="c">// carry: phase never accumulates error</span>
+  detents += whole;
+  onnudge(whole, 'rest');
+}</code></pre>
+					<ul>
+						<li>
+							<strong>No re-base, ever.</strong> The transform is a modulo of the value, so it is bounded
+							by construction; nothing needs to "reset" the rotation when it passes 360°.
+						</li>
+						<li>
+							<strong>No float accumulation.</strong> The only float is <code>phase</code>, and it is
+							subtracted back to within ±15° on every detent, so error cannot grow across 500 turns.
+							Accumulating angles in one float and multiplying would drift visibly after a few thousand
+							steps.
+						</li>
+						<li>
+							<strong>The seam.</strong> <code>atan2</code> jumps at ±180°: diff the consecutive angles
+							and wrap the <em>difference</em> into (−180, 180], not the absolute angle. Pointer angles
+							are also noisy near the centre — ignore deltas measured inside ~20 px of the hub, and
+							prefer the pointer's <em>tangential</em> component over the raw angle.
+						</li>
+						<li>
+							<strong>Pointer capture.</strong> <code>setPointerCapture</code> on pointerdown; release
+							only <code>if (el.hasPointerCapture(id))</code> — a <code>pointercancel</code> already
+							releases it and releasing twice throws. The wrapper already carries
+							<code>touch-action: none</code>; keep <code>preventDefault</code> on wheel.
+						</li>
+						<li>
+							<strong>Frame-rate independence.</strong> Integrate, never step per frame:
+							<code>carry += v * dt</code> with <code>dt</code> from <code>performance.now()</code>, then
+							emit <code>Math.trunc(carry)</code>. A 30 Hz frame and a 120 Hz frame must travel the same
+							distance for the same flick.
+						</li>
+						<li>
+							<strong>Commit budget.</strong> <code>stateAtStep</code> is O(n) and
+							<code>eventDiff</code> is O(n) per touched title; at 800 events a full replay is tens of
+							microseconds, so one commit per frame is affordable. The expensive part is the strip
+							(<code>touchedAfterStep</code> allocating a Set over the tail) — skip it while winding.
+							Measure at 5,000 events before shipping the wind.
+						</li>
+					</ul>
+					<h3>8.3 The honest hard part, per option</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Option</th>
+								<th>What will actually take the time</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><strong>A</strong></td>
+								<td>The gear as a mode: discoverability, and a visible ratio at all times.</td>
+							</tr>
+							<tr>
+								<td><strong>B</strong></td>
+								<td>Tuning the velocity→rate curve and the settle, then never touching them again;
+									plus the reduced-motion wind display.</td>
+							</tr>
+							<tr>
+								<td><strong>C</strong></td>
+								<td>Deciding what a lap <em>is</em> when days are wildly unequal, and animating a wrap
+									that does not look like a glitch.</td>
+							</tr>
+							<tr>
+								<td><strong>D</strong></td>
+								<td>24 slivers at 60 fps and a gate that stays legible while its content changes.</td>
+							</tr>
+							<tr>
+								<td><strong>E</strong></td>
+								<td>The index (title → events, day buckets) and admitting the wheel is now a nudge.</td>
+							</tr>
+						</tbody>
+					</table>
+				</section>
+
+				<section id="recommend">
+					<h2><span class="num">9</span>Recommendation</h2>
+					<div class="verdict">
+						<p>
+							<strong>Take B's two regimes, with A's fixed detent as its rest state, and ship E's jumps
+							as P0 — and delete <code>densityFor</code>/<code>DETENT_CAPACITY</code> in the first
+							commit.</strong>
+						</p>
+						<p>
+							Concretely: 24 detents a turn at 15°; one detent is one event <em>everywhere</em> in the
+							log at rest; above ~1 turn a second the wheel winds instead of stepping, capped at 400
+							events a second; the only zoom is a discrete unit ladder anchored on the event index; a
+							palette plus day chips get you to a three-month-old event without spinning. Options C and
+							D do not need to ship — C's lap labels are a cheap layer to add later if the wind proves
+							disorienting, and D's inversion is a solution to a problem B removes.
+						</p>
+					</div>
+					<p><strong>Why this one:</strong></p>
+					<ol>
+						<li>
+							<strong>It is the user's sentence.</strong> "Rotate the dial multiple times over" — with
+							one event a detent, a full turn is 24 events, so a small correction is a fraction of a
+							turn and a deliberate hunt is a few turns. The half-circle limit was the bug.
+						</li>
+						<li>
+							<strong>The thing to delete is the thing they complained about.</strong> Coarseness
+							survives only as suspended rendering <em>inside</em> the wind, where it is invisible and
+							free. That is the smallest honest fix, and it removes a block of tests rather than adding
+							one.
+						</li>
+						<li>
+							<strong>It resolves range-vs-precision by moving the trade onto speed.</strong> A is
+							correct but pays with a mode the user must remember; B pays with a curve we must tune
+							once. Tuning a curve beats asking the user to remember a gear.
+						</li>
+						<li>
+							<strong>It upgrades the contract that everything else needs.</strong> Unbounded integer
+							deltas + a settle callback is the same contract a linear tape, a minimap, or a
+							rotation-free scrubber would need — so a bigger dial is not the only door, and the next
+							redesign does not start over.
+						</li>
+						<li>
+							<strong>With jumps, the wheel never has to cover the log.</strong> That is what lets the
+							ratio stay human — 24 detents a turn — instead of degrading to 167 events a detent like
+							<code>densityFor(20_000)</code> does today.
+						</li>
+					</ol>
+					<h3>Shipping order, if it is agreed</h3>
+					<ol>
+						<li>
+							Contract + unbounded jog: 15° detents, one event each, modulo transform, spinbutton role,
+							real value text. Delete the decimator. This alone answers the complaint.
+						</li>
+						<li>Wind: velocity, cap, settle, brake, reduced-motion path.</li>
+						<li>Jumps: palette, day chips, "rewind to before this".</li>
+						<li>Unit ladder unified across event and time modes (§3.3).</li>
+						<li>
+							Only then, if it still feels disorienting: C's lap labels, or a strip minimap for coarse
+							extent.
+						</li>
+					</ol>
+					<div class="callout">
+						<strong>What this recommendation deliberately does not do.</strong> It does not enlarge the
+						dial. A larger radius buys a constant factor (2.2 px per detent today; ≈4.4 px at a doubled
+						radius) against a log that grows without bound — at 10,000 events that is 0.1 px per event.
+						Size is not the axis; the ratio is.
+					</div>
+				</section>
+
+				<section id="questions">
+					<h2><span class="num">10</span>Questions only you can answer</h2>
+					<ol>
+						<li>
+							<strong>Is a stop authoritative or exploratory?</strong> If landing on the wrong event
+							and merely reading it is free, a fast wind can be forgiven its overshoot. If every stop is
+							a candidate write (Undo sits right there, one tab away), the wind needs a confirm gate —
+							which kills momentum. Which is it in practice?
+						</li>
+						<li>
+							<strong>How long will the log actually get?</strong> It is ≈800 events today. Under
+							≈2,000, rotation can plausibly carry the range with a wind. Past ≈10,000, a 24-detent lap
+							is 0.24% of the log and no rotation covers it — jumps stop being optional and the wheel
+							becomes a precision tool by design.
+						</li>
+						<li>
+							<strong>Does it have to stay a dial?</strong> The complaint is about precision, not about
+							circles. A linear strip with momentum — the poster strip promoted to the control, the
+							dial demoted — solves the same problem with maths the browser already has, at the cost of
+							the one affordance a dial gives that a strip does not: an unbounded, non-scrolling
+							control you can turn without the page moving.
+						</li>
+					</ol>
+				</section>
+
+				<section id="assumptions">
+					<h2><span class="num">11</span>Assumptions</h2>
+					<ul>
+						<li>
+							<strong>≈800 events</strong> is taken from the report, not measured — nothing in the code
+							carries a count.
+						</li>
+						<li>
+							The measurements of the current dial are from
+							<code>src/lib/components/history/time-dial.svelte</code> as it stands on
+							<code>paul/mrq-276-time-travel</code>: <code>SWEEP = 180</code>,
+							<code>RADIUS = 84</code>, <code>CENTRE = 120</code> in a 240 viewBox,
+							<code>ARC_TICKS = 9</code>, a 320 ms settle, and the wheel handler's 40 px-per-detent
+							accumulator. <code>DETENT_CAPACITY = 120</code>, <code>densityFor</code>,
+							<code>backStep</code> and <code>backFromProgress</code> are from
+							<code>src/lib/sync/history.ts</code>; the haptic timings (10 ms pulse, 40 ms floor) are
+							from <code>src/lib/client/history/haptics.svelte.ts</code>; the strip's 20-title cap,
+							−220 px translate and 520 ms settle are from <code>src/routes/history/+page.svelte</code>.
+						</li>
+						<li>
+							The page is client-only (IndexedDB, no server load), so no option here has an SSR
+							constraint — nothing above runs on the server.
+						</li>
+						<li>
+							The dial is assumed to stay dumb about meaning: it emits deltas, the page composes labels.
+							Options C and D break that assumption (the wheel would need to know what a lap or a
+							sliver is), which is part of their cost.
+						</li>
+						<li>
+							Every number labelled <em>proposal</em> — 15° detents, 24 a turn, the 1.6 exponent, 400
+							events a second, the 280 ms decay, the haptic patterns — is chosen for coherence, not
+							measured. The measured numbers are the ones with arithmetic against the current code.
+						</li>
+					</ul>
+				</section>
+			</main>
+
+			<footer>
+				<strong>Rewind dial — design options.</strong> A proposal; no application code was changed. Written
+				against <code>paul/mrq-276-time-travel</code> (PR #337, the current attempt), which holds the
+				component and the history module this document measures. Self-contained: no build step, no external
+				assets, prints light.
+			</footer>
+		</div>
+	</body>
+</html>
