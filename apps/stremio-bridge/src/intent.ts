@@ -33,21 +33,36 @@ export interface Intent {
 	status?: TrackingStatus;
 	removed?: boolean;
 	episodes?: EpisodeIntent[];
+	/** The whole title, one scope wider than a season: every aired episode, or every watched one. */
+	allEpisodes?: { watched: boolean };
 }
 
 /** Un-watching is not removal: the title stays on the list, just not finished. */
 const UNWATCHED_STATUS: TrackingStatus = 'want_to_watch';
 
 /**
- * The one translation table in the bridge. `null` means the event names nothing to change, which
- * is a deliberate answer rather than a failure — a bare `watched` on a show must mark **nothing**,
- * never "every aired episode".
+ * The one translation table in the bridge. `null` means the event names nothing to change.
+ *
+ * A bare `watched` or `unwatched` on a show **is** a whole-title claim, not an empty one: Stremio
+ * sends no videoIds when the gesture is the whole series, so the intent is `allEpisodes` and the
+ * server decides which episodes that means. It picks the aired ones for a watch, and for an
+ * un-watch only from what is actually watched, so neither direction has to trust a catalogue the
+ * bridge does not own.
  */
 export function toIntent(event: LibraryEvent): Intent | null {
 	if (event.action === 'libraryAdd') return { removed: false };
 	if (event.action === 'libraryRemove') return { removed: true };
 
 	if (event.type === 'show') {
+		// Only a genuinely bare gesture widens to the whole title. VideoIds that were present but
+		// unparseable must not, or a malformed event would mark every episode of the series.
+		if (event.videoIds.length === 0)
+			return event.action === 'watched'
+				? { allEpisodes: { watched: true } }
+				: // Un-watching the whole title is not a completed title: it goes back on the list, the
+					// same answer a movie's un-watch gets, so the status cannot outlive the progress.
+					{ allEpisodes: { watched: false }, status: UNWATCHED_STATUS };
+
 		const episodes = episodesOf(event);
 		return episodes.length > 0 ? { episodes } : null;
 	}

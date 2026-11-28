@@ -55,7 +55,13 @@ export const libraryCommandSchema = z
 		removed: z.boolean().optional(),
 		episodes: z.array(episodeDeltaSchema).max(COMMAND_EPISODES_MAX).optional(),
 		/** Bulk intent for one season: every aired episode of it gets `watched`. */
-		season: episodeCoordSchema.pick({ season: true }).extend({ watched: z.boolean() }).optional()
+		season: episodeCoordSchema.pick({ season: true }).extend({ watched: z.boolean() }).optional(),
+		/**
+		 * Bulk intent for the whole title: every aired episode gets `watched`, or — the other way —
+		 * every episode currently watched is un-watched. One field instead of a client enumerating a
+		 * catalogue it does not own, and the server keeps the air dates either way.
+		 */
+		allEpisodes: z.object({ watched: z.boolean() }).strict().optional()
 	})
 	.strict();
 
@@ -107,7 +113,10 @@ export async function applyLibraryCommand(
 	const live = current !== undefined && !current.removed;
 
 	const wantsEpisodes =
-		title.type === 'show' && (command.episodes !== undefined || command.season !== undefined);
+		title.type === 'show' &&
+		(command.episodes !== undefined ||
+			command.season !== undefined ||
+			command.allEpisodes !== undefined);
 	// Removal clears episode progress too, so both paths need the current watched rows.
 	const needsWatches = wantsEpisodes || (title.type === 'show' && command.removed === true);
 	const watches = needsWatches
@@ -150,6 +159,28 @@ export async function applyLibraryCommand(
 				// Un-watching needs no air dates: only what is actually watched can be un-watched.
 				for (const w of watches)
 					if (w.watched && w.season === season) desired.set(coordKey(w), { ...w, watched: false });
+			}
+		}
+
+		// `allEpisodes` is the same intent one scope wider: same two branches, no season filter.
+		// The aired query keeps the explicit-list ceiling, so a long-running show cannot expand into
+		// an unbounded number of events from a single field.
+		if (command.allEpisodes) {
+			const { watched } = command.allEpisodes;
+			if (watched) {
+				const aired = await db
+					.select({ seasonNumber: episodes.seasonNumber, episodeNumber: episodes.episodeNumber })
+					.from(episodes)
+					.where(and(eq(episodes.mediaId, mediaId), lte(episodes.airDate, todayIso())))
+					.limit(COMMAND_EPISODES_MAX);
+				for (const e of aired)
+					desired.set(coordKey({ season: e.seasonNumber, episode: e.episodeNumber }), {
+						season: e.seasonNumber,
+						episode: e.episodeNumber,
+						watched: true
+					});
+			} else {
+				for (const w of watches) if (w.watched) desired.set(coordKey(w), { ...w, watched: false });
 			}
 		}
 	}

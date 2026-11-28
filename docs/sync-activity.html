@@ -147,8 +147,9 @@ flowchart TD
 				<h2><span class="num">2</span>Marked watched <em>in Stremio</em></h2>
 				<p>
 					Same inbound path, different intent. The only new information is <code>videoId</code>, and the
-					rule is deliberately asymmetric: <strong>a movie is one unit, so "watched" needs no episode; a
-					show is not, so we refuse to guess.</strong>
+					rule is asymmetric: <strong>a movie is one unit, so "watched" needs no episode; a show's
+					episodes are named, and a gesture that names none is a claim about the whole title.</strong> What
+					that claim means in episodes is resolved by the server, which owns the air dates — not here.
 				</p>
 				<pre class="mermaid">
 flowchart TD
@@ -157,7 +158,7 @@ flowchart TD
   C --&gt;|"movie"| D["no videoId is normal&lt;br/&gt;PATCH /api/v1/library/movie/tt…&lt;br/&gt;{ status: 'completed' }"]
   C --&gt;|"show"| E{"videoId present?"}
   E --&gt;|"yes"| F["decode, then split on &quot;,&quot;&lt;br/&gt;PATCH { episodes: [ {season, episode, watched:true}, ... ] }&lt;br/&gt;one event can carry the whole list"]
-  E --&gt;|"no"| G["&lt;b&gt;mark nothing&lt;/b&gt;&lt;br/&gt;log it, surface as unmappable&lt;br/&gt;never infer &quot;all episodes&quot;"]
+  E --&gt;|"no"| G["&lt;b&gt;the whole title&lt;/b&gt;&lt;br/&gt;PATCH { allEpisodes: { watched: true } }&lt;br/&gt;the server enumerates the aired ones"]
 
   D --&gt; H["translator compares against the projected state"]
   F --&gt; H
@@ -172,9 +173,12 @@ flowchart TD
 				</pre>
 				<ul class="legend">
 					<li>
-						<strong>Why a bare "watched" on a show marks nothing.</strong> An older series can run twenty
-						seasons; reading one ambiguous signal as "every aired episode" would fabricate hundreds of
-						watches, and a wrong bulk mark is tedious to unpick by hand.
+						<strong>A bare "watched" on a show is a claim about the whole title.</strong> An older series
+						can run twenty seasons, so "every episode" is far too much to read into one signal — which is
+						why the bridge does not enumerate anything. It sends <code>allEpisodes: { watched }</code> and
+						the server decides what that means: the episodes that have <strong>aired</strong> for a watch, and
+						only the ones <strong>actually watched</strong> for an un-watch. The ambiguity is resolved where the
+						air dates are, not where the gesture arrived.
 					</li>
 					<li>
 						<strong><code>videoId</code> is a list, not an id.</strong> The protocol doc says
@@ -183,9 +187,9 @@ flowchart TD
 						So one event can legitimately carry dozens of episodes and the bridge must iterate.
 					</li>
 					<li>
-						<strong>"Mark all watched" still exists</strong> — it is simply never inferred. The app has an
-						explicit bulk season/series action, and the API accepts an explicit episode list, so a client
-						that really means everything can say so.
+						<strong>"Mark all watched" is still explicit.</strong> The app has a bulk season/series action and
+						the API accepts an explicit episode list, so a client that really means everything can say so —
+						<code>allEpisodes</code> is the same intent as an explicit list, just stated as a scope.
 					</li>
 					<li>
 						<strong>The withdrawn intent is visible, not silent.</strong> An unmappable

@@ -520,10 +520,12 @@ describe('library events', () => {
 		);
 	});
 
-	// A videoId naming another title would land an episode watch on the wrong show.
-	it('drops a videoId that does not belong to the event\u2019s id', async () => {
-		const spy = log();
-		const { handle, bindings } = await paired();
+	// The route keeps the evidence and the intent layer acts on it. Filtering here would make
+	// "a foreign videoId arrived" indistinguishable from "no videoId arrived", and the latter now
+	// widens to the whole title.
+	it('keeps a foreign videoId in the event instead of erasing it', async () => {
+		log();
+		const { handle, bindings, queue } = await paired();
 
 		await call(
 			`/${handle}/library/series/tt0944947/action=watched&videoId=tt0133093%3A1%3A1.json`,
@@ -531,9 +533,7 @@ describe('library events', () => {
 			bindings
 		);
 
-		expect(spy).toHaveBeenCalledWith(
-			`[event] ${shortHandle(handle)} {"type":"show","id":"tt0944947","action":"watched","videoIds":[]}`
-		);
+		expect(queue.sent[0].videoIds).toEqual(['tt0133093:1:1']);
 	});
 
 	// Stremio ignores the reply and never retries, so a deliberate drop still says success —
