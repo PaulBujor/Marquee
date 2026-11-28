@@ -57,8 +57,9 @@ describe('parseLibraryEvent', () => {
 		}
 	});
 
-	// A bare `watched` on a show means "mark nothing", never "every episode".
-	it('reports an absent videoId as an empty list, not as all episodes', () => {
+	// The parser reports what arrived. Whether an empty list means the whole title is decided in
+	// `intent.ts`, which is also where a present-but-foreign value is told apart from none.
+	it('reports an absent videoId as an empty list', () => {
 		expect(parseLibraryEvent('series', 'tt2', 'action=watched')).toMatchObject({
 			event: { videoIds: [] }
 		});
@@ -109,15 +110,17 @@ describe('parseLibraryEvent', () => {
 		}
 	});
 
-	// A videoId naming another title would put an episode watch on the wrong show.
-	it('keeps only the videoIds that belong to the event id', () => {
+	// Filtering here would erase the evidence that a videoId arrived at all, so "present but
+	// foreign" would look exactly like "none given" — and the whole-title intent would widen over
+	// a request that named another show. The intent layer filters instead.
+	it('keeps a foreign videoId, so it cannot be mistaken for none', () => {
 		expect(
 			parseLibraryEvent(
 				'series',
 				'tt2',
 				'action=watched&videoId=tt2%3A1%3A1,tt0133093%3A1%3A1,tt2%3A1%3A2'
 			)
-		).toMatchObject({ event: { videoIds: ['tt2:1:1', 'tt2:1:2'] } });
+		).toMatchObject({ event: { videoIds: ['tt2:1:1', 'tt0133093:1:1', 'tt2:1:2'] } });
 	});
 
 	// A client that repeats the parameter instead of joining the list must not lose all but the last.

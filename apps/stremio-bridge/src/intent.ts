@@ -57,7 +57,11 @@ export function toIntent(event: LibraryEvent): Intent | null {
 		// Only a genuinely bare gesture widens to the whole title. VideoIds that were present but
 		// unparseable must not, or a malformed event would mark every episode of the series.
 		if (event.videoIds.length === 0)
-			return { allEpisodes: { watched: event.action === 'watched' } };
+			return event.action === 'watched'
+				? { allEpisodes: { watched: true } }
+				: // Un-watching the whole title is not a completed title: it goes back on the list, the
+					// same answer a movie's un-watch gets, so the status cannot outlive the progress.
+					{ allEpisodes: { watched: false }, status: UNWATCHED_STATUS };
 
 		const episodes = episodesOf(event);
 		return episodes.length > 0 ? { episodes } : null;

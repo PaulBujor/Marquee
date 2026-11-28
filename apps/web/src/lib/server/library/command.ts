@@ -162,15 +162,17 @@ export async function applyLibraryCommand(
 			}
 		}
 
-		// `allEpisodes` is the same intent one scope wider, so it runs the same path with no season
-		// filter — `and()` drops the undefined term.
+		// `allEpisodes` is the same intent one scope wider: same two branches, no season filter.
+		// The aired query keeps the explicit-list ceiling, so a long-running show cannot expand into
+		// an unbounded number of events from a single field.
 		if (command.allEpisodes) {
 			const { watched } = command.allEpisodes;
 			if (watched) {
 				const aired = await db
 					.select({ seasonNumber: episodes.seasonNumber, episodeNumber: episodes.episodeNumber })
 					.from(episodes)
-					.where(and(eq(episodes.mediaId, mediaId), lte(episodes.airDate, todayIso())));
+					.where(and(eq(episodes.mediaId, mediaId), lte(episodes.airDate, todayIso())))
+					.limit(COMMAND_EPISODES_MAX);
 				for (const e of aired)
 					desired.set(coordKey({ season: e.seasonNumber, episode: e.episodeNumber }), {
 						season: e.seasonNumber,
@@ -178,8 +180,7 @@ export async function applyLibraryCommand(
 						watched: true
 					});
 			} else {
-				for (const w of watches)
-					if (w.watched) desired.set(coordKey(w), { ...w, watched: false });
+				for (const w of watches) if (w.watched) desired.set(coordKey(w), { ...w, watched: false });
 			}
 		}
 	}

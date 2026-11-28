@@ -147,8 +147,9 @@ flowchart TD
 				<h2><span class="num">2</span>Marked watched <em>in Stremio</em></h2>
 				<p>
 					Same inbound path, different intent. The only new information is <code>videoId</code>, and the
-					rule is deliberately asymmetric: <strong>a movie is one unit, so "watched" needs no episode; a
-					show is not, so we refuse to guess.</strong>
+					rule is asymmetric: <strong>a movie is one unit, so "watched" needs no episode; a show's
+					episodes are named, and a gesture that names none is a claim about the whole title.</strong> What
+					that claim means in episodes is resolved by the server, which owns the air dates — not here.
 				</p>
 				<pre class="mermaid">
 flowchart TD

@@ -68,7 +68,9 @@ describe('toIntent', () => {
 			allEpisodes: { watched: true }
 		});
 		expect(toIntent(event({ type: 'show', action: 'unwatched', videoIds: [] }))).toEqual({
-			allEpisodes: { watched: false }
+			allEpisodes: { watched: false },
+			// Not a completed title any more: it goes back on the list, as a movie's un-watch does.
+			status: 'want_to_watch'
 		});
 	});
 

@@ -55,8 +55,9 @@ export interface LibraryEvent {
 	id: string;
 	action: AddonAction;
 	/**
-	 * Decoded `videoId`s, in one event however many were marked. Empty when the event carried
-	 * none, which for a bare `watched` on a show means "mark nothing" — never "every episode".
+	 * Decoded `videoId`s, in one event however many were marked — and **unfiltered**, so a foreign
+	 * value stays distinguishable from none. Empty means the event named no episode; whether that
+	 * widens to the whole title is `intent.ts`'s decision.
 	 */
 	videoIds: string[];
 }
@@ -100,23 +101,26 @@ export function parseLibraryEvent(
 			type: mediaType,
 			id,
 			action: action as AddonAction,
-			videoIds: videoIdsFor(id, params)
+			videoIds: videoIdsFor(params)
 		}
 	};
 }
 
 /**
- * A videoId belongs to this event's title or it is not ours to act on: a foreign `tt…:s:e`
- * would otherwise be applied to whichever show the event named, putting an episode watch on the
- * wrong title. A movie's videoId is the title id itself; a series' is `id:season:episode`.
+ * The `videoId` values the event carried, decoded and split — **not** filtered to this title.
+ *
+ * Filtering here erased the evidence: a foreign or malformed `tt…:s:e` became an empty list,
+ * indistinguishable from a gesture that named no episode at all, and the whole-title intent then
+ * widened over a request that should have marked nothing. `intent.ts` is where belonging is
+ * decided, because it is also where "nothing named" vs "nothing valid" is decided.
  */
-function videoIdsFor(id: string, params: Map<string, string[]>): string[] {
+function videoIdsFor(params: Map<string, string[]>): string[] {
 	// Every `videoId` parameter counts: one event carries the whole season as a comma-separated
 	// list, and a client that repeats the parameter instead would otherwise lose all but the last.
 	return (params.get('videoId') ?? [])
 		.flatMap((value) => value.split(','))
 		.map((value) => value.trim())
-		.filter((value) => value === id || value.startsWith(`${id}:`));
+		.filter(Boolean);
 }
 
 const last = (params: Map<string, string[]>, name: string): string | undefined =>

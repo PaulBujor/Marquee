@@ -189,7 +189,12 @@ describe('deliver', () => {
 
 		expect(calls).toHaveLength(1);
 		expect(JSON.parse(String(calls[0].init?.body)).items).toEqual([
-			{ type: 'show', id: 'tt0133093', allEpisodes: { watched: false } }
+			{
+				type: 'show',
+				id: 'tt0133093',
+				allEpisodes: { watched: false },
+				status: 'want_to_watch'
+			}
 		]);
 	});
 
