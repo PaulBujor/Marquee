@@ -60,11 +60,19 @@ export interface RewindStop {
 	ms: number;
 }
 
+/** The user-facing name of each status, shared by the panel and the event wording. */
+export const STATUS_LABELS: Record<TrackingStatus, string> = {
+	want_to_watch: 'On list',
+	watching: 'Watching',
+	completed: 'Watched',
+	did_not_finish: "Didn't finish"
+};
+
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** Now first, then ever coarser steps back — the dial's snap points. */
+/** Now first, then ever coarser steps back — the time dial's snap points. */
 export const REWIND_STOPS: readonly RewindStop[] = [
 	{ label: 'Now', ms: 0 },
 	{ label: '15m', ms: 15 * MINUTE },
@@ -98,6 +106,68 @@ export function relativeAgo(ms: number): string {
 /** The client's episode-watch key (`${mediaId}::s{S}e{E}`), so a replay matches the store's rows. */
 export function episodeWatchKey(mediaId: string, season: number, episode: number): string {
 	return `${mediaId}::s${season}e${episode}`;
+}
+
+/** What one log event did, in the words the dial's panel uses. */
+export function eventSummary(event: EventEnvelope): string {
+	switch (event.type) {
+		case 'tracking.added':
+			return `Added · ${STATUS_LABELS[(event.payload as { status: TrackingStatus }).status]}`;
+		case 'tracking.status_changed':
+			return `Status → ${STATUS_LABELS[(event.payload as { status: TrackingStatus }).status]}`;
+		case 'tracking.favorite_toggled':
+			return (event.payload as { favorite: boolean }).favorite ? 'Favorited' : 'Unfavorited';
+		case 'tracking.rated': {
+			const { rating } = event.payload as { rating: number | null };
+			return rating === null ? 'Rating cleared' : `Rated ${rating}`;
+		}
+		case 'tracking.removed':
+			return 'Removed from your lists';
+		case 'episode.watched':
+		case 'episode.unwatched': {
+			const { season, episode } = event.payload as { season: number; episode: number };
+			const label = `S${season}E${episode}`;
+			return event.type === 'episode.watched' ? `${label} watched` : `${label} unwatched`;
+		}
+		case 'media.linked':
+			return 'Linked to a match';
+		case 'media.unlinked':
+			return 'Match removed';
+		case 'media.match_declined':
+			return 'Match declined';
+		case 'media.deleted':
+			return 'Custom entry deleted';
+	}
+}
+
+/**
+ * Detents the arc can address comfortably. The dial covers the whole log at this resolution: one
+ * event per detent near now, decimating by distance so a long history compresses instead of
+ * overflowing the arc.
+ */
+export const DETENT_CAPACITY = 120;
+
+/** Events one detent covers, `distance` events back. `fine` always means a single event. */
+export function densityFor(distance: number, fine = false): number {
+	if (fine) return 1;
+	return Math.max(1, Math.round(Math.abs(distance) / DETENT_CAPACITY));
+}
+
+/** Moving `back` one detent further back (+1) or towards now (−1), clamped to the log's ends. */
+export function backStep(length: number, back: number, direction: 1 | -1, fine = false): number {
+	const next = back + direction * densityFor(back, fine);
+	return Math.max(0, Math.min(length, next));
+}
+
+/**
+ * The detent nearest a dial position (0 = now, 1 = the far end of the log). Detents are spaced by
+ * the density at that distance, so they line up with the steps `backStep` walks.
+ */
+export function backFromProgress(length: number, progress: number, fine = false): number {
+	if (length <= 0) return 0;
+	const target = Math.round(Math.max(0, Math.min(1, progress)) * length);
+	const density = densityFor(target, fine);
+	return Math.max(0, Math.min(length, Math.round(target / density) * density));
 }
 
 /** Mutable accumulator — the LWW clocks never leave this module. */
@@ -204,18 +274,15 @@ function applyEvent(replay: Replay, event: EventEnvelope): void {
 	}
 }
 
-/**
- * The library as it stood at `cutoff` (epoch ms), replaying every event stamped at or before it.
- * An empty log is an empty library.
- */
-export function stateAt(events: readonly EventEnvelope[], cutoff: number): HistoryState {
-	const replay: Replay = { titles: new Map(), episodes: new Map() };
-	const upToCutoff = events
-		.filter((event) => event.clientCreatedAt <= cutoff)
-		.sort((a, b) => a.clientCreatedAt - b.clientCreatedAt || a.id.localeCompare(b.id));
+/** The log in replay order — the order both the cutoff and the event dial walk it in. */
+export function orderedLog(events: readonly EventEnvelope[]): EventEnvelope[] {
+	return [...events].sort(
+		(a, b) => a.clientCreatedAt - b.clientCreatedAt || a.id.localeCompare(b.id)
+	);
+}
 
-	for (const event of upToCutoff) applyEvent(replay, event);
-
+/** Flattens a replay accumulator into the public, clock-free shape. */
+function snapshot(replay: Replay): HistoryState {
 	const tracking: Record<string, TitleSnapshot> = {};
 	for (const [mediaId, row] of replay.titles) {
 		tracking[mediaId] = {
@@ -230,6 +297,59 @@ export function stateAt(events: readonly EventEnvelope[], cutoff: number): Histo
 		if (entry.watched) episodes[key] = entry.episode;
 	}
 	return { tracking, episodes };
+}
+
+/** Replays an already-ordered slice of the log. */
+function project(events: readonly EventEnvelope[]): HistoryState {
+	const replay: Replay = { titles: new Map(), episodes: new Map() };
+	for (const event of events) applyEvent(replay, event);
+	return snapshot(replay);
+}
+
+/**
+ * The library as it stood at `cutoff` (epoch ms), replaying every event stamped at or before it.
+ * An empty log is an empty library.
+ */
+export function stateAt(events: readonly EventEnvelope[], cutoff: number): HistoryState {
+	return project(orderedLog(events).filter((event) => event.clientCreatedAt <= cutoff));
+}
+
+/**
+ * The library after the first `step` events of the ordered log — the event dial's position.
+ * `step = log.length` is now, `step = 0` is an empty library.
+ */
+export function stateAtStep(log: readonly EventEnvelope[], step: number): HistoryState {
+	return project(log.slice(0, Math.max(0, Math.min(step, log.length))));
+}
+
+/** The event a step sits just after — the newest one `stateAtStep(log, step)` includes. */
+export function eventAtStep(
+	log: readonly EventEnvelope[],
+	step: number
+): EventEnvelope | undefined {
+	return step <= 0 ? undefined : log[Math.min(step, log.length) - 1];
+}
+
+/** One title's state after the first `upto` events — the cheap half of an event's own diff. */
+function titleStateAt(log: readonly EventEnvelope[], mediaId: string, upto: number): HistoryState {
+	const replay: Replay = { titles: new Map(), episodes: new Map() };
+	for (let i = 0; i < Math.min(upto, log.length); i++) {
+		if (log[i].entityId === mediaId) applyEvent(replay, log[i]);
+	}
+	return snapshot(replay);
+}
+
+/**
+ * Undoing one event. It diffs the title's state *now* against its state just before `step`'s event,
+ * so the write pulls the present back over that event — and is empty when a later event already
+ * undid it. Null too for an identity event, which projects no tracking state.
+ */
+export function eventDiff(log: readonly EventEnvelope[], step: number): TitleDiff | null {
+	const event = eventAtStep(log, step);
+	if (!event || event.type.startsWith('media.')) return null;
+	const before = titleStateAt(log, event.entityId, step - 1);
+	const now = titleStateAt(log, event.entityId, log.length);
+	return diffStates(now, before)[0] ?? null;
 }
 
 /** A title is on the user's lists when it has a row that isn't tombstoned. */
@@ -321,6 +441,18 @@ export function summarize(state: HistoryState): { titles: number; episodes: numb
  * The titles the log touched strictly after `cutoff` (up to `now`), newest first — the film strip's
  * running order. Identity events aren't a library change, so they're skipped.
  */
+/**
+ * The titles the ordered log touched after `step`, newest first — the event dial's film strip.
+ * Identity events aren't a library change, so they're skipped.
+ */
+export function touchedAfterStep(log: readonly EventEnvelope[], step: number): string[] {
+	const seen = new Set<string>();
+	for (let i = log.length - 1; i >= Math.max(0, step); i--) {
+		if (!log[i].type.startsWith('media.')) seen.add(log[i].entityId);
+	}
+	return [...seen];
+}
+
 export function touchedSince(
 	events: readonly EventEnvelope[],
 	cutoff: number,

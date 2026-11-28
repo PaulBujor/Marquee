@@ -6,13 +6,23 @@ import {
 	type SyncEventType
 } from './events.js';
 import {
+	DETENT_CAPACITY,
+	backFromProgress,
+	backStep,
 	compensatingEventCount,
 	compensatingEvents,
+	densityFor,
 	diffStates,
+	eventAtStep,
+	eventDiff,
+	eventSummary,
 	isOnList,
+	orderedLog,
 	relativeAgo,
 	stateAt,
+	stateAtStep,
 	summarize,
+	touchedAfterStep,
 	touchedSince,
 	type HistoryState
 } from './history.js';
@@ -243,5 +253,115 @@ describe('relativeAgo', () => {
 		expect(relativeAgo(0)).toBe('now');
 		expect(relativeAgo(15 * MIN)).toMatch(/15 minutes? ago/);
 		expect(relativeAgo(24 * 60 * MIN)).toMatch(/yesterday|1 day/);
+	});
+});
+
+describe('the event dial', () => {
+	/** A log whose events interleave two titles, so order matters. */
+	function log(): EventEnvelope[] {
+		return orderedLog([
+			ev('tracking.added', 'movie/b', { status: 'watching' }, NOW - 30),
+			ev('tracking.added', 'movie/a', { status: 'watching' }, NOW - 20),
+			ev('episode.watched', 'movie/b', { season: 1, episode: 1 }, NOW - 10),
+			ev('tracking.removed', 'movie/a', {}, NOW - 5)
+		]);
+	}
+
+	it('orders the log by clock, then id', () => {
+		expect(log().map((e) => e.entityId)).toEqual(['movie/b', 'movie/a', 'movie/b', 'movie/a']);
+	});
+
+	it('counts steps as a prefix of the ordered log', () => {
+		const events = log();
+		expect(stateAtStep(events, 0)).toEqual({ tracking: {}, episodes: {} });
+		expect(stateAtStep(events, 1).tracking['movie/b'].status).toBe('watching');
+		expect(stateAtStep(events, 2).tracking['movie/a']).toBeDefined();
+		expect(stateAtStep(events, 4)).toEqual(stateAt(events, Infinity));
+	});
+
+	it('names the event a step sits just after', () => {
+		const events = log();
+		expect(eventAtStep(events, 0)).toBeUndefined();
+		expect(eventAtStep(events, 1)?.entityId).toBe('movie/b');
+		expect(eventAtStep(events, 4)?.type).toBe('tracking.removed');
+	});
+
+	it('turns one event into a diff that undoes just that event', () => {
+		const events = log();
+		// Step 1 added movie/b: undoing it takes the title off the list again.
+		expect(eventDiff(events, 1)).toMatchObject({ mediaId: 'movie/b', remove: true });
+		// Step 3 watched S1E1: undoing it un-watches that episode only.
+		expect(eventDiff(events, 3)).toMatchObject({
+			mediaId: 'movie/b',
+			episodes: { watched: [], unwatched: [{ mediaId: 'movie/b', season: 1, episode: 1 }] }
+		});
+		// Step 4 removed movie/a: undoing it puts the title back as it was.
+		expect(eventDiff(events, 4)).toMatchObject({
+			mediaId: 'movie/a',
+			readd: true,
+			status: 'watching'
+		});
+	});
+
+	it('has nothing to undo for an event that changed nothing visible', () => {
+		const events = orderedLog([
+			ev('tracking.added', 'movie/a', { status: 'watching' }, NOW - 20),
+			ev('tracking.favorite_toggled', 'movie/a', { favorite: false }, NOW - 10),
+			ev(
+				'media.linked',
+				'movie/a',
+				{ targetId: 'movie/a', provider: 'tmdb', externalId: '1' },
+				NOW - 5
+			)
+		]);
+		// Favoriting something that was already not a favorite.
+		expect(eventDiff(events, 2)).toBeNull();
+		// An identity event isn't tracking state.
+		expect(eventDiff(events, 3)).toBeNull();
+	});
+
+	it('lists the titles touched after a step, newest first', () => {
+		const events = log();
+		expect(touchedAfterStep(events, 2)).toEqual(['movie/a', 'movie/b']);
+		expect(touchedAfterStep(events, 4)).toEqual([]);
+	});
+
+	it('summarizes an event in words', () => {
+		const events = log();
+		expect(eventSummary(events[0])).toBe('Added · Watching');
+		expect(eventSummary(events[2])).toBe('S1E1 watched');
+		expect(eventSummary(events[3])).toBe('Removed from your lists');
+	});
+});
+
+describe('detent density', () => {
+	it('is one event per detent near now and decimates with distance', () => {
+		expect(densityFor(0)).toBe(1);
+		expect(densityFor(DETENT_CAPACITY)).toBe(1);
+		expect(densityFor(DETENT_CAPACITY * 4)).toBe(4);
+		expect(densityFor(20_000)).toBe(167);
+	});
+
+	it('a fine step is always exactly one event', () => {
+		expect(densityFor(20_000, true)).toBe(1);
+	});
+
+	it('steps back and forward without leaving the log', () => {
+		expect(backStep(1000, 0, 1)).toBe(1);
+		expect(backStep(1000, 0, -1)).toBe(0);
+		expect(backStep(1000, 1000, 1)).toBe(1000);
+		expect(backStep(1000, 500, 1)).toBe(500 + densityFor(500));
+		expect(backStep(1000, 500, 1, true)).toBe(501);
+	});
+
+	it('maps a dial position onto the nearest detent', () => {
+		expect(backFromProgress(0, 0.5)).toBe(0);
+		expect(backFromProgress(1000, 0)).toBe(0);
+		expect(backFromProgress(1000, 1)).toBe(1000);
+		expect(backFromProgress(1000, 0.5)).toBe(500);
+		// A long log snaps to its density grid rather than landing between events.
+		const snapped = backFromProgress(20_000, 0.5);
+		expect(snapped % densityFor(snapped)).toBe(0);
+		expect(backFromProgress(20_000, 0.5, true)).toBe(10_000);
 	});
 });
