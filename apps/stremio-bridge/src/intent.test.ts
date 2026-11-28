@@ -63,15 +63,17 @@ describe('toIntent', () => {
 	// The product rule, revised: a bare gesture on a show is a claim about the whole title, so it is
 	// sent as one field and the server decides which episodes that means. VideoIds that were present
 	// but unparseable are a different case — they must not widen to the series.
-	it('sends a bare show gesture as a whole-title intent', () => {
+	it('sends a bare watch as a whole-title intent', () => {
 		expect(toIntent(event({ type: 'show', action: 'watched', videoIds: [] }))).toEqual({
 			allEpisodes: { watched: true }
 		});
-		expect(toIntent(event({ type: 'show', action: 'unwatched', videoIds: [] }))).toEqual({
-			allEpisodes: { watched: false },
-			// Not a completed title any more: it goes back on the list, as a movie's un-watch does.
-			status: 'want_to_watch'
-		});
+	});
+
+	// Additive acts; destructive waits. A whole-title clear destroys history the log cannot restore,
+	// and the addon surface authenticates on a URL — so it is acknowledged and does nothing until
+	// the bridge can ask its owner.
+	it('does not act on a bare un-watch of a whole title', () => {
+		expect(toIntent(event({ type: 'show', action: 'unwatched', videoIds: [] }))).toBeNull();
 	});
 
 	it('does not widen to the whole title when the videoIds were merely unparseable', () => {

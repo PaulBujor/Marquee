@@ -56,12 +56,15 @@ export function toIntent(event: LibraryEvent): Intent | null {
 	if (event.type === 'show') {
 		// Only a genuinely bare gesture widens to the whole title. VideoIds that were present but
 		// unparseable must not, or a malformed event would mark every episode of the series.
-		if (event.videoIds.length === 0)
-			return event.action === 'watched'
-				? { allEpisodes: { watched: true } }
-				: // Un-watching the whole title is not a completed title: it goes back on the list, the
-					// same answer a movie's un-watch gets, so the status cannot outlive the progress.
-					{ allEpisodes: { watched: false }, status: UNWATCHED_STATUS };
+		if (event.videoIds.length === 0) {
+			// The two directions do not carry the same risk. Marking a whole title watched is
+			// additive: nothing is lost if it was not meant. Clearing one destroys history, cannot be
+			// undone from the log, and this surface can only authenticate on a URL — so it waits for
+			// the owner to confirm, which is the Durable Object's job. Until that exists, a bare
+			// `unwatched` on a show is acknowledged and does nothing.
+			// shortcut: the destructive whole-title gesture is inert until the DO can confirm it.
+			return event.action === 'watched' ? { allEpisodes: { watched: true } } : null;
+		}
 
 		const episodes = episodesOf(event);
 		return episodes.length > 0 ? { episodes } : null;
