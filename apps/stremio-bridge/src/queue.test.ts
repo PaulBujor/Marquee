@@ -177,25 +177,31 @@ describe('deliver', () => {
 		expect(calls).toHaveLength(0);
 	});
 
-	// The bare gesture really does reach the API, as one field rather than an enumerated list.
-	it('sends a bare show gesture as a whole-title intent', async () => {
+	// The bare watch really does reach the API, as one field rather than an enumerated list.
+	it('sends a bare watch as a whole-title intent', async () => {
 		const calls = marqueeAnswers();
 		const { handle, bindings } = await paired();
 
-		await deliver(
+		await deliver(bindings, inboundBody({ handle, type: 'show', action: 'watched', videoIds: [] }));
+
+		expect(calls).toHaveLength(1);
+		expect(JSON.parse(String(calls[0].init?.body)).items).toEqual([
+			{ type: 'show', id: 'tt0133093', allEpisodes: { watched: true } }
+		]);
+	});
+
+	// The destructive direction is the one an unauthenticated URL must not be able to fire.
+	it('acknowledges a bare un-watch without touching the library', async () => {
+		const calls = marqueeAnswers();
+		const { handle, bindings } = await paired();
+
+		const outcome = await deliver(
 			bindings,
 			inboundBody({ handle, type: 'show', action: 'unwatched', videoIds: [] })
 		);
 
-		expect(calls).toHaveLength(1);
-		expect(JSON.parse(String(calls[0].init?.body)).items).toEqual([
-			{
-				type: 'show',
-				id: 'tt0133093',
-				allEpisodes: { watched: false },
-				status: 'want_to_watch'
-			}
-		]);
+		expect(outcome).toBe('ack');
+		expect(calls).toHaveLength(0);
 	});
 
 	// A dead token does not heal by itself, so the record carries the failure and the configure

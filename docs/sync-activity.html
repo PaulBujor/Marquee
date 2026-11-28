@@ -148,8 +148,16 @@ flowchart TD
 				<p>
 					Same inbound path, different intent. The only new information is <code>videoId</code>, and the
 					rule is asymmetric: <strong>a movie is one unit, so "watched" needs no episode; a show's
-					episodes are named, and a gesture that names none is a claim about the whole title.</strong> What
-					that claim means in episodes is resolved by the server, which owns the air dates — not here.
+					episodes are named, and a gesture that names none is a claim about the whole title.</strong>
+				</p>
+				<p>
+					<strong>The two directions do not carry the same risk, so they are not handled the same
+					way.</strong> Marking a whole title watched is additive — nothing is lost if it was not
+					meant, and the server resolves it to the aired episodes. Clearing one destroys history the
+					log cannot restore, and this surface can only authenticate on the URL, so a bare
+					<code>unwatched</code> on a show is acknowledged and <em>does nothing</em> until the bridge
+					can ask its owner to confirm. A leaked addon URL must not be a "clear any show's history"
+					button.
 				</p>
 				<pre class="mermaid">
 flowchart TD
