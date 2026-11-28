@@ -75,7 +75,8 @@
 
 	function onPointerUp(event: PointerEvent): void {
 		dragging = false;
-		svg?.releasePointerCapture(event.pointerId);
+		// A `pointercancel` releases the capture itself; releasing it again throws.
+		if (svg?.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
 	}
 
 	/** Trackpads fire many small deltas, so accumulate into one stop per ~40px of intent. */
